@@ -40,19 +40,55 @@ public struct FileChanges: Equatable, Sendable {
     public var unwritable: String?
     /// The tags the changes were worked out from.
     var tags: TrackTags
+    /// Whether the file has a cover now.
+    var hasCover = false
+    /// What the album's cover does to this file.
+    public internal(set) var cover = CoverState.none
+}
+
+/// What an album's cover does to one file (ADR 0140).
+public enum CoverState: Equatable, Sendable {
+    /// Nothing: no cover, the mode is off, or it fills only empty ones and the file has one.
+    case none
+    case adds
+    case replaces
 }
 
 /// Every change the mapping would make to an album's files for its match: the model of the
 /// View Changes sheet and of Apply (ADR 0132). Nothing here reads or writes a file.
 public struct AlbumChangeSet: Equatable, Sendable {
     public var files: [FileChanges]
+    /// The release's cover, which each file's `cover` says what it does to.
+    public private(set) var cover: Cover?
 
-    /// Each file's edit with the changes `isIncluded` keeps, as `TagWriter` writes it; a file
-    /// left with no change has no edit. Throws for a value no format can hold, naming it, so
-    /// the sheet can show it before anything is written.
-    public func edits(including isIncluded: (TagChange.ID) -> Bool = { _ in true })
-        throws(TagValueError) -> [(path: String, edit: TagEdit)]
-    {
+    /// The set with `cover` going to each file that `mode` gives it: every writable one for
+    /// replace, those with no cover for fill empty, none for off.
+    public func covering(_ cover: Cover, mode: DiscogsArtworkMode) -> AlbumChangeSet {
+        var set = self
+        set.cover = mode == .off ? nil : cover
+        for index in set.files.indices {
+            let file = set.files[index]
+            set.files[index].cover =
+                switch mode {
+                case _ where file.unwritable != nil: .none
+                case .off: .none
+                case .fillEmpty: file.hasCover ? .none : .adds
+                case .replace: file.hasCover ? .replaces : .adds
+                }
+        }
+        return set
+    }
+
+    /// The files the cover goes to.
+    public var coveredFiles: Int { cover == nil ? 0 : files.count { $0.cover != .none } }
+
+    /// Each file's edit with the changes `isIncluded` keeps, and the cover unless
+    /// `includingCover` is off, as `TagWriter` writes it, in the same batch; a file left with
+    /// no change has no edit. Throws for a value no format can hold, naming it, so the sheet
+    /// can show it before anything is written.
+    public func edits(
+        including isIncluded: (TagChange.ID) -> Bool = { _ in true }, includingCover: Bool = true
+    ) throws(TagValueError) -> [(path: String, edit: TagEdit)] {
         var edits: [(path: String, edit: TagEdit)] = []
         for file in files where file.unwritable == nil {
             var edit = TagEdit()
@@ -61,6 +97,9 @@ public struct AlbumChangeSet: Equatable, Sendable {
                 case .field(let field): edit.values[field] = change.new ?? ""
                 case .custom(let name): edit.custom[name] = change.new ?? ""
                 }
+            }
+            if includingCover, let cover, file.cover != .none {
+                edit.art = .replace(cover.bytes, mimeType: cover.mimeType)
             }
             guard !edit.isEmpty else { continue }
             _ = try edit.applied(to: file.tags)
@@ -104,7 +143,7 @@ public func changeSet(
             }
             return FileChanges(
                 fileID: file.id, path: file.path, changes: changes, unwritable: nil,
-                tags: file.metadata.tags)
+                tags: file.metadata.tags, hasCover: file.metadata.art != nil)
         })
 }
 

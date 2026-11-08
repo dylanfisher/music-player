@@ -503,6 +503,40 @@ private func problems(_ json: String) -> [SettingProblem] {
     }
 }
 
+/// The tagger sheets' layouts are saved and read back by kind of sheet; an unknown key or a
+/// size that isn't positive discards the file, as any value that doesn't match (ADR 0136).
+@Test func theTaggerSheetsLayoutsRoundTripAndABadOneIsDiscarded() throws {
+    let url = temporaryFile()
+    let state = try StateStore(AppState(), fileURL: url)
+    #expect(state[\.taggerSheets] == TaggerSheetLayouts())
+    let layouts = TaggerSheetLayouts(
+        otherReleases: .init(
+            width: 1000, height: 520, columns: ["artist": 210, "year": 50], sortColumn: "year",
+            sortAscending: false),
+        fieldMapping: .init(
+            width: 800, height: 400, columns: ["template": 300], sortColumn: nil,
+            sortAscending: true))
+    try state.set(\.taggerSheets, to: layouts)
+    let read = try StateStore(AppState(), fileURL: url)
+    #expect(read.discardReason == nil)
+    #expect(read[\.taggerSheets] == layouts)
+
+    let sheet = #"{"width": 900, "height": 480, "columns": {}, "sortAscending": true"#
+    for (json, problem) in [
+        (#"{"discogsTagger.sheets": {"viewRelease": "# + sheet + #", "x": 1}}}"#, "x: unknown key"),
+        (#"{"discogsTagger.sheets": {"other": "# + sheet + "}}}", "other: unknown key"),
+        (
+            #"{"discogsTagger.sheets": {"viewChanges": {"width": -5, "height": 480,"#
+                + #" "columns": {}, "sortAscending": true}}}"#, "size isn't positive"
+        ),
+    ] {
+        try Data(json.utf8).write(to: url)
+        let discarded = try StateStore(AppState(), fileURL: url)
+        #expect(discarded.discardReason?.contains(problem) == true, "\(json)")
+        #expect(discarded[\.taggerSheets] == TaggerSheetLayouts())
+    }
+}
+
 /// Get Info's place is saved and read back; a file from before it reads as none.
 @Test func getInfosPlaceIsSavedAndAnOlderFileHasNone() throws {
     let url = temporaryFile()

@@ -52,6 +52,13 @@ package struct WriteFaults: Sendable {
     /// Runs right after the temp file is closed, where an SMB server sets the mtime of a file
     /// written through the handle. A throw stops the write the way a failure there would.
     var whenTempCloses: (@Sendable (_ temp: String) throws -> Void)?
+    /// Asked for each extended attribute the temp file is about to take, by name, and for its
+    /// ACL as "acl"; an errno makes that copy fail with it, as a volume that refuses the
+    /// attribute does.
+    var refusingAttribute: (@Sendable (_ name: String) -> Int32?)?
+    /// The attributes a refusal leaves off the temp file. Tests add one of their own, as no
+    /// process can set or remove `com.apple.provenance`, so a test can't give a file one.
+    var unsettable = unsettableAttributes
     /// Stops right before the rename and leaves the temp file, as a crash there would.
     package var crashBeforeRename = false
     /// Writes only this many bytes of each write in place, then stops the batch and leaves the
@@ -221,9 +228,7 @@ func writeTemp(
             }
         }
         // The attributes go first, so the flush covers them too before the rename.
-        // The extended attributes and ACL, the mode, the creation date and the flags.
-        for _ in 0..<4 { faults.called(.metadata) }
-        try copyAttributes(from: source, info, to: destination, original)
+        try copyAttributes(from: source, info, to: destination, original, faults)
         faults.called(.flushDrive)
         try flush(destination, original, .writeFailed)
         faults.called(.metadata)
@@ -384,12 +389,28 @@ private func copy(
     }
 }
 
+/// Extended attributes macOS manages itself, which a volume may refuse to set on a new file
+/// although the file it was read from has them; a refusal of one leaves it off the new file
+/// (ADR 0136). Any other refusal fails the write, so a Finder tag or an attribute of the
+/// owner's is never dropped.
+let unsettableAttributes: Set<String> = ["com.apple.provenance"]
+
+/// The errors a volume answers with when it won't set an attribute.
+private let refusals: Set<Int32> = [EACCES, EPERM, ENOTSUP]
+
 /// Everything but the data and the mtime, so the edited file keeps the original's attributes.
 private func copyAttributes(
-    from source: Int32, _ info: stat, to destination: Int32, _ path: String
+    from source: Int32, _ info: stat, to destination: Int32, _ path: String,
+    _ faults: WriteFaults
 ) throws(TagWriteError) {
-    guard fcopyfile(source, destination, nil, copyfile_flags_t(COPYFILE_ACL | COPYFILE_XATTR)) == 0
-    else { throw systemError(path, .writeFailed, "can't copy its extended attributes") }
+    // The ACL, the list of extended attributes, then the mode, the creation date and the
+    // flags; each attribute adds its own read and write below.
+    for _ in 0..<5 { faults.called(.metadata) }
+    let refusal = faults.refusingAttribute?("acl")
+    if let refusal { errno = refusal }
+    guard refusal == nil, fcopyfile(source, destination, nil, copyfile_flags_t(COPYFILE_ACL)) == 0
+    else { throw systemError(path, .writeFailed, "can't copy its ACL") }
+    try copyExtendedAttributes(from: source, to: destination, path, faults)
     guard fchmod(destination, info.st_mode & 0o7777) == 0 else {
         throw systemError(path, .writeFailed, "can't copy its permissions")
     }
@@ -402,6 +423,49 @@ private func copyAttributes(
     }
     guard fchflags(destination, info.st_flags) == 0 else {
         throw systemError(path, .writeFailed, "can't copy its file flags")
+    }
+}
+
+/// Copies each extended attribute on its own, rather than in one `fcopyfile`, so a refusal
+/// names the attribute, and one in `faults.unsettable` can be left off.
+private func copyExtendedAttributes(
+    from source: Int32, to destination: Int32, _ path: String, _ faults: WriteFaults
+) throws(TagWriteError) {
+    for name in try attributeNames(source, path) {
+        faults.called(.metadata)
+        let size = fgetxattr(source, name, nil, 0, 0, 0)
+        var value = [UInt8](repeating: 0, count: max(0, size))
+        let read = size < 0 ? size : fgetxattr(source, name, &value, value.count, 0, 0)
+        guard read >= 0 else {
+            throw systemError(path, .unreadable, "can't read its extended attribute \(name)")
+        }
+        faults.called(.metadata)
+        let refusal = faults.refusingAttribute?(name)
+        if let refusal { errno = refusal }
+        guard refusal != nil || fsetxattr(destination, name, value, read, 0, 0) != 0 else {
+            continue
+        }
+        guard faults.unsettable.contains(name), refusals.contains(errno) else {
+            throw systemError(path, .writeFailed, "can't copy the extended attribute \(name)")
+        }
+        logger.notice(
+            "left the extended attribute \(name) off the new file of \(path), which the volume refused: \(String(cString: strerror(errno)))"
+        )
+    }
+}
+
+/// The names of the extended attributes of the file open as `descriptor`.
+private func attributeNames(_ descriptor: Int32, _ path: String) throws(TagWriteError)
+    -> [String]
+{
+    let size = flistxattr(descriptor, nil, 0, 0)
+    var names = [CChar](repeating: 0, count: max(0, size))
+    let listed = size <= 0 ? size : flistxattr(descriptor, &names, names.count, 0)
+    guard listed >= 0 else {
+        throw systemError(path, .unreadable, "can't list its extended attributes")
+    }
+    return names[0..<listed].split(separator: 0).map {
+        String(decoding: $0.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 }
 

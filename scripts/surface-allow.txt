@@ -12,3 +12,6 @@ TagEditorWindow.controlTextDidChange | NSControlTextEditingDelegate
 TagEditorWindow.textDidChange | NSTextDelegate
 TagEditorWindow.tabView | NSTabViewDelegate
 TagEditorWindow.windowDidBecomeKey | NSWindowDelegate
+# The standard library calls this: CustomReflectable's requirement, which keeps the token out of
+# dump and mirrors (ADR 0137).
+DiscogsToken.customMirror | CustomReflectable

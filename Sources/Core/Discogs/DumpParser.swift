@@ -291,11 +291,9 @@ final class DumpParser: NSObject, XMLParserDelegate {
     /// has no position and no duration, and a track otherwise.
     private func endTrack() {
         var track = tracks.removeLast()
-        if !track.subTracks.isEmpty {
-            track.kind = .index
-        } else if track.position == nil, track.durationSeconds == nil {
-            track.kind = .heading
-        }
+        track.kind = CatalogTrack.kind(
+            position: track.position, durationSeconds: track.durationSeconds,
+            hasSubTracks: !track.subTracks.isEmpty)
         if tracks.isEmpty {
             release.tracks.append(track)
         } else {

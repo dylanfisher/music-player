@@ -45,6 +45,16 @@ public struct AppPaths: Sendable {
     public func discogsCatalogFile(_ catalogPath: String?) -> URL {
         catalogPath.map { URL(fileURLWithPath: $0, isDirectory: false) } ?? discogsCatalogFile
     }
+    /// Where the library's snapshots go unless `library.snapshotFolder` names another folder
+    /// (ADR 0142).
+    var snapshotDirectory: URL {
+        dataDirectory.appendingPathComponent("Backups", isDirectory: true)
+    }
+
+    /// The snapshot folder: `snapshotFolder`, the setting's value, or the default.
+    public func snapshotDirectory(_ snapshotFolder: String?) -> URL {
+        snapshotFolder.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? snapshotDirectory
+    }
     /// The art column's thumbnails.
     public var thumbnailDirectory: URL { cacheDirectory.appendingPathComponent("Thumbnails") }
     /// The Spectrum window's spectrograms (phase 45).

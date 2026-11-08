@@ -17,6 +17,11 @@ extension AppDelegate {
         dispatcher.handle(
             .showDiscogsTagger, enabled: { [weak self] in self?.window != nil },
             run: { [weak self] in self?.discogsTaggerController()?.show() })
+        dispatcher.handle(
+            .openDiscogsRelease, enabled: hasSelectedTracks,
+            run: { [weak self] in
+                self?.browser?.openSelectedRelease { NSWorkspace.shared.open(discogsPage($0)) }
+            })
     }
 
     /// The tagger, made on first use; nil, after saying why, when the library can't be read.
@@ -31,9 +36,12 @@ extension AppDelegate {
             return nil
         }
         let catalog = paths.discogsCatalogFile(settings[\.discogsCatalogPath])
+        let apis = DiscogsAPIs(cache: .index(reader))
         let tagger = DiscogsTagger(
             reader: reader, catalog: catalog, mapping: settings[\.discogsMapping],
             savedMappings: settings[\.discogsSavedMappings], choices: taggerChoices(settings),
+            source: state?[\.taggerSource],
+            api: { apis.api(token: settings.fileValue(\.discogsToken) ?? nil) },
             importing: { [weak self] folder, startingOver, progress in
                 let configured = await MainActor.run { self?.settings?[\.watchedFolders] ?? [] }
                 return try await importCatalog(
@@ -41,6 +49,9 @@ extension AppDelegate {
                     startingOver: startingOver, progress: progress)
             })
         tagger.selectedTracks = { [weak browser] in try browser?.selectedTrackIDs() ?? [] }
+        if let state { tagger.sheetLayouts = state[\.taggerSheets] }
+        tagger.sheetLayoutsChosen = { [weak self] in self?.saver?.set(\.taggerSheets, $0) }
+        tagger.sourceChosen = { [weak self] in self?.saver?.set(\.taggerSource, $0) }
         tagger.write = { [weak self] files, window, completion in
             self?.tagEditing.write(files, over: window, completion: completion)
         }
@@ -57,6 +68,7 @@ extension AppDelegate {
                 try settings.set(\.discogsKeepExistingValues, to: choices.keepExistingValues)
                 try settings.set(\.discogsSkipVideo, to: choices.skipVideo)
                 try settings.set(\.discogsFillSortArtist, to: choices.fillSortArtist)
+                try settings.set(\.discogsArtwork, to: choices.artwork)
             } catch {
                 self?.fail("Couldn't save the Discogs tagger's choices", error)
             }
@@ -90,11 +102,37 @@ extension AppDelegate {
     }
 }
 
+/// The Discogs API for the token the config file has now (ADR 0137): made again only when the
+/// token changes, so its pacing carries from one Analyze to the next. The one place the app
+/// builds the internet transport.
+@MainActor
+private final class DiscogsAPIs {
+    private let cache: DiscogsCache
+    private let transport = DiscogsAPI.internet()
+    private var made: (token: DiscogsToken?, api: DiscogsAPI)?
+
+    init(cache: DiscogsCache) { self.cache = cache }
+
+    func api(token: DiscogsToken?) -> DiscogsAPI {
+        if let made, made.token == token { return made.api }
+        // A build run outside its bundle, as `swift run` does, has no version to send.
+        let version =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "dev"
+        let api = DiscogsAPI(
+            token: token, userAgent: DiscogsAPI.userAgent(version: version),
+            transport: transport, cache: cache)
+        made = (token, api)
+        return api
+    }
+}
+
 /// The tagger window's choices as the settings hold them.
 @MainActor func taggerChoices(_ settings: ConfigStore<AppSettings>) -> TaggerChoices {
     TaggerChoices(
         keepExistingValues: settings[\.discogsKeepExistingValues],
-        skipVideo: settings[\.discogsSkipVideo], fillSortArtist: settings[\.discogsFillSortArtist])
+        skipVideo: settings[\.discogsSkipVideo], fillSortArtist: settings[\.discogsFillSortArtist],
+        artwork: settings[\.discogsArtwork])
 }
 
 /// The watched folders' paths where they are now; one on a share that isn't mounted holds

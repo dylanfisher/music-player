@@ -3,18 +3,21 @@ import Library
 /// The releases an album might be, in the order they're found (ADR 0131): the release ids its
 /// tracks carry, the releases with its barcode, those with its label and catalog number, then
 /// the releases of the masters, and the master-less releases, with its artist and title. Each
-/// release once.
-func candidateIDs(for album: DiscogsAlbum, in catalog: Catalog) throws -> [Int] {
-    var found: [Int] = []
+/// release once, with the way it was first found. Without a catalog, only the tagged ids.
+func candidateIDs(for album: DiscogsAlbum, in catalog: Catalog?) throws
+    -> [(id: Int, foundBy: CandidateKey)]
+{
+    var found: [(id: Int, foundBy: CandidateKey)] = []
     var seen: Set<Int> = []
-    func add(_ ids: [Int]) {
-        for id in ids where seen.insert(id).inserted { found.append(id) }
+    func add(_ ids: [Int], _ key: CandidateKey = .title) {
+        for id in ids where seen.insert(id).inserted { found.append((id, key)) }
     }
-    add(album.tracks.compactMap { $0.releaseID.flatMap { Int($0) } })
-    if let barcode = album.barcode { add(try catalog.releaseIDs(barcode: barcode)) }
+    add(taggedReleaseIDs(album), .taggedID)
+    guard let catalog else { return found }
+    if let barcode = album.barcode { add(try catalog.releaseIDs(barcode: barcode), .barcode) }
     if let number = album.catalogNumber, let label = album.label {
         for name in labelNames(label) {
-            add(try catalog.releaseIDs(label: name, catalogNumber: number))
+            add(try catalog.releaseIDs(label: name, catalogNumber: number), .labelAndCatalogNumber)
         }
     }
     var masters: Set<Int> = []
@@ -30,6 +33,20 @@ func candidateIDs(for album: DiscogsAlbum, in catalog: Catalog) throws -> [Int] 
         }
     }
     return found
+}
+
+/// The release ids `album`'s tracks carry, in track order, each once.
+func taggedReleaseIDs(_ album: DiscogsAlbum) -> [Int] {
+    var seen: Set<Int> = []
+    return album.tracks.compactMap { $0.releaseID.flatMap { Int($0) } }.filter {
+        seen.insert($0).inserted
+    }
+}
+
+/// What found a candidate release: the release id its tracks carry, its barcode, its label and
+/// catalog number, or its artist and title.
+enum CandidateKey: Equatable, Sendable {
+    case taggedID, barcode, labelAndCatalogNumber, title
 }
 
 /// The label as tagged, then each label of a " & " list, as YATE joins a release's labels

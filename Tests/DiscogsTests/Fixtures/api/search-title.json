@@ -1,0 +1,8 @@
+{
+  "pagination": {"page": 1, "pages": 1, "per_page": 25, "items": 3, "urls": {}},
+  "results": [
+    {"id": 1002, "type": "release", "master_id": 500, "title": "Persuader - Stockholm", "country": "Europe", "year": "2009", "format": ["CD", "Album", "Remastered"], "label": ["Svek", "Other"], "catno": "SK 032CD", "uri": "/release/1002", "resource_url": "https://api.discogs.com/releases/1002"},
+    {"id": 500, "type": "master", "title": "Persuader - Stockholm", "uri": "/master/500", "resource_url": "https://api.discogs.com/masters/500"},
+    {"id": 1006, "type": "release", "master_id": 500, "title": "Persuader - Stockholm", "year": "1999", "format": ["CD"], "uri": "/release/1006", "resource_url": "https://api.discogs.com/releases/1006"}
+  ]
+}

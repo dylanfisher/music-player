@@ -10,6 +10,12 @@ struct LibraryStatus: Equatable, Sendable {
     private(set) var scanning: [String: ScanProgress] = [:]
     /// The folder whose scan Pause Scan holds, until Resume Scan or the scan's end.
     private(set) var pausedScan: String?
+    /// Whether this launch rebuilt the index, so each folder's scan is the rebuild's until one
+    /// of its scans ends (ADR 0136).
+    var rebuildingIndex = false
+    /// The folders a scan has finished for since launch, read through or failed; a stopped one
+    /// starts again as the rebuild's.
+    private var scannedFolders: Set<String> = []
     /// Problems the last scan of each folder had with the folder itself, by folder path.
     private(set) var folderIssues: [String: [ScanIssue]] = [:]
     /// Scans that failed outright, by folder path.
@@ -60,10 +66,12 @@ struct LibraryStatus: Equatable, Sendable {
             }
         case .scanned(let folder, let summary):
             scanEnded(folder)
+            scannedFolders.insert(folder)
             failures[folder] = nil
             folderIssues[folder] = summary.issues.isEmpty ? nil : summary.issues
         case .scanFailed(let folder, let reason):
             scanEnded(folder)
+            scannedFolders.insert(folder)
             failures[folder] = reason
         case .scanStopped(let folder):
             scanEnded(folder)
@@ -118,7 +126,8 @@ struct LibraryStatus: Equatable, Sendable {
     }
 
     /// "Scanning Music: 300 of 1,200 read", a part per folder, and "Scan paused: Music: 300 of
-    /// 1,200 read" for the one Pause Scan holds; nil while nothing scans.
+    /// 1,200 read" for the one Pause Scan holds, and "Rebuilding the index: Music: 300 of 1,200
+    /// read" for a folder's scan that refills a rebuilt index; nil while nothing scans.
     var scanText: String? {
         guard !scanning.isEmpty else { return nil }
         let parts = scanning.sorted(by: { $0.key < $1.key }).map { folder, progress in
@@ -130,10 +139,14 @@ struct LibraryStatus: Equatable, Sendable {
                     : "\(name): \(number(progress.read)) of \(number(progress.toRead)) read"
             )
         }
-        let running = parts.filter { $0.0 != pausedScan }.map(\.1)
+        let running = parts.filter { $0.0 != pausedScan }
+        let rebuilding = running.filter { rebuildingIndex && !scannedFolders.contains($0.0) }
+        let plain = running.filter { !rebuilding.map(\.0).contains($0.0) }.map(\.1)
         let paused = parts.filter { $0.0 == pausedScan }.map(\.1)
         return
-            ((running.isEmpty ? [] : ["Scanning " + running.joined(separator: " · ")])
+            ((rebuilding.isEmpty
+            ? [] : ["Rebuilding the index: " + rebuilding.map(\.1).joined(separator: " · ")])
+            + (plain.isEmpty ? [] : ["Scanning " + plain.joined(separator: " · ")])
             + paused.map { "Scan paused: " + $0 }).joined(separator: " · ")
     }
 

@@ -27,6 +27,7 @@ private final class Seen: @unchecked Sendable {
     private var _reads: [[String]] = []
     private var _places: [NSPoint?] = []
     private var _edits: [[TagEdit]] = []
+    private var _origins: [TagEditOrigin] = []
 
     var presented: [[String]] { lock.withLock { _presented } }
     var alerts: [String] { lock.withLock { _alerts } }
@@ -39,6 +40,8 @@ private final class Seen: @unchecked Sendable {
     var places: [NSPoint?] { lock.withLock { _places } }
     /// Each write's edits, a file's each.
     var edits: [[TagEdit]] { lock.withLock { _edits } }
+    /// Each write's origin.
+    var origins: [TagEditOrigin] { lock.withLock { _origins } }
 
     func present(_ paths: [String], at place: NSPoint?) {
         lock.withLock {
@@ -52,6 +55,7 @@ private final class Seen: @unchecked Sendable {
     func ran(_ work: String) { lock.withLock { _work.append(work) } }
     func read(_ paths: [String]) { lock.withLock { _reads.append(paths) } }
     func edited(_ edits: [TagEdit]) { lock.withLock { _edits.append(edits) } }
+    func came(from origin: TagEditOrigin) { lock.withLock { _origins.append(origin) } }
 }
 
 private func editable(_ path: String, title: String? = nil) -> EditableTrack {
@@ -75,6 +79,7 @@ private func makeEditing(
         return report
     },
     undo: @escaping @Sendable () -> TagWriteReport = { TagWriteReport() },
+    newestEdit: JournaledEdit? = nil,
     confirm: Bool = true,
     progress: [TagWriteProgress] = []
 ) -> TagEditing {
@@ -85,17 +90,19 @@ private func makeEditing(
                 let (tracks, problems) = read(paths, isStopped)
                 return (tracks, problems)
             },
-            write: { files, report in
+            write: { files, origin, report in
                 let paths = files.map(\.path)
                 seen.ran("write \(paths.joined(separator: " "))")
+                seen.came(from: origin)
                 for step in progress { report(step) }
                 seen.edited(files.map(\.edit))
                 return write(files[0].edit, paths)
             },
-            undo: {
-                seen.ran("undo")
+            undo: { expected in
+                seen.ran(expected.map { "undo \($0.sequence)" } ?? "undo")
                 return undo()
             },
+            newestEdit: { newestEdit },
             present: { editor, _, place, _ in seen.present(editor.paths, at: place) },
             confirm: { message, _, answer in
                 seen.confirm(message.message)
@@ -182,7 +189,7 @@ private func editor(_ editing: TagEditing, _ paths: [String]) -> TagEditorWindow
     try await eventually { editing.editors.allSatisfy(\.isLoaded) }
     editor(editing, ["/a.flac"])?.saved(TagEdit(values: [.title: "A"]))
     editor(editing, ["/b.flac"])?.saved(TagEdit(values: [.title: "B"]))
-    editing.undo(over: window)
+    editing.undo(over: window, from: .tagEditor)
     #expect(editing.pendingWrites == 3)
     try await Task.sleep(nanoseconds: 50_000_000)
     #expect(seen.work == ["write /a.flac"])
@@ -280,7 +287,7 @@ private final class Titles: @unchecked Sendable {
             report.notWritten = ["/b.flac"]
             return report
         })
-    editing.undo(over: window)
+    editing.undo(over: window, from: .tagEditor)
     try await eventually { !editing.isWriting }
     #expect(seen.alerts == ["Couldn't undo the tag edit for 1 file"])
     #expect(seen.written.isEmpty)
@@ -449,10 +456,45 @@ private final class Titles: @unchecked Sendable {
     gate.open()
     try await eventually { !editing.isWriting }
     #expect(seen.work == ["write /a.flac", "write /b.flac /c.flac"])
+    #expect(seen.origins == [.tagEditor, .discogsTagger])
     #expect(seen.edits.last == edits)
     #expect(seen.confirmations.isEmpty)
     #expect(seen.written == [["/a.flac"], ["/b.flac", "/c.flac"]])
     #expect(shown.last == .some(nil))
+}
+
+/// Undo Tag Edit undoes the newest edit anywhere, so it asks first when another kind of
+/// window made it; Cancel leaves the edit undoable. The undo is handed the edit it asked about,
+/// so it undoes that one or none (ADR 0136).
+@MainActor
+@Test func undoAsksBeforeUndoingAnotherWindowsEdit() async throws {
+    let edit = { (origin: TagEditOrigin?, count: Int) in
+        JournaledEdit(sequence: 7, origin: origin, fileCount: count)
+    }
+    for (answer, ran) in [(false, [String]()), (true, ["undo 7"])] {
+        let seen = Seen()
+        let editing = makeEditing(
+            seen, newestEdit: edit(.discogsTagger, 22), confirm: answer)
+        editing.undo(over: window, from: .tagEditor)
+        try await eventually { !editing.isWriting && !seen.confirmations.isEmpty }
+        #expect(seen.confirmations == ["Undo the Discogs tagger's edit of 22 files?"])
+        #expect(seen.work == ran)
+    }
+    #expect(
+        TagEditing.Confirmation.undoing(.tagEditor, 1).message
+            == "Undo an info window's edit of 1 file?")
+
+    // The same window's edit, one whose window isn't known, and none, ask nothing.
+    for (newest, origin, ran) in [
+        (edit(.discogsTagger, 3), TagEditOrigin.discogsTagger, "undo 7"),
+        (edit(nil, 3), .tagEditor, "undo 7"), (nil, .tagEditor, "undo"),
+    ] {
+        let seen = Seen()
+        let editing = makeEditing(seen, newestEdit: newest)
+        editing.undo(over: window, from: origin)
+        try await eventually { seen.work == [ran] }
+        #expect(seen.confirmations.isEmpty)
+    }
 }
 
 /// An info window's Undo Tag Edit, Replace Artwork… and Remove Artwork buttons ask the
@@ -582,7 +624,7 @@ private final class FileTitles: @unchecked Sendable {
     touched.controlTextDidChange(
         Notification(name: NSControl.textDidChangeNotification, object: artist))
     let reads = seen.reads.count
-    editing.undo(over: window)
+    editing.undo(over: window, from: .tagEditor)
     try await eventually { touched.model?.text(.title) == "Before" }
     #expect(touched.model?.text(.artist) == "Typed", "what was typed stays")
     #expect(other.model?.text(.title) == "Edited", "a window on other files isn't read")

@@ -43,6 +43,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "HTTPSClient",
+            path: "Sources/Primitives/HTTPSClient",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SQLite",
             path: "Sources/Primitives/SQLite",
             swiftSettings: strictSwift,
@@ -147,10 +152,18 @@ let package = Package(
         .target(
             name: "Discogs",
             dependencies: [
-                "DisplayText", "Library", "Log", "Metadata", "Recommender", "SQLite", "Settings",
-                "TagWriter",
+                "Artwork", "DisplayText", "HTTPSClient", "Library", "Log", "Metadata",
+                "Recommender", "SQLite", "Settings", "TagWriter",
             ],
             path: "Sources/Core/Discogs",
+            swiftSettings: strictSwift,
+            // The system library, which the SDK's zlib module declares.
+            linkerSettings: [.linkedLibrary("z")]
+        ),
+        .target(
+            name: "Snapshot",
+            dependencies: ["Library", "Log", "SQLite"],
+            path: "Sources/Core/Snapshot",
             swiftSettings: strictSwift,
             // The system library, which the SDK's zlib module declares.
             linkerSettings: [.linkedLibrary("z")]
@@ -191,8 +204,8 @@ let package = Package(
         .target(
             name: "TagEditor",
             dependencies: [
-                "Artwork", "Commands", "DisplayText", "Library", "Log", "Metadata", "Settings",
-                "TagWriter",
+                "Artwork", "Commands", "Discogs", "DisplayText", "Library", "Log", "Metadata",
+                "Settings", "TagWriter",
             ],
             path: "Sources/Features/TagEditor",
             swiftSettings: strictSwift
@@ -249,9 +262,8 @@ let package = Package(
                 "Downloads", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Recommender",
-                "Scripting", "SQLite", "Settings", "SettingsWindow", "Spectrum", "TagEditor",
-                "TagWriter",
-                "UPnP", "UPnPOutput",
+                "Scripting", "SQLite", "Settings", "SettingsWindow", "Snapshot", "Spectrum",
+                "TagEditor", "TagWriter", "UPnP", "UPnPOutput",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -314,7 +326,7 @@ let package = Package(
             name: "Bench",
             dependencies: [
                 "Analysis", "Artwork", "Commands", "Discogs", "DiscogsTagger", "DisplayText",
-                "Fixtures", "HALOutput",
+                "Fixtures", "HALOutput", "HTTPSClient",
                 "Library",
                 "LibraryBrowser",
                 "Metadata", "Palette", "Playback", "QueueView", "SQLite", "Settings", "TagEditor",
@@ -347,7 +359,8 @@ let package = Package(
             name: "DiscogsTests",
             dependencies: [
                 // DiscogsImport, built for the tests that kill it partway through an import.
-                "Discogs", "DiscogsImport", "Fixtures", "Library", "Metadata", "Recommender",
+                "Discogs", "DiscogsImport", "Fixtures", "HTTPSClient", "Library", "Metadata",
+                "Recommender",
                 "SQLite", "Settings", "TagWriter",
             ],
             resources: [.copy("Fixtures")],
@@ -424,6 +437,11 @@ let package = Package(
                 "LibraryBrowser",
                 "Metadata", "Playback", "SQLite", "Settings",
             ],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "HTTPSClientTests",
+            dependencies: ["HTTPSClient"],
             swiftSettings: strictSwift
         ),
         .testTarget(
@@ -521,12 +539,19 @@ let package = Package(
         ),
         .testTarget(
             name: "TagEditorTests",
-            dependencies: ["Commands", "Fixtures", "Metadata", "TagEditor", "TagWriter"],
+            dependencies: [
+                "Commands", "Discogs", "Fixtures", "Metadata", "TagEditor", "TagWriter",
+            ],
             swiftSettings: strictSwift
         ),
         .testTarget(
             name: "TagWriterTests",
             dependencies: ["Fixtures", "Metadata", "TagWriter"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "SnapshotTests",
+            dependencies: ["Fixtures", "Library", "Settings", "Snapshot", "SQLite"],
             swiftSettings: strictSwift
         ),
         .testTarget(

@@ -11,7 +11,8 @@ import TagWriter
 /// per tier with its count, each an album list; the selected album's release beside its
 /// tracklist, file against track; and the buttons that review it and apply a tier. With a
 /// catalog it says which dump it's of, when it was imported, its size and where it is; without
-/// one it says so and offers the import, and Analyze stays off. After an import stopped before
+/// one it says so and offers the import, and Analyze stays off for Local Catalog; the Discogs
+/// API, and Both as the API alone, still analyze (ADR 0139). After an import stopped before
 /// it finished it offers Resume Import and Start Over.
 @MainActor
 final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
@@ -29,28 +30,39 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         checkboxWithTitle: "Skip Blu-ray, DVD and video", target: nil, action: nil)
     let sortArtistBox = NSButton(
         checkboxWithTitle: "Fill sort artist from album artist", target: nil, action: nil)
+    /// The API and Both items' tooltip without a token.
+    static let noTokenTip =
+        "No Discogs token in config.json: only releases already tagged with an ID are looked up"
     static let importTitle = "Import Discogs Dump…"
+
     static let reimportTitle = "Reimport Discogs Dump…"
     let importButton = NSButton(title: TaggerWindow.importTitle, target: nil, action: nil)
     let progress = NSProgressIndicator()
     let statusLabel = NSTextField(labelWithString: "")
-    let catalogLabel = NSTextField(wrappingLabelWithString: "")
-    let catalogImportButton = NSButton(title: TaggerWindow.importTitle, target: nil, action: nil)
+    let catalogLabel = NSTextField(labelWithString: "")
     let revealButton = NSButton(title: "Reveal in Finder", target: nil, action: nil)
     let catalogBox = NSStackView()
-    let resumeLabel = NSTextField(wrappingLabelWithString: "")
+    let resumeLabel = NSTextField(labelWithString: "")
     let resumeButton = NSButton(title: "Resume Import", target: nil, action: nil)
     let startOverButton = NSButton(title: "Start Over", target: nil, action: nil)
     let resumeBox = NSStackView()
+    /// The rows above the tabs, each on one line.
+    private(set) var headerRows: [NSStackView] = []
     let tabs = NSSegmentedControl()
     let albumTable = NSTableView()
     let trackTable = NSTableView()
     let releaseTitle = NSTextField(labelWithString: "")
     let releaseLine = NSTextField(labelWithString: "")
+    /// Why a Likely or Incomplete album isn't Exact, under the release's lines.
+    let reasonsLine = NSTextField(labelWithString: "")
     let otherReleasesButton = NSButton(title: "Other Releases…", target: nil, action: nil)
     let changesButton = NSButton(title: "View Changes…", target: nil, action: nil)
+    let discogsButton = NSButton(title: openOnDiscogsTitle, target: nil, action: nil)
     let rejectButton = NSButton(title: "Reject", target: nil, action: nil)
+    /// The row of buttons under the tracklists, and the one under the album list and them.
+    let reviewButtons = NSStackView()
     let applyButton = NSButton(title: "", target: nil, action: nil)
+    let bottom = NSStackView()
 
     /// Writes the confirmed edits.
     var write: ([(path: String, edit: TagEdit)], @escaping (Set<String>) -> Void) -> Void = {
@@ -60,6 +72,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     var choicesChosen: (TaggerChoices) -> Void = { _ in }
     var dumpsFolder: () -> URL? = { nil }
     var dumpsFolderChosen: (URL) -> Void = { _ in }
+    /// The sheets' layouts, which each sheet opens at, and what saves them once one closes.
+    var sheetLayouts = TaggerSheetLayouts()
+    var sheetLayoutsChosen: (TaggerSheetLayouts) -> Void = { _ in }
 
     /// The albums of the tab shown, in list order.
     private(set) var shownAlbums: [TaggerModel.Album] = []
@@ -67,6 +82,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     private(set) var rows: [TrackComparison] = []
     /// An open sheet's controller, held while it shows.
     private var sheet: NSWindowController?
+    /// View Release…'s sheet, over Other Releases…, held while it shows.
+    private var releaseSheet: ViewReleaseSheet?
+    /// Set from View Release…'s click until its sheet shows or the read fails, so a second
+    /// click doesn't queue a second sheet.
+    private var readingRelease = false
 
     init(model: TaggerModel) {
         self.model = model
@@ -92,22 +112,20 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     // MARK: - Layout
 
     private func build(in window: NSWindow) {
-        sourcePopUp.autoenablesItems = false
-        for source in TaggerModel.Source.allCases {
-            sourcePopUp.addItem(withTitle: source.title)
-            sourcePopUp.lastItem?.isEnabled = source.isAvailable
-            if !source.isAvailable { sourcePopUp.lastItem?.toolTip = "Comes with the Discogs API" }
-        }
+        sourcePopUp.addItems(withTitles: DiscogsSource.allCases.map(\.title))
+        sourcePopUp.target = self
+        sourcePopUp.action = #selector(sourceChosen)
         scopePopUp.addItems(withTitles: TaggerModel.Scope.allCases.map(\.title))
         scopePopUp.target = self
         scopePopUp.action = #selector(scopeChosen)
         for (button, action) in [
             (analyzeButton, #selector(analyzeOrStop)), (mappingButton, #selector(showMapping)),
-            (importButton, #selector(chooseDumps)), (catalogImportButton, #selector(chooseDumps)),
+            (importButton, #selector(chooseDumps)),
             (revealButton, #selector(revealCatalog)), (resumeButton, #selector(resumeImport)),
             (startOverButton, #selector(startImportOver)),
             (otherReleasesButton, #selector(showOtherReleases)),
             (changesButton, #selector(showChanges)), (rejectButton, #selector(toggleRejected)),
+            (discogsButton, #selector(openReleasePage)),
             (applyButton, #selector(applyAll)),
         ] {
             button.bezelStyle = .rounded
@@ -139,22 +157,27 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         statusLabel.lineBreakMode = .byTruncatingTail
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
+        // The catalog's line with its buttons, then the controls in two rows, each of which
+        // fits the window's minimum width on one line; the labels that can't truncate.
+        catalogBox.setViews([catalogLabel, revealButton], in: .leading)
+        catalogBox.setViews([importButton], in: .trailing)
+        catalogBox.spacing = 12
         let bar = NSStackView(views: [
             label("Source:"), sourcePopUp, label("Scope:"), scopePopUp, analyzeButton, progress,
-            statusLabel, NSView(), importButton,
+            statusLabel, NSView(),
         ])
         bar.spacing = 8
         let choices = NSStackView(views: [
             mappingButton, keepBox, skipVideoBox, sortArtistBox, NSView(),
         ])
         choices.spacing = 12
-
-        catalogBox.setViews([catalogLabel, catalogImportButton, revealButton], in: .leading)
-        catalogBox.spacing = 12
-        catalogLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         resumeBox.setViews([resumeLabel, resumeButton, startOverButton], in: .leading)
         resumeBox.spacing = 12
-        resumeLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        for label in [catalogLabel, resumeLabel] {
+            label.lineBreakMode = .byTruncatingTail
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+        headerRows = [catalogBox, bar, choices, resumeBox]
 
         tabs.segmentStyle = .automatic
         tabs.segmentCount = MatchTier.allCases.count
@@ -178,16 +201,20 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         releaseTitle.lineBreakMode = .byTruncatingTail
         releaseLine.textColor = .secondaryLabelColor
         releaseLine.lineBreakMode = .byTruncatingTail
-        let buttons = NSStackView(views: [otherReleasesButton, changesButton, rejectButton])
-        buttons.spacing = 8
+        reasonsLine.textColor = .systemOrange
+        reasonsLine.lineBreakMode = .byTruncatingTail
+        revealButton.isHidden = true
+        reviewButtons.setViews([otherReleasesButton, changesButton, rejectButton], in: .leading)
+        reviewButtons.setViews([discogsButton], in: .trailing)
+        reviewButtons.spacing = 8
         let detail = NSStackView(views: [
-            releaseTitle, releaseLine, tracks, buttons,
+            releaseTitle, releaseLine, reasonsLine, tracks, reviewButtons,
         ])
         detail.orientation = .vertical
         detail.alignment = .leading
         detail.spacing = 6
         detail.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 0)
-        for view in detail.arrangedSubviews where view is NSScrollView {
+        for view in [tracks, reviewButtons] {
             view.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -8).isActive = true
         }
 
@@ -204,7 +231,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
         detail.widthAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
 
-        let bottom = NSStackView(views: [NSView(), applyButton])
+        bottom.setViews([applyButton], in: .trailing)
         let page = NSStackView(views: [bar, choices, catalogBox, resumeBox, tabs, split, bottom])
         page.orientation = .vertical
         page.alignment = .leading
@@ -213,7 +240,18 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         for view in [bar, choices, catalogBox, resumeBox, split, bottom] {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -28).isActive = true
         }
-        split.setContentHuggingPriority(.defaultLow, for: .vertical)
+        // The tables are the one view of each stack that takes the spare height, and give it
+        // up first: every other row keeps its own height.
+        for stack in [page, detail] {
+            stack.distribution = .fill
+            for view in stack.arrangedSubviews {
+                let isTables = view === split || view === tracks
+                view.setContentHuggingPriority(
+                    isTables ? .defaultLow : .defaultHigh, for: .vertical)
+                view.setContentCompressionResistancePriority(
+                    isTables ? .defaultLow : .defaultHigh, for: .vertical)
+            }
+        }
         window.contentView = page
     }
 
@@ -226,37 +264,50 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Shows the model as it is now: the catalog, the work running, the tabs, the albums and
     /// the selected album.
     func refresh() {
-        catalogBox.isHidden = model.catalog == .checking
-        catalogImportButton.isHidden = false
-        revealButton.isHidden = true
-        catalogLabel.toolTip = nil
+        // The line, its tooltip, and whether there's a catalog to reveal; nil while checking,
+        // when what the last check showed stays until this one answers.
+        let catalogShown: (text: String, tip: String?, isReady: Bool)?
         switch model.catalog {
-        case .checking:
-            // The title the last check gave stays until this one answers.
-            break
-        case .ready(let status):
-            catalogLabel.stringValue = status.shown
-            catalogLabel.toolTip = status.url.path
-            catalogImportButton.isHidden = true
-            revealButton.isHidden = false
-            importButton.title = Self.reimportTitle
+        case .checking: catalogShown = nil
+        case .ready(let status): catalogShown = (status.shown, status.detail, true)
         case .missing:
-            catalogLabel.stringValue =
-                "There's no Discogs catalog on this Mac, so there's nothing to match with."
-                + " Import Discogs Dump… builds one from the dumps folder."
-            importButton.title = Self.importTitle
+            let asked = model.source == .catalog ? "" : ", so the Discogs API is asked"
+            catalogShown = (
+                "There's no Discogs catalog on this Mac\(asked); Import Discogs Dump… builds one.",
+                nil, false
+            )
         case .unusable(let why):
-            catalogLabel.stringValue = "The Discogs catalog can't be used: \(why)."
-            importButton.title = Self.importTitle
+            let text = "The Discogs catalog can't be used: \(why)."
+            catalogShown = (text, text, false)
         }
-        resumeBox.isHidden = model.unfinished == nil || model.isBusy
+        if let catalogShown {
+            catalogLabel.stringValue = catalogShown.text
+            catalogLabel.toolTip = catalogShown.tip
+            revealButton.isHidden = !catalogShown.isReady
+            importButton.title = catalogShown.isReady ? Self.reimportTitle : Self.importTitle
+        } else if catalogLabel.stringValue.isEmpty {
+            catalogLabel.stringValue = "Checking the Discogs catalog…"
+        }
+        let resumeHidden = model.unfinished == nil || model.isBusy
         if let unfinished = model.unfinished {
             resumeLabel.stringValue =
                 "The import of the \(unfinished.dumpDate) Discogs dump stopped at"
                 + " \(Int(unfinished.fraction * 100))%. Resume Import carries on from there; Start"
                 + " Over imports the dump from its start."
+            resumeLabel.toolTip = resumeLabel.stringValue
         }
-        sourcePopUp.selectItem(at: TaggerModel.Source.allCases.firstIndex(of: model.source)!)
+        if resumeBox.isHidden != resumeHidden {
+            resumeBox.isHidden = resumeHidden
+            // The tables take the height the row leaves or gives back now, not at the next
+            // pass that happens to come.
+            window?.contentView?.layoutSubtreeIfNeeded()
+        }
+        sourcePopUp.selectItem(at: DiscogsSource.allCases.firstIndex(of: model.source)!)
+        sourcePopUp.isEnabled = !model.isBusy
+        let tokenTip = model.hasToken() ? nil : Self.noTokenTip
+        for (item, source) in zip(sourcePopUp.itemArray, DiscogsSource.allCases) {
+            item.toolTip = source == .catalog ? nil : tokenTip
+        }
         scopePopUp.selectItem(at: TaggerModel.Scope.allCases.firstIndex(of: model.scope)!)
         scopePopUp.isEnabled = !model.isBusy
         importButton.isEnabled = !model.isBusy
@@ -274,7 +325,21 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             statusLabel.stringValue = model.status
         case .analyzing(let done, let total):
             stoppable = true
-            show(done, of: total, "Analyzing \(number(done)) of \(number(total)) albums")
+            let api = model.matchProgress.flatMap { progress in
+                progress.apiAlbumCount.map { (progress.apiAlbumsDone ?? 0, $0) }
+            }
+            if let (apiDone, apiTotal) = api {
+                show(
+                    apiDone, of: apiTotal,
+                    "Catalog \(number(done)) of \(number(total)), then Discogs \(number(apiDone))"
+                        + " of \(number(apiTotal))")
+            } else {
+                let what = model.runSource == .api ? "Asking Discogs about" : "Analyzing"
+                show(done, of: total, "\(what) \(number(done)) of \(number(total)) albums")
+            }
+            if let seconds = model.matchProgress?.waitingSeconds {
+                statusLabel.stringValue += "; waiting \(number(seconds)) s for Discogs's rate limit"
+            }
         case .reading(let done, let total):
             stoppable = true
             show(done, of: total, "Reading \(number(done)) of \(number(total)) files")
@@ -323,6 +388,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 [
                     summary.label, summary.catalogNumber, summary.country, summary.year,
                     summary.format, "Release \(summary.id)",
+                    album?.match.origin == .api ? "from the Discogs API" : "",
                 ]
                 .filter { !$0.isEmpty }.joined(separator: " · ")
         } else {
@@ -331,11 +397,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 album == nil
                 ? "" : "Other Releases… lists what the catalog found, if anything."
         }
+        reasonsLine.stringValue = album.flatMap { reasonsText($0.match, separator: " · ") } ?? ""
         rows = album.map { $0.match.comparison(of: $0.album) } ?? []
         trackTable.reloadData()
         let reviewing = album != nil && !model.isBusy
         otherReleasesButton.isEnabled = reviewing
         changesButton.isEnabled = reviewing && summary != nil && album?.isRejected == false
+        discogsButton.isEnabled = summary != nil
         rejectButton.isEnabled = reviewing
         rejectButton.title = album?.isRejected == true ? "Accept" : "Reject"
     }
@@ -353,8 +421,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         else { return nil }
         let cell = NSTextField(labelWithString: text(tableView, id, row))
         cell.lineBreakMode = .byTruncatingTail
-        if tableView === albumTable, shownAlbums[row].isRejected || shownAlbums[row].applied {
-            cell.textColor = .secondaryLabelColor
+        if tableView === albumTable {
+            if shownAlbums[row].isRejected || shownAlbums[row].applied {
+                cell.textColor = .secondaryLabelColor
+            }
+            cell.toolTip = reasonsText(shownAlbums[row].match, separator: "\n")
         }
         if tableView === trackTable, id == .state {
             cell.textColor =
@@ -365,6 +436,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 }
         }
         return cell
+    }
+
+    /// Why `match` isn't Exact, a reason a line or `separator` apart; nil when it says nothing.
+    private func reasonsText(_ match: AlbumMatch, separator: String) -> String? {
+        match.reasons.isEmpty ? nil : match.reasons.map(\.text).joined(separator: separator)
     }
 
     /// The text of the cell in column `id` of `row`.
@@ -445,6 +521,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     // MARK: - Actions
 
+    @objc private func sourceChosen() {
+        model.chooseSource(DiscogsSource.allCases[sourcePopUp.indexOfSelectedItem])
+    }
+
     @objc private func scopeChosen() {
         model.scope = TaggerModel.Scope.allCases[scopePopUp.indexOfSelectedItem]
     }
@@ -505,7 +585,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     @objc private func choiceToggled() {
         let choices = TaggerChoices(
             keepExistingValues: keepBox.state == .on, skipVideo: skipVideoBox.state == .on,
-            fillSortArtist: sortArtistBox.state == .on)
+            fillSortArtist: sortArtistBox.state == .on, artwork: model.choices.artwork)
         model.setChoices(choices)
         choicesChosen(choices)
     }
@@ -513,11 +593,18 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     @objc private func showMapping() {
         guard let window, sheet == nil else { return }
         let mapping = MappingSheet(
-            draft: MappingDraft(mapping: model.mapping, saved: model.savedMappings))
+            draft: MappingDraft(mapping: model.mapping, saved: model.savedMappings),
+            artwork: model.choices.artwork, hasToken: model.hasToken())
         present(mapping, over: window) { [weak self] in
-            guard let draft = mapping.result else { return }
-            self?.mappingChosen(draft.mapping, draft.saved)
+            guard let self, let draft = mapping.result else { return }
+            mappingChosen(draft.mapping, draft.saved)
+            guard mapping.artwork != model.choices.artwork else { return }
+            var choices = model.choices
+            choices.artwork = mapping.artwork
+            model.setChoices(choices)
+            choicesChosen(choices)
         }
+
     }
 
     @objc private func showOtherReleases() {
@@ -532,6 +619,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             let releases = ReleasesSheet(
                 candidates: candidates, chosen: album.match.releaseID,
                 title: albumTitle(album.album))
+            releases.viewRelease = { [self, weak releases] id in
+                guard let over = releases?.window else { return }
+                viewRelease(id, over: over)
+            }
             present(releases, over: window) { [self] in
                 guard let id = releases.result, id != album.match.releaseID else { return }
                 Task { await model.choose(id, for: album.id) }
@@ -539,8 +630,45 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         }
     }
 
+    /// Shows release `id` over Other Releases…, which stays open under it.
+    private func viewRelease(_ id: Int, over sheetWindow: NSWindow) {
+        guard releaseSheet == nil, !readingRelease else { return }
+        readingRelease = true
+        Task {
+            defer { readingRelease = false }
+            let detail: ReleaseDetail?
+            do {
+                detail = try await model.release(id)
+            } catch {
+                // Over the tagger when Other Releases was closed while the release was read.
+                let over = sheetWindow.sheetParent != nil ? sheetWindow : nil
+                return alert("The release couldn't be read", ["\(error)"], over: over)
+            }
+            // Other Releases was closed while the release was read.
+            guard sheetWindow.sheetParent != nil else { return }
+            guard let detail else {
+                return alert(
+                    "The release couldn't be read", ["The catalog has no release \(id)."],
+                    over: sheetWindow)
+            }
+            let shown = ViewReleaseSheet(release: detail)
+            releaseSheet = shown
+            begin(shown, over: sheetWindow) { [self] in releaseSheet = nil }
+        }
+    }
+
+    /// What Open on Discogs opens a page with; tests stand in for the browser.
+    var openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
+
+    @objc private func openReleasePage() {
+        guard let id = model.selected?.match.releaseID else { return }
+        openOnDiscogs(id, through: openURL)
+    }
+
     @objc private func showChanges() {
-        guard let window, let album = model.selected, sheet == nil else { return }
+        guard let window, let album = model.selected, let releaseID = album.match.releaseID,
+            sheet == nil
+        else { return }
         Task {
             let set: AlbumChangeSet
             let problems: [String]
@@ -554,10 +682,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 return alert("\(problems.count) of the album's files can't be read", problems)
             }
             let changes = ChangesSheet(
-                set: set, excluded: album.excluded, title: albumTitle(album.album))
+                set: set, excluded: album.excluded, coverExcluded: album.coverExcluded,
+                title: albumTitle(album.album), releaseID: releaseID)
             present(changes, over: window) { [self] in
                 guard let answer = changes.result else { return }
-                model.setExcluded(answer.excluded, for: album.id)
+                model.setExcluded(
+                    answer.excluded, coverExcluded: answer.coverExcluded, for: album.id)
+
                 if answer.apply { apply([album.id]) }
             }
         }
@@ -600,21 +731,38 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     /// Shows `controller`'s window as a sheet over `window`, calling `ended` once it closes.
     private func present(
-        _ controller: NSWindowController & TaggerSheet, over window: NSWindow,
-        ended: @escaping () -> Void
+        _ controller: some TaggerSheet, over window: NSWindow, ended: @escaping () -> Void
     ) {
-        guard let sheetWindow = controller.window else { return }
+        guard controller.window != nil else { return }
         sheet = controller
         refresh()
-        window.beginSheet(sheetWindow) { [weak self] _ in
+        begin(controller, over: window) { [weak self] in
             self?.sheet = nil
             ended()
             self?.refresh()
         }
     }
 
-    private func alert(_ message: String, _ details: [String]) {
-        guard let window else { return }
+    /// Shows `controller` as a sheet over `window` at the layout it was left at, and saves its
+    /// layout once it closes, before `ended`.
+    private func begin(
+        _ controller: some TaggerSheet, over window: NSWindow, ended: @escaping () -> Void
+    ) {
+        guard let sheetWindow = controller.window else { return }
+        controller.apply(sheetLayouts, room: window.screen?.visibleFrame.size)
+        window.beginSheet(sheetWindow) { [weak self, weak controller] _ in
+            if let self, let controller {
+                sheetLayouts = controller.recorded(in: sheetLayouts)
+                sheetLayoutsChosen(sheetLayouts)
+            }
+            ended()
+        }
+    }
+
+    /// Shows the problems over `over`, the tagger's window unless a sheet of it is up and
+    /// would hide the alert.
+    private func alert(_ message: String, _ details: [String], over: NSWindow? = nil) {
+        guard let window = over ?? window else { return }
         let shown = 8
         let alert = NSAlert()
         alert.messageText = message
@@ -627,7 +775,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
 /// A sheet over the tagger's window, which ends itself with its answer set.
 @MainActor
-protocol TaggerSheet: AnyObject {}
+protocol TaggerSheet: NSWindowController {
+    /// Which of the saved layouts is this sheet's.
+    static var layoutKind: TaggerSheetKind { get }
+    /// The table whose column widths and sort the layout keeps.
+    var table: NSTableView { get }
+}
 
 extension NSWindowController {
     /// Ends the sheet this controller's window is.

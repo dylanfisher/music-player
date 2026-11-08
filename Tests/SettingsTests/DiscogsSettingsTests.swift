@@ -73,3 +73,43 @@ private func problems(_ text: String) -> [String]? {
         #expect(found?.first?.contains(problem) == true, "\(found ?? [])")
     }
 }
+
+/// Made up for these tests; no real token appears in a test (ADR 0137).
+let fakeToken = "fakeTOKENfor3tests0nly"
+
+@Test func theTokenReadsAsADiscogsToken() throws {
+    let contents = try parsed(#"{"discogs.token": "\#(fakeToken)"}"#)
+    #expect(contents.values["discogs.token"] as? DiscogsToken == DiscogsToken(fakeToken))
+    #expect(try parsed(#"{"discogs.token": null}"#).values["discogs.token"] != nil)
+}
+
+@Test func theTokenNeverPrintsItsValue() throws {
+    let token = DiscogsToken(fakeToken)
+    let optional: DiscogsToken? = token
+    var dumped = ""
+    dump(token, to: &dumped)
+    for text in [
+        String(describing: token), "\(token)", String(reflecting: token), "\(optional as Any)",
+        String(reflecting: optional), dumped,
+    ] {
+        #expect(!text.contains(fakeToken))
+        #expect(text.contains("<Discogs token>"), "\(text)")
+    }
+    let decodeError = #expect(throws: DecodingError.self) {
+        try JSONDecoder().decode(DiscogsToken.self, from: Data(#"{"t": "\#(fakeToken)"}"#.utf8))
+    }
+    #expect(!"\(decodeError as Any)".contains(fakeToken))
+}
+
+@Test func aBadTokenIsAProblemThatNamesTheKeyButNotTheValue() {
+    for json in [
+        #""\#(fakeToken)\nX""#, #""\#(fakeToken) X""#, #""   ""#, #""""#, "12345",
+        #""\#(fakeToken)é""#,
+    ] {
+        let found = problems(#"{"discogs.token": \#(json)}"#)
+        #expect(found?.count == 1, "\(json)")
+        #expect(found?.first?.contains("\"discogs.token\"") == true, "\(found ?? [])")
+        #expect(found?.first?.contains(fakeToken) == false, "\(found ?? [])")
+        #expect(found?.first?.contains("12345") == false, "\(found ?? [])")
+    }
+}

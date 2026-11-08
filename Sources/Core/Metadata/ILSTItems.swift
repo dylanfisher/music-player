@@ -1,7 +1,9 @@
 /// What the iTunes metadata items under `moov/udta/meta/ilst` hold.
 struct ILSTItems {
     var tags = TrackTags()
+    /// The first picture of the first `covr`.
     var art: EmbeddedArt?
+    var pictures: [EmbeddedPicture] = []
     /// From `iTunSMPB`: AAC's length without the encoder's priming and remainder frames.
     var gaplessLength: Int?
 }
@@ -174,42 +176,64 @@ func metadataItems(_ reader: ByteReader, _ udta: Atom) throws(ParseFailure) -> I
     return items
 }
 
+/// A `data` atom's type code and where its value lies.
+private func dataValue(_ data: Atom, of item: Atom, _ reader: ByteReader) throws(ParseFailure)
+    -> (type: UInt32, value: Range<Int>)
+{
+    guard data.body.count >= 8 else {
+        throw .malformed(at: data.start, "MP4 '\(item.type)' data atom is too short")
+    }
+    let header = try reader.bytes(data.body.lowerBound..<data.body.lowerBound + 8)
+    return (try header.uint32BE(0) & 0xFF_FFFF, data.body.lowerBound + 8..<data.body.upperBound)
+}
+
 /// An item holds a `data` atom: a type code, a locale, then the value. Freeform items also hold
 /// `mean` and `name`. Unknown items are skipped without reading their values.
 private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItems)
     throws(ParseFailure)
 {
     guard let kind = itemKinds[item.type] else { return }
-    var data: Atom?
+    var datas: [Atom] = []
     var mean: String?
     var name: String?
     try forEachAtom(reader, in: item.body, parent: item) { child throws(ParseFailure) in
         switch child.type {
-        case MP4Type.data where data == nil: data = child
+        case MP4Type.data: datas.append(child)
         case MP4Type.mean: mean = latin1(try reader.bytes(child.body).suffix(from: 4).array)
         case MP4Type.name: name = latin1(try reader.bytes(child.body).suffix(from: 4).array)
         default: break
         }
         return true
     }
-    guard let data else { return }
-    guard data.body.count >= 8 else {
-        throw .malformed(at: data.start, "MP4 '\(item.type)' data atom is too short")
-    }
-    let header = try reader.bytes(data.body.lowerBound..<data.body.lowerBound + 8)
-    let type = try header.uint32BE(0) & 0xFF_FFFF
-    let valueRange = data.body.lowerBound + 8..<data.body.upperBound
-    let offset = valueRange.lowerBound
+    // `covr` holds a `data` atom a picture; every other item, one value.
+    // A picture of a type it can't show is left out and the rest kept; only a `covr` with
+    // none it can show is reported, as one of a single picture always was.
     if case .cover = kind {
-        guard items.art == nil else { return }
-        let head = try reader.bytes(valueRange.lowerBound..<min(valueRange.upperBound, offset + 8))
-        guard let mime = artTypes[type] ?? (type == 0 ? sniffedMIMEType(head.array) : nil) else {
-            throw .unsupported(at: data.start, "MP4 cover art with data type \(type)")
+        // Without the pictures kept, the first one it can show is all a scan needs.
+        guard reader.keepsPictures || items.art == nil else { return }
+        var skipped: ParseFailure?
+        for data in datas {
+            let (type, valueRange) = try dataValue(data, of: item, reader)
+            let offset = valueRange.lowerBound
+            let head = try reader.bytes(offset..<min(valueRange.upperBound, offset + 8))
+            guard let mime = artTypes[type] ?? (type == 0 ? sniffedMIMEType(head.array) : nil)
+            else {
+                skipped =
+                    skipped ?? .unsupported(at: data.start, "MP4 cover art with data type \(type)")
+                continue
+            }
+            let art = EmbeddedArt(
+                offset: offset, byteCount: valueRange.count, mimeType: mime, unsynchronised: false)
+            if items.art == nil { items.art = art }
+            guard reader.keepsPictures else { break }
+            items.pictures.append(EmbeddedPicture(art: art, type: nil))
         }
-        items.art = EmbeddedArt(
-            offset: offset, byteCount: valueRange.count, mimeType: mime, unsynchronised: false)
+        if items.art == nil, let skipped { throw skipped }
         return
     }
+    guard let data = datas.first else { return }
+    let (type, valueRange) = try dataValue(data, of: item, reader)
+    let offset = valueRange.lowerBound
 
     let value = try reader.bytes(valueRange)
     switch kind {

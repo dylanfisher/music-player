@@ -292,3 +292,72 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(row.isSelected && row.interiorBackgroundStyle == .emphasized)
     palette.close()
 }
+
+/// Types `text` into the palette's field as the user would, replacing what's selected.
+@MainActor
+private func type(_ text: String, into palette: PaletteController) throws {
+    let editor = try #require(palette.field.currentEditor() as? NSTextView)
+    editor.insertText(text, replacementRange: editor.selectedRange())
+}
+
+/// Waits a few seconds for `condition`, yielding to the ranking task meanwhile.
+@MainActor
+private func waitFor(_ condition: () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(5)
+    while !condition() {
+        try #require(Date() < deadline, "timed out")
+        try await Task.sleep(for: .milliseconds(5))
+    }
+}
+
+/// ⌘K opens with its last query selected, so typing replaces it and Return runs it again; ⌘K
+/// while it has one clears it, and closes it once empty (53.14).
+@MainActor @Test func thePaletteKeepsItsQueryUntilItsChordClearsIt() async throws {
+    let palette = PaletteController(
+        model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
+    palette.closingChords = { $0 == .commands ? [KeyChord("k", .command)] : [] }
+    var chosen: [String] = []
+    palette.choose = { item, _ in chosen.append(item.title) }
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    let items = ["Play", "Pause", "Stop"].map { item($0, .command) }
+    func open() { palette.show(.commands, items: items, over: window, place: nil) }
+    open()
+    // With nothing typed it opens empty, listing every command at once.
+    #expect(palette.field.stringValue.isEmpty)
+    #expect(palette.shown.count == 3)
+    try type("sto", into: palette)
+    try await waitFor { palette.shown.map(\.item.title) == ["Stop"] }
+    palette.runSelected()
+    #expect(chosen == ["Stop"])
+    #expect(!palette.isShowing)
+
+    open()
+    #expect(palette.field.stringValue == "sto")
+    #expect(palette.model.query == "sto")
+    #expect(palette.shown.map(\.item.title) == ["Stop"])
+    let editor = try #require(palette.field.currentEditor())
+    #expect(editor.selectedRange == NSRange(location: 0, length: 3))
+    palette.runSelected()
+    #expect(chosen == ["Stop", "Stop"])
+
+    open()
+    try type("pau", into: palette)
+    #expect(palette.field.stringValue == "pau")
+    try await waitFor { palette.shown.map(\.item.title) == ["Pause"] }
+    let commandK = try #require(
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+            windowNumber: palette.window.windowNumber, context: nil, characters: "k",
+            charactersIgnoringModifiers: "k", isARepeat: false, keyCode: 40))
+    #expect(palette.takeKeyEquivalent(commandK))
+    #expect(palette.isShowing)
+    #expect(palette.field.stringValue.isEmpty)
+    try await waitFor { palette.shown.count == 3 }
+    #expect(palette.takeKeyEquivalent(commandK))
+    #expect(!palette.isShowing)
+    open()
+    #expect(palette.field.stringValue.isEmpty)
+    palette.close()
+}

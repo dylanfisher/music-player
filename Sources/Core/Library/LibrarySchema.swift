@@ -56,10 +56,15 @@ enum SchemaPart: String, CaseIterable {
     /// path or album ID of this index, so an index rebuild finds them again. An outbox and a
     /// hint only: every step can be told again from the files.
     case importJobs
+    /// Releases and masters the Discogs API returned, by kind and id, as JSON (ADR 0138). A
+    /// cache: rebuilding it discards nothing a fetch can't get again.
+    case discogsCache
 
-    var sql: String {
+    /// The part's SQL, the index's built with Separate Releases as given (ADR 0143); the other
+    /// parts don't depend on it.
+    func sql(separateReleases: Bool = false) -> String {
         switch self {
-        case .index: indexSchema
+        case .index: indexSchema(separateReleases: separateReleases)
         case .stats: statsSchema
         case .loved: lovedSchema
         case .disliked: dislikedSchema
@@ -74,6 +79,19 @@ enum SchemaPart: String, CaseIterable {
         case .analysisRun: analysisRunSchema
         case .discogsReviews: discogsReviewsSchema
         case .importJobs: importJobsSchema
+        case .discogsCache: discogsCacheSchema
+        }
+    }
+
+    /// Why a rebuild of the part needs a rescan, which the rescan question shows (ADR 0136); nil
+    /// for a part a rescan doesn't refill. The stored SQL is the part's only identity, so this
+    /// says what the part holds, not what this build changed in it.
+    var rescanWhy: String? {
+        switch self {
+        case .index:
+            "This build stores the index of the library's files, their tags and albums, in a new"
+                + " shape, so the index is made again from the files."
+        default: nil
         }
     }
 
@@ -101,6 +119,7 @@ enum SchemaPart: String, CaseIterable {
         case .analysisRun: [analysisRunTable, measuredAtTable, analysisFailuresTable]
         case .discogsReviews: [discogsReviewsTable]
         case .importJobs: [importOutboxTable, importStepsTable]
+        case .discogsCache: [discogsCacheTable]
         }
     }
 }
@@ -130,6 +149,7 @@ let analysisFailuresTable = "analysis_failures"
 let discogsReviewsTable = "discogs_reviews"
 let importOutboxTable = "import_outbox"
 let importStepsTable = "import_steps"
+let discogsCacheTable = "discogs_cache"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
@@ -144,7 +164,23 @@ let syncTables: Set<String> = [
     syncMovesTable,
 ]
 
-private let indexSchema = """
+/// The first line of the index's SQL, which says how albums were made, so that every
+/// connection reads the option from the file (ADR 0143).
+private func separateReleasesLine(_ on: Bool) -> String {
+    "-- separate releases: \(on ? "on" : "off")\n"
+}
+
+/// Whether the index SQL `stored` was built with Separate Releases on; nil when its first line
+/// doesn't say, as in a file from before the option.
+func storedSeparateReleases(_ stored: String) -> Bool? {
+    [true, false].first { stored.hasPrefix(separateReleasesLine($0)) }
+}
+
+private func indexSchema(separateReleases: Bool) -> String {
+    separateReleasesLine(separateReleases) + indexTablesSchema
+}
+
+private let indexTablesSchema = """
     CREATE TABLE files (
         -- The path's ID in paths, which an index rebuild keeps.
         id INTEGER PRIMARY KEY REFERENCES paths (id),
@@ -177,9 +213,11 @@ private let indexSchema = """
         title TEXT NOT NULL,
         -- The album artist, else the track artist; NULL for a compilation without one.
         artist_id INTEGER REFERENCES artists (id),
-        sort_title TEXT NOT NULL
+        sort_title TEXT NOT NULL,
+        -- The tracks' Discogs release id with Separate Releases on, else ''.
+        release_id TEXT NOT NULL DEFAULT ''
     );
-    CREATE UNIQUE INDEX albums_identity ON albums (title, ifnull(artist_id, 0));
+    CREATE UNIQUE INDEX albums_identity ON albums (title, ifnull(artist_id, 0), release_id);
     CREATE TABLE tracks (
         file_id INTEGER PRIMARY KEY REFERENCES files (id) ON DELETE CASCADE,
         title TEXT,
@@ -369,6 +407,18 @@ private let discogsReviewsSchema = """
         path_id INTEGER PRIMARY KEY REFERENCES paths (id),
         release_id INTEGER
     );
+    """
+
+private let discogsCacheSchema = """
+    -- A row for each release or master fetched from the Discogs API: its kind, "release" or
+    -- "master", its id, when it was fetched in seconds since 1970, and what was kept of it.
+    CREATE TABLE \(discogsCacheTable) (
+        kind TEXT NOT NULL,
+        id INTEGER NOT NULL,
+        fetched_at REAL NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (kind, id)
+    ) WITHOUT ROWID;
     """
 
 private let measuresSchema = """

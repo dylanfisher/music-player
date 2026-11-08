@@ -8,15 +8,21 @@ public struct ConfigProblem: Error, Equatable, CustomStringConvertible {
     /// The path of keys to a key the app doesn't know, such as an obsolete setting, which is
     /// skipped while the rest of the file applies. Nil for a problem that applies nothing.
     public var obsoleteKey: [String]?
+    /// Whether the rest of the file applies anyway, as for a secret withheld from a file other
+    /// users can read.
+    public var isWarning: Bool
 
-    public init(line: Int?, message: String, obsoleteKey: [String]? = nil) {
+    public init(
+        line: Int?, message: String, obsoleteKey: [String]? = nil, isWarning: Bool = false
+    ) {
         self.line = line
         self.message = message
         self.obsoleteKey = obsoleteKey
+        self.isWarning = isWarning
     }
 
     /// Whether the file applies nothing while it has this problem.
-    public var blocks: Bool { obsoleteKey == nil }
+    public var blocks: Bool { obsoleteKey == nil && !isWarning }
 
     public var description: String { (line.map { "line \($0): " } ?? "") + message }
 }
@@ -58,10 +64,12 @@ public enum ConfigFile {
     /// Reads `text`, collecting every problem before throwing. An unknown key, a bad value, a
     /// key set twice and a shortcut `check` refuses are each a problem on their line. Unknown
     /// keys alone don't throw: they're skipped, and listed in `skipped` (ADR 0082).
-    /// `conflicts` checks the values in effect against each other, as the schema's does.
+    /// `conflicts` checks the values in effect against each other, as the schema's does. With
+    /// `othersCanRead`, a secret the file sets isn't used, and a warning says why (ADR 0137).
     static func parse(
         _ text: ConfigText, settings: [SettingDescriptor], check: ShortcutCheck,
-        conflicts: ([String: any SettingValue]) -> [SettingConflict] = { _ in [] }
+        conflicts: ([String: any SettingValue]) -> [SettingConflict] = { _ in [] },
+        othersCanRead: Bool = false
     ) throws(ConfigErrorList) -> ConfigContents {
         let plain: [UInt8]
         do {
@@ -119,6 +127,12 @@ public enum ConfigFile {
                 continue
             }
             switch descriptor.decode(json) {
+            case .success where othersCanRead && descriptor.isSecret && !(json is NSNull):
+                problems.append(
+                    ConfigProblem(
+                        line: line(member),
+                        message: "\"\(key)\" isn't used while other users can read the file;"
+                            + " run chmod 600 on it", isWarning: true))
             case .success(let value): values[key] = value
             case .failure(let reason):
                 problems.append(ConfigProblem(line: line(member), message: "\"\(key)\": \(reason)"))

@@ -60,9 +60,9 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(!window.analyzeButton.isEnabled)
     #expect(window.importButton.isEnabled)
     #expect(window.importButton.title == "Import Discogs Dump…")
-    #expect(!window.catalogImportButton.isHidden)
+    #expect(window.importButton.superview === window.catalogLabel.superview, "beside the line")
     #expect(window.revealButton.isHidden)
-    #expect(window.sourcePopUp.itemArray.map { $0.isEnabled } == [true, false, false])
+    #expect(window.sourcePopUp.itemArray.map { $0.isEnabled } == [true, true, true])
     window.window?.close()
 }
 
@@ -117,7 +117,9 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
             tags: TrackTags()),
         files(3, "1-2"),
     ])
-    let sheet = ChangesSheet(set: set, excluded: [], title: "Persuader – Stockholm")
+    let sheet = ChangesSheet(
+        set: set, excluded: [], title: "Persuader – Stockholm", releaseID: 10)
+    #expect(sheet.releaseID == 10)
     #expect(sheet.rows.count == 4, "the release id once, a position per file, the DSD file")
     #expect(sheet.text(.fileName, 0) == "All 2 files")
     #expect(sheet.text(.written, 0) == "10")
@@ -143,7 +145,8 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     let summary = { (id: Int, country: String, format: String) in
         ReleaseSummary(
             id: id, artist: "Persuader", title: "Stockholm", label: "Svek",
-            catalogNumber: "SK \(id)", country: country, year: "2000", format: format)
+            catalogNumber: "SK \(id)", country: country, year: "2000", format: format,
+            trackCount: 3)
     }
     let sheet = ReleasesSheet(
         candidates: [
@@ -159,10 +162,68 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(sheet.shown.map(\.summary.id) == [2])
 }
 
+/// Other Releases sorts by any column's header, numbers as numbers, keeping the sort through a
+/// filter, and shows each release's track count (51.37).
+@MainActor
+@Test func otherReleasesSortByEachColumnAndCountTracks() throws {
+    let summary = { (id: Int, artist: String, year: String, tracks: Int) in
+        ReleaseSummary(
+            id: id, artist: artist, title: "Title \(4 - id)", label: "Label \(id % 3)",
+            catalogNumber: "SK \(10 - id)", country: id == 2 ? "UK" : "Sweden", year: year,
+            format: "Format \(id)", trackCount: tracks)
+    }
+    let sheet = ReleasesSheet(
+        candidates: [
+            (summary(1, "Persuader", "2000", 12), nil), (summary(2, "abba", "1999", 9), 0.9),
+            (summary(3, "Cobra", "", 10), 0.95),
+        ],
+        chosen: 1, title: "Stockholm")
+    #expect(sheet.table.tableColumns.allSatisfy { $0.sortDescriptorPrototype != nil })
+    #expect(sheet.table.tableColumns.last?.title == "Tracks")
+    #expect(sheet.text(0, .tracks) == "12")
+    let order = { (column: TaggerColumn, ascending: Bool) in
+        sheet.sort(by: column, ascending: ascending)
+        return sheet.shown.map(\.summary.id)
+    }
+    #expect(order(.tracks, true) == [2, 3, 1], "9 before 10 before 12")
+    #expect(order(.tracks, false) == [1, 3, 2])
+    #expect(order(.score, true) == [2, 3, 1], "the chosen release's fit above any score")
+    #expect(order(.year, true) == [3, 2, 1], "no year first")
+    #expect(order(.artist, true) == [2, 3, 1], "ignoring case")
+    #expect(order(.title, true) == [3, 2, 1])
+    #expect(order(.label, true) == [3, 1, 2])
+    #expect(order(.catalogNumber, true) == [3, 2, 1])
+    #expect(order(.country, false) == [2, 1, 3], "equal values keep the found order")
+    #expect(order(.format, false) == [3, 2, 1])
+    sheet.filter([.country: "swe"])
+    #expect(sheet.shown.map(\.summary.id) == [3, 1], "still by format, descending")
+}
+
+/// View Release shows the release from the catalog, headings included, and Open on Discogs
+/// opens its page from the one URL builder.
+@MainActor
+@Test func viewReleaseShowsTheTracklistAndItsDiscogsPage() async throws {
+    let tagger = await model(
+        Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    let detail = try #require(try await tagger.release(42))
+    let sheet = ViewReleaseSheet(release: detail)
+    #expect(sheet.heading.stringValue == "Persuader – Release 42")
+    #expect(sheet.line.stringValue == "Svek · SK 42 · CD · Sweden · 2000")
+    #expect(sheet.numberOfRows(in: sheet.table) == 3)
+    #expect(
+        (0..<3).map { row in
+            [TaggerColumn.position, .title, .releaseTime].map { sheet.text($0, row) }
+        } == [["", "Side A", ""], ["A1", "Östermalm", "4:45"], ["A2", "Gamla Stan", "6:10"]])
+    #expect(discogsPage(detail.summary.id).absoluteString == releaseURL(42))
+    #expect(releaseURL(42) == "https://www.discogs.com/release/42")
+    try snapshot(try #require(sheet.window), "discogs-view-release")
+}
+
 @MainActor
 @Test func theFieldMappingSheetListsEveryFieldAndEditsTheDraft() throws {
     let sheet = MappingSheet(
-        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []))
+        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []), artwork: .off,
+        hasToken: true)
     #expect(sheet.numberOfRows(in: sheet.table) == DiscogsField.allCases.count)
     #expect(MappingSheet.fields.first == .releaseID)
     #expect(MappingSheet.fields.last == .involvedPeople)
@@ -252,7 +313,8 @@ private final class Imports: @unchecked Sendable {
 @Test func saveAsChoosesTheNewNameAndAsksBeforeReplacingOne() throws {
     let mine = NamedDiscogsMapping(name: "Mine", mapping: DiscogsPreset.minimal.mapping)
     let sheet = MappingSheet(
-        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: [mine]))
+        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: [mine]),
+        artwork: .off, hasToken: true)
     var asked: [String] = []
     var answer = false
     sheet.confirmReplace = { name, reply in
@@ -287,7 +349,8 @@ private final class Imports: @unchecked Sendable {
 @Test func aMappingExportedImportedAndPastedBackIsTheOneExported() throws {
     var mapping = DiscogsPreset.yate.mapping
     mapping[.genres].format.template = "{genre} - {styles}"
-    let sheet = MappingSheet(draft: MappingDraft(mapping: mapping, saved: []))
+    let sheet = MappingSheet(
+        draft: MappingDraft(mapping: mapping, saved: []), artwork: .off, hasToken: true)
     var refusals: [String] = []
     sheet.refused = { message, _ in refusals.append(message) }
     let folder = FileManager.default.temporaryDirectory
@@ -300,7 +363,8 @@ private final class Imports: @unchecked Sendable {
     #expect(text == AppSettings().discogsMapping.text(mapping), "the config file's shape")
 
     let other = MappingSheet(
-        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []))
+        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []), artwork: .off,
+        hasToken: true)
     other.refused = { message, _ in refusals.append(message) }
     other.importFile(at: file)
     #expect(other.draft.mapping == mapping)
@@ -311,7 +375,8 @@ private final class Imports: @unchecked Sendable {
     let pasteboard = NSPasteboard.withUniqueName()
     defer { pasteboard.releaseGlobally() }
     let pasted = MappingSheet(
-        draft: MappingDraft(mapping: DiscogsPreset.minimal.mapping, saved: []))
+        draft: MappingDraft(mapping: DiscogsPreset.minimal.mapping, saved: []), artwork: .off,
+        hasToken: true)
     pasted.pasteboard = pasteboard
     pasted.refused = { message, _ in refusals.append(message) }
     pasteboard.clearContents()
@@ -341,16 +406,17 @@ private final class Imports: @unchecked Sendable {
     let controller = TaggerWindow(model: tagger)
     try snapshot(try #require(controller.window), "discogs-tagger-catalog")
     #expect(!controller.catalogBox.isHidden)
-    let line = controller.catalogLabel.stringValue
-    #expect(line.hasPrefix("The catalog of the 20261101 Discogs dump, imported "))
     #expect(
-        line.contains(
+        controller.catalogLabel.stringValue
+            == "Catalog from the 2026-11-01 dump · \(fileSizeText(status.sizeBytes))")
+    let tip = try #require(controller.catalogLabel.toolTip)
+    #expect(tip.hasPrefix("/Volumes/Scratch/discogs-catalog.sqlite\nImported "))
+    #expect(
+        tip.hasSuffix(
             DateFormatter.localizedString(
                 from: status.importedAt, dateStyle: .medium, timeStyle: .short)))
-    #expect(line.contains(fileSizeText(status.sizeBytes)))
-    #expect(line.hasSuffix("/Volumes/Scratch/discogs-catalog.sqlite"))
     #expect(!controller.revealButton.isHidden)
-    #expect(controller.catalogImportButton.isHidden)
+    #expect(controller.revealButton.superview === controller.catalogLabel.superview)
     #expect(controller.importButton.title == "Reimport Discogs Dump…")
     #expect(controller.importButton.toolTip?.isEmpty == false)
     #expect(controller.mappingButton.toolTip?.isEmpty == false)
@@ -378,7 +444,8 @@ private final class Checks: @unchecked Sendable {
     let tagger = TaggerModel(
         effects: .init(
             albums: { [] }, reviews: { [:] }, review: { _, _ in },
-            match: { _, _, _, _ in [] }, summaries: { _ in [] }, read: { _, _ in ([], []) },
+            match: { _, _, _, _, _ in [] }, summaries: { _ in [] }, release: { _ in nil },
+            read: { _, _ in ([], []) },
             checkCatalog: {
                 if checks.next() > 1 { gate.wait() }
                 return readyCatalog
@@ -396,4 +463,347 @@ private final class Checks: @unchecked Sendable {
     await checking.value
     #expect(controller.importButton.title == "Reimport Discogs Dump…")
     controller.window?.close()
+}
+
+/// `view`'s frame in its window's coordinates.
+@MainActor
+private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil) }
+
+/// At the window's minimum width each header row is one line: every control inside the
+/// window, none over another, and only the lines that truncate narrower than they'd be.
+@MainActor
+@Test func theHeaderFitsTheMinimumWidthOnOneLinePerRow() async throws {
+    for catalog in [readyCatalog, .missing] {
+        let tagger = await model(
+            Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) },
+            catalog: catalog, unfinished: UnfinishedImport(dumpDate: "20261101", fraction: 0.5))
+        let controller = TaggerWindow(model: tagger)
+        let window = try #require(controller.window)
+        window.setContentSize(NSSize(width: window.minSize.width, height: 600))
+        window.contentView?.layoutSubtreeIfNeeded()
+        let content = frame(try #require(window.contentView))
+        let truncating = [controller.catalogLabel, controller.resumeLabel, controller.statusLabel]
+        for row in controller.headerRows where !row.isHidden {
+            let controls = row.arrangedSubviews.filter {
+                !$0.isHidden && type(of: $0) != NSView.self
+            }
+            .sorted { frame($0).minX < frame($1).minX }
+            for (control, next) in zip(controls, controls.dropFirst()) {
+                #expect(frame(control).maxX <= frame(next).minX, "\(control) beside \(next)")
+            }
+            for control in controls {
+                let shown = frame(control)
+                #expect(content.contains(shown), "\(control) in the window")
+                #expect(abs(shown.midY - frame(row).midY) <= 2, "\(control) on its row's line")
+                if !truncating.contains(where: { $0 === control }) {
+                    #expect(shown.width >= control.fittingSize.width - 1, "\(control) whole")
+                }
+            }
+        }
+        try snapshot(window, "discogs-tagger-narrow-\(catalog == .missing ? "missing" : "ready")")
+        window.close()
+    }
+}
+
+/// Opened with tracks selected in the library, the tagger is scoped to their albums and, with a
+/// catalog, analyzes them; without a selection it opens as before, and without a catalog it
+/// only scopes.
+@MainActor
+@Test func openingWithASelectionScopesToItAndAnalyzes() async throws {
+    for (selection, catalog, analyzes) in [
+        ([Int64(100)], readyCatalog, true), ([], readyCatalog, false),
+        ([100], TaggerModel.CatalogState.missing, false),
+    ] {
+        let seen = Seen()
+        let tagger = DiscogsTagger(
+            model: await model(
+                seen, albums: [album(1, "Stockholm", titles: stockholm)],
+                matches: { album, _ in
+                    match(album, release(10, "Stockholm", titles: stockholm), tier: .exact)
+                },
+                catalog: catalog))
+        tagger.selectedTracks = { selection }
+        tagger.show()
+        #expect(tagger.model.scope == (selection.isEmpty ? .library : .selection))
+        if analyzes {
+            try await eventually { seen.matched.count == 1 }
+        } else {
+            try await eventually { tagger.model.catalog != .checking }
+            // Long enough for an analyze the check would start to show.
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        await tagger.model.finished()
+        #expect(seen.matched.count == (analyzes ? 1 : 0), "\(selection) \(catalog)")
+        #expect(tagger.model.albums.map(\.id) == (analyzes ? [1] : []))
+
+        // Shown again with a selection, an open window does the same.
+        tagger.model.scope = .library
+        tagger.selectedTracks = { [100] }
+        tagger.show()
+        #expect(tagger.model.scope == .selection)
+        tagger.window?.close()
+    }
+}
+
+/// A Likely album says why it isn't Exact under its release's title and in its row's tooltip.
+@MainActor
+@Test func aLikelyAlbumSaysWhyUnderItsTitleAndInItsTooltip() async throws {
+    let likely = album(2, "Second", titles: ["Östermalm", "Other"])
+    var matched = match(likely, release(20, "Second", titles: stockholm), tier: .likely)
+    matched.reasons = [
+        .countDiffers(files: 2, tracks: 3), .tracksWithoutFile(1),
+        .durationsDiffer(3, overSeconds: 8, orFraction: 0.05),
+    ]
+    let reasoned = matched
+    let tagger = await model(Seen(), albums: [likely], matches: { _, _ in reasoned })
+    tagger.analyze()
+    await tagger.finished()
+    tagger.tab = .likely
+    tagger.selectedID = 2
+    let controller = TaggerWindow(model: tagger)
+    let words = [
+        "2 files, the release has 3 tracks", "1 track of the release has no file",
+        "3 file lengths are off by more than 8 s or 5%",
+    ]
+    #expect(controller.reasonsLine.stringValue == words.joined(separator: " · "))
+    let cell = controller.tableView(
+        controller.albumTable, viewFor: controller.albumTable.tableColumns[0], row: 0)
+    #expect(cell?.toolTip == words.joined(separator: "\n"))
+    #expect(NotExactReason.filesWithoutTrack(2).text == "2 files have no track on the release")
+    #expect(NotExactReason.foundByTitleOnly.text == "found by title only")
+
+    tagger.tab = .exact
+    tagger.selectedID = nil
+    controller.refresh()
+    #expect(controller.reasonsLine.stringValue.isEmpty)
+    controller.window?.close()
+}
+
+/// The tracklists and the album list take the height the header and the buttons leave: their
+/// bottoms sit on the button rows, and they grow with the window. Checked on the first open,
+/// after an import, after reopening and after a resize, since the owner saw them short once.
+@MainActor
+@Test func theTablesTakeTheHeightLeftInEveryCase() async throws {
+    let made = await model(
+        Seen(), albums: [album(1, "Stockholm", titles: stockholm)],
+        matches: { album, _ in
+            match(album, release(10, "Stockholm", titles: stockholm), tier: .exact)
+        },
+        unfinished: UnfinishedImport(dumpDate: "20261101", fraction: 0.5),
+        importing: { _, _, _ in
+            CatalogImportSummary(
+                dumpDate: "20261101", records: [:], compressedBytes: 0, catalogBytes: 0,
+                seconds: 1, resumedBytes: 0)
+        })
+    let tagger = DiscogsTagger(model: made)
+    tagger.dumpsFolder = { URL(fileURLWithPath: "/Volumes/music/discogs", isDirectory: true) }
+    tagger.show()
+    let controller = try #require(tagger.window?.windowController as? TaggerWindow)
+    let window = try #require(tagger.window)
+    window.setContentSize(NSSize(width: 1060, height: 700))
+
+    func expectFilled(_ when: String) {
+        let tracks = frame(controller.trackTable.enclosingScrollView!)
+        let albums = frame(controller.albumTable.enclosingScrollView!)
+        #expect(abs(tracks.minY - frame(controller.reviewButtons).maxY) <= 12, "\(when)")
+        #expect(abs(albums.minY - frame(controller.bottom).maxY) <= 12, "\(when)")
+        #expect(tracks.height > 200 && albums.height > 300, "\(when): \(tracks) \(albums)")
+        var views = [window.contentView!]
+        while let view = views.popLast() {
+            #expect(!view.hasAmbiguousLayout, "\(when): \(view) \(view.frame)")
+            views += view.subviews
+        }
+    }
+    window.contentView?.layoutSubtreeIfNeeded()
+    expectFilled("first open")
+    await tagger.model.finished()
+    try await eventually { tagger.model.catalog != .checking }
+    expectFilled("once the catalog is checked")
+
+    click(controller.resumeButton)
+    await tagger.model.finished()
+    try await eventually { tagger.model.catalog != .checking && !tagger.model.isBusy }
+    expectFilled("after an import")
+
+    window.close()
+    tagger.show()
+    window.contentView?.layoutSubtreeIfNeeded()
+    expectFilled("after reopening")
+
+    let before = frame(controller.trackTable.enclosingScrollView!).height
+    window.setContentSize(NSSize(width: 1060, height: 900))
+    window.contentView?.layoutSubtreeIfNeeded()
+    expectFilled("after a resize")
+    #expect(frame(controller.trackTable.enclosingScrollView!).height >= before + 190)
+    window.close()
+}
+
+/// A sheet opens at the size, column widths and sort it was left at, each kind of sheet its
+/// own, saved through the closure as it closes; a size past the screen or under the sheet's
+/// minimum is brought within them, and a column the sheet no longer has is ignored (51.38).
+@MainActor
+@Test func aSheetKeepsItsSizeWidthsAndSortAfterReopening() async throws {
+    let tagger = await model(
+        Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    let controller = TaggerWindow(model: tagger)
+    let window = try #require(controller.window)
+    window.orderFront(nil)
+    var saved: [TaggerSheetLayouts] = []
+    controller.sheetLayoutsChosen = { saved.append($0) }
+
+    click(controller.mappingButton)
+    let mapping = try #require(window.attachedSheet?.windowController as? MappingSheet)
+    try #require(mapping.window).setContentSize(NSSize(width: 820, height: 410))
+    let column = try #require(mapping.table.tableColumns.last)
+    column.width = 240
+    // As a drag of a column's edge leaves them: the others take up the difference.
+    mapping.table.sizeToFit()
+    let widths = mapping.table.tableColumns.map(\.width)
+    mapping.endSheet()
+    try await eventually { saved.count == 1 }
+    let layout = try #require(saved.last?.fieldMapping)
+    #expect(layout.width == 820 && layout.height == 410)
+    #expect(
+        mapping.table.tableColumns.map { layout.columns[$0.identifier.rawValue] }
+            == widths.map {
+                Double($0)
+            })
+    #expect(saved.last?.otherReleases == nil, "each kind of sheet its own")
+
+    click(controller.mappingButton)
+    let reopened = try #require(window.attachedSheet?.windowController as? MappingSheet)
+    let sheetWindow = try #require(reopened.window)
+    #expect(
+        sheetWindow.contentRect(forFrameRect: sheetWindow.frame).size
+            == NSSize(width: 820, height: 410))
+    #expect(reopened.table.tableColumns.map(\.width) == widths)
+    reopened.endSheet()
+    window.close()
+
+    let summary = ReleaseSummary(
+        id: 1, artist: "Persuader", title: "Stockholm", label: "Svek", catalogNumber: "SK 1",
+        country: "Sweden", year: "2000", format: "CD", trackCount: 3)
+    let releases = ReleasesSheet(candidates: [(summary, nil)], chosen: 1, title: "Stockholm")
+    releases.sort(by: .year, ascending: false)
+    var layouts = releases.recorded(in: TaggerSheetLayouts())
+    #expect(layouts.otherReleases?.sortColumn == "year")
+    #expect(layouts.otherReleases?.sortAscending == false)
+    layouts.otherReleases?.columns["gone"] = 99
+    layouts.otherReleases?.width = 5000
+    layouts.otherReleases?.height = 10
+    let again = ReleasesSheet(candidates: [(summary, nil)], chosen: 1, title: "Stockholm")
+    again.apply(layouts, room: NSSize(width: 1200, height: 800))
+    let size = try #require(again.window).contentRect(forFrameRect: again.window!.frame).size
+    #expect(size == NSSize(width: 1200, height: again.window!.minSize.height))
+    #expect(again.table.sortDescriptors == [NSSortDescriptor(key: "year", ascending: false)])
+    #expect(again.table.tableColumns.allSatisfy { $0.identifier.rawValue != "gone" })
+}
+
+/// View Release… clicked twice shows one sheet, and one clicked as Other Releases closes shows
+/// none and leaves the next click working.
+@MainActor
+@Test func viewReleaseShowsOneSheetAndNoneOverAClosedList() async throws {
+    let tagger = await analyzed()
+    let controller = TaggerWindow(model: tagger)
+    let window = try #require(controller.window)
+    window.orderFront(nil)
+    defer { window.close() }
+    click(controller.otherReleasesButton)
+    try await eventually { window.attachedSheet?.windowController is ReleasesSheet }
+    let releases = try #require(window.attachedSheet?.windowController as? ReleasesSheet)
+    let list = try #require(releases.window)
+
+    releases.viewRelease(10)
+    releases.viewRelease(10)
+    try await eventually { list.attachedSheet?.windowController is ViewReleaseSheet }
+    (list.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
+    try await eventually { list.attachedSheet == nil }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    #expect(list.attachedSheet == nil, "the second click queued nothing")
+
+    releases.viewRelease(10)
+    releases.endSheet()
+    try await Task.sleep(nanoseconds: 100_000_000)
+    #expect(list.attachedSheet == nil && window.attachedSheet == nil)
+
+    click(controller.otherReleasesButton)
+    try await eventually { window.attachedSheet?.windowController is ReleasesSheet }
+    let again = try #require(window.attachedSheet?.windowController as? ReleasesSheet)
+    again.viewRelease(10)
+    try await eventually { again.window?.attachedSheet?.windowController is ViewReleaseSheet }
+    (again.window?.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
+    again.endSheet()
+}
+
+/// The release area's Open on Discogs is on only for an album with a release, and opens that
+/// release's page from the one URL builder.
+@MainActor
+@Test func openOnDiscogsOpensTheSelectedRelease() async throws {
+    let tagger = await analyzed()
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    var opened: [URL] = []
+    controller.openURL = { opened.append($0) }
+    #expect(controller.discogsButton.isEnabled)
+    click(controller.discogsButton)
+    #expect(opened.map(\.absoluteString) == [releaseURL(10)])
+
+    let none = await model(
+        Seen(), albums: [album(3, "Nothing", titles: ["One"])],
+        matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    none.analyze()
+    await none.finished()
+    none.tab = .noCandidate
+    none.selectedID = 3
+    let empty = TaggerWindow(model: none)
+    defer { empty.window?.close() }
+    #expect(!empty.discogsButton.isEnabled)
+    tagger.selectedID = nil
+    controller.refresh()
+    #expect(!controller.discogsButton.isEnabled)
+}
+
+/// The tagger's own windows are its window and any sheet over it, so Undo Tag Edit pressed in a
+/// sheet counts as the tagger's.
+@MainActor
+@Test func aSheetOverTheTaggerCountsAsItsWindow() async throws {
+    let tagger = DiscogsTagger(model: await analyzed())
+    #expect(!tagger.isOwnWindow(nil))
+    tagger.show()
+    let window = try #require(tagger.window)
+    defer { window.close() }
+    let controller = try #require(window.windowController as? TaggerWindow)
+    #expect(tagger.isOwnWindow(window))
+    #expect(!tagger.isOwnWindow(NSWindow()))
+    click(controller.otherReleasesButton)
+    try await eventually { window.attachedSheet?.windowController is ReleasesSheet }
+    let releases = try #require(window.attachedSheet?.windowController as? ReleasesSheet)
+    let list = try #require(releases.window)
+    #expect(tagger.isOwnWindow(list))
+    releases.viewRelease(10)
+    try await eventually { list.attachedSheet != nil }
+    #expect(tagger.isOwnWindow(list.attachedSheet), "a sheet over the sheet")
+    (list.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
+    releases.endSheet()
+}
+
+/// Shown with a selection while an analysis runs, the window keeps the scope of the albums it
+/// is matching.
+@MainActor
+@Test func showingWhileBusyKeepsTheScope() async throws {
+    let gate = Gate()
+    let tagger = DiscogsTagger(
+        model: await model(
+            Seen(), albums: [album(1, "Stockholm", titles: stockholm)],
+            matches: { album, _ in match(album, nil, tier: .noCandidate) }, gate: gate))
+    tagger.show()
+    try await eventually { tagger.model.catalog != .checking }
+    tagger.model.analyze()
+    #expect(tagger.model.isBusy)
+    tagger.selectedTracks = { [100] }
+    tagger.show()
+    #expect(tagger.model.scope == .library)
+    gate.open()
+    await tagger.model.finished()
+    tagger.window?.close()
 }

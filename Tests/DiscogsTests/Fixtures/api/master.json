@@ -1,0 +1,27 @@
+{
+  "id": 500,
+  "main_release": 1001,
+  "most_recent_release": 1002,
+  "resource_url": "https://api.discogs.com/masters/500",
+  "uri": "https://www.discogs.com/master/500-Persuader-Stockholm",
+  "versions_url": "https://api.discogs.com/masters/500/versions",
+  "main_release_url": "https://api.discogs.com/releases/1001",
+  "most_recent_release_url": "https://api.discogs.com/releases/1002",
+  "num_for_sale": 10,
+  "lowest_price": 8.0,
+  "images": [
+    {"type": "primary", "uri": "https://i.discogs.com/front-1001.jpg", "width": 600, "height": 600}
+  ],
+  "genres": ["Electronic"],
+  "styles": ["Techno"],
+  "year": 1999,
+  "tracklist": [
+    {"position": "1", "type_": "track", "title": "Östermalm", "duration": "4:45"}
+  ],
+  "artists": [
+    {"name": "Persuader", "anv": "", "join": "", "role": "", "tracks": "", "id": 1}
+  ],
+  "title": "Stockholm",
+  "data_quality": "Correct",
+  "videos": []
+}

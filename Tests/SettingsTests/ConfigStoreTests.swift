@@ -9,6 +9,17 @@ private struct Schema: SettingsSchema {
     let count = Setting("a.count", title: "Count", default: 5, range: 1...10, "An integer.")
 }
 
+private struct TokenSchema: SettingsSchema {
+    let flag = Setting("a.flag", title: "Flag", default: false, "A bool.")
+    let count = Setting("a.count", title: "Count", default: 5, range: 1...10, "An integer.")
+    let token = Setting<DiscogsToken?>("a.token", title: "Token", default: nil, "A secret.")
+}
+
+@MainActor
+private func tokenStore(_ url: URL) -> ConfigStore<TokenSchema> {
+    ConfigStore(TokenSchema(), fileURL: url, check: { _, _, _ in nil }, creating: true)
+}
+
 /// A config file in a fresh temporary folder that nothing else touches.
 private func configURL() -> URL {
     FileManager.default.temporaryDirectory
@@ -142,6 +153,84 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
     try settings.set(\.count, to: 6)
     #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == target.path)
     #expect(try read(target) == #"{"a.count": 6}"#)
+}
+
+private func mode(_ url: URL) throws -> Int {
+    try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as! Int
+}
+
+private func setMode(_ mode: Int, _ url: URL) throws {
+    try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path)
+}
+
+@MainActor @Test func everyConfigWriteIsMode0600() throws {
+    let new = configURL()
+    _ = store(new)
+    #expect(try mode(new) == 0o600)
+    let loose = configURL()
+    try write(#"{"a.count": 3}"#, to: loose)
+    try setMode(0o644, loose)
+    try store(loose).set(\.count, to: 4)
+    #expect(try mode(loose) == 0o600)
+    let target = configURL()
+    try write(#"{"a.count": 3}"#, to: target)
+    try setMode(0o644, target)
+    let link = configURL()
+    try FileManager.default.createDirectory(
+        at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+    try store(link).set(\.count, to: 5)
+    #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == target.path)
+    #expect(try mode(target) == 0o600)
+}
+
+@MainActor @Test func aTokenInAFileOthersCanReadIsntUsedUntilTheModeIsFixed() throws {
+    let url = configURL()
+    try write(#"{"a.count": 3, "a.token": "\#(fakeToken)"}"#, to: url)
+    try setMode(0o644, url)
+    let settings = tokenStore(url)
+    #expect(settings.problems.count == 1)
+    #expect(settings.problems.first?.message.contains("\"a.token\"") == true)
+    #expect(settings.problems.first?.message.contains("chmod 600") == true)
+    #expect(settings.problems.first?.message.contains(fakeToken) == false)
+    #expect(!settings.blocked)
+    #expect(settings.fileValue(\.token) == nil)
+    #expect(settings[\.token] == nil)
+    #expect(settings[\.count] == 3)
+    // A file without a token, or with null, is fine at any mode.
+    let plain = configURL()
+    try write(#"{"a.count": 3, "a.token": null}"#, to: plain)
+    try setMode(0o644, plain)
+    #expect(tokenStore(plain).problems.isEmpty)
+    // The chmod outside the app is read back, though the text is the same.
+    try setMode(0o600, url)
+    settings.read(confirmed: false)
+    #expect(settings.problems.isEmpty)
+    #expect(settings.fileValue(\.token) == DiscogsToken(fakeToken))
+    #expect(settings[\.count] == 3)
+    // A change in the app writes the file at 0600, so the token applies from then on.
+    let other = configURL()
+    try write(#"{"a.count": 3, "a.token": "\#(fakeToken)"}"#, to: other)
+    try setMode(0o640, other)
+    let changed = tokenStore(other)
+    #expect(changed.fileValue(\.token) == nil)
+    try changed.set(\.flag, to: true)
+    #expect(changed.problems.isEmpty)
+    #expect(changed.fileValue(\.token) == DiscogsToken(fakeToken))
+}
+
+@Test func aConfigWriteThatFailsPartwayLeavesTheOldFileAndNoTempFile() throws {
+    let url = configURL()
+    try write(#"{"a.count": 3}"#, to: url)
+    struct Cut: Error {}
+    #expect(throws: Cut.self) {
+        try writeConfigFile(Array(#"{"a.count": 4}"#.utf8), to: url) { descriptor, bytes in
+            try writeAll(descriptor, Array(bytes.prefix(5)))
+            throw Cut()
+        }
+    }
+    #expect(try read(url) == #"{"a.count": 3}"#)
+    #expect(leftoverAtomicWrites(beside: url).isEmpty)
 }
 
 @MainActor @Test func theStrictReadThrowsOnAnyProblem() throws {

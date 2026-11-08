@@ -44,6 +44,9 @@ public struct AppSettings: SettingsSchema {
     public let libraryFolder = Setting<String?>(
         "library.folder", title: "Library Folder", default: nil,
         "Where added files are copied; it's watched once they are.")
+    public let snapshotFolder = Setting<String?>(
+        "library.snapshotFolder", title: "Snapshot Folder", default: nil,
+        "A local folder outside your music for daily snapshots; none uses Backups.")
     /// What `networkScanReaders` and `--scan --readers` accept; a scan starts that many threads.
     public static let networkScanReadersRange = 1...64
     public let networkScanReaders = Setting<Int?>(
@@ -59,6 +62,9 @@ public struct AppSettings: SettingsSchema {
     public let discogsCatalogPath = Setting<String?>(
         "discogs.catalogPath", title: "Discogs Catalog", filePath: nil,
         "The catalog's file, outside your music; none keeps it with the library.")
+    public let discogsToken = Setting<DiscogsToken?>(
+        "discogs.token", title: "Discogs Token", default: nil,
+        "A personal access token from discogs.com/settings/developers, for the API.")
     public let discogsMapping = Setting(
         "discogs.mapping", title: "Discogs Field Mapping", default: DiscogsPreset.oneToOne.mapping,
         "Where the Discogs tagger writes each field, and how.")
@@ -86,9 +92,15 @@ public struct AppSettings: SettingsSchema {
     public let stagingFolder = Setting<StagingFolder?>(
         "import.stagingFolder", title: "Staging Folder", default: nil,
         "Where music-recommender puts downloads for review, outside your music folders.")
+    public let discogsArtwork = Setting(
+        "discogs.artwork", title: "Discogs Artwork", default: DiscogsArtworkMode.off,
+        "The Discogs tagger writes the release's cover: never, where none, or always.")
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")
+    public let separateReleases = Setting(
+        "library.separateReleases", title: "Separate Releases", default: false,
+        "Make each Discogs release an album, apart from same-titled reissues.")
     public let browserGroupings = Setting(
         "browser.columnGroupings", title: "Browser Column Groupings",
         groupings: BrowserColumn.defaults.map(\.grouping),
@@ -179,20 +191,34 @@ public struct AppSettings: SettingsSchema {
             conflicts.append(
                 SettingConflict(
                     key: syncFolder.key,
-                    reason: "it's inside the watched folder \"\(watched.path)\"; the sync folder"
-                        + " must be outside every watched folder, since the app writes its log there"
-                ))
+                    reason: insideWatchedReason(
+                        watched, "the sync folder", "the app writes its log there")))
         }
         if let catalog = values[discogsCatalogPath.key] as? String,
-            let watched = folders.first(where: {
-                $0.share == nil && isPath(standardized(catalog), inOrAt: standardized($0.path))
-            })
+            let watched = watchedFolder(holding: catalog, among: folders)
         {
             conflicts.append(
                 SettingConflict(
                     key: discogsCatalogPath.key,
-                    reason: "it's inside the watched folder \"\(watched.path)\"; the catalog must"
-                        + " be outside every watched folder, since the app writes it"))
+                    reason: insideWatchedReason(watched, "the catalog", "the app writes it")))
+        }
+        if let snapshots = values[snapshotFolder.key] as? String {
+            if let watched = watchedFolder(holding: snapshots, among: folders) {
+                conflicts.append(
+                    SettingConflict(
+                        key: snapshotFolder.key,
+                        reason: insideWatchedReason(
+                            watched, "the snapshot folder",
+                            "the app writes the library's snapshots there")))
+            } else if let sync = values[syncFolder.key] as? SyncFolder, sync.share == nil,
+                isPath(standardized(snapshots), inOrAt: standardized(sync.path))
+            {
+                conflicts.append(
+                    SettingConflict(
+                        key: snapshotFolder.key,
+                        reason: "it's inside the sync folder \"\(sync.path)\"; the app writes only"
+                            + " its own log there"))
+            }
         }
         if let staging = values[stagingFolder.key] as? StagingFolder {
             var others = folders.map { (path: $0.path, share: $0.share) }
@@ -212,5 +238,22 @@ public struct AppSettings: SettingsSchema {
             }
         }
         return conflicts
+    }
+
+    /// The folder among `folders` stored by path that `path` is in or is.
+    private func watchedFolder(holding path: String, among folders: [WatchedFolder])
+        -> WatchedFolder?
+    {
+        folders.first {
+            $0.share == nil && isPath(standardized(path), inOrAt: standardized($0.path))
+        }
+    }
+
+    /// Why `subject` can't be inside `watched`: the app writes there, `why`.
+    private func insideWatchedReason(_ watched: WatchedFolder, _ subject: String, _ why: String)
+        -> String
+    {
+        "it's inside the watched folder \"\(watched.path)\"; \(subject) must be outside every"
+            + " watched folder, since \(why)"
     }
 }

@@ -178,6 +178,9 @@ public struct SettingDescriptor: Sendable {
     public let typeName: String
     public let defaultValue: any SettingValue
     let decode: @Sendable (Any) -> Result<any SettingValue, SettingProblem.Reason>
+
+    /// Whether the setting holds a secret, alone or as an optional.
+    var isSecret: Bool { kind == .secret || kind == .optional(.secret) }
 }
 
 /// Lets `SettingsSchema` find settings among a schema's properties without knowing their types.

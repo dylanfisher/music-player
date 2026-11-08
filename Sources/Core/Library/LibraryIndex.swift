@@ -30,7 +30,15 @@ public final class LibraryIndex {
 
     /// Where the file SQLite couldn't read was moved, when this open moved it.
     public private(set) var movedAside: URL?
-    /// Unreadable files kept beside the library; older ones are deleted when another is moved.
+    /// Whether this open dropped the index a library held and made it again, which the scans
+    /// then fill. In memory only: a quit in the middle of the rescan reads as a plain scan at
+    /// the next launch (ADR 0136).
+    public private(set) var rebuiltIndex = false
+    /// Whether albums are made of each Discogs release (ADR 0143): what this open built the
+    /// index with, which the stored index SQL holds for every other connection.
+    public private(set) var separateReleases = false
+    /// Files moved aside for one reason that are kept beside the library: unreadable ones, or
+    /// those a restore replaced; older ones are deleted when another is moved.
     static let keptUnreadableFiles = 3
     /// The wall clock sync events are stamped by, in milliseconds since 1970; tests set their
     /// own to skew one machine's.
@@ -47,7 +55,20 @@ public final class LibraryIndex {
     /// window's first open at launch passes: then it's moved aside, with a discard notice
     /// saying where, and a new library is made (ADR 0023). Any other open moving it could leave
     /// a connection opened before on the old file, and the library split in two.
-    public init(at url: URL, movingAsideIfUnreadable: Bool = false) throws {
+    ///
+    /// Before a rebuild drops a part a rescan refills, in a library that already holds it,
+    /// `confirmRescan` is asked; false throws `LibraryError.rescanDeclined` with nothing in the
+    /// file changed, so the next open asks again (ADR 0136). Nil asks nothing. A rebuild of the
+    /// stats doesn't ask: it keeps its discard notice (ADR 0022).
+    ///
+    /// `separateReleases` builds the index with Separate Releases on or off, rebuilding it when
+    /// the stored index was built the other way. Nil, which every open but the window's first
+    /// passes, keeps what the stored index was built with (off for a new one), so no other
+    /// connection rebuilds it (ADR 0143).
+    public init(
+        at url: URL, movingAsideIfUnreadable: Bool = false,
+        confirmRescan: ((RescanNotice) -> Bool)? = nil, separateReleases: Bool? = nil
+    ) throws {
         fileURL = url
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -59,7 +80,7 @@ public final class LibraryIndex {
                 "SQLite maps \(self.database.mappedBytesInEffect) bytes of the library, not the \(Database.mappedBytes) asked for"
             )
         }
-        try prepareSchema()
+        try prepareSchema(confirmRescan: confirmRescan, separateReleases: separateReleases)
         if let detail { try recordDiscard(detail) }
     }
 
@@ -96,21 +117,42 @@ public final class LibraryIndex {
         }
     }
 
+    /// What SQLite keeps beside a database: its log and shared memory, which move with it.
+    private static let movedSuffixes = ["", Database.walSuffix, Database.shmSuffix]
+
     /// Renames the file at `url`, with its log and shared memory, which would otherwise be read
-    /// into the new file, to a name no other move uses, and deletes all but the newest
-    /// `keptUnreadableFiles` moved before.
-    private static func moveAside(_ url: URL) throws -> URL {
+    /// into the new file, to a name no other move uses, `<name>.<reason>-<stamp>`, and unless
+    /// `pruning` is false, deletes all but the newest `keptUnreadableFiles` moved for the same
+    /// reason. A restore of a snapshot moves the index it replaces with the reason `replaced`,
+    /// and prunes only once the restore is in place (ADR 0142).
+    package static func moveAside(
+        _ url: URL, reason: String = "unreadable", pruning: Bool = true
+    ) throws -> URL {
         let stamp = ISO8601DateFormatter.string(
             from: Date(), timeZone: .current,
             formatOptions: [.withInternetDateTime, .withFractionalSeconds]
         ).replacingOccurrences(of: ":", with: "-")
-        let prefix = url.lastPathComponent + ".unreadable-"
         let aside = url.deletingLastPathComponent().appendingPathComponent(
-            prefix + stamp + "-" + UUID().uuidString.prefix(8))
-        let suffixes = ["", Database.walSuffix, Database.shmSuffix]
-        for suffix in suffixes where FileManager.default.fileExists(atPath: url.path + suffix) {
-            try FileManager.default.moveItem(atPath: url.path + suffix, toPath: aside.path + suffix)
+            url.lastPathComponent + ".\(reason)-" + stamp + "-" + UUID().uuidString.prefix(8))
+        try move(url, to: aside)
+        if pruning { try pruneMovedAside(url, reason: reason) }
+        return aside
+    }
+
+    /// Renames the database at `url`, with its log and shared memory, to `destination`.
+    package static func move(_ url: URL, to destination: URL) throws {
+        for suffix in movedSuffixes where FileManager.default.fileExists(atPath: url.path + suffix)
+        {
+            try FileManager.default.moveItem(
+                atPath: url.path + suffix, toPath: destination.path + suffix)
         }
+    }
+
+    /// Deletes all but the newest `keptUnreadableFiles` files `moveAside` moved from `url` for
+    /// `reason`, with their logs and shared memory.
+    package static func pruneMovedAside(_ url: URL, reason: String) throws {
+        let prefix = url.lastPathComponent + ".\(reason)-"
+        let suffixes = movedSuffixes
         let folder = url.deletingLastPathComponent()
         let moved = try FileManager.default.contentsOfDirectory(atPath: folder.path)
             .filter { $0.hasPrefix(prefix) && !suffixes.dropFirst().contains(where: $0.hasSuffix) }
@@ -121,10 +163,28 @@ public final class LibraryIndex {
                 try FileManager.default.removeItem(atPath: folder.path + "/" + old + suffix)
             }
         }
-        return aside
     }
 
-    private func prepareSchema() throws {
+    /// Writes a compacted copy of the whole database to a new file at `url`, from one read
+    /// transaction, so it holds every commit up to its start, the write-ahead log's included,
+    /// and none after (ADR 0142). Fails when a file is at `url` already.
+    public func copy(to url: URL) throws {
+        try database.prepare("VACUUM INTO ?").run(url.path)
+    }
+
+    private func prepareSchema(
+        confirmRescan: ((RescanNotice) -> Bool)?, separateReleases asked: Bool?
+    ) throws {
+        let tables = try database.prepare(tableNamesSQL).map { try $0.text(0) }
+        let stored = tables.contains(schemaIdentityTable) ? try storedParts() : nil
+        let storedOption = stored.flatMap(Self.storedOption)
+        separateReleases = asked ?? storedOption ?? false
+        if let confirmRescan, let stored,
+            let notice = rescanNotice(stored: stored, storedOption: storedOption),
+            !confirmRescan(notice)
+        {
+            throw LibraryError.rescanDeclined
+        }
         try database.execute(
             """
             CREATE TABLE IF NOT EXISTS \(schemaIdentityTable) (
@@ -136,37 +196,80 @@ public final class LibraryIndex {
         // rows, which foreign keys would check against tables already dropped. The pragma does
         // nothing inside a transaction, so it goes around it.
         try database.execute("PRAGMA foreign_keys = OFF")
-        let rebuilt = Result { try rebuildStaleParts() }
+        let rebuilt = Result { try rebuildStaleParts(adoptingStoredOption: asked == nil) }
         try database.execute("PRAGMA foreign_keys = ON")
         try rebuilt.get()
         try database.execute(healthTracksSchema)
     }
 
-    private func rebuildStaleParts() throws {
+    /// What the rescan question says before this open's rebuild of the parts `stored`, nil
+    /// when there is nothing to ask: no part a rescan refills is stored in an earlier shape or
+    /// with the other Separate Releases, `storedOption`, or the stats are rebuilt too.
+    private func rescanNotice(stored: [String: String], storedOption: Bool?) -> RescanNotice? {
+        let rebuilt = partsToRebuild(stored: stored)
+        guard !rebuilt.contains(.stats) else { return nil }
+        var parts = rebuilt.filter { stored[$0.rawValue] != nil }
+        let changedOption = storedOption.flatMap { $0 == separateReleases ? nil : separateReleases }
+        // When the option is all that changed, the index's own reason, a new shape, isn't true.
+        if let storedOption, changedOption != nil,
+            stored[SchemaPart.index.rawValue]
+                == SchemaPart.index.sql(separateReleases: storedOption)
+        {
+            parts.removeAll { $0 == .index }
+        }
+        return RescanNotice(parts: parts, separateReleases: changedOption)
+    }
+
+    /// Whether the index part `stored` was built with Separate Releases on; nil when it says
+    /// nothing, as in a new file.
+    private static func storedOption(_ stored: [String: String]) -> Bool? {
+        stored[SchemaPart.index.rawValue].flatMap(storedSeparateReleases)
+    }
+
+    /// The SQL each part was last built from, by part name.
+    private func storedParts() throws -> [String: String] {
+        Dictionary(
+            uniqueKeysWithValues: try database.prepare(
+                "SELECT part, sql FROM \(schemaIdentityTable)"
+            ).map { row in (try row.text(0), try row.text(1)) })
+    }
+
+    /// The parts this build makes again, given the SQL `stored` they were last built from.
+    private func partsToRebuild(stored: [String: String]) -> [SchemaPart] {
+        let stale = SchemaPart.allCases.filter {
+            stored[$0.rawValue] != $0.sql(separateReleases: separateReleases)
+        }
+        guard !stale.isEmpty else { return [] }
+        // Stats tables that don't match are discarded with everything else, since every
+        // other part refers to their paths, and so are they when an earlier sync part is
+        // (SchemaPart.sync); any other part is rebuilt around the rest.
+        var rebuilt =
+            stale.contains(.stats)
+                || (stale.contains(.sync) && stored[SchemaPart.sync.rawValue] != nil)
+            ? SchemaPart.allCases : stale
+        if rebuilt.contains(.index), !rebuilt.contains(.scans) { rebuilt.append(.scans) }
+        return rebuilt
+    }
+
+    /// Rebuilds the parts whose SQL differs from this build's. `adoptingStoredOption` takes
+    /// Separate Releases from the stored index as the transaction reads it, so an open that
+    /// asked nothing never undoes another connection's rebuild that committed meanwhile.
+    private func rebuildStaleParts(adoptingStoredOption: Bool) throws {
         try database.transaction {
-            let stored = Dictionary(
-                uniqueKeysWithValues: try database.prepare(
-                    "SELECT part, sql FROM \(schemaIdentityTable)"
-                ).map { row in (try row.text(0), try row.text(1)) })
-            let stale = SchemaPart.allCases.filter { stored[$0.rawValue] != $0.sql }
-            guard !stale.isEmpty else { return }
-            // Stats tables that don't match are discarded with everything else, since every
-            // other part refers to their paths, and so are they when an earlier sync part is
-            // (SchemaPart.sync); any other part is rebuilt around the rest.
-            var rebuilt =
-                stale.contains(.stats)
-                    || (stale.contains(.sync) && stored[SchemaPart.sync.rawValue] != nil)
-                ? SchemaPart.allCases : stale
-            if rebuilt.contains(.index), !rebuilt.contains(.scans) { rebuilt.append(.scans) }
+            let stored = try storedParts()
+            if adoptingStoredOption { separateReleases = Self.storedOption(stored) ?? false }
+            let rebuilt = partsToRebuild(stored: stored)
+            guard !rebuilt.isEmpty else { return }
             for part in rebuilt where stored[part.rawValue] != nil {
                 logger.notice("the \(part.rawValue) tables don't match this build; rebuilding them")
             }
             // The sync part's rows are where reading the logs got to, which the next sync
             // reads again, not the owner's stats. The recorded part refills itself from history,
-            // and the measures and their run are a cache.
+            // and the measures and their run, and the Discogs cache, are caches.
             let discarded = rebuilt.filter {
                 stored[$0.rawValue] != nil
-                    && ![.sync, .scans, .recorded, .measures, .analysisRun].contains($0)
+                    && ![.sync, .scans, .recorded, .measures, .analysisRun, .discogsCache].contains(
+                        $0)
             }
             .compactMap(\.tables).reduce(into: Set<String>()) { $0.formUnion($1) }
             if !discarded.isEmpty { try recordDiscardedStats(discarded) }
@@ -185,9 +288,11 @@ public final class LibraryIndex {
             let identity = try database.prepare(
                 "INSERT OR REPLACE INTO \(schemaIdentityTable) (part, sql) VALUES (?, ?)")
             for part in rebuilt {
-                try database.execute(part.sql)
-                try identity.run(part.rawValue, part.sql)
+                let sql = part.sql(separateReleases: separateReleases)
+                try database.execute(sql)
+                try identity.run(part.rawValue, sql)
             }
+            rebuiltIndex = rebuilt.contains(.index) && stored[SchemaPart.index.rawValue] != nil
         }
     }
 
@@ -461,7 +566,8 @@ public final class LibraryIndex {
         let albumArtist = try artistID(tags.albumArtist)
         let album = try albumID(
             tags.album,
-            artist: tags.albumArtist != nil ? albumArtist : tags.compilation ? nil : artist)
+            artist: tags.albumArtist != nil ? albumArtist : tags.compilation ? nil : artist,
+            releaseID: tags.custom[DiscogsKey.releaseID])
         let groupArtist =
             tags.albumArtist != nil
             ? albumArtist : tags.compilation ? try artistID(variousArtists) : artist
@@ -581,24 +687,30 @@ public final class LibraryIndex {
         return database.lastInsertRowID
     }
 
-    private func albumID(_ title: String?, artist: Int64?) throws -> Int64? {
+    /// The album of `title` and `artist`, and with Separate Releases on, of `releaseID` too;
+    /// tracks without a release id share one album, as with the option off.
+    private func albumID(_ title: String?, artist: Int64?, releaseID: String?) throws -> Int64? {
         guard let title else { return nil }
         if albumIDs == nil {
             albumIDs = Dictionary(
                 uniqueKeysWithValues: try database.prepare(
-                    "SELECT title, artist_id, id FROM albums"
+                    "SELECT title, artist_id, release_id, id FROM albums"
                 ).map { row in
                     (
                         AlbumKey(
-                            title: try row.text(0), artist: row.optionalInt(1).map(Int64.init)),
-                        try row.int64(2)
+                            title: try row.text(0), artist: row.optionalInt(1).map(Int64.init),
+                            releaseID: try row.text(2)),
+                        try row.int64(3)
                     )
                 })
         }
-        let key = AlbumKey(title: title, artist: artist)
+        let release =
+            separateReleases ? releaseID?.trimmingCharacters(in: .whitespaces) ?? "" : ""
+        let key = AlbumKey(title: title, artist: artist, releaseID: release)
         if let id = albumIDs?[key] { return id }
-        try statement("INSERT INTO albums (title, artist_id, sort_title) VALUES (?, ?, ?)").run(
-            title, artist, sortKey(title))
+        try statement(
+            "INSERT INTO albums (title, artist_id, sort_title, release_id) VALUES (?, ?, ?, ?)"
+        ).run(title, artist, sortKey(title), release)
         albumIDs?[key] = database.lastInsertRowID
         return database.lastInsertRowID
     }
@@ -646,6 +758,7 @@ struct ScannedFile: Sendable {
 private struct AlbumKey: Hashable {
     var title: String
     var artist: Int64?
+    var releaseID: String
 }
 
 /// `path` as the library stores and compares it: without trailing slashes, except that "/"

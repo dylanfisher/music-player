@@ -1,0 +1,33 @@
+{
+  "id": 1003,
+  "status": "Accepted",
+  "artists": [
+    {"name": "Persuader", "anv": "", "join": "", "role": "", "tracks": "", "id": 1}
+  ],
+  "labels": [
+    {"name": "Svek", "catno": "SK 032", "entity_type": "1", "id": 5}
+  ],
+  "formats": [
+    {"name": "Vinyl", "qty": "2", "descriptions": ["12\"", "33 ⅓ RPM", "Album"]}
+  ],
+  "master_id": 500,
+  "title": "Stockholm",
+  "country": "Sweden",
+  "released": "1999",
+  "genres": ["Electronic"],
+  "styles": ["Techno"],
+  "identifiers": [
+    {"type": "Barcode", "value": "7350001000130"}
+  ],
+  "tracklist": [
+    {"position": "", "type_": "heading", "title": "Side A", "duration": ""},
+    {"position": "A1", "type_": "track", "title": "Östermalm", "duration": "4:45"},
+    {"position": "A2", "type_": "track", "title": "Gamla Stan", "duration": "6:10"},
+    {"position": "", "type_": "heading", "title": "Side B", "duration": ""},
+    {"position": "B1", "type_": "track", "title": "Kungsholmen", "duration": "5:00"},
+    {"position": "B2", "type_": "track", "title": "Södermalm", "duration": ""}
+  ],
+  "images": [
+    {"type": "primary", "uri": "https://i.discogs.com/front-1003.jpg", "width": 600, "height": 600}
+  ]
+}

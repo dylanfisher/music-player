@@ -35,6 +35,12 @@ struct CatalogTrack: Equatable, Sendable {
         self.subTracks = subTracks
     }
 
+    /// A row's kind by its shape, as the dumps and the API both have to be read: one with
+    /// sub-tracks is an index track, one with no position and no duration a heading.
+    static func kind(position: String?, durationSeconds: Int?, hasSubTracks: Bool) -> Kind {
+        hasSubTracks ? .index : position == nil && durationSeconds == nil ? .heading : .track
+    }
+
     /// Seconds in a Discogs duration, "4:45" or "1:02:03"; nil for an empty or unreadable
     /// one, including one too long for an `Int`, which the real dump has.
     static func seconds(_ text: String) -> Int? {

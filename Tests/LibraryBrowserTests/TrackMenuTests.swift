@@ -52,6 +52,77 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     #expect(selectedTrack(browser) == track)
 }
 
+@MainActor @Test func showInAllMusicSelectsTheTracksInTheWholeLibrary() async throws {
+    let (browser, index) = try await browser(selecting: [6])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    window.layoutIfNeeded()
+    // All Music already shows them.
+    #expect(!browser.canShowSelectionInAllMusic)
+    let tracks = [browser.model.trackIDs[90], browser.model.trackIDs[60]]
+    let mix = try index.createPlaylist(named: "Mix")
+    _ = try index.addToPlaylist(mix, trackIDs: [browser.model.trackIDs[0]] + tracks)
+    await browser.model.setSource(.playlist(mix))
+    browser.table.table.selectRowIndexes([], byExtendingSelection: false)
+    #expect(!browser.canShowSelectionInAllMusic)
+    browser.table.table.selectRowIndexes([1, 2], byExtendingSelection: false)
+    #expect(browser.canShowSelectionInAllMusic)
+    window.makeFirstResponder(nil)
+    browser.showSelectionInAllMusic()
+    let table = browser.table.table
+    try await waitFor("the keys") { window.firstResponder === table }
+    #expect(browser.showsAllMusic)
+    #expect(table.selectedRowIndexes == [60, 90])
+    #expect(Set(table.selectedRowIndexes.map { browser.model.trackIDs[$0] }) == Set(tracks))
+    #expect(abs(table.rect(ofRow: 60).midY - table.visibleRect.midY) < 3 * table.rowHeight)
+    #expect(window.firstResponder === table)
+    #expect(!browser.canShowSelectionInAllMusic)
+}
+
+/// Tracks the library no longer lists, as after a rescan removed them, are said to be gone
+/// rather than leaving All Music with nothing selected.
+@MainActor @Test func showInAllMusicSaysSoWhenNoneOfTheTracksIsListed() async throws {
+    let (browser, index) = try await browser(selecting: [])
+    var beeps = 0
+    browser.beep = { beeps += 1 }
+    let gone = browser.model.trackIDs[10]
+    let mix = try index.createPlaylist(named: "Mix")
+    _ = try index.addToPlaylist(mix, trackIDs: [gone])
+    await browser.model.setSource(.playlist(mix))
+    browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
+    try index.database.prepare("DELETE FROM tracks WHERE file_id = ?").run(gone)
+    browser.showSelectionInAllMusic()
+    try await waitFor("the message") { browser.statusText == LibraryBrowser.notInAllMusicText }
+    #expect(browser.showsAllMusic)
+    #expect(beeps == 1)
+    #expect(browser.table.table.selectedRowIndexes.isEmpty)
+}
+
+/// Open Discogs Release reads the first selected row's release id when it runs, and says so
+/// when that track has none.
+@MainActor @Test func openDiscogsReleaseOpensTheFirstSelectedTracksRelease() async throws {
+    let (browser, index) = try await browser(selecting: [])
+    var opened: [Int] = []
+    var beeps = 0
+    browser.beep = { beeps += 1 }
+    browser.openSelectedRelease { opened.append($0) }
+    #expect(opened.isEmpty && beeps == 0, "nothing selected, nothing to say")
+    let tagged = browser.model.trackIDs[3]
+    try index.database.prepare("UPDATE tracks SET discogs_release_id = '42' WHERE file_id = ?")
+        .run(tagged)
+    browser.table.table.selectRowIndexes([2, 3], byExtendingSelection: false)
+    browser.openSelectedRelease { opened.append($0) }
+    #expect(opened.isEmpty)
+    #expect(beeps == 1)
+    #expect(browser.statusText == LibraryBrowser.noReleaseIDText)
+    browser.table.table.selectRowIndexes([3, 4], byExtendingSelection: false)
+    browser.openSelectedRelease { opened.append($0) }
+    #expect(opened == [42])
+    #expect(beeps == 1)
+}
+
 @MainActor @Test func addToPlaybackQueueSendsTheSelectedFiles() async throws {
     let (browser, _) = try await browser(selecting: [2, 5])
     let expected = try await browser.model.urls(ofRows: [2, 5])

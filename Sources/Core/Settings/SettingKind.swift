@@ -18,12 +18,13 @@ public indirect enum SettingKind: Sendable, Equatable {
     case syncFolder
     case dumpsFolder
     case stagingFolder
-    /// Text that is a secret, which the settings window never shows (ADR 0144).
-    case secret
     /// The Discogs tagger's field mapping, which its own sheet edits (ADR 0132).
     case discogsMapping
     /// A color with its opacity, which the settings window picks in a color well.
     case color
+    /// A secret, which no window shows and which the config file gives only while other users
+    /// can't read it (ADR 0137).
+    case secret
     /// Window layout the app saves as it changes; the settings window shows no control for it.
     case windowState
 

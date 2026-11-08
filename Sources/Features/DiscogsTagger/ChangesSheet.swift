@@ -16,22 +16,34 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     enum Row: Equatable {
         case change(files: [String], [TagChange])
         case unwritable(file: String, why: String)
+        /// The release's cover, and how many files it adds one to and replaces one in.
+        case cover(Cover, adds: Int, replaces: Int)
     }
 
     let rows: [Row]
     /// How many files the set can write to, for "All 18 files".
     private let writable: Int
     private(set) var excluded: Set<TagChange.ID>
+    /// Whether the cover's box is unticked.
+    private(set) var coverExcluded: Bool
     let table = NSTableView()
+    static let layoutKind = TaggerSheetKind.viewChanges
     let summary = NSTextField(labelWithString: "")
     /// What the user answered: the boxes left unticked, and whether to apply now; nil for
     /// Cancel.
-    private(set) var result: (excluded: Set<TagChange.ID>, apply: Bool)?
+    private(set) var result: (excluded: Set<TagChange.ID>, coverExcluded: Bool, apply: Bool)?
+    /// The release the changes come from.
+    let releaseID: Int
 
-    init(set: AlbumChangeSet, excluded: Set<TagChange.ID>, title: String) {
+    init(
+        set: AlbumChangeSet, excluded: Set<TagChange.ID>, coverExcluded: Bool = false,
+        title: String, releaseID: Int
+    ) {
+        self.releaseID = releaseID
         rows = Self.rows(set)
         writable = set.files.filter { $0.unwritable == nil }.count
         self.excluded = excluded
+        self.coverExcluded = coverExcluded
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 860, height: 520),
             styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -41,8 +53,9 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         showSummary()
     }
 
-    /// The changes merged by tag, current value and new value, in the order of the mapping's
-    /// tags and then of the files; then the files nothing can be written to.
+    /// The cover first, then the changes merged by tag, current value and new value, in the
+    /// order of the mapping's tags and then of the files; then the files nothing can be
+    /// written to.
     private static func rows(_ set: AlbumChangeSet) -> [Row] {
         struct Key: Hashable {
             var tag: MappedTag
@@ -71,10 +84,21 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
             let (tagA, tagB) = (tagOrder[keys[a].tag]!, tagOrder[keys[b].tag]!)
             return tagA != tagB ? tagA < tagB : a < b
         }
-        return ordered.map { index -> Row in
-            let group = groups[keys[index]]!
-            return .change(files: group.files, group.changes)
-        } + unwritable
+        let cover: [Row] =
+            set.cover.map { cover in
+                set.coveredFiles == 0
+                    ? []
+                    : [
+                        .cover(
+                            cover, adds: set.files.count { $0.cover == .adds },
+                            replaces: set.files.count { $0.cover == .replaces })
+                    ]
+            } ?? []
+        return cover
+            + ordered.map { index -> Row in
+                let group = groups[keys[index]]!
+                return .change(files: group.files, group.changes)
+            } + unwritable
     }
 
     @available(*, unavailable)
@@ -98,7 +122,8 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         let done = NSButton(title: "Done", target: self, action: #selector(done))
         let apply = NSButton(title: "Apply…", target: self, action: #selector(applyNow))
         apply.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [summary, NSView(), cancel, done, apply])
+        let open = NSButton(title: openOnDiscogsTitle, target: self, action: #selector(open))
+        let buttons = NSStackView(views: [summary, NSView(), open, cancel, done, apply])
         let page = NSStackView(views: [heading, scroll, buttons])
         page.orientation = .vertical
         page.alignment = .leading
@@ -125,6 +150,10 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     /// Ticks or unticks the change on `row` in each of its files: unticks them all when any
     /// is ticked.
     func toggle(_ row: Int) {
+        if case .cover = rows[row] {
+            coverExcluded.toggle()
+            return
+        }
         guard case .change(_, let changes) = rows[row] else { return }
         let ids = Set(changes.map(\.id))
         if ids.isSubset(of: excluded) {
@@ -150,6 +179,15 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         switch rows[row] {
         case .unwritable(let file, let why):
             return id == .fileName ? file : id == .field ? why : ""
+        case .cover(let cover, let adds, let replaces):
+            switch id {
+            case .fileName: return filesText(Array(repeating: "", count: adds + replaces))
+            case .field: return MappingSheet.artworkTitle
+            case .current:
+                return replaces == 0 ? "" : "replaces the cover in \(count(replaces, "file"))"
+            case .written: return "\(cover.text) from Discogs"
+            default: return ""
+            }
         case .change(let files, let changes):
             let change = changes[0]
             switch id {
@@ -170,6 +208,17 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         switch rows[row] {
         case .unwritable:
             return NSTextField(labelWithString: text(id, row))
+        case .cover:
+            if id == .include {
+                let box = NSButton(checkboxWithTitle: "", target: self, action: #selector(ticked))
+                box.tag = row
+                box.state = coverExcluded ? .off : .on
+                return box
+            }
+            let cell = NSTextField(labelWithString: text(id, row))
+            cell.lineBreakMode = .byTruncatingTail
+            if id == .current { cell.textColor = .secondaryLabelColor }
+            return cell
         case .change(let files, let changes):
             if id == .include {
                 let box = NSButton(checkboxWithTitle: "", target: self, action: #selector(ticked))
@@ -194,15 +243,18 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         table.reloadData(forRowIndexes: [sender.tag], columnIndexes: [0])
     }
 
+    @objc private func open() { openOnDiscogs(releaseID) }
+
     @objc private func cancel() { endSheet() }
 
     @objc private func done() {
-        result = (excluded, false)
+        result = (excluded, coverExcluded, false)
         endSheet()
     }
 
     @objc private func applyNow() {
-        result = (excluded, true)
+        result = (excluded, coverExcluded, true)
         endSheet()
     }
+
 }

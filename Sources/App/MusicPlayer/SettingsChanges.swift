@@ -48,6 +48,35 @@ extension AppDelegate {
             })
     }
 
+    /// Asks over the Settings window, else the main one, whether to rescan now that Separate
+    /// Releases differs from what the index was built with (ADR 0143). Rescan Now relaunches,
+    /// and the launch builds it the new way; Cancel puts the setting back. Nothing is asked
+    /// while another sheet is up there: the next launch asks instead.
+    private func askToSeparateReleases(_ settings: ConfigStore<AppSettings>) {
+        let on = settings[\.separateReleases]
+        let shown = settingsWindow.map(\.window).flatMap { $0.isVisible ? $0 : nil }
+        guard let inUse = separatesReleases, SeparateReleasesChange(inUse: inUse).asks(on),
+            let over = shown ?? window?.window, over.attachedSheet == nil
+        else { return }
+        let change = SeparateReleasesChange(inUse: inUse)
+        askToRescan(RescanNotice(separatingReleases: on), over: over) { [weak self] rescan in
+            guard let self else { return }
+            switch change.answer(rescan: rescan, setting: settings[\.separateReleases]) {
+            case .relaunch(let value):
+                relaunch(
+                    adding: rescanConfirmedArguments(value),
+                    failing: "The app couldn't open again; open it to rescan the library")
+            case .revert:
+                do {
+                    try settings.set(\.separateReleases, to: inUse)
+                } catch {
+                    fail("Couldn't turn Separate Releases back", error)
+                }
+            case .nothing: break
+            }
+        }
+    }
+
     private func change(_ key: String, to json: Any) {
         do {
             try settings?.set(key: key, json: json)
@@ -98,7 +127,7 @@ extension AppDelegate {
         }
         let choices = [
             schema.discogsKeepExistingValues.key, schema.discogsSkipVideo.key,
-            schema.discogsFillSortArtist.key,
+            schema.discogsFillSortArtist.key, schema.discogsArtwork.key,
         ]
         if !keys.isDisjoint(with: choices) {
             discogsTagger?.choicesChanged(taggerChoices(settings))
@@ -120,6 +149,7 @@ extension AppDelegate {
             let on = settings[\.groupByAlbumArtist]
             Task { await browser.setGroupByAlbumArtist(on) }
         }
+        if keys.contains(schema.separateReleases.key) { askToSeparateReleases(settings) }
         // A file that stops naming the key leaves the columns as they are, as a launch without
         // it keeps the state file's.
         if keys.contains(schema.browserGroupings.key), let browser,
@@ -255,6 +285,20 @@ extension AppDelegate {
                     } else if dispatcher?.run(.checkHealth) != true {
                         NSSound.beep()
                     }
+                },
+                libraryDatabase: { [weak self] in
+                    guard let self else { throw CancellationError() }
+                    return try await libraryDatabase()
+                },
+                revealIndex: { [paths] in
+                    NSWorkspace.shared.activateFileViewerSelecting([
+                        libraryFileURL(in: paths.dataDirectory)
+                    ])
+                },
+                backUpNow: { [weak self] in await self?.backUpNow() },
+                restoreSnapshot: { [weak self] snapshot in
+                    guard let window = self?.settingsWindow?.window else { return }
+                    self?.confirmRestoring(snapshot, over: window)
                 }))
         settingsWindow = controller
         return controller

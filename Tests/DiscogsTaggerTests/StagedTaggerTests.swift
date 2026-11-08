@@ -90,6 +90,7 @@ private func stagedTagger(
                 return match(album, release, tier: .likely)
             },
             summaries: { _ in [] },
+            release: { _ in nil },
             checkCatalog: { readyCatalog },
             write: { edits in
                 switch writing {

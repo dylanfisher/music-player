@@ -52,7 +52,7 @@ struct ReleaseFields {
         switch field {
         case .releaseID: return .text(String(release.id))
         case .masterID: return text(release.masterID.map { "m\($0)" })
-        case .releaseURL: return .text(discogsURL("release", release.id))
+        case .releaseURL: return .text(releaseURL(release.id))
         case .masterURL: return text(release.masterID.map { discogsURL("master", $0) })
         case .album: return text(release.title)
         case .albumArtist: return release.artists.isEmpty ? nil : .artists(release.artists)
@@ -141,6 +141,21 @@ struct ReleaseFields {
         return false
     }
 }
+
+/// The Discogs page of release `id`: the one address the release URL tag and every Open on
+/// Discogs use.
+func releaseURL(_ id: Int) -> String { discogsURL("release", id) }
+
+/// The Discogs page of release `id`, from `releaseURL`.
+public func discogsPage(_ id: Int) -> URL {
+    guard let url = URL(string: releaseURL(id)) else {
+        preconditionFailure("\(releaseURL(id)) isn't a URL")
+    }
+    return url
+}
+
+/// The title of every button that opens a release's page.
+public let openOnDiscogsTitle = "Open on Discogs"
 
 /// A Discogs page's address, as YATE writes the `DISCOGS_*_URL` keys.
 private func discogsURL(_ kind: String, _ id: Int) -> String {

@@ -1,0 +1,30 @@
+{
+  "id": 1002,
+  "status": "Accepted",
+  "artists": [
+    {"name": "Persuader", "anv": "", "join": "", "role": "", "tracks": "", "id": 1, "resource_url": "https://api.discogs.com/artists/1"}
+  ],
+  "labels": [
+    {"name": "Svek", "catno": "SK 032CD", "entity_type": "1", "id": 5, "resource_url": "https://api.discogs.com/labels/5"},
+    {"name": "Other", "catno": "none", "entity_type": "1", "id": 6, "resource_url": "https://api.discogs.com/labels/6"}
+  ],
+  "formats": [
+    {"name": "CD", "qty": "2", "descriptions": ["Album", "Remastered"], "text": "Digipak"}
+  ],
+  "master_id": 500,
+  "title": "Stockholm",
+  "country": "Europe",
+  "released": "2009",
+  "genres": ["Electronic"],
+  "styles": ["Techno"],
+  "tracklist": [
+    {"position": "", "type_": "heading", "title": "Disc One", "duration": ""},
+    {"position": "1-1", "type_": "track", "title": "Östermalm", "duration": "4:45"},
+    {"position": "1-2", "type_": "track", "title": "Gamla Stan", "duration": "6:10"},
+    {"position": "", "type_": "heading", "title": "Disc Two", "duration": ""},
+    {"position": "2-1", "type_": "track", "title": "Kungsholmen", "duration": "5:00"}
+  ],
+  "images": [
+    {"type": "primary", "uri": "https://i.discogs.com/front-1002.jpg", "width": 600, "height": 600}
+  ]
+}

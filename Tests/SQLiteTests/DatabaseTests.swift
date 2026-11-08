@@ -371,3 +371,18 @@ private func residentFraction(_ url: URL) throws -> Double {
     let reopened = try Database(rollbackJournalAt: copy, creating: false)
     #expect(try reopened.prepare("SELECT i FROM t").map { try $0.int(0) } == [1])
 }
+
+/// What Settings shows as the library's size: the file and its write-ahead log, whose commits
+/// aren't in the file until a checkpoint.
+@Test func theSizeIsTheFileAndItsLog() throws {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sqlite-\(UUID().uuidString).sqlite")
+    let database = try Database(at: url)
+    try database.execute("CREATE TABLE t (x BLOB); INSERT INTO t VALUES (zeroblob(100000))")
+    func size(_ path: String) throws -> Int {
+        try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int ?? -1
+    }
+    let log = try size(url.path + Database.walSuffix)
+    #expect(log > 100_000)
+    #expect(try Database.sizeBytes(at: url) == size(url.path) + log)
+}

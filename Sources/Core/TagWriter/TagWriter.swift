@@ -27,18 +27,19 @@ public struct TagWriter: Sendable {
     /// Files whose new tags fit are read and planned first, a chunk at a time, then written in
     /// place together (ADR 0108); any other file goes through its temp file when it's reached.
     /// `progress` is told of each file read and each written, from the threads writing them.
+    /// The journal keeps `origin` with the edit, for `newestEdit()`.
     public func write(
-        _ edit: TagEdit, to requested: [String],
+        _ edit: TagEdit, to requested: [String], origin: TagEditOrigin = .tagEditor,
         progress: @escaping @Sendable (TagWriteProgress) -> Void = { _ in }
     ) -> TagWriteReport {
-        write(requested.map { (path: $0, edit: edit) }, progress: progress)
+        write(requested.map { (path: $0, edit: edit) }, origin: origin, progress: progress)
     }
 
     /// Writes each file's own edit, as one undoable edit, the way `write(_:to:)` writes one
     /// edit to them all: the Discogs tagger writes each track its release's values (ADR 0133).
     /// A path named twice is written with its first edit only.
     public func write(
-        _ requested: [(path: String, edit: TagEdit)],
+        _ requested: [(path: String, edit: TagEdit)], origin: TagEditOrigin = .tagEditor,
         progress: @escaping @Sendable (TagWriteProgress) -> Void = { _ in }
     ) -> TagWriteReport {
         // Once each, so a path named twice isn't written by two threads at once.
@@ -49,7 +50,7 @@ public struct TagWriter: Sendable {
         var report = recoverInterrupted()
         let entry: TagUndoJournal.Entry
         do {
-            entry = try journal.newEntry()
+            entry = try journal.newEntry(origin: origin)
         } catch {
             report.failures.append(error)
             report.notWritten = paths
@@ -126,6 +127,29 @@ public struct TagWriter: Sendable {
         do throws(TagWriteError) {
             try journal.removeIfEmpty(entry)
             try journal.prune()
+        } catch {
+            report.failures.append(error)
+        }
+        return report
+    }
+
+    /// The newest journaled edit, nil when there is nothing to undo. Changes nothing.
+    public func newestEdit() throws(TagWriteError) -> JournaledEdit? {
+        try journal.newestEdit()
+    }
+
+    /// Undoes the newest edit only while it is still `expected`, the one Undo Tag Edit asked
+    /// about (nil for none); an edit made since fails the undo with nothing undone, rather than
+    /// undoing an edit nobody was asked about (ADR 0136).
+    public func undoLast(ifNewestIs expected: JournaledEdit?) -> TagWriteReport {
+        var report = TagWriteReport()
+        do throws(TagWriteError) {
+            if try journal.newestEdit() == expected { return undoLast() }
+            report.failures.append(
+                TagWriteError(
+                    path: journal.directory.path, kind: .journal,
+                    detail: "a tag edit was made after Undo Tag Edit asked, so nothing was undone"
+                ))
         } catch {
             report.failures.append(error)
         }

@@ -1,4 +1,4 @@
-enum LibraryError: Error, Equatable, CustomStringConvertible {
+public enum LibraryError: Error, Equatable, CustomStringConvertible {
     /// A stored warning or failure kind this build doesn't know, from a database another build
     /// wrote.
     case unknownKind(String)
@@ -20,8 +20,10 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
     case nestedRoots(String, String)
     /// A path an import step names that isn't relative to its folder or leaves it.
     case notRelative(String)
+    /// The owner answered the rescan question with Quit, so the index was left as it was.
+    case rescanDeclined
 
-    var description: String {
+    public var description: String {
         switch self {
         case .unknownKind(let name): "the library database holds an unknown kind \"\(name)\""
         case .notWatched(let path):
@@ -40,6 +42,7 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
         case .notRelative(let path):
             "\(path.debugDescription) isn't a path inside its folder, so the import step wasn't"
                 + " recorded"
+        case .rescanDeclined: "the library wasn't rebuilt, since the rescan was declined"
         }
     }
 }

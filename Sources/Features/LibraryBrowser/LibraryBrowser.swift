@@ -221,6 +221,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     ) {
         self.reader = reader
         self.index = index
+        status.rebuildingIndex = index.rebuiltIndex
         self.browserHeight = browserHeight
         model = BrowserModel(
             reader: reader, sortColumn: layout.sortColumn, ascending: layout.sortAscending,
@@ -1459,6 +1460,68 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func playlistsHoldingSelection() throws -> [Playlist] {
         guard let track = try selectedTrackIDs().first else { return [] }
         return try index.playlists(holding: track)
+    }
+
+    /// Whether Show in All Music has tracks to show: a selection in a list narrower than All
+    /// Music.
+    public var canShowSelectionInAllMusic: Bool { hasSelectedTracks && !showsAllMusic }
+
+    /// Show in All Music: the whole library with the selected tracks selected, the first
+    /// centered, and the keys in the track table.
+    public func showSelectionInAllMusic() {
+        guard let ids = selectedTrackIDs(else: "couldn't show the tracks in All Music"),
+            !ids.isEmpty
+        else { return }
+        Task {
+            // Already All Music: the selection is there to center.
+            guard await model.showAll() else { return showSelectedTrack() }
+            if !searchField.stringValue.isEmpty { searchField.stringValue = "" }
+            showSource()
+            let rows = model.rows(holding: Set(ids))
+            guard !rows.isEmpty else {
+                beep()
+                return show(failure: Self.notInAllMusicText)
+            }
+            table.select(rows)
+            table.centerSelection()
+            focusTracks()
+        }
+    }
+
+    /// What Show in All Music says when the library no longer lists any selected track, as
+    /// after a rescan removed them.
+    static let notInAllMusicText = "None of the selected tracks is in All Music any more"
+
+    /// What Open Discogs Release says when the first selected track has no release id.
+    static let noReleaseIDText = "The selected track has no Discogs release ID"
+
+    /// Open Discogs Release: hands `open` the first selected track's Discogs release id. Its
+    /// menu item is on for any selection, since the id is read here, not at each validation;
+    /// a track with none beeps and says so in the status bar.
+    public func openSelectedRelease(_ open: (Int) -> Void) {
+        let failure = "couldn't read the selected track's Discogs release ID"
+        let release: Int?
+        do {
+            guard let track = try firstSelectedTrackID() else { return }
+            release = try index.discogsReleaseID(ofTrack: track)
+        } catch {
+            reportCommand(failure, error)
+            return
+        }
+        guard let release else {
+            beep()
+            return show(failure: Self.noReleaseIDText)
+        }
+        open(release)
+    }
+
+    /// The track of the first selected row, reading only that row.
+    private func firstSelectedTrackID() throws -> Int64? {
+        let list = showsTimeline ? timeline.table : table.table
+        guard let first = list.selectedRowIndexes.first else { return nil }
+        let row = IndexSet(integer: first)
+        return showsTimeline
+            ? try timelineModel.trackIDs(ofRows: row).first : model.ids(ofRows: row).first
     }
 
     /// Shows the playlist `id` with the first selected track selected.

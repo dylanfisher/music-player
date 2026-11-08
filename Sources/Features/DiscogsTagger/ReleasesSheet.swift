@@ -2,7 +2,8 @@ import AppKit
 import Discogs
 
 /// Other Releases… (51.11, after YATE's release list): the album's candidates with filters by
-/// artist, title, country, label and format. Choosing one rescores the album with it.
+/// artist, title, country, label and format, sorted by any column's header. Choosing one
+/// rescores the album with it; View Release… shows one first.
 @MainActor
 final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource,
     NSTableViewDelegate, NSSearchFieldDelegate
@@ -35,10 +36,14 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
     let chosen: Int?
     let fields: [Filter: NSSearchField]
     let table = NSTableView()
-    /// The candidates the filters leave, in their order.
+    static let layoutKind = TaggerSheetKind.otherReleases
+    /// The candidates the filters leave, in the order the sort gives.
     private(set) var shown: [(summary: ReleaseSummary, score: Double?)]
     /// The release chosen; nil for Cancel.
     private(set) var result: Int?
+    /// Shows the release given, over this sheet.
+    var viewRelease: (Int) -> Void = { _ in }
+    private var texts: [Filter: String] = [:]
 
     init(candidates: [(summary: ReleaseSummary, score: Double?)], chosen: Int?, title: String) {
         self.candidates = candidates
@@ -73,16 +78,22 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
             table,
             [
                 (.score, 44), (.artist, 160), (.title, 180), (.label, 140), (.catalogNumber, 90),
-                (.country, 80), (.year, 44), (.format, 160),
+                (.country, 80), (.year, 44), (.format, 160), (.tracks, 48),
             ],
             source: self)
+        for column in table.tableColumns {
+            column.sortDescriptorPrototype = NSSortDescriptor(
+                key: column.identifier.rawValue, ascending: true)
+        }
         table.target = self
         table.doubleAction = #selector(choose)
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
         cancel.keyEquivalent = "\u{1b}"
+        let viewButton = NSButton(
+            title: "View Release…", target: self, action: #selector(showRelease))
         let use = NSButton(title: "Use Release", target: self, action: #selector(choose))
         use.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [NSView(), cancel, use])
+        let buttons = NSStackView(views: [NSView(), cancel, viewButton, use])
         let page = NSStackView(views: [heading, filters, scroll, buttons])
         page.orientation = .vertical
         page.alignment = .leading
@@ -98,16 +109,63 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
     }
 
     /// Keeps the candidates whose every filtered column holds its field's text, ignoring case
-    /// and accents.
+    /// and accents, in the sort's order.
     func filter(_ texts: [Filter: String]) {
-        shown = candidates.filter { candidate in
+        self.texts = texts
+        showCandidates()
+    }
+
+    /// Sorts by the column `column`; the header's click does the same.
+    func sort(by column: TaggerColumn, ascending: Bool) {
+        table.sortDescriptors = [
+            NSSortDescriptor(key: column.rawValue, ascending: ascending)
+        ]
+    }
+
+    func tableView(
+        _ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]
+    ) {
+        showCandidates()
+    }
+
+    /// The candidates the filters leave, sorted by the table's sort descriptor; their found
+    /// order when it has none, and between equal values.
+    private func showCandidates() {
+        let kept = candidates.enumerated().filter { _, candidate in
             texts.allSatisfy { filter, text in
                 text.isEmpty
                     || filter.value(candidate.summary).range(
                         of: text, options: [.caseInsensitive, .diacriticInsensitive]) != nil
             }
         }
+        let descriptor = table.sortDescriptors.first
+        let column = descriptor.flatMap { $0.key.flatMap(TaggerColumn.init(rawValue:)) }
+        shown = kept.sorted { a, b in
+            guard let column, let descriptor else { return a.offset < b.offset }
+            let order = Self.compare(a.element, b.element, by: column)
+            if order == .orderedSame { return a.offset < b.offset }
+            return descriptor.ascending
+                ? order == .orderedAscending : order == .orderedDescending
+        }
+        .map(\.element)
         table.reloadData()
+    }
+
+    /// How two candidates compare in `column`: numbers as numbers, the chosen release's fit,
+    /// which has no score, above every scored one; the rest as Finder sorts names.
+    private static func compare(
+        _ a: (summary: ReleaseSummary, score: Double?),
+        _ b: (summary: ReleaseSummary, score: Double?), by column: TaggerColumn
+    ) -> ComparisonResult {
+        func numbers<T: Comparable>(_ x: T, _ y: T) -> ComparisonResult {
+            x < y ? .orderedAscending : x > y ? .orderedDescending : .orderedSame
+        }
+        switch column {
+        case .score: return numbers(a.score ?? .infinity, b.score ?? .infinity)
+        case .tracks: return numbers(a.summary.trackCount, b.summary.trackCount)
+        case .year: return numbers(Int(a.summary.year) ?? 0, Int(b.summary.year) ?? 0)
+        default: return text(a.summary, column).localizedStandardCompare(text(b.summary, column))
+        }
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -119,26 +177,44 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
         -> NSView?
     {
-        let (summary, score) = shown[row]
-        let text =
-            switch tableColumn.flatMap({ TaggerColumn(rawValue: $0.identifier.rawValue) }) {
-            case .score: score.map { "\(Int(($0 * 100).rounded()))%" } ?? "chosen"
-            case .artist: summary.artist
-            case .title: summary.title
-            case .label: summary.label
-            case .catalogNumber: summary.catalogNumber
-            case .country: summary.country
-            case .year: summary.year
-            default: summary.format
-            }
-        let cell = NSTextField(labelWithString: text)
+        guard let column = tableColumn.flatMap({ TaggerColumn(rawValue: $0.identifier.rawValue) })
+        else { return nil }
+        let value = text(row, column)
+        let cell = NSTextField(labelWithString: value)
         cell.lineBreakMode = .byTruncatingTail
-        cell.toolTip = text
-        if summary.id == chosen { cell.font = .boldSystemFont(ofSize: NSFont.systemFontSize) }
+        cell.toolTip = value
+        if shown[row].summary.id == chosen {
+            cell.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        }
         return cell
     }
 
+    /// The text of `row`'s cell in `column`.
+    func text(_ row: Int, _ column: TaggerColumn) -> String {
+        let (summary, score) = shown[row]
+        if column == .score { return score.map { "\(Int(($0 * 100).rounded()))%" } ?? "chosen" }
+        return Self.text(summary, column)
+    }
+
+    private static func text(_ summary: ReleaseSummary, _ column: TaggerColumn) -> String {
+        switch column {
+        case .artist: summary.artist
+        case .title: summary.title
+        case .label: summary.label
+        case .catalogNumber: summary.catalogNumber
+        case .country: summary.country
+        case .year: summary.year
+        case .tracks: String(summary.trackCount)
+        default: summary.format
+        }
+    }
+
     @objc private func cancel() { endSheet() }
+
+    @objc private func showRelease() {
+        guard table.selectedRow >= 0, table.selectedRow < shown.count else { return NSSound.beep() }
+        viewRelease(shown[table.selectedRow].summary.id)
+    }
 
     @objc private func choose() {
         guard table.selectedRow >= 0, table.selectedRow < shown.count else { return NSSound.beep() }

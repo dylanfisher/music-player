@@ -63,7 +63,8 @@ public enum AppMenus {
     /// Its items act on the selection, which a right-click sets.
     public static let trackMenu: [MenuEntry] = [
         .command(.playNext), .command(.addToQueue), .command(.playSelection), .separator,
-        .command(.showAlbum), .command(.showArtist), .separator,
+        .command(.showAlbum), .command(.showArtist), .command(.showInAllMusic),
+        .command(.openDiscogsRelease), .separator,
         .command(.toggleLoved), .command(.toggleDisliked), .separator,
         .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
         .separator, .command(.editTags), .command(.showSpectrum), .command(.revealInFinder),
@@ -107,7 +108,8 @@ public enum AppMenus {
                     .command(.showDiscogsTagger), .command(.showDownloads),
                     .setting(settings.discogsKeepExistingValues.key),
                     .setting(settings.discogsSkipVideo.key),
-                    .setting(settings.discogsFillSortArtist.key), .command(.rescanNow),
+                    .setting(settings.discogsFillSortArtist.key),
+                    .setting(settings.discogsArtwork.key), .command(.rescanNow),
                     .command(.resolveLostStats), .command(.restoreRemoved),
                     .command(.importMoves),
                     .setting(settings.pausePollingDuringPlayback.key),
@@ -116,6 +118,7 @@ public enum AppMenus {
                     .setting(settings.rescanModifiedFiles.key),
                     .setting(settings.copyAddedFiles.key),
                     .setting(settings.groupByAlbumArtist.key),
+                    .setting(settings.separateReleases.key),
                     .separator, .command(.revealInFinder), .setting(settings.fileViewer.key),
                     .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),
                     .command(.showInPlaylist), .command(.showAlbum), .command(.showArtist),
@@ -170,7 +173,9 @@ public enum AppMenus {
                     .separator, .command(.back), .command(.forward), .command(.undoSelection),
                     .command(.redoSelection), .command(.showCurrentTrack),
                     .command(.showSelectedTrack),
-                    .command(.showAllTracks), .command(.scrollUp), .command(.scrollDown),
+                    .command(.showAllTracks), .command(.showInAllMusic),
+                    .command(.openDiscogsRelease),
+                    .command(.scrollUp), .command(.scrollDown),
                     .separator, .setting(settings.appearance.key),
                     .submenu(
                         AppState().trackTable.title,

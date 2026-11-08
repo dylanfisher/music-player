@@ -44,7 +44,8 @@ func parseWAV(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     guard let dataBytes else { throw .malformed(at: 12, "WAV without a data chunk") }
     return TrackMetadata(
         tags: (id3?.tags ?? TrackTags()).filling(from: info),
-        audio: try wavAudio(format, dataBytes: dataBytes), art: id3?.art)
+        audio: try wavAudio(format, dataBytes: dataBytes), art: id3?.art,
+        pictures: id3?.pictures ?? [])
 }
 
 /// Format tag, channels, rate, byte rate, block align, bits per sample; then for

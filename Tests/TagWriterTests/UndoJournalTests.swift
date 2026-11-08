@@ -209,3 +209,105 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
         }
     }
 }
+
+/// The newest edit says which window made it and how many files it holds, without changing the
+/// journal; an edit whose folder names no origin reads as unknown (ADR 0136).
+@Test func theNewestEditSaysWhoMadeIt() throws {
+    let urls = try [Sample.flac.copy(), Sample.mp3v24.copy()]
+    let writer = scratchWriter()
+    #expect(try writer.newestEdit() == nil)
+    expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [urls[0].path]), [urls[0]])
+    let first = try #require(try writer.newestEdit())
+    let edit = TagEdit(values: [.title: "Two"])
+    expectChanged(
+        writer.write(urls.map { ($0.path, edit) }, origin: .discogsTagger), urls)
+    let second = try #require(try writer.newestEdit())
+    #expect(second == JournaledEdit(sequence: 2, origin: .discogsTagger, fileCount: 2))
+    #expect(try writer.newestEdit() == second, "nothing changed")
+
+    // Asked about the first edit, the undo finds the second newer and undoes nothing.
+    let afterTwo = try urls.map { try Data(contentsOf: $0) }
+    let refused = writer.undoLast(ifNewestIs: first)
+    #expect(refused.changed.isEmpty)
+    #expect(refused.failures.map(\.kind) == [.journal])
+    #expect(try urls.map { try Data(contentsOf: $0) } == afterTwo)
+    #expect(try writer.newestEdit() == second)
+
+    expectChanged(writer.undoLast(ifNewestIs: second), urls.reversed())
+    #expect(try writer.newestEdit() == JournaledEdit(sequence: 1, origin: .tagEditor, fileCount: 1))
+    try FileManager.default.removeItem(
+        at: try newestEntry(writer.journal).appendingPathComponent(TagUndoJournal.originName))
+    #expect(try writer.newestEdit() == JournaledEdit(sequence: 1, origin: nil, fileCount: 1))
+    expectChanged(writer.undoLast(), [urls[0]])
+    #expect(writer.undoLast(ifNewestIs: nil).nothingToUndo)
+}
+
+/// The value of the extended attribute `name` of the file at `url`, nil without one.
+private func attribute(_ name: String, of url: URL) -> [UInt8]? {
+    let size = getxattr(url.path, name, nil, 0, 0, 0)
+    guard size >= 0 else { return nil }
+    var value = [UInt8](repeating: 0, count: size)
+    return getxattr(url.path, name, &value, size, 0, 0) == size ? value : nil
+}
+
+private func inode(_ url: URL) throws -> Int? {
+    try FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int
+}
+
+/// A write in place never copies the attributes, so its undo, through a temp file, is the
+/// first copy of them: a refused one the system manages is left off and the rest kept, and
+/// any other refusal fails the undo with its name and leaves the edit undoable (ADR 0136).
+@Test func anUndoThroughARefusedAttributeCopyOnlySkipsTheUnsettable() throws {
+    let url = try Sample.mp3v24.copy()
+    let original = try Data(contentsOf: url)
+    let managed = "com.example.managed"
+    #expect(setxattr(url.path, "com.example.note", "kept", 4, 0, 0) == 0)
+    #expect(setxattr(url.path, managed, "system", 6, 0, 0) == 0)
+    var writer = scratchWriter()
+    writer.faults.unsettable.insert(managed)
+    let before = try inode(url)
+    expectChanged(writer.write(TagEdit(values: [.title: "Edited"]), to: [url.path]), [url])
+    #expect(try inode(url) == before, "written in place")
+    let edited = try Data(contentsOf: url)
+
+    writer.faults.refusingAttribute = { $0 == "com.example.note" ? EACCES : nil }
+    let refused = writer.undoLast()
+    #expect(
+        refused.failures.map(\.detail)
+            == ["can't copy the extended attribute com.example.note: Permission denied"])
+    #expect(try Data(contentsOf: url) == edited)
+
+    writer.faults.refusingAttribute = { $0 == managed ? EACCES : nil }
+    expectChanged(writer.undoLast(), [url])
+    #expect(try Data(contentsOf: url) == original)
+    // The undo's temp file is an APFS clone here, which has every attribute already; on SMB,
+    // which can't clone, it would start without the one left off.
+    #expect(attribute("com.example.note", of: url) == Array("kept".utf8))
+}
+
+/// A write past the padding copies the attributes the same way, and a refused ACL names it.
+@Test func aWriteThroughTheTempFileSkipsOnlyTheUnsettable() throws {
+    let url = try Sample.mp3v24.copy()
+    let managed = "com.example.managed"
+    #expect(setxattr(url.path, "com.example.note", "kept", 4, 0, 0) == 0)
+    #expect(setxattr(url.path, managed, "system", 6, 0, 0) == 0)
+    let original = try Data(contentsOf: url)
+    var writer = scratchWriter()
+    writer.faults.unsettable.insert(managed)
+    let long = TagEdit(values: [.title: String(repeating: "Long ", count: 20_000)])
+
+    for (name, detail) in [
+        ("com.example.note", "can't copy the extended attribute com.example.note"),
+        ("acl", "can't copy its ACL"),
+    ] {
+        writer.faults.refusingAttribute = { $0 == name ? EPERM : nil }
+        let report = writer.write(long, to: [url.path])
+        #expect(report.failures.map(\.detail) == [detail + ": Operation not permitted"])
+        #expect(try Data(contentsOf: url) == original)
+    }
+
+    writer.faults.refusingAttribute = { $0 == managed ? ENOTSUP : nil }
+    expectChanged(writer.write(long, to: [url.path]), [url])
+    #expect(attribute("com.example.note", of: url) == Array("kept".utf8))
+    #expect(attribute(managed, of: url) == nil)
+}

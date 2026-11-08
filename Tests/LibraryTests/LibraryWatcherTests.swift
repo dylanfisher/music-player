@@ -598,3 +598,36 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(try await eventually(within: 20) { received.stopped == [library.root] })
     #expect(received.scanned.isEmpty && received.failedScans.isEmpty)
 }
+
+/// Counts the runs of a job from any thread.
+private final class RunCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var runs = 0
+
+    func run() { lock.withLock { runs += 1 } }
+    var count: Int { lock.withLock { runs } }
+}
+
+/// A job for between scans, as a snapshot is, waits out a running scan, and runs once it ends.
+@Test func aJobBetweenScansWaitsForTheRunningScan() async throws {
+    let library = try TestLibrary()
+    let access = GatedAccess(readsBeforeGate: 20)
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        scanner: LibraryScanner(
+            databaseURL: library.databaseURL, networkReaders: 4, access: access, batchSize: 1),
+        mounts: FakeMounts(), events: received.append)
+    watcher.start(
+        folders: [WatchedFolder(path: library.root, kind: .network)],
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
+    defer { watcher.stop() }
+    #expect(try await eventually(within: 20) { access.isHeld })
+
+    let job = RunCount()
+    watcher.betweenScans(job.run)
+    try await Task.sleep(nanoseconds: 1_000_000_000)
+    #expect(job.count == 0)
+    access.open()
+    #expect(try await eventually(within: 30) { job.count == 1 })
+    #expect(received.scanned.count == 1)
+}

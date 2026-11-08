@@ -64,4 +64,14 @@ extension TrackColumn {
         case .playlistOrder: "Order"
         }
     }
+
+    /// The column's header: `title`, shortened where the full one is wider than the column
+    /// needs. The header menu, the tooltip and the smart playlist fields keep `title`.
+    public var headerTitle: String {
+        switch self {
+        case .trackOfTotal: "Track No."
+        case .discOfTotal: "Disc No."
+        default: title
+        }
+    }
 }

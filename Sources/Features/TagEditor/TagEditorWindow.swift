@@ -1,6 +1,7 @@
 import AppKit
 import Artwork
 import Commands
+import Discogs
 import DisplayText
 import Metadata
 import TagWriter
@@ -52,6 +53,17 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// The buttons that run a registry command, each with its command.
     private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
+    /// The Extras tab's keys and values, one a line.
+    let extrasText = readOnlyText()
+    /// The Discogs tab's release, or why it isn't shown.
+    let discogsText = readOnlyText()
+    /// The release the Discogs tab shows, once the files are read; nil when they have none.
+    private(set) var discogsReleaseID: Int?
+    /// Reads release `id` from the local catalog: nil when it doesn't have it, and
+    /// `CatalogError.missing` with no catalog.
+    var release: @MainActor (Int) async throws -> ReleaseDetail? = { _ in nil }
+    /// Opens a page in the browser, for Open on Discogs.
+    var openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// Spins in the buttons row while the files are read; it keeps its space once stopped.
     private let spinner = NSProgressIndicator()
     /// One line beside the buttons: "Reading tags…", then why some files can't be saved, or why
@@ -147,6 +159,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             current.reread(model.tracks)
             self.model = current
             showValues()
+            showDiscogs(current.discogsReleaseIDs)
             return
         }
         self.model = model
@@ -154,16 +167,72 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         showNote(model.readOnlyNote ?? "", color: .secondaryLabelColor)
         showEditable()
         showValues()
+        showDiscogs(model.discogsReleaseIDs)
         focusFirstField()
+    }
+
+    /// The release ids the Discogs tab was last read for, so a reread that leaves them as
+    /// they were reads nothing again.
+    private var discogsShownIDs: [Int]?
+    /// Counts the catalog reads, so one finishing after a later one started is dropped.
+    private var discogsRead = 0
+    /// The Discogs tab while it's taken away, to put back.
+    private var discogsItem: NSTabViewItem?
+
+    /// Reads the first of `ids` into the Discogs tab, and puts the tab back when a save gave
+    /// the files their first release id; with none, the tab goes.
+    private func showDiscogs(_ ids: [Int]) {
+        guard ids != discogsShownIDs else { return }
+        discogsShownIDs = ids
+        discogsRead += 1
+        guard let first = ids.first else {
+            discogsReleaseID = nil
+            return removeDiscogsTab()
+        }
+        if tabItem(.discogs) == nil, let discogsItem { tabs.addTabViewItem(discogsItem) }
+        discogsReleaseID = first
+        discogsText.string = "Reading the Discogs catalog…"
+        let release = self.release
+        let mine = discogsRead
+        Task { [weak self] in
+            let read: Result<ReleaseDetail?, any Error>
+            do {
+                read = .success(try await release(first))
+            } catch {
+                read = .failure(error)
+            }
+            guard let self, mine == discogsRead else { return }
+            discogsText.string = discogsTabText(read, releases: ids.count)
+        }
+    }
+
+    /// Takes the Discogs tab away for files with no release id, keeping it as the tab the next
+    /// window opens on if it was.
+    private func removeDiscogsTab() {
+        guard let item = tabItem(.discogs) else { return }
+        discogsItem = item
+        let last = Self.lastTab
+        if shownTab == .discogs {
+            tabs.selectTabViewItem(withIdentifier: TagEditorTab.info.rawValue)
+        }
+        tabs.removeTabViewItem(item)
+        Self.lastTab = last
+    }
+
+    private func tabItem(_ tab: TagEditorTab) -> NSTabViewItem? {
+        tabs.tabViewItems.first { $0.identifier as? String == tab.rawValue }
+    }
+
+    /// The tabs the window has, in order: every one, less Discogs for files with no release.
+    var shownTabs: [TagEditorTab] {
+        tabs.tabViewItems.compactMap { ($0.identifier as? String).flatMap(TagEditorTab.init) }
     }
 
     private var builtTabs: Set<TagEditorTab> = []
 
     /// Makes `tab`'s fields the first time it's shown, filled with the model's values.
     private func build(_ tab: TagEditorTab) {
-        guard !builtTabs.contains(tab),
-            let item = tabs.tabViewItems.first(where: { $0.identifier as? String == tab.rawValue })
-        else { return }
+        guard !builtTabs.contains(tab), let item = tabItem(tab) else { return }
         builtTabs.insert(tab)
         item.view = tabView(tab)
         showEditable()
@@ -178,7 +247,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// Shows the tab `step` places after the one shown, wrapping past either end, as Back and
     /// Forward do in an info window.
     func stepTab(_ step: Int) {
-        let all = TagEditorTab.allCases
+        let all = shownTabs
         let index = shownTab.flatMap { all.firstIndex(of: $0) } ?? 0
         let next = all[((index + step) % all.count + all.count) % all.count]
         tabs.selectTabViewItem(withIdentifier: next.rawValue)
@@ -291,6 +360,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             case .artwork: artworkView()
             case .file: fileView()
             case .lyrics: areaView(.lyrics)
+            case .extras: readOnlyTextView(extrasText)
+            case .discogs: discogsView()
             default: grid(tab.rows)
             }
         let container = NSView()
@@ -305,7 +376,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             content.bottomAnchor.constraint(
                 lessThanOrEqualTo: container.bottomAnchor, constant: -inset),
         ])
-        if tab == .lyrics {
+        if [.lyrics, .extras, .discogs].contains(tab) {
             content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -inset)
                 .isActive = true
         }
@@ -507,6 +578,33 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         return stack
     }
 
+    /// The release's text over Open on Discogs.
+    private func discogsView() -> NSView {
+        let scroll = readOnlyTextView(discogsText)
+        let open = NSButton(
+            title: openOnDiscogsTitle, target: self, action: #selector(openOnDiscogs))
+        let stack = NSStackView(views: [scroll, open])
+        stack.orientation = .vertical
+        stack.alignment = .trailing
+        stack.spacing = 10
+        scroll.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        return stack
+    }
+
+    @objc func openOnDiscogs() {
+        guard let discogsReleaseID else { return }
+        openURL(discogsPage(discogsReleaseID))
+    }
+
+    /// `text`, made by `readOnlyText`, in a scroll view.
+    private func readOnlyTextView(_ text: NSTextView) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.borderType = .bezelBorder
+        scroll.hasVerticalScroller = true
+        scroll.documentView = text
+        return scroll
+    }
+
     private func fileView() -> NSView {
         let rows = FileRow.allCases.map { row -> [NSView] in
             let title = NSTextField(labelWithString: row.title)
@@ -569,8 +667,45 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         }
         showArt()
         showFile()
+        showExtras()
         showEdited()
     }
+
+    /// The Extras tab: a line a key, its value after a tab, or "Mixed" where the tracks differ.
+    private func showExtras() {
+        guard let model else { return }
+        let rows = model.extras
+        let plain: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
+            .foregroundColor: NSColor.labelColor, .paragraphStyle: Self.extrasParagraph,
+        ]
+        var dimmed = plain
+        dimmed[.foregroundColor] = NSColor.secondaryLabelColor
+        let text = NSMutableAttributedString()
+        if rows.isEmpty {
+            text.append(
+                NSAttributedString(string: "The files hold no other tags.", attributes: dimmed))
+        }
+        for (index, row) in rows.enumerated() {
+            if index > 0 { text.append(NSAttributedString(string: "\n", attributes: plain)) }
+            text.append(NSAttributedString(string: row.key + "\t", attributes: dimmed))
+            text.append(
+                NSAttributedString(
+                    string: row.value ?? mixedPlaceholder,
+                    attributes: row.value == nil ? dimmed : plain))
+        }
+        extrasText.textStorage?.setAttributedString(text)
+    }
+
+    /// The values start at one tab stop, and a long value's later lines start there too.
+    private static let extrasParagraph: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        let column = 220.0
+        style.tabStops = [NSTextTab(textAlignment: .left, location: column)]
+        style.headIndent = column
+        style.paragraphSpacing = 3
+        return style
+    }()
 
     private func showAreaPlaceholders() {
         guard let model else { return }
@@ -703,6 +838,20 @@ extension TagEditorWindow: NSTabViewDelegate {
         }
         Self.lastTab = tab
     }
+}
+
+/// A text view to select and copy from but not edit, which grows down with its text.
+@MainActor
+private func readOnlyText() -> NSTextView {
+    let text = NSTextView()
+    text.isEditable = false
+    text.isSelectable = true
+    text.isRichText = false
+    text.textContainerInset = NSSize(width: 2, height: 4)
+    text.autoresizingMask = .width
+    text.isVerticallyResizable = true
+    text.textContainer?.widthTracksTextView = true
+    return text
 }
 
 /// "JPEG, 700 × 700, 126 KB": the image's type, pixels and size.

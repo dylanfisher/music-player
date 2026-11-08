@@ -53,7 +53,7 @@ func parseMP4(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         throw .malformed(at: moov.start, "MP4 without a sound track")
     }
     if audio.codec == .aac, let length = items.gaplessLength { audio.lengthFrames = length }
-    return TrackMetadata(tags: items.tags, audio: audio, art: items.art)
+    return TrackMetadata(tags: items.tags, audio: audio, art: items.art, pictures: items.pictures)
 }
 
 /// Calls `body` with each atom that tiles `range`, until it returns false. QuickTime ends a

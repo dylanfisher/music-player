@@ -39,7 +39,13 @@ private func actions(
     rescanNow: @escaping () -> Void = {}, rescanFolders: @escaping ([Int]) -> Void = { _ in },
     outputs: @escaping () -> [OutputOption] = { [] },
     chooseOutput: @escaping (OutputChoice) -> Void = { _ in },
-    showHealth: @escaping () -> Void = {}
+    showHealth: @escaping () -> Void = {},
+    libraryDatabase: @escaping () async throws -> LibraryDatabase = {
+        LibraryDatabase(
+            indexPath: "/tmp/library.sqlite", indexBytes: 0, snapshots: [], lastProblem: nil)
+    },
+    revealIndex: @escaping () -> Void = {}, backUpNow: @escaping () async -> Void = {},
+    restoreSnapshot: @escaping (LibraryDatabase.Snapshot) -> Void = { _ in }
 ) -> SettingsActions {
     SettingsActions(
         openConfigFile: openConfigFile, revealConfigFile: {}, copyDefaultConfig: {},
@@ -47,7 +53,9 @@ private func actions(
         chooseStagingFolder: chooseStagingFolder, addFolder: addFolder,
         removeFolder: removeFolder, rescanNow: rescanNow,
         rescanFolders: rescanFolders, outputs: outputs,
-        searchOutputs: {}, chooseOutput: chooseOutput, showHealth: showHealth)
+        searchOutputs: {}, chooseOutput: chooseOutput, showHealth: showHealth,
+        libraryDatabase: libraryDatabase, revealIndex: revealIndex, backUpNow: backUpNow,
+        restoreSnapshot: restoreSnapshot)
 }
 
 private var appearanceChoices: [SettingKind.Choice] {
@@ -79,9 +87,10 @@ private var appearanceChoices: [SettingKind.Choice] {
         isBlocked: { false })
     let inTheFileOnly: Set<String> = [
         schema.networkScanReaders.key, schema.resume.key, schema.browserGroupings.key,
-        schema.discogsDumpsFolder.key, schema.discogsCatalogPath.key, schema.discogsMapping.key,
-        schema.discogsSavedMappings.key, schema.discogsKeepExistingValues.key,
-        schema.discogsSkipVideo.key, schema.discogsFillSortArtist.key,
+        schema.discogsDumpsFolder.key, schema.discogsCatalogPath.key, schema.discogsToken.key,
+        schema.discogsMapping.key, schema.discogsSavedMappings.key,
+        schema.discogsKeepExistingValues.key, schema.discogsSkipVideo.key,
+        schema.discogsFillSortArtist.key, schema.discogsArtwork.key,
     ]
     #expect(
         model.rows.map(\.key) == schema.settings.map(\.key).filter { !inTheFileOnly.contains($0) })
@@ -265,11 +274,13 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(!keys.contains(schema.networkScanReaders.key))
     #expect(!keys.contains(schema.discogsDumpsFolder.key))
     #expect(!keys.contains(schema.discogsCatalogPath.key))
+    #expect(!keys.contains(schema.discogsToken.key))
     #expect(!keys.contains(schema.discogsMapping.key))
     #expect(!keys.contains(schema.discogsSavedMappings.key))
     #expect(!keys.contains(schema.discogsKeepExistingValues.key))
     #expect(!keys.contains(schema.discogsSkipVideo.key))
     #expect(!keys.contains(schema.discogsFillSortArtist.key))
+    #expect(!keys.contains(schema.discogsArtwork.key))
     #expect(keys.contains(schema.groupByAlbumArtist.key))
 }
 
@@ -300,6 +311,9 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         ])
     #expect(
         sections.first { $0.section == .playCounts }?.rows.map(\.key) == [schema.playedPercent.key])
+    #expect(
+        sections.first { $0.section == .library }?.rows.map(\.key).contains(
+            schema.separateReleases.key) == true)
     func keys(_ section: GeneralModel.Section) -> [String] {
         sections.first { $0.section == section }?.rows.map(\.key) ?? []
     }
@@ -320,7 +334,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
     #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
     let listed = sections.flatMap(\.rows).map(\.key)
-    #expect(listed.count == AppSettings().settings.count - 12)
+    #expect(listed.count == AppSettings().settings.count - 14)
     #expect(!listed.contains(AppSettings().resume.key))
     #expect(!listed.contains(AppSettings().browserGroupings.key))
     #expect(!listed.contains(AppSettings().watchedFolders.key))
@@ -646,7 +660,11 @@ private func waitFor(_ condition: () -> Bool) async throws {
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
         set: { key, json in stored[key] = json }, isBlocked: { false })
-    #expect(model.rows.first { $0.key == schema.libraryFolder.key }?.control == .libraryFolder)
+    let row = model.rows.first { $0.key == schema.libraryFolder.key }
+    guard case .folder(noValueText, _) = row?.control else {
+        Issue.record("\(String(describing: row))")
+        return
+    }
     let pane = GeneralPane(
         model: model, configPath: nil, actions: actions(), sections: [.libraryFolder])
     #expect(labels(in: pane.view).contains(noValueText))
@@ -1018,4 +1036,30 @@ private func visibleLabels(in view: NSView) -> [String] {
     #expect(button("Change…", in: pane.view) != nil)
     try click(#require(button("Clear", in: pane.view)))
     #expect(values[schema.stagingFolder.key] is NSNull)
+}
+
+/// The section under `view` whose heading is `title`: a stack of the heading and its box.
+@MainActor
+private func section(titled title: String, in view: NSView) -> NSStackView? {
+    if let stack = view as? NSStackView, stack.arrangedSubviews.count == 2,
+        (stack.arrangedSubviews.first as? NSTextField)?.stringValue == title
+    {
+        return stack
+    }
+    return view.subviews.lazy.compactMap { section(titled: title, in: $0) }.first
+}
+
+/// The config file's place and its three buttons sit in a box titled Config, as the sections'
+/// rows do.
+@MainActor @Test func theConfigFileRowsAreInAConfigBox() throws {
+    let (model, _) = model()
+    let pane = GeneralPane(model: model, configPath: "/tmp/config.json", actions: actions())
+    let config = try #require(section(titled: GeneralPane.configTitle, in: pane.view))
+    for title in [
+        AppCommands.title(of: .openConfigFile), "Reveal in Finder",
+        AppCommands.title(of: .copyDefaultConfig),
+    ] {
+        #expect(button(title, in: config) != nil, "\(title)")
+    }
+    #expect(labels(in: config).contains("/tmp/config.json"))
 }

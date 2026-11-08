@@ -39,6 +39,10 @@ public struct AlbumMatch: Sendable {
     public var mapping: [Int64: Int]
     /// The other releases found, the best first.
     public var candidates: [MatchCandidate]
+    /// Why a Likely or Incomplete album isn't Exact; empty for any other tier.
+    public internal(set) var reasons: [NotExactReason] = []
+    /// Where the chosen release came from.
+    public internal(set) var origin: MatchOrigin = .catalog
 
     public var releaseID: Int? { release?.id }
 
@@ -46,8 +50,19 @@ public struct AlbumMatch: Sendable {
     public var releaseTrackCount: Int { tracks.count }
 }
 
-/// How far a matching run has got.
+/// Where a match's release came from: the catalog, or the Discogs API (ADR 0139).
+public enum MatchOrigin: Equatable, Sendable {
+    case catalog, api
+}
+
+/// How far a matching run has got. In Both, `albumsDone` and `albumCount` are the catalog's
+/// pass and `apiAlbumsDone` and `apiAlbumCount` the API's, once it starts; with the API alone
+/// they're nil and the first two count the API's albums.
 public struct AlbumMatchProgress: Equatable, Sendable {
     public var albumsDone: Int
     public var albumCount: Int
+    public var apiAlbumsDone: Int? = nil
+    public var apiAlbumCount: Int? = nil
+    /// The seconds the run waits for Discogs's rate limit, while it waits.
+    public var waitingSeconds: Int? = nil
 }

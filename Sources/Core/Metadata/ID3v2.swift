@@ -5,6 +5,7 @@ package let id3v2Identifier = "ID3"
 struct ID3v2Tag {
     var tags: TrackTags
     var art: EmbeddedArt?
+    var pictures: [EmbeddedPicture]
     /// Header, extended header, frames, padding and footer.
     var byteCount: Int
 }
@@ -262,7 +263,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
     }
 
     var tags = TrackTags()
-    var pictures: [(type: UInt32, art: EmbeddedArt)] = []
+    var pictures: [EmbeddedPicture] = []
     var day: (text: String, offset: Int)?
     var time: (text: String, offset: Int)?
     var iTunes = TrackTags()
@@ -394,7 +395,9 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
     if let day, let year = tags.date {
         tags.date = fullDate(year: year, day: day, time: time, &reader.warnings)
     }
-    return ID3v2Tag(tags: tags, art: preferredPicture(pictures), byteCount: byteCount)
+    return ID3v2Tag(
+        tags: tags, art: preferredPicture(pictures), pictures: reader.kept(pictures),
+        byteCount: byteCount)
 }
 
 /// Four characters from A–Z and 0–9.
@@ -602,7 +605,7 @@ private func genre(_ text: String, _ version: UInt8, at offset: Int) throws(Pars
 private func picture(
     _ area: FrameArea, _ contents: Range<Int>, version: UInt8, unsynchronised: Bool, stored: Bool,
     _ warnings: inout [MetadataWarning]
-) throws(ParseFailure) -> (type: UInt32, art: EmbeddedArt)? {
+) throws(ParseFailure) -> EmbeddedPicture? {
     func header(_ length: Int) throws(ParseFailure) -> Bytes {
         let raw = try area.bytes(contents.lowerBound..<contents.lowerBound + length)
         guard unsynchronised else { return raw }
@@ -623,10 +626,10 @@ private func picture(
     let offset = bytes.fileOffset(imageStart)
     let end = area.fileOffset(contents.upperBound - 1) + 1
     guard end > offset else { return nil }
-    return (
-        type,
-        EmbeddedArt(offset: offset, byteCount: end - offset, mimeType: mime, unsynchronised: stored)
-    )
+    return EmbeddedPicture(
+        art: EmbeddedArt(
+            offset: offset, byteCount: end - offset, mimeType: mime, unsynchronised: stored),
+        type: type)
 }
 
 /// The MIME type, picture type and where the image starts, or nil when `bytes` ends first.

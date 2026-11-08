@@ -173,6 +173,28 @@ public struct TagEditorModel: Equatable, Sendable {
         return edit
     }
 
+    /// What the Extras tab lists: every key the reader found that no field maps (ADR 0129), by
+    /// key. A key's value shows when every track has it and they agree; otherwise it's mixed,
+    /// a key some tracks lack included. Keys another tab shows, as the Discogs ones, are listed
+    /// too: this is what the files hold, not what's left unshown.
+    var extras: [ExtraRow] {
+        let keys = Set(tracks.flatMap(\.tags.custom.keys)).sorted()
+        return keys.map { key in
+            let values = tracks.map { $0.tags.custom[key] }
+            let first = values[0]
+            return ExtraRow(
+                key: key, value: values.allSatisfy { $0 == first } ? first : nil)
+        }
+    }
+
+    /// The Discogs release ids the tracks carry, each once, in the tracks' order; a value that
+    /// isn't a number is left out. The Discogs tab shows the first.
+    var discogsReleaseIDs: [Int] {
+        var seen = Set<Int>()
+        return tracks.compactMap { $0.tags.custom[DiscogsKey.releaseID].flatMap { Int($0) } }
+            .filter { seen.insert($0).inserted }
+    }
+
     private func text(_ field: TagEditField, in tags: TrackTags) -> String {
         if let property = field.textField?.textProperty { return tags[keyPath: property] ?? "" }
         if let property = field.numberProperty {
@@ -180,6 +202,12 @@ public struct TagEditorModel: Equatable, Sendable {
         }
         return tags.compilation ? "1" : ""
     }
+}
+
+/// A row of the Extras tab: a key and its value, nil where the tracks differ.
+struct ExtraRow: Equatable {
+    var key: String
+    var value: String?
 }
 
 /// Reads each file's tags and art for the editor, through `read`, `filesReadAtOnce` at a time,

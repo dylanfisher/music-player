@@ -280,6 +280,12 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
+    /// Runs `job` on the scan queue, so after the running scan or sync, paused or not, and
+    /// before the next: a snapshot of the index (ADR 0142).
+    public func betweenScans(_ job: @escaping @Sendable () -> Void) {
+        scanQueue.async(execute: job)
+    }
+
     /// Stop Watching on the last folder: removes every file from the index, as `start` does for
     /// the files outside the folders when there are some. Its stats stay, by path.
     public func removeEveryFile() {

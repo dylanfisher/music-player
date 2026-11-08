@@ -382,6 +382,56 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(result.tier == .likely)
     #expect(result.releaseID == 10)
     #expect(result.candidates.map(\.releaseID) == [11, 12])
+    #expect(result.reasons == [.tiedAfterTieBreak, .foundByTitleOnly])
+}
+
+/// A Likely or Incomplete album says why it isn't Exact, from the chosen release's score and
+/// how it was found; Exact and Matched albums say nothing (ADR 0136).
+@Test func anAlbumThatIsntExactSaysWhy() throws {
+    let releases = release(10, tracks: stockholm)
+    let bonus = try match(
+        album(
+            ["Östermalm", "Bonus Beat", "Other Bonus", "Gamla Stan", "Kungsholmen"],
+            seconds: [285, 100, 100, 370, 300]),
+        releases: releases)
+    #expect(bonus.tier == .incomplete)
+    #expect(
+        bonus.reasons == [
+            .countDiffers(files: 5, tracks: 3), .filesWithoutTrack(2), .foundByTitleOnly,
+        ])
+
+    let hidden = try match(
+        album(stockholmTitles),
+        releases: release(10, tracks: stockholm + [track("4", "Untitled Hidden Track", "1:00")]))
+    #expect(
+        hidden.reasons == [
+            .countDiffers(files: 3, tracks: 4), .tracksWithoutFile(1), .foundByTitleOnly,
+        ])
+
+    let lengths = try match(
+        album(stockholmTitles, seconds: [200, 200, 300], barcode: "123"),
+        releases: release(10, barcode: "123", tracks: stockholm))
+    #expect(lengths.tier == .likely)
+    #expect(
+        lengths.reasons == [.durationsDiffer(2, overSeconds: 8, orFraction: 0.05)],
+        "found by its barcode, worded from the thresholds the matcher used")
+
+    let titles = try match(
+        album(["Östermalm", "Gamla Stan", "Something Else Entirely"]), releases: releases)
+    #expect(titles.tier == .likely)
+    #expect(titles.reasons == [.titlesDiffer(1), .foundByTitleOnly])
+
+    let mixed = try match(
+        album(stockholmTitles, title: "Unfindable", releaseIDs: ["10", nil, "10"]),
+        releases: releases)
+    #expect(mixed.tier == .incomplete)
+    #expect(mixed.reasons == [.releaseIDsDiffer], "found by the id its tracks carry")
+
+    #expect(try match(album(stockholmTitles), releases: releases).reasons.isEmpty)
+    let matched = try match(
+        album(stockholmTitles, releaseIDs: ["10", "10", "10"]), releases: releases)
+    #expect(matched.tier == .matched)
+    #expect(matched.reasons.isEmpty)
 }
 
 @Test func aMultiDiscSetWithHeadingsIsExact() throws {
@@ -600,8 +650,30 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
             ReleaseSummary(
                 id: 10, artist: "Persuader", title: "Stockholm", label: "Svek & Other",
                 catalogNumber: "SK 032", country: "Sweden", year: "2000",
-                format: "Vinyl (LP,Album)")
+                format: "Vinyl (LP,Album)", trackCount: 3)
         ])
+}
+
+/// View Release lists a release's rows as Discogs has them, an index track before its parts;
+/// its track count is the tracks a file can be, as the matcher counts them (51.37).
+@Test func aReleasesDetailListsItsRowsAndCountsItsTracksAsTheMatcherDoes() async throws {
+    let folder = try DumpFolder()
+    try folder.write(
+        "20261101",
+        releases: release(
+            10,
+            tracks: [
+                heading("Side A"), track("A1", "Östermalm", "4:45"),
+                index(
+                    "Suite", [track("A2a", "Part One", "1:00"), track("A2b", "Part Two", "2:00")]),
+            ]))
+    try folder.importCatalog()
+    let detail = try #require(try await releaseDetail(10, catalogAt: folder.catalog))
+    #expect(detail.summary.trackCount == 3)
+    #expect(detail.tracks.map(\.position) == ["", "A1", "", "A2a", "A2b"])
+    #expect(detail.tracks.map(\.title) == ["Side A", "Östermalm", "Suite", "Part One", "Part Two"])
+    #expect(detail.tracks.map(\.seconds) == [nil, 285, 180, 60, 120])
+    #expect(try await releaseDetail(99, catalogAt: folder.catalog) == nil)
 }
 
 /// The progress a run reported, from its thread.

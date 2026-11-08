@@ -30,69 +30,54 @@ extension TaggerModel.Scope {
 }
 
 extension CatalogStatus {
-    /// The line the window shows of a catalog in place.
+    /// The line the window shows of a catalog in place: "Catalog from the 2026-11-01 dump ·
+    /// 3.1 GB".
     var shown: String {
+        "Catalog from the \(dumpDay) dump · \(fileSizeText(sizeBytes))"
+    }
+
+    /// Its tooltip: where the catalog is and when it was imported.
+    var detail: String {
         let imported = DateFormatter.localizedString(
             from: importedAt, dateStyle: .medium, timeStyle: .short)
-        return
-            "The catalog of the \(dumpDate) Discogs dump, imported \(imported):"
-            + " \(fileSizeText(sizeBytes)), at \((url.path as NSString).abbreviatingWithTildeInPath)"
+        return "\((url.path as NSString).abbreviatingWithTildeInPath)\nImported \(imported)"
+    }
+
+    /// The dump's date, which Discogs writes as 20261101, as 2026-11-01.
+    private var dumpDay: String {
+        guard dumpDate.count == 8, dumpDate.allSatisfy(\.isNumber) else { return dumpDate }
+        let digits = Array(dumpDate)
+        return "\(String(digits[0..<4]))-\(String(digits[4..<6]))-\(String(digits[6..<8]))"
     }
 }
 
-extension TaggerModel.Source {
-    var title: String {
+extension NotExactReason {
+    /// "2 files have no track on the release": one of the reasons under the release's title.
+    var text: String {
         switch self {
-        case .catalog: "Local Catalog"
-        case .api: "Discogs API"
-        case .both: "Both"
+        case .filesWithoutTrack(let files):
+            "\(count(files, "file")) \(files == 1 ? "has" : "have") no track on the release"
+        case .tracksWithoutFile(let count):
+            "\(tracks(count)) of the release \(count == 1 ? "has" : "have") no file"
+        case .countDiffers(let files, let tracks):
+            "\(count(files, "file")), the release has \(DisplayText.tracks(tracks))"
+        case .titlesDiffer(let titles):
+            "\(count(titles, "file title")) "
+                + (titles == 1 ? "differs from its track's" : "differ from their tracks'")
+        case .durationsDiffer(let lengths, let seconds, let fraction):
+            "\(count(lengths, "file length")) \(lengths == 1 ? "is" : "are") off by more than"
+                + " \(number(Int(seconds))) s or \(number(Int((fraction * 100).rounded())))%"
+        case .releaseIDsDiffer: "its files carry different release IDs, or only some carry one"
+        case .tiedAfterTieBreak: "other releases fit as well"
+        case .foundByTitleOnly: "found by title only"
         }
     }
 }
 
-extension DiscogsField {
-    /// As the Field Mapping and View Changes sheets name it, after YATE's Release screen: the
-    /// track table's column's title where the two are the same tag.
-    var title: String {
-        switch self {
-        case .releaseID: "Release ID"
-        case .masterID: "Master ID"
-        case .releaseURL: "Release URL"
-        case .masterURL: "Master URL"
-        case .album: TrackColumn.album.title
-        case .albumArtist: TrackColumn.albumArtist.title
-        case .albumArtistURL: "Album Artist URLs"
-        case .label: "Labels"
-        case .labelURL: "Label URLs"
-        case .catalogNumber: TrackColumn.catalogNumber.title
-        case .labelCatalogNumbers: "Labels' Catalog Numbers"
-        case .barcode: TrackColumn.barcode.title
-        case .country: "Release Country"
-        case .date: "Released"
-        case .genres: "Genres"
-        case .styles: "Styles"
-        case .media: "Release Formats"
-        case .compilation: TrackColumn.compilation.title
-        case .discCount: TrackColumn.discTotal.title
-        case .title: TrackColumn.title.title
-        case .artist: TrackColumn.artist.title
-        case .artistList: "Artist List"
-        case .artistNameVariations: "Name Variations"
-        case .artistURL: "Artist URLs"
-        case .trackNumber: TrackColumn.trackNumber.title
-        case .trackCount: TrackColumn.trackTotal.title
-        case .discNumber: TrackColumn.discNumber.title
-        case .position: "Track Position"
-        case .ordinalPosition: "Ordinal Position"
-        case .discSubtitle: TrackColumn.discSubtitle.title
-        case .composer: TrackColumn.composer.title
-        case .conductor: TrackColumn.conductor.title
-        case .lyricist: TrackColumn.lyricist.title
-        case .remixer: "Remixers"
-        case .producer: "Producers"
-        case .involvedPeople: "Involved People"
-        }
-    }
+/// Open on Discogs: release `id`'s page, through `open`, the browser unless a test stands in.
+@MainActor
+func openOnDiscogs(_ id: Int, through open: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+    open(discogsPage(id))
 }
 
 /// A column of the tagger's tables: its identifier is the case's name.
@@ -104,7 +89,7 @@ enum TaggerColumn: String {
     // View Changes.
     case include, fileName, field, tag, current, written
     // Other Releases.
-    case score, artist, title, label, catalogNumber, country, year, format
+    case score, artist, title, label, catalogNumber, country, year, format, tracks
     // Field Mapping.
     case discogsField, mode, targets, join, template
 
@@ -134,6 +119,7 @@ enum TaggerColumn: String {
         case .country: DiscogsField.country.title
         case .year: TrackColumn.year.title
         case .format: DiscogsField.media.title
+        case .tracks: "Tracks"
         case .mode: "Mode"
         case .targets: "Tags"
         case .join: "Join"

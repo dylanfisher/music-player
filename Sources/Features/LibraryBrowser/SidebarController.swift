@@ -258,13 +258,21 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 
     // MARK: Dropping tracks on a playlist
 
+    /// Whether another app started the drag, so its file URLs are files to add or import. The
+    /// app's own rows carry their files too, for other apps, but drop here as tracks
+    /// (ADR 0141).
+    private func fromAnotherApp(_ info: any NSDraggingInfo) -> Bool {
+        info.draggingSource == nil
+    }
+
     func outlineView(
         _ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo,
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
-        if !playlistFileURLs(info.draggingPasteboard).isEmpty
-            || !addableFileURLs(info.draggingPasteboard).isEmpty
+        if fromAnotherApp(info),
+            !playlistFileURLs(info.draggingPasteboard).isEmpty
+                || !addableFileURLs(info.draggingPasteboard).isEmpty
         {
             // A file goes to the playlists or the library, not to the row it's over.
             outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex)
@@ -281,15 +289,17 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         _ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?,
         childIndex index: Int
     ) -> Bool {
-        let files = playlistFileURLs(info.draggingPasteboard)
-        if !files.isEmpty {
-            dropPlaylistFiles(files)
-            return true
-        }
-        let audio = addableFileURLs(info.draggingPasteboard)
-        if !audio.isEmpty {
-            dropFiles(audio)
-            return true
+        if fromAnotherApp(info) {
+            let files = playlistFileURLs(info.draggingPasteboard)
+            if !files.isEmpty {
+                dropPlaylistFiles(files)
+                return true
+            }
+            let audio = addableFileURLs(info.draggingPasteboard)
+            if !audio.isEmpty {
+                dropFiles(audio)
+                return true
+            }
         }
         guard case .playlist(let playlist) = (item as? SidebarNode)?.kind, playlist.isManual
         else { return false }

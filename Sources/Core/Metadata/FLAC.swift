@@ -7,7 +7,7 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     var offset = 4
     var audio: TrackAudio?
     var tags: TrackTags?
-    var pictures: [(type: UInt32, art: EmbeddedArt)] = []
+    var pictures: [EmbeddedPicture] = []
     var isLast = false
     while !isLast {
         try reader.step(at: offset)
@@ -46,17 +46,12 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         throw .malformed(at: 4, "FLAC without a STREAMINFO block")
     }
     return TrackMetadata(
-        tags: tags ?? TrackTags(), audio: audio, art: preferredPicture(pictures))
+        tags: tags ?? TrackTags(), audio: audio, art: preferredPicture(pictures),
+        pictures: reader.kept(pictures))
 }
 
 /// The MIME type FLAC PICTURE and ID3 APIC give a picture that's a URL, not embedded.
 let linkedPictureMIMEType = "-->"
-
-/// The front cover (picture type 3) if there is one, otherwise the first picture. FLAC PICTURE and
-/// ID3 APIC share the type numbers.
-func preferredPicture(_ pictures: [(type: UInt32, art: EmbeddedArt)]) -> EmbeddedArt? {
-    (pictures.first { $0.type == 3 } ?? pictures.first)?.art
-}
 
 /// Sample rate (20 bits), channels − 1 (3), bits per sample − 1 (5) and total samples (36),
 /// packed after the block and frame size limits.
@@ -79,7 +74,7 @@ private func streamInfo(_ block: Bytes) throws(ParseFailure) -> TrackAudio {
 /// Big-endian: picture type, MIME length and MIME, description length and description, width,
 /// height, depth, colors, then the image's length and the image, which is skipped.
 private func flacPicture(_ reader: ByteReader, _ body: Range<Int>) throws(ParseFailure)
-    -> (type: UInt32, art: EmbeddedArt)?
+    -> EmbeddedPicture?
 {
     var cursor = body.lowerBound
     func field(_ length: Int) throws(ParseFailure) -> Bytes {
@@ -101,8 +96,8 @@ private func flacPicture(_ reader: ByteReader, _ body: Range<Int>) throws(ParseF
             at: imageOffset, "FLAC picture of \(length) bytes runs past the end of its block")
     }
     if mime == linkedPictureMIMEType { return nil }
-    return (
-        type,
-        EmbeddedArt(offset: imageOffset, byteCount: length, mimeType: mime, unsynchronised: false)
-    )
+    return EmbeddedPicture(
+        art: EmbeddedArt(
+            offset: imageOffset, byteCount: length, mimeType: mime, unsynchronised: false),
+        type: type)
 }

@@ -2,6 +2,7 @@ import Analysis
 import AppKit
 import Artwork
 import Commands
+import Discogs
 import DiscogsTagger
 import Downloads
 import HALOutput
@@ -21,6 +22,7 @@ import SQLite
 import Scripting
 import Settings
 import SettingsWindow
+import Snapshot
 import TagEditor
 import TagWriter
 import UPnPOutput
@@ -42,6 +44,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let reportingLaunch: Bool
     private let snapshotURL: URL?
     private let snapshotOf: SnapshotTarget
+    /// The Separate Releases value a rescan was confirmed for before a relaunch.
+    private let rescanConfirmed: Bool?
+    /// Whether the index makes an album of each Discogs release, as the window's first open
+    /// built it (ADR 0143). The setting differs from it after a change, until a relaunch.
+    private(set) var separatesReleases: Bool?
     /// How long after the first rows the snapshot waits, for the scan and art to show.
     static let snapshotDelaySeconds = 4.0
     /// How long quitting waits for the outputs to close: longer than a device takes to restore
@@ -81,6 +88,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dockMenu: DockMenu?
     private(set) var queue: QueuePanel?
     private(set) var watcher: LibraryWatcher?
+    /// The library's snapshots (ADR 0142), made with the window.
+    private(set) var snapshotScheduler: SnapshotScheduler?
+    /// Asks for the day's snapshot every hour, once the launch's scans have ended.
+    var snapshotTimer: Timer?
+    /// Held while the app runs, so a restore at another copy's launch waits (ADR 0142).
+    var indexInUse: IndexInUse?
     private var shareChanges: ShareChangeObserver?
     private(set) var output: DeviceOutput?
     /// Each device's state before playback first changed it, shared by every provider made for
@@ -164,11 +177,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
     /// `reportingLaunch` prints a line once the first scan of each watched folder has ended.
-    /// `snapshotURL` gets a PNG of the window a few seconds after that.
+    /// `snapshotURL` gets a PNG of the window a few seconds after that. `rescanConfirmed`
+    /// rebuilds the index at launch without asking, when Separate Releases changing to it is
+    /// the only reason.
     init(
         paths: AppPaths, measuring: MeasurementKind?, reportingLaunch: Bool, snapshotURL: URL?,
-        snapshotOf: SnapshotTarget
+        snapshotOf: SnapshotTarget, rescanConfirmed: Bool? = nil
     ) {
+        self.rescanConfirmed = rescanConfirmed
         self.snapshotOf = snapshotOf
         self.paths = paths
         self.measuring = measuring
@@ -222,6 +238,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             showConfigProblems()
             settings.startWatching()
+        } catch LibraryError.rescanDeclined {
+            // Quit at the rescan question, which left the index as it was.
+            NSApp.terminate(nil)
         } catch {
             fail("The library couldn't open", error)
         }
@@ -241,6 +260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.saver = saver
         let layout = WindowSettings(settings, state: state)
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
+        // Before any connection opens the index, which a restore replaces (ADR 0142).
+        try applyRestoreAtLaunch(databaseURL: databaseURL)
         do {
             try Database.readAhead(at: databaseURL)
         } catch {
@@ -249,7 +270,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Rows for the table come from a connection of the main thread's own. It opens first,
         // so it alone may move an unreadable file aside, before any other connection opens.
-        let index = try LibraryIndex(at: databaseURL, movingAsideIfUnreadable: true)
+        // It alone passes Separate Releases; every other connection keeps what it built.
+        let index = try LibraryIndex(
+            at: databaseURL, movingAsideIfUnreadable: true,
+            confirmRescan: { [rescanConfirmed] notice in
+                rescanConfirmed.map(notice.onlySeparatesReleases) == true || askToRescan(notice)
+            },
+            separateReleases: settings[\.separateReleases])
+        separatesReleases = index.separateReleases
+        snapshotScheduler = SnapshotScheduler(databaseURL: databaseURL)
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,
@@ -638,6 +667,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editing.placeChanged = { [weak self] corner in
             self?.saver?.set(\.infoPlace, InfoWindowPlace(x: corner.x, y: corner.y))
         }
+        // The local catalog only: the tab is what an import of the dumps holds.
+        editing.release = { [weak self] id in
+            guard let self, let settings else { throw NoSettings() }
+            return try await releaseDetail(
+                id, catalogAt: paths.discogsCatalogFile(settings[\.discogsCatalogPath]))
+        }
         return editing
     }
 
@@ -848,15 +883,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher?.stop()
         watcher = nil
         guard let browser else { return }
+        // A run Bench measures, or one drawing a PNG, takes no snapshots, which would add
+        // their reads to what it measures.
+        let snapshotting = measuring == nil && !reportingLaunch && snapshotURL == nil
+        let events = analysisStandingFollowing(
+            reportingLaunch ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents)
         guard
             let watcher = startedWatcher(
                 settings, databaseURL: libraryFileURL(in: paths.dataDirectory),
-                events: analysisStandingFollowing(
-                    reportingLaunch
-                        ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents))
+                events: snapshotting ? startingSnapshotsAfterLaunch(events) : events)
         else {
             // No folder has a scan to wait for.
             if reportingLaunch { FileHandle.standardOutput.write(launchedLine) }
+            if snapshotting { startDailySnapshots() }
             return
         }
         if activity != .stopped {
@@ -1079,4 +1118,10 @@ enum PlayRequestError: Error, CustomStringConvertible {
         case .noStart(let first, let count): "track \(first + 1) of \(count) isn't in the queue"
         }
     }
+}
+
+/// Get Info's Discogs tab asked for the catalog before the settings that name it were read,
+/// or as the app quits.
+private struct NoSettings: Error, CustomStringConvertible {
+    var description: String { "the settings that name the catalog aren't read" }
 }

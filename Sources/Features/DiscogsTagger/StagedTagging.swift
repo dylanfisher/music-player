@@ -18,6 +18,7 @@ extension TaggerModel {
         /// Matches the album with the release by id.
         var match: @Sendable (DiscogsAlbum, Int) async throws -> AlbumMatch
         var summaries: @Sendable ([Int]) async throws -> [ReleaseSummary]
+        var release: @Sendable (Int) async throws -> ReleaseDetail?
         var checkCatalog: @Sendable () async -> CatalogState
         /// `StagedWriter.write(_:)`, which refuses a path outside the staging folder.
         var write: @Sendable ([(path: String, edit: TagEdit)]) async throws -> TagWriteReport
@@ -57,12 +58,13 @@ extension TaggerModel {
                     }
                 },
                 // One album: there's no progress to show.
-                match: { albums, _, _, _ in
+                match: { albums, _, _, _, _ in
                     var matches: [AlbumMatch] = []
                     for album in albums { matches.append(try await staged.match(album, release)) }
                     return matches
                 },
                 summaries: staged.summaries,
+                release: staged.release,
                 read: { ids, progress in
                     let read = await staged.read()
                     let wanted = Set(ids)

@@ -22,6 +22,7 @@ enum Flag: String {
     case reportLaunch = "--report-launch"
     case snapshot = "--snapshot"
     case snapshotOf = "--snapshot-of"
+    case rescanConfirmed = "--rescan-confirmed"
 }
 
 /// The value after `flag`, or nil when the flag is absent, last, or followed by another flag.
@@ -48,6 +49,18 @@ let ioHintsChoices = ReadHints.allCases.map(\.rawValue).joined(separator: ", ")
 /// What `--measure-scroll` accepts, for its error messages.
 private let scrollChoices = ScrollCase.allCases.map(\.rawValue).joined(separator: ", ")
 
+/// What `--rescan-confirmed` takes: the Separate Releases value the rescan was confirmed for.
+private let rescanConfirmedValues = ["on": true, "off": false]
+private let rescanConfirmedChoices = rescanConfirmedValues.keys.sorted().joined(separator: ", ")
+
+/// `--rescan-confirmed`'s text as the Separate Releases value, or nil when it isn't one.
+func rescanConfirmed(_ text: String) -> Bool? { rescanConfirmedValues[text] }
+
+/// The arguments that tell the next launch a rescan to Separate Releases `on` was confirmed.
+func rescanConfirmedArguments(_ on: Bool) -> [String] {
+    [Flag.rescanConfirmed.rawValue, on ? "on" : "off"]
+}
+
 /// What `--snapshot-of` accepts, for its error messages.
 private let snapshotChoices = SnapshotTarget.allCases.map(\.rawValue).joined(separator: ", ")
 
@@ -58,14 +71,14 @@ private let valueFlags: [(Flag, String)] = [
     (.scanIOHints, ioHintsChoices), (.settings, "a config file"), (.home, "a folder"),
     (.snapshot, "a PNG file to write"), (.snapshotOf, snapshotChoices),
     (.captureRenderers, "a folder to write to"), (.measureScroll, scrollChoices),
-    (.artDelayMs, "milliseconds"),
+    (.artDelayMs, "milliseconds"), (.rescanConfirmed, rescanConfirmedChoices),
 ]
 /// The command-line modes, which run and exit without the window.
 private let modeFlags: [Flag] = [.listDevices, .scan, .play, .captureRenderers]
 /// Flags only the window uses.
 private let windowFlags: [Flag] = [
     .measureWindow, .measureLaunch, .measureScroll, .artDelayMs, .reportLaunch, .snapshot,
-    .snapshotOf,
+    .snapshotOf, .rescanConfirmed,
 ]
 private let scanOnlyFlags: [Flag] = [.db, .readers, .scanIOHints]
 
@@ -88,6 +101,9 @@ func argumentProblem(_ arguments: [String]) -> String? {
     }
     if let text = value(after: .snapshotOf, in: arguments), SnapshotTarget(rawValue: text) == nil {
         return choiceProblem(.snapshotOf, snapshotChoices, text)
+    }
+    if let text = value(after: .rescanConfirmed, in: arguments), rescanConfirmed(text) == nil {
+        return choiceProblem(.rescanConfirmed, rescanConfirmedChoices, text)
     }
     if let text = value(after: .measureScroll, in: arguments), ScrollCase(rawValue: text) == nil {
         return choiceProblem(.measureScroll, scrollChoices, text)

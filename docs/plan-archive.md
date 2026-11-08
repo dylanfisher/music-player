@@ -7318,3 +7318,1678 @@ and Resume Scan while playback holds a network scan leaves it held until playbac
 The Settings window's two color tests failed the first full runs, as on 50c's branch before
 its fix; that fix, a 30 s wait for the color saves, is taken onto this branch, and
 `./scripts/check` passes.
+
+### 51. Discogs tagger
+
+A window, opened like Year in Review, that matches library albums to Discogs releases and
+writes their tags through `TagWriter` once the user has reviewed them. Asked for on 2026-11-07.
+This round reads only a local catalog built from the Discogs dumps; the API is phase 52, and an
+LLM review of incomplete matches is under Later. The lookup moved out of music-recommender into
+the player on 2026-11-07; the service (`~/projects/music-recommender` on mbp2021, whose
+`docs/recommendations.md` is the design for it) keeps the recommendations. Workflow and field
+names are modeled on YATE's Discogs Wizard
+(`https://2manyrobots.com/YateResources/InAppHelp/Discogs.html`), whose tags the owner's
+matched albums already carry.
+
+51a (`Core/Metadata`, `Core/TagWriter`, `Core/Library`, `Tools/TagCorpus`) and 51b (a new
+`Core` module for the catalog) touch different modules, so they run in parallel worktrees and
+merge a, then b. 51c needs both, and 51d needs 51c; 51e needs 51d's import button; 51f runs after the gate, and 51g after 51f. ADR
+numbers: 0128 and 0129 to 51a (the survey's findings, custom fields), 0130 to 51b, 0131 to 51c,
+0132 and 0133 to 51d (the mapping, one confirmation for a match set), 0134 to 51e (resuming an
+import), 0135 to 51f (list fields in smart playlists); 51g needs none.
+
+Decided by the owner on 2026-11-07:
+
+| Question | Answer |
+|---|---|
+| Where the catalog and the matching live | The player: a local SQLite catalog built from the dumps, matched in Swift; the API (52) reuses the same matcher |
+| An album is matched when | Its files carry `DISCOGS_RELEASE_ID` |
+| Several releases match a tracklist equally | Tie-break by barcode or catalog number in the tags, then a digital or CD format over vinyl, then the master's main release; still tied, the album drops to Likely |
+| A field that already has a different value | Per-field replace or fill-empty, set once in a saved mapping, then applied to a whole match set |
+| Which tags are written | A YATE-style mapping the user edits. By default each Discogs field goes one to one to its own tag; the owner configures it to their layout (genre and styles below), saved as a preset |
+| Where the dumps are | A folder set in `config.json`, the same one music-recommender reads, so both use one copy of the data; each builds its own database from it |
+| zlib | Fine to link (the system library) |
+| Agents reading the real library | Allowed, read only, for 51.1's survey, 51.8's tuning and 51.13's budgets: the watched folders and the dumps folder, reports under `.build/`; an ADR records the exception to AGENTS.md's music files boundary |
+| The real import | An agent imports the 2026-11-01 dump on this Mac for 51.8 and 51.13 |
+| The dumps folder in `config.json` | A share and a path, the shape of `library.watchedFolders`, so a remount elsewhere still finds it |
+| MP3's Discogs links and credits | Read and written: YATE stores the `DISCOGS_*_URL` fields as `WXXX` frames and credits as `TIPL` (ADR 0128), so 51.2's custom fields gain both in 51d, and "Like my library" matches YATE in every format |
+| Presets that ship (2026-11-07) | None from the owner's library, since the app will be shared: "One to one", "Minimal" and a generic "YATE" (YATE's keys and spellings per format). The owner's YATE layout stays only as a test fixture; their saved mapping is One to one with their own values kept (51.22) |
+| Styles (2026-11-07) | One tag, `MOOD`, in every mapping and in the index; no `STYLE` key. `MOOD` is a standard field in all three tag formats, so other apps read it |
+| The API token (52.1) | The owner adds one, as `"discogs.token"` in `config.json`, before phase 52 runs |
+
+What the owner's matched albums carry, from a sample on 2026-11-07 (400 random FLAC albums, 90
+with a release id; all tagged by YATE): `DISCOGS_RELEASE_ID`, `DISCOGS_MASTER_ID` (as `m744074`),
+`DISCOGS_RELEASE_ORDINAL_POSITION`, `DISCOGS_CATALOG_NUMBER` (as `Label: catno`),
+`DISCOGS_ARTIST_LIST`, `DISCOGS_IMPORT_SETTINGS`, the `DISCOGS_*_URL` fields (release, master,
+artist, album artist, label, artwork), `LABEL`, `CATALOGNUMBER`, `MEDIA` (as
+`File (WAV,Album,Remastered)`), `INVOLVEDPEOPLE`, `PRODUCER` and `TRACK_NUMBER_TEXT`. The owner's
+own layout, which the mapping must be able to reproduce but doesn't default to: `GENRE` is the
+first genre, " - ", then the styles (`Electronic - Ambient, Dub Techno`; some files repeat the
+styles twice, a YATE template error not to copy), `MOOD` holds the styles and `GROUPING` the
+label. Album titles are Discogs's, with no year added. The survey (51.1) checks this over the
+whole library and the other formats.
+
+#### 51a. Survey and fields
+
+- [x] **51.1 Survey (read only, the owner's ask).** A `TagCorpus` mode that reads every file in
+      the watched folders and reports, per format: each `DISCOGS_*` and other non-standard key
+      with how many files and albums carry it, sample values, and which keys are constant
+      within an album. Also how many albums have `DISCOGS_RELEASE_ID` on every track, on some,
+      or none, and the conventions around it (the genre, style and grouping layout,
+      `Artist (2)` suffixes, ANVs). Written to a file under `.build/`, never to the
+      library. Its findings become 51.10's "Like my library" preset and an ADR.
+- [x] **51.2 Custom fields read and written.** The tag reader exposes non-standard keys
+      (Vorbis comments, ID3 `TXXX`, MP4 `----:com.apple.iTunes:<name>`) by name, and `TagEdit`
+      can set or remove a custom key in each format, with tests on generated fixtures and the
+      corpus clones. `DISCOGS_RELEASE_ID` and `DISCOGS_MASTER_ID` are stored in the index
+      (columns on `tracks`), the rest is read from the file when needed.
+- [x] **51.3 Matched albums.** An album counts as matched when every track has the same
+      `DISCOGS_RELEASE_ID`; mixed or partial ids are their own state, shown as Incomplete.
+
+Implementation plan, part 51a (ADRs 0128, 0129):
+
+1. **Reader (51.2).** `TrackTags.custom`, the non-standard keys by uppercased name, the first
+   value winning as for the other fields: every Vorbis key the reader doesn't map, every
+   `TXXX` description it doesn't map, and every `----` item whose `mean` is
+   `com.apple.iTunes` and whose `name` it doesn't map, apart from `iTunSMPB`. `filling(from:)`
+   fills them too. `DiscogsKey` in `Metadata` names `DISCOGS_RELEASE_ID` and
+   `DISCOGS_MASTER_ID` once. Tests in `MetadataTests` on hand-built FLAC, MP3 (2.3 and 2.4),
+   MP4 and WAV tags.
+2. **Survey (51.1).** `TagCorpus --discogs-survey <folder>…`: walks the folders, reads each
+   file once (`FileFormat`, then `parse`, through a read-only `FileSource`), and appends one
+   JSON line per file to `.build/discogs-survey/files.jsonl`, so a stopped run resumes where it
+   was; progress on standard error. Then `DiscogsSurvey` folds the lines into
+   `.build/discogs-survey/report.txt`: per format, each custom key's files, albums, sample
+   values and albums where it is constant; albums with a release id on all, some or no
+   tracks; and the conventions (`GENRE` as "genre - styles", doubled styles, `MOOD` against
+   the styles, `GROUPING` against the label, `Artist (2)` suffixes, artist names against
+   `DISCOGS_ARTIST_LIST`). Every write goes through `requireCorpusWrite` with the survey folder
+   as its only root. Tests in `TagCorpusTests` fold hand-made lines and run the walk on
+   generated fixtures in a temporary folder. Run in the background on `/Volumes/music/library`
+   and `/Volumes/music/dsd`.
+3. **Writer (51.2).** `TagEdit.custom`, name to text, empty text removing the key; a name
+   must be printable ASCII without `=` and not one the reader maps to a field. `TagGroup`
+   gains `.custom(name)`, which FLAC writes as a Vorbis comment, ID3 as `TXXX` and MP4 as a
+   `----:com.apple.iTunes:<name>` item, each replacing every key of that name. Tests in
+   `TagWriterTests` on generated fixtures in each format, and the round trip on the corpus
+   clones gains a custom-key edit.
+4. **Index (51.2, 51.3).** `discogs_release_id` and `discogs_master_id` on `tracks`, from
+   `TrackTags.custom`; the index's changed SQL rebuilds it on open, as any change does.
+   `LibraryIndex.discogsMatches()`: each album's state, matched (one release id on every
+   track), incomplete (some tracks without one, or several ids) or unmatched. Tests in
+   `LibraryTests` through a scan of generated fixtures.
+5. **ADRs.** 0128, the survey's findings and the exception that lets agents read the real
+   library, with AGENTS.md's boundary pointing at it; 0129, custom fields.
+
+#### 51b. The local catalog
+
+- [x] **51.4 Import.** A streaming import of the releases, masters, artists and labels dumps,
+      read in place from the dumps folder in `config.json`, `/Volumes/music/discogs` on the
+      owner's Macs (the NAS folder music-recommender reads too, as `~/mnt/music/discogs`; it is
+      only read, never written or copied), into `discogs.sqlite` in Application Support (a path in
+      `config.json` overrides it; it must be outside every watched folder). The newest complete
+      dump set in the folder is used. Gzip read through the system zlib as a stream and XML
+      with `XMLParser`; nothing is unpacked to disk, since the gzip is read only once per
+      import and the window only ever queries the SQLite catalog. The checksum file is
+      checked first. A new import writes a new file and replaces the old one when complete, so
+      the window never sees a half-built catalog; a failed import is reported and the old
+      catalog stays. Started from the window ("Import Discogs Dump…", choosing the folder),
+      with progress, and it can be stopped.
+- [x] **51.5 What's kept.** Per release: id, master id and whether it's the main release, title,
+      artists (id, name, ANV, join), labels with catalog numbers, formats with descriptions,
+      country, release date, genres, styles, barcodes, and the credits the mapping can use.
+      Per track: position, title, duration, track artists and credits; headings and sub-tracks
+      kept with their type so the matcher can fold them. Per artist: name and name variations.
+      Per label: name. Folded keys (lowercased, accents and a leading "The" dropped, `&` as "and",
+      `Artist (2)` suffixes and edition words in brackets removed, punctuation and spaces
+      removed; the folding the 2026-11-06 coverage count used) indexed for
+      artist plus title, barcode, and label plus catalog number.
+- [x] **51.6 Tests.** Small fixtures in the dump's format: a release with every optional element
+      missing, sub-tracks and headings, vinyl and `CD2-4` positions, a truncated file, a bad
+      checksum, a stopped import leaving the old catalog in use.
+
+Implementation plan, part 51b (ADR 0130):
+
+1. **Settings (51.4).** `discogs.dumpsFolder`, a `DumpsFolder` (a path, or a share and the path
+   inside it, checked as `SyncFolder` is, through `folderLocationProblem`), null by default;
+   `discogs.catalogPath`, an absolute path or null for `AppPaths.discogsCatalogFile`
+   (`discogs.sqlite` in the data directory). `AppSettings.conflicts` refuses a catalog path
+   inside a watched folder stored by path, as it refuses the sync folder. The Settings window
+   hides both, as it hides Network Scan Readers: 51d's window picks the folder. Tests in
+   SettingsTests and the hidden-rows test in SettingsWindowTests.
+2. **Discogs module.** `Sources/Core/Discogs`, importing Library (for `MountedShare` and the
+   share lookup `locate(_:among:)` already finds the sync folder with), Log, Settings and
+   SQLite, linking the system zlib, with CryptoKit for SHA-256. In order, each with its tests:
+   - `CatalogKey`: the fold (the coverage count's rules, from music-recommender's
+     `fold.py`, with the title-only edition words) and the keys built from it: artist credit
+     keys (each name, all joined, all joined with "and"), title, barcode, label and catalog
+     number. Public, so 51c folds the library's side with the same code.
+   - `DumpSet`: the newest date in the folder whose four `discogs_<date>_<kind>.xml.gz`
+     files and `discogs_<date>_CHECKSUM.txt` are there and the checksum file lists all four;
+     its SHA-256 per file and total compressed size. `locateDumps(_:among:)` finds the
+     setting's folder on its share.
+   - `GzipStream`: a file descriptor read 1 MB at a time and inflated with zlib, hashing
+     the compressed bytes and counting them for progress. A file that ends before its gzip
+     trailer, or bad data, fails the read with the file's name; the hash is compared with the
+     checksum file when the stream ends. `DumpBatches` cuts the inflated bytes into batches of
+     whole records, each parsed by its own `XMLParser` in an autorelease pool (added after
+     the first real import held 1.8 GB in `XMLParser`'s autoreleased strings).
+   - `DumpParser`: an `XMLParserDelegate` per dump kind, building one record per element
+     (`CatalogRelease` with its tracks, headings and index tracks with their sub-tracks,
+     artists, credits, labels, formats, barcodes from the identifiers; `CatalogMaster`,
+     `CatalogArtist`, `CatalogLabel`), everything optional but the id, checking
+     `Task.isCancelled` every few hundred records.
+   - `CatalogSchema` and `CatalogWriter`: one row per release, master, artist and label,
+     the lists in the row as JSON, and key tables (`title_keys` for masters and releases
+     without a master, `barcode_keys`, `catno_keys`). Written with `journal_mode = MEMORY`,
+     `synchronous = OFF` and a large page cache, 2,000 records a transaction, the indexes
+     built after the last row.
+   - `CatalogImport`: `importCatalog(from:to:outsideOf:progress:)` checks the catalog path
+     against the located watched folders, picks the dump set, imports labels, artists,
+     masters, releases into `<catalog>.importing`, and renames it over the catalog only when
+     every file's hash matched and the indexes are built. A failure or a stop removes the new
+     file and throws; the old catalog is untouched. `Progress`: the stage, compressed bytes
+     read of the set's total, records so far, a line of text.
+   - `Catalog`: the read API, opened read-only: a release or master by id, release ids by
+     barcode and by label plus catalog number, and title matches (masters and master-less
+     releases) by artist and title.
+3. **Fixtures and tests (51.6).** `DiscogsDumpFixture` in `Tools/Fixtures`: writes gzipped
+   dump files and their checksum file from XML text, and a synthetic dump of N releases for
+   the bench. `Tests/DiscogsTests`: every optional element missing, sub-tracks and headings,
+   vinyl and `CD2-4` positions, the keys and lookups, a truncated gzip, a bad checksum, an
+   incomplete set skipped for an older complete one, a stopped import and a failed one each
+   leaving the old catalog in use.
+4. **Bench.** `DiscogsBenchmarks`: importing a 20,000-release fixture dump, and its catalog's
+   size, with rows in the budget table; 51.13 adds the real dump's numbers.
+5. **Tool.** `Sources/Tools/DiscogsImport`, an executable that imports a folder into a catalog
+   path (Application Support's by default) and logs progress lines, for the real import of
+   the 2026-11-01 dump on this Mac, run in the background with its log under `.build/`.
+6. **ADR 0130**: streaming, the schema and why the lists are JSON, the folding, the hash
+   checked as the file streams rather than in a pass before it, the atomic swap, the settings
+   keys.
+
+#### 51c. Matching
+
+- [x] **51.7 Candidates.** For each album, in order: its release id (refresh); barcode; label
+      plus catalog number; folded album artist plus title against masters and against releases
+      without a master. Titles are also tried with a leading `[catalog number]` or trailing edition
+      words removed (music-recommender's prototype found 390 library titles with the first).
+- [x] **51.8 Scoring.** Each candidate scored on track count, the tracklist (folded titles
+      compared in order, Discogs positions and headings folded), durations within a tolerance
+      where Discogs has them, then the tie-break the owner decided. The result is the file to
+      track mapping and a tier:
+      - **Exact:** same track count, every title matches in order, durations agree where
+        present, and one release wins the tie-break.
+      - **Likely:** same track count and the tracklist matches above a threshold, or exact but
+        still tied after the tie-break.
+      - **Incomplete:** a different track count, a weak tracklist match, or a partial id.
+      - **No candidate**, and **Matched** (already has a release id; refresh offered).
+      Thresholds are named constants, tuned on the owner's matched albums: run on them with
+      their ids hidden, at least 95% of those counted should come back Exact or Likely with
+      the same release or a twin of it, and at most 2% Exact with a release that is neither
+      (decided by the owner on 2026-11-07). A twin is equal to the tagged release in every
+      tag the matcher compares (tracklist, catalog number, barcode, date, `MEDIA`, country)
+      and stays Exact. Not counted: albums whose tagged release isn't in the dump or doesn't
+      fit the files (another track count, titles changed since the tagging), and albums left
+      Incomplete because the owner kept another track count. Albums whose tagged release
+      Discogs has changed since (its date or format) are counted, and reported as known
+      misses.
+- [x] **51.9 Tests.** Albums from fixtures against a fixture catalog for each tier, the tie-break
+      order, bonus and hidden tracks, multi-disc sets, vinyl positions, sub-tracks, and
+      `Artist (2)` and ANV names.
+
+Implementation plan, part 51c (ADR 0131):
+
+1. **The album side.** `DiscogsAlbum` in `Library`: the album's title and artist (album artist,
+   else artist), label, catalog number and barcode, and its tracks (file id, title, seconds,
+   disc and track numbers, release id) in disc and track order. `LibraryIndex.discogsAlbums()`
+   reads them from the index alone: the `tracks` table already has `publisher`,
+   `catalog_number` and `barcode`, the standard fields each reader maps YATE's `LABEL`,
+   `CATALOGNUMBER` and `BARCODE` to in every format, beside 51a's two ids, so no file reads
+   over the NAS. (As built: the date and `MEDIA` too, `MEDIA` in a new column, for the
+   tie-break the tuning found.) Tests in `LibraryTests`.
+2. **Catalog.** `releaseIDs(master:)`, over the `releases_by_master` index. Test in
+   `CatalogLookupTests`.
+3. **Candidates (51.7).** `AlbumCandidates`: the album's release ids, then the barcode's
+   releases, then label plus catalog number (the whole `LABEL`, then each label of a
+   " & " list), then title matches for the artist and title, each master expanded to its
+   releases. Titles are also tried without a leading `[…]` and without trailing edition words
+   after " - "; artists also as the first of a "feat."/"&"/","/"vs." list, and Various
+   Artists as Discogs's "Various". Each release once, in the order found.
+4. **Scoring and tiers (51.8).** `ReleaseTracklist`: a release's playable tracks, headings
+   dropped (kept as tracks when no row has a position), index tracks as their sub-tracks or as
+   one track, whichever the album's count fits. `ReleaseScore`: titles folded with
+   `CatalogKey`, a similarity per pair, an in-order alignment that maps files to tracks when
+   the counts differ, durations within a tolerance. `TieBreak`: barcode or catalog number in
+   the tags, then File or CD over other formats, then the master's main release. `AlbumMatch`:
+   the tier, the chosen release, the other candidates scored, and the file to track mapping.
+   `MatchThreshold` holds every threshold once.
+5. **The API.** `matchAlbums(_:catalogAt:progress:)`, async: a detached task opens its own
+   `Catalog` (so a call after an import reads the new file), checks cancellation before each
+   album, and reports albums done of the total. Public only where the tuning tool calls it.
+6. **Tests (51.9).** `Tests/DiscogsTests`: fixture dumps imported into a catalog, albums built
+   by hand, one test per tier, the tie-break order, bonus and hidden tracks, multi-disc sets,
+   vinyl positions, sub-tracks, `Artist (2)` and ANV names, cancellation and progress.
+7. **Tuning (51.8).** `SurveyRecord` gains title, numbers, seconds and barcode, so the survey's
+   `files.jsonl` is the read-once cache of the watched folders. `TagCorpus --discogs-tuning
+   [--catalog <path>]` groups it into the survey's albums, keeps those with one release id on
+   every track, hides the ids, matches them, and writes `.build/discogs-tuning/report.txt`:
+   tiers, same-release rate, wrong Exacts with examples, time per album and in all.
+8. **ADR 0131**: candidates, scoring, tiers, thresholds and their tuning, the inputs from the
+   index.
+
+#### 51d. The mapping and the window
+
+- [x] **51.10 Field mapping.** A list of Discogs fields, release-level and track-level, as
+      YATE's Release screen shows them. Each has a target tag (a standard field or a custom
+      key), a mode (replace, fill empty only, or off) and, where it needs one, a format:
+      the join between values, ANV or canonical artist names, `(2)` suffixes kept or dropped,
+      full date or year, and a template that builds a tag from several Discogs fields (the
+      owner's `GENRE` is `{genre} - {styles}`). The default is one to one: genres to `GENRE`,
+      styles to `STYLE`, label to `LABEL`, and so on, each Discogs field to its own tag. Any
+      field can be sent to another tag or to several (styles to `MOOD` too, label to
+      `GROUPING`). Saved in the settings (ADR 0003), set once and used for every album. Presets:
+      "One to one" (the default), "Minimal" (release id, label, catalog number, year) and the
+      user's own, saved by name; the owner's layout from 51.1 is saved as "Like my library".
+- [x] **51.11 The window.** Toolbar: source (Local catalog; API and Both are shown disabled
+      until 52), scope (whole library, the albums selected in the library window, or only
+      unmatched albums), Analyze, Field Mapping…. A tab per tier with its count; each tab is an
+      album list. The selected album shows the chosen release (artist, title, label, catalog
+      number, country, year, format) and, side by side, the album's tracks against the release's
+      with each row marked matched, different or missing. "Other Releases…" lists the
+      candidates with filters by artist, title, country, label and format (YATE's release
+      list), and choosing one rescores the album. For Likely and Incomplete albums, the rows
+      can be dragged to change which file gets which track (YATE's mapping screen). Analysis
+      runs off the main thread with progress and can be stopped.
+- [x] **51.12 Review and apply.** Each album has a "View Changes" sheet: per file and field, the
+      current value against the value the mapping writes, with a checkbox each (YATE's import
+      screen). "Apply to All in Exact" (and in Likely) opens one confirmation sheet with the
+      counts of albums, files and fields changed, then writes through `TagWriter` as a batch with
+      the existing progress and undo. Rejected albums and chosen releases are remembered in the
+      index, so a second session doesn't redo the review. Nothing is written before the user
+      confirms, and an ADR records that one confirmation for a reviewed match set is the
+      confirmation AGENTS.md's music files boundary asks for.
+- [x] **51.13 Budgets.** Rows for the import's time and the catalog's size, Analyze over the
+      whole library, one album's candidates, and opening the window, measured on fixtures and
+      on the real catalog on this Mac. On a Mac without a catalog (the 2015 MacBook Pro) the
+      window says so and offers the import; nothing falls back silently.
+- [ ] **Owner check:** import the 2026-11-01 dump, analyze the whole library, review the Exact
+      tab, apply it, and check a few albums' tags in YATE.
+
+#### 51e. An import that resumes
+
+Asked for by the owner on 2026-11-07, after the first real import trapped at 76% of the
+releases (a duration too long for an `Int`, fixed in `72960469`) and had to start over.
+
+- [x] **51.14 Checkpoints.** A table in `<catalog>.importing` holds the dump date, the files
+      finished, and for the current file the last record committed, its compressed and bit
+      offsets, the last 32 KB inflated (zlib's `zran.c` access point) and the SHA-256 state
+      (CommonCrypto's `CC_SHA256_CTX`, since CryptoKit's can't be saved). Written in the same
+      transaction as its batch, every few minutes of input, so a checkpoint always matches the
+      rows.
+- [x] **51.15 Resume.** An import that finds a `.importing` file of the same dump date carries
+      on from its checkpoint: it seeks to the offset, restores the inflate state with
+      `inflatePrime` and `inflateSetDictionary` and the hash, and goes on; one of another date,
+      or without a checkpoint, is removed and the import starts over. The window shows
+      "Resume Import" and "Start Over" after a stop, a quit or a crash. The hash still covers
+      every byte, and the swap is unchanged.
+- [x] **51.16 Fuzzing the dump parser.** A `DumpParser` target in `Tools/Fuzz`, so a record that
+      traps is found on fixtures, not 20 minutes into a real import: Swift can't catch a trap.
+- [x] **51.18 Name variations.** `title_keys` also holds each release's and master's artist
+      ANVs, so an album tagged with one is found by title, not only by its barcode or catalog
+      number (found in 51c's tuning; the owner chose 51e on 2026-11-07, as it reimports anyway).
+- [x] **51.17 Tests.** A stop and a crash (a killed child process) at each stage, resumed to a
+      catalog identical to an import run straight through; a checkpoint from another dump date;
+      a damaged checkpoint; the bench's fixture import stopped halfway and resumed.
+
+#### 51f. Mood and styles in the library
+
+Asked for by the owner on 2026-11-07: YATE puts a release's Discogs styles in `MOOD`
+("Dub Techno, House, Techno"), which the tag reader and Get Info already handle, but the index
+doesn't store it, so it has no column and no smart playlist field. And "Genre contains Techno"
+also matches "Dub Techno", so no rule can pick out one style. Changing the tracks part rescans
+the library once on first launch (pre-release: one shape, no migrations), so 51f ships in the build
+that also needs the new catalog; the owner asked for 51f before the real catalog is rebuilt. The
+mapping choices (51.22–51.24) were decided by the owner the same day.
+
+- [x] **51.19 Mood in the index.** `MOOD` stored with the other tags, a Mood column in the
+      track table (sortable, in the header's menu) and a Mood smart playlist field, its title
+      defined once with the tag editor's.
+- [x] **51.20 Whole values in a list.** Text rules on Genre, Mood, Grouping and Publisher gain
+      "has" and "doesn't have": the value split on ", " and on " - " (Genre's
+      `{genre} - {styles}`), each part folded as the column's sort is, and compared whole, so
+      "Mood has Techno" matches "Dub Techno, Techno" and not "Dub Techno". Done in SQL, on
+      the indexed column, within the smart playlist budgets. ADR 0135 records the split.
+- [x] **51.21 Tests.** Mood read from FLAC, MP4 and ID3 fixtures into the index; the column
+      sorts; "has" against values at the start, middle and end, a genre with a comma of its
+      own (`Folk, World, & Country`), and a value that only contains the word; the smart
+      playlist bench row with a "has" rule.
+- [x] **51.22 Presets and the owner's mapping.** "Like my library" leaves the shipped presets;
+      a generic "YATE" preset (YATE's keys and per-format spellings, plain genres) joins "One
+      to one" and "Minimal". Every preset sends the styles to `MOOD` only. The owner's
+      `config.json` gets a saved mapping, "Mine": One to one with titles, artists, track and
+      disc numbers and totals, composer, conductor, lyricist, remixer and the date set to fill
+      only empty tags. The YATE layout moves to a test fixture, which keeps the write-back
+      tests. ADRs 0128 and 0132 updated.
+- [x] **51.23 Choices in the tagger window.** Next to Field Mapping…, without opening the sheet:
+      "Keep existing values" (on: the fields 51.22 lists fill only empty tags, whatever the
+      mapping says; off: the mapping's own modes), "Skip Blu-ray, DVD and video" (on by
+      default: those releases are never candidates, as YATE's `DiscogsIgnoredMedia`), and
+      "Fill sort artist from album artist" (`ARTISTSORT` from the album artist, only when
+      empty, as the owner's YATE after-import action). Each a setting (ADR 0003), so it
+      persists; changing one rescores or recomputes the open album's changes.
+- [x] **51.24 Undo Tag Edit in the Edit menu**, with ⌥⌘Z, out of File.
+- [ ] **Owner check:** a smart playlist of one style on the real library, and the Mood column
+      on albums tagged by YATE.
+
+#### 51g. The tagger's and the tag editor's rough edges
+
+From the owner's testing on 2026-11-07, before 51 closes.
+
+- [x] **51.25 Template help.** A help button (?) beside Field Mapping's template field opens a
+      popover: every token a template can name (from the list `DiscogsMapping` checks
+      against, not a copy), that text outside braces is kept as written, how a list field
+      joins inside a template, and two examples (`{genre} - {styles}`, the owner's `GENRE`).
+- [x] **51.26 Save As says it saved.** After Save As… the new name is chosen in the saved
+      mappings menu and the sheet says "Saved as “Name”"; a name already in use asks before it
+      replaces that mapping.
+- [x] **51.27 Import and export a mapping.** Export… writes the shown mapping as JSON in the
+      shape `config.json` keeps it (one encoder); Import… reads a file, and Paste reads JSON from
+      the clipboard. Either is checked as the config's mapping is, and a bad one is refused with
+      the reason, never half applied. An imported mapping is shown unsaved, for Save As….
+- [x] **51.28 Tooltips and the catalog's state.** Tooltips on Import Discogs Dump… and Field
+      Mapping… say what each does. With a catalog in place the window says so: the dump date it
+      was built from, when it was imported, its size, and its path with a Reveal in Finder
+      button; the import button then reads Reimport Discogs Dump….
+- [x] **51.29 Tag commands in the tag editor.** While the tag editor is open it shows Undo Tag
+      Edit, Replace Artwork… and Remove Artwork as buttons, which run the same commands as the
+      menu items and are enabled by the same rules.
+- [x] **51.30 Dismissing a config warning.** A problem that doesn't block the config (an
+      unknown key such as `discogs.token`, which no build knows until 52.1) gets a close
+      button. A dismissed problem stays hidden until the config file changes. A problem that
+      blocks the config has no close button.
+- [x] **51.31 Tests.** The help lists every token; Save As over an existing name; a mapping
+      exported, imported and pasted back is equal to the one exported; a bad import changes nothing;
+      the catalog status from a fixture catalog; the editor's buttons follow the commands'
+      enabled rules; a dismissed warning returns when the file changes, and a blocking one can't
+      be dismissed.
+- [ ] **Owner check:** the help, Save As, an export opened in a text editor and imported back,
+      the catalog status after the real reimport, and the editor's buttons.
+
+#### 51h. The tagger, second pass
+
+From the owner's testing on 2026-11-08, after 51g ran on the real library.
+
+- [x] **51.32 Asking before a rescan** (moved from 53.9: the first launch after 51f rescanned
+      the whole library with no word, which looks like a corrupted library). When a new build
+      would drop an index part that a rescan refills, before dropping anything a dialog says
+      which part changed and why, in words kept once with the part, that every file is read
+      again, and that plays, ratings and playlists stay. It offers Rescan Now or Quit. Quit
+      leaves the index as it was and asks again at the next launch. While the rescan runs, the
+      status bar says it's a rebuild, not a first scan. An ADR.
+- [x] **51.33 A plainer header.** The catalog's state is one short line, "Catalog from the
+      2026-11-01 dump · 3.1 GB", with its path and import date in the tooltip and Reveal in
+      Finder beside it. The rest of the header's controls on one row; nothing wraps at the
+      window's minimum width.
+- [x] **51.34 Opening on the selection.** With tracks selected in the library, Discogs Tagger
+      opens scoped to their albums and, with a catalog in place, analyzes them at once.
+      Without a selection it opens as now.
+- [x] **51.35 Why not Exact.** A Likely or Incomplete album says why, under its release title
+      and in its row's tooltip: "2 files have no track on the release", "3 durations differ by
+      over 5 s", "found by title only". Worded from what the matcher already kept for its tier,
+      not scored a second time.
+- [x] **51.36 The window's height.** The track tables take all the height the header and the
+      buttons leave, and scroll. Right on the first open, after an import, after reopening,
+      and after a resize: the owner saw it too short once and right the next time, so a test
+      checks the tables' frames in each case.
+- [x] **51.37 Viewing a release.** The Other Releases sheet sorts by any column's header and
+      gains a Tracks column, the release's track count from the catalog. View Release… beside
+      Use Release shows the release before it's used: tracklist (position, title, duration),
+      label, catalog number, format, country and year, as YATE's release view. View Changes
+      and the release area get Open on Discogs, the URL from `ReleaseFields`'s one builder.
+- [x] **51.38 Sheets keep their size.** Each tagger sheet (Other Releases, View Release, View
+      Changes, Field Mapping) keeps its last size, column widths and sort, per kind of sheet,
+      in `state.json` (`AppState`): this Mac's, not the config.
+- [x] **51.39 Undoing a tagger write.** Undo Tag Edit after the tagger wrote 22 MP3s on the NAS
+      failed for all of them: "can't copy its extended attributes: Permission denied", from
+      `fcopyfile(COPYFILE_ACL | COPYFILE_XATTR)` in `FileReplace.copyAttributes`. Find which
+      attribute or ACL the SMB server refuses when the tagger's own write of the same files
+      went through, and fix the replace so an undo of any write the app made can run. As
+      Undo Tag Edit undoes the newest edit anywhere, it first asks when that edit wasn't
+      made in the window it's pressed in: "Undo the Discogs tagger's edit of 22 files?".
+- [x] **51.40 Tests.** The rescan dialog's Quit leaves the index untouched; the header at the
+      minimum width; scoping to a selection; each reason over crafted matches; the tables'
+      frames in each case of 51.36; sorting, the Tracks column and View Release; a sheet's
+      frame, widths and sort back after reopening; an undo through a replace whose attribute
+      copy is refused, through `faults`, and the question for another window's edit.
+- [ ] **Owner check:** the next build that changes the index, the tagger on a selection of
+      Likely albums, a sheet resized and reopened, and Undo Tag Edit after a tagger write on
+      the NAS.
+
+Implementation plan, part 51h (ADR 0136):
+
+One ADR, 0136, covers the part (52 and 53 number after it): the rescan dialog (51.32), the
+attribute copy (51.39) and the undo question (51.39). If the owner wants the attribute copy
+recorded apart, it takes 0137 and 52 and 53 shift by one.
+
+1. **The rescan dialog (51.32), Library.** Searched `rg -i 'rescan|stale|rebuildStaleParts'`:
+   the only place that drops an index part is `LibraryIndex.rebuildStaleParts()`
+   (`Sources/Core/Library/LibraryIndex.swift`), run from `prepareSchema()` inside the init, and
+   the parts are `SchemaPart` in `LibrarySchema.swift`.
+   - `SchemaPart.rescanWhy: String?`, the words kept once with the part. Set for the parts a
+     rescan refills (`.index`, today), nil for every other part (`.scans` rebuilds with the
+     index and adds no line; stats-like parts, `.measures` and `.analysisRun` are not refilled
+     by a rescan). The text is per part, not per build: the stored SQL is the only identity, so
+     the build can't say more than "this part's tables changed". 53.13 adds its albums part
+     with its own `rescanWhy` and nothing else in the dialog changes.
+   - `RescanNotice` (new file `RescanNotice.swift` in `Library`): `parts: [SchemaPart]` and
+     `text`, built only from the parts' `rescanWhy`, plus the fixed sentences "Every file is
+     read again. Plays, ratings and playlists stay." Takes any list of parts, so 53.13 reuses
+     it as is.
+   - `rebuildStaleParts()` is split: `partsToRebuild(stored:)` (read only, the `stale` and
+     `rebuilt` computation it already does) and the drop and create. `prepareSchema()` calls
+     the first, and when the result has a part with a `rescanWhy` that is already stored
+     (`stored[part] != nil`, so a new library never asks) and no stats part (a stats rebuild
+     keeps its existing discard notice, ADR 0022, since "plays stay" would be false), it asks
+     before the transaction opens. Nothing is dropped before the answer.
+   - `LibraryIndex.init(at:movingAsideIfUnreadable:confirmRescan:)`, with
+     `confirmRescan: ((RescanNotice) -> Bool)? = nil`. Nil means no question, as today: the
+     `music-player scan` command, `LibraryReader`'s connections and every existing test keep
+     their behavior. A false answer throws `LibraryError.rescanDeclined`
+     (`LibraryError.swift`) before the first statement that changes the file, so the index is
+     as it was and the next launch asks again.
+   - The index records that it rebuilt (`rebuiltParts`, like `movedAside`), for the status bar.
+   - Decision: the rebuild flag is in memory. A quit mid-rescan reads "Scanning" at the next
+     launch; a persisted flag would be a part of its own for one status word.
+2. **The dialog and the quit, LibraryBrowser and App.** `RescanAlert.swift` in
+   `Features/LibraryBrowser` (neighbor: the other small alerts there; the text is the
+   notice's, so the file holds no wording): an `NSAlert` with `Rescan Now` and `Quit`, run
+   modally because it comes before the window exists. `AppDelegate.openWindow` passes it as
+   `confirmRescan` on the one open that already passes `movingAsideIfUnreadable: true`;
+   it catches `LibraryError.rescanDeclined` and terminates without the error alert
+   (`NSApp.terminate`), where the other errors from that open are reported.
+3. **The status bar (51.32).** `LibraryStatus.scanText` (`Features/LibraryBrowser`) says
+   "Rebuilding the index: Music: 300 of 1,200 read" in place of "Scanning" while the index
+   rebuilt this launch and that folder's first whole scan hasn't ended. `LibraryBrowser` gets
+   the flag from the index it is given.
+4. **A plainer header (51.33), DiscogsTagger.** `TaggerWindow.build` and `refresh()` (the
+   `catalogBox`, `catalogLabel`, `revealButton`, `status.shown`). The label becomes
+   "Catalog from the 2026-11-01 dump · 3.1 GB" from `CatalogStatus.dumpDate` and `sizeBytes`
+   (size through the formatter the app already uses for sizes: `rg ByteCountFormatter`); the
+   path and `importedAt` go in the tooltip, Reveal in Finder stays beside the label, and the
+   remaining controls (Import, Mapping, Source, Scope, Analyze, the three choices) go in one
+   `NSStackView` row. Compression resistance low on the label (tail truncation), so the row
+   fits the window's `minSize` (760 pt) with nothing wrapping. Wording stays in
+   `TaggerTitles.swift`.
+5. **Opening on the selection (51.34).** `DiscogsTagger.show()` takes the library selection
+   (`selectedTracks` is already wired): if it is non-empty, sets `model.scope = .selection`
+   and, when the catalog is `.ready`, calls `model.analyze()` after `checkCatalog()` returns.
+   The first `show()` runs the check in a `Task` today, so the analyze goes after it in that
+   same task. An already open window reopened with a selection does the same; with no
+   selection nothing changes. `analyze()` already reports an empty selection.
+6. **Why not Exact (51.35), Discogs and DiscogsTagger.** The matcher keeps, for the chosen
+   release, `ReleaseScore.mapping`, `durationsCompared`, `durationsAgreeing`, `sameCount`,
+   `titlesInOrder`, and `tied` in `choose(...)`. It does not keep how the release was found.
+   - `AlbumCandidates.swift`: `candidateIDs(for:in:)` returns each id with the way it was
+     first found (`.taggedID`, `.barcode`, `.labelAndCatalogNumber`, `.title`). No second
+     search.
+   - `NotExactReason` (new, `Discogs`, next to `AlbumMatch.swift`): an enum with counts
+     (`filesWithoutTrack(Int)`, `tracksWithoutFile(Int)`, `durationsDiffer(Int)`,
+     `titlesDiffer(Int)`, `countDiffers(files:tracks:)`, `tiedAfterTieBreak`,
+     `foundByTitleOnly`). `AlbumMatcher.match` fills `AlbumMatch.reasons` from the chosen
+     score and the `tied` flag it already has, for tiers Likely and Incomplete only. It scores
+     nothing again.
+   - The words are in `TaggerTitles.swift`: "2 files have no track on the release",
+     "3 durations differ by more than 8 s or 5%" (from `MatchThreshold.durationSeconds` and
+     `durationFraction`, so the number isn't written twice; the owner's example said 5 s, the
+     threshold is 8 s), "found by title only". Shown under the release title in the
+     selected-album area and as the row's tooltip (`TaggerWindow.tableView(_:viewFor:row:)`).
+7. **The window's height (51.36), DiscogsTagger.** Read `TaggerWindow.build` (the `split`
+   and `detail` stacks, the `for view in detail.arrangedSubviews where view is NSScrollView`
+   constraints). The tables must be the one view that takes the spare height: vertical
+   content-hugging low and compression resistance low on the tables' scroll views, high on
+   the header rows, and no fixed-height constraints on the scroll views. Because the owner saw
+   it too short once and right the next time, the likely cause is the window laid out before
+   the catalog row (`catalogBox`, hidden while `.checking`) and the resume row showed, with no
+   layout pass after: call `window.contentView?.layoutSubtreeIfNeeded()` at the end of
+   `refresh()` when a hidden row changes, and test it. If the test finds another cause, fix
+   that one and record it in the commit.
+8. **Viewing a release (51.37), DiscogsTagger and Discogs.**
+   - Sorting: `ReleasesSheet` gets `NSSortDescriptor`s on its columns
+     (`taggerTable(...)` builds them, in `TaggerChoices`' neighbor `TaggerTitles`/the table
+     helper), `tableView(_:sortDescriptorsDidChange:)`, `shown` re-sorted after a filter.
+     Numeric columns (score, tracks, year) compare as numbers.
+   - A Tracks column: `ReleaseSummary.trackCount` (`ReleaseSummary.swift`), the playable
+     count from `ReleaseTracklist` as the matcher counts it (not Discogs rows with headings),
+     in `CatalogRelease.summary`; `TaggerColumn.tracks` and its title.
+   - `ViewReleaseSheet.swift` (new, `DiscogsTagger`, a `TaggerSheet` like `ChangesSheet`;
+     neighbor `ChangesSheet.swift`): opened by `View Release…` beside `Use Release`. It shows
+     the release from the catalog: a header (label, catalog number, format, country, year) and
+     a tracklist table (position, title, duration), with Open on Discogs. The data is a
+     `ReleaseDetail` read through a new `Effects.release(id)` on the model, which wraps
+     `Catalog.release(id:)` off the main thread the way `summaries` does.
+   - Open on Discogs: `ReleaseFields.swift` has `private func discogsURL(_ kind:, _ id:)`.
+     Make `releaseURL(_ id: Int) -> String` the one `package` builder there
+     (`.releaseURL` case uses it), and the sheets and the View Changes sheet call it through
+     `NSWorkspace.shared.open`. 53.10 and 53.11 use the same function.
+9. **Sheets keep their size (51.38), Settings, App and DiscogsTagger.** `AppState`
+   (`Sources/Core/Settings/AppState.swift`; neighbor `infoPlace`/`InfoWindowPlace`) gets
+   `taggerSheets = Setting(... default: TaggerSheetLayouts())`, key `discogsTagger.sheets`,
+   `kind: .windowState`. `TaggerSheetLayouts` (new in `Core/Settings`, as `InfoWindowPlace`
+   is) is a `SettingValue` holding, by sheet kind (`otherReleases`, `viewRelease`,
+   `viewChanges`, `fieldMapping`), the size, the column widths by `TaggerColumn` raw value,
+   and the sort key and direction, with `rejectUnknownKeys`. `DiscogsTagger` takes it and a
+   `layoutChosen` closure, as it takes `choicesChosen`; `AppDelegate` fills it from `state`
+   and saves through `saver.set(\.taggerSheets, ...)`, as `infoPlace` is. The sheets apply it
+   in `build` and report it in `endSheet()`. A size smaller than the sheet's minimum or
+   larger than the screen is clamped, and a column name no longer in the sheet is ignored by
+   the decoder's own rule: unknown values are discarded (pre-release, no versions). This
+   Mac's state, not the config: `state.json`.
+10. **Undoing a tagger write (51.39), TagWriter.**
+
+    What the code says. Undo does not copy attributes from the saved undo copy: the
+    journal in `tag-undo` keeps only the old bytes and a JSON record, no attributes.
+    `TagWriter.restore` calls `writeTemp(segments, from: path, ...)` with `path` the live,
+    edited file, and `copyAttributes(from: source, ...)` copies from a descriptor opened on
+    that file. So the quarantine, provenance and local ACL on the undo copy are not the
+    difference. The difference is that the forward write took a different path.
+    `WriteFaults.writesInPlace` defaults to true, and a tag that fits the padding (22 MP3s
+    from the same ripper commonly do) is written in place (ADR 0107): no temp file, no
+    `fcopyfile`, the file's attributes never touched. Undo always goes through a temp file
+    (`restore` -> `writeTemp` -> `copyAttributes`), so it is the first time `fcopyfile`
+    runs on those files. The forward write "went through" because it never made the call.
+
+    The most likely cause is then one attribute or ACL on those NAS files that macOS reads
+    but the SMB server refuses to set on a new file: `fcopyfile(COPYFILE_ACL|COPYFILE_XATTR)`
+    sets every xattr with `fsetxattr` and the ACL with `acl_set_fd`, and a single `EACCES` or
+    `EPERM` fails the whole call with no name. Candidates, in the order I would check:
+    (a) `com.apple.provenance`, which macOS 13+ refuses to set outside the kernel's own
+    paths; (b) an ACL the server synthesizes from its own permission model, which macOS
+    reads as an ACL and the server won't take back on a file it has just created;
+    (c) `com.apple.quarantine`, `com.apple.metadata:_kMDItem*`. This can't be proved without
+    the NAS, and no agent or test touches it (AGENTS.md), so the first step is an owner
+    check, read only, on one of the 22 files:
+    `xattr -l <file>` and `ls -le@ <file>`, then the same for a file the app never wrote.
+    Whatever it shows picks the list in the fix below. Needs the owner (see Open).
+
+    The fix, in three parts:
+    - `copyAttributes` copies the ACL and each extended attribute separately instead of one
+      `fcopyfile` call: `COPYFILE_ACL` through `fcopyfile`, then `flistxattr`, `fgetxattr`
+      and `fsetxattr` per name (`XATTR_NOFOLLOW` is not needed on descriptors). A failure
+      names what failed: "can't copy the extended attribute com.apple.provenance: Permission
+      denied" or "can't copy its ACL". That alone fixes the message for every future
+      refusal.
+    - An attribute the destination refuses (`EACCES`, `EPERM`, `ENOTSUP`) and that is in
+      `FileReplace`'s one list `unsettableAttributes` (names macOS itself manages, starting
+      with `com.apple.provenance`, plus whatever the owner's output adds) is skipped and
+      logged at notice level with the file and name. Any other refusal still fails the write,
+      with the name. This keeps principle 5: only named attributes, only the ones the system
+      says user code can't carry, and a Finder tag or a user's xattr is never dropped
+      quietly. An ACL refusal on SMB is skipped only if the owner's output shows the ACL is
+      the server's synthesized one; decided after the check.
+    - The forward temp path uses the same function, so a rewrite past the padding on the NAS
+      can't fail the same way.
+    - Rejected: undoing an in-place write in place. It would avoid the temp file and the
+      attributes, but it needs the in-place journal (marker, torn-write recovery, ADR 0107)
+      run backwards; a larger change than this one.
+
+    The fault: `WriteFaults.refusingAttribute: (@Sendable (_ name: String) -> Int32?)?`
+    (`FileReplace.swift`, beside `beforeReplacing`), asked for each attribute name
+    `copyAttributes` is about to set; a returned errno makes that `fsetxattr` fail as the
+    server's would. Same for `"acl"`. No real SMB needed.
+
+    Undo question. The journal doesn't record who wrote an edit. `TagUndoJournal` gets an
+    `origin` file in the entry's folder (`TagEditOrigin`: `tagEditor` or `discogsTagger`),
+    written with the entry; an entry without one is unknown and asks nothing (pre-release:
+    no migration). `TagWriter.write(_:to:origin:)` takes it (default `tagEditor`), and
+    `TagWriter.newestEdit() -> (origin, fileCount)?` reads the newest entry without
+    changing anything. `TagEditing.write(_:over:)` (the Discogs path) passes
+    `.discogsTagger`; `save` passes `.tagEditor`. `TagEditing.undo(over:)` takes the
+    asking window's kind (`.tagEditor` for the main window and the Get Info windows,
+    `.discogsTagger` for the tagger window; `TagCommands.swift` picks it from the key
+    window, which today is always the main window's), asks `newestEdit()` on the writes
+    queue, and when the origin differs shows `Confirmation.undoing(origin, count)`:
+    "Undo the Discogs tagger's edit of 22 files?" with Undo Tag Edit and Cancel (the same
+    `Confirmation` and `ask` as the write question). Cancel leaves the journal alone.
+    Rule: ask when the origin is known and isn't the window's.
+11. **Tests (51.40).** Swift Testing, in the neighbor of each.
+    - `Tests/LibraryTests/RescanNoticeTests.swift`: a library built at an older shape
+      (`DiscogsMatchTests` lines 96-116 do this with a changed SQL) opened with
+      `confirmRescan` returning false throws `rescanDeclined` and the file is byte-identical
+      (files table, plays and the identity table unchanged, `discards()` empty); true
+      rebuilds as before and `rebuiltParts == [.index]`; a new library never asks; a nil
+      closure never asks. The notice's text for a custom `[SchemaPart]` list (the 53.13 use)
+      holds each part's `rescanWhy` once.
+    - `Tests/LibraryBrowserTests`: `scanText` says "Rebuilding the index" in a rebuild and
+      "Scanning" otherwise.
+    - `Tests/DiscogsTests`: each `NotExactReason` over crafted matches (a file with no track,
+      a different count, durations over the tolerance, a tie, found by title only), the
+      `.taggedID` and `.barcode` ways of finding, `trackCount` in the summary, and that
+      Exact and Matched albums carry no reasons.
+    - `Tests/DiscogsTaggerTests/TaggerWindowTests.swift` (neighbor): the header at 760 pt
+      (every control's frame inside the window, none below another); the opening scope with
+      a selection, with none, and with no catalog (analyze doesn't start); the tables'
+      frames in four cases (first open, after an import, after reopening, after a resize):
+      each table's frame bottom is within a few points of the buttons' top and its height
+      grows with the window; the reasons in the row's tooltip; sorting each column of Other
+      Releases and the Tracks column; View Release's rows against a fixture release; a
+      sheet's size, widths and sort back after closing and reopening, through a fake
+      `layoutChosen`; the URL from `releaseURL` in both sheets.
+    - `Tests/SettingsTests`: `TaggerSheetLayouts` round trips, rejects unknown keys, and a
+      bad value is discarded.
+    - `Tests/TagWriterTests/UndoJournalTests.swift` (neighbor): write a fixture MP3 in place
+      (default `writesInPlace`), set a local xattr, then undo with `faults.refusingAttribute`
+      refusing that name with `EACCES`: fails without the change (the old single
+      `fcopyfile` can't skip), and after it (a) a name in `unsettableAttributes` is skipped,
+      the undo succeeds, the bytes match the original and the other attributes are kept;
+      (b) a name not in the list fails the undo with that name in the detail, the file
+      untouched, and the journal still holds the edit; (c) the same refusals on a forward
+      write past the padding. The existing `theFileKeepsItsAttributes` stays as it is.
+    - `Tests/TagWriterTests`: `newestEdit()` returns the origin and count, an entry without
+      an origin file reads as unknown.
+    - `Tests/TagEditorTests`: the question for another window's edit (asked, with "22
+      files"; Cancel leaves the edit undoable; Undo runs it), none for the same origin, none
+      for an unknown one.
+12. **Commit order**, each green on `./scripts/test --changed`:
+    1. `feat(library)`: `SchemaPart.rescanWhy`, `RescanNotice`, `confirmRescan`, tests.
+    2. `feat(librarybrowser)`: the alert, the quit, the status bar's "Rebuilding", the
+       `AppDelegate` wiring.
+    3. `fix(tagwriter)`: per-attribute copy, `unsettableAttributes`, `refusingAttribute`,
+       tests (after the owner's output fixes the list).
+    4. `feat(tageditor)`: the origin in the journal and the undo question.
+    5. `feat(discogs)`: the not-Exact reasons and the ways of finding, tests.
+    6. `refactor(discogs)`: `releaseURL` as the one builder (its own commit, per the
+       promotion rule).
+    7. `feat(discogstagger)`: the header (51.33), opening on the selection (51.34), the
+       reasons' words (51.35), the height (51.36), with their tests.
+    8. `feat(discogstagger)`: sorting, Tracks, View Release, Open on Discogs (51.37).
+    9. `feat(settings)` and `feat(discogstagger)`: the sheets' saved layouts (51.38).
+    10. `docs`: ADR 0136 (the dialog and when it is used, why the why is per part, the flag in
+        memory, the attribute copy and its cause and list, undoing through a temp file, the
+        origin in the journal; rejected: an in-place undo, a persisted rebuild flag, asking
+        for stats rebuilds), `docs/map.md` untouched, plan boxes ticked, 53.13 pointing at
+        `RescanNotice`.
+13. **Gate.** `./scripts/check` once at the end: it reads all of this (`scripts/dupes.swift`
+    for the wording and the URL, `scripts/surface.swift` for `package` on `releaseURL` and
+    `RescanNotice`, `scripts/arch.swift` for `LibraryBrowser` importing only core).
+    The owner check in the part's last item stays: the next index change, the tagger on a
+    selection of Likely albums, a sheet resized and reopened, and Undo Tag Edit after a
+    tagger write on the NAS.
+
+Open for the owner:
+- Output of `xattr -l` and `ls -le@` on one of the 22 files and on a file the app never wrote
+  (read only), to settle which attribute the NAS refuses and so `unsettableAttributes`.
+  Until then the fix names the attribute and skips only `com.apple.provenance`.
+- One ADR (0136) for all of 51h, or a separate 0137 for the attribute copy.
+
+Decided here, no input needed: the why is per part, not per build; the rebuild flag lives in
+memory; stats rebuilds keep their discard notice and don't use the dialog; the not-Exact tolerance
+text reads the threshold constants (8 s or 5%, not 5 s); the undo question compares origins and
+asks only when the origin is known; an undo of an in-place write still goes through a temp file.
+
+Result, part 51h: shipped 51.32 to 51.40 (ADR 0136), with these changes from the plan. The
+header's controls measure about 1,600 points against the window's 760, so the catalog line,
+Reveal in Finder and the import button share one row and the rest keep two rows, each on one
+line at the minimum width. The frame test didn't reproduce 51.36's short tables on the old
+layout; the likely causes are fixed anyway (the catalog row no longer hides during its check,
+the resume row forces a layout pass, both stacks fill). 51.35 gains a reason for mixed release
+ids, and the length tolerance comes from `MatchThreshold` (8 s or 5%), not the 5 s of the ask.
+51.39: the forward write of those MP3s most likely went in place (ADR 0107), which never calls
+`fcopyfile`, so the undo was the first attribute copy on those files. The copy now goes one
+attribute at a time, names the one refused, and skips only `com.apple.provenance`; an ACL or
+any other refusal still fails. Undo Tag Edit undoes exactly the edit it asked about, and
+refuses if a newer one was written meanwhile.
+
+Gate, part 51h: four Sonnet reviews (correctness, simplify, architecture, performance), 14
+findings, 13 fixed in their own commits; the read of the sheets' layouts stays where the
+tagger is made, as other windows' state is. A second review of the fixes found one low
+regression, an error alert shown on a closed sheet, fixed. `./scripts/check` passes except
+`theGlassHeadersAreFrosted`, which fails on main too in an agent session (every screen pixel
+reads 0). `./scripts/bench`: 80 rows ran, no budget missed; the closest are metadata parse
+(4.94 s of 5), changing the Stats period (217 ms of 250) and the slow NAS scan (7.88 s of 10).
+Over 10% against the last recorded: seek while decoded, 6.6 to 10.3 ms (a median of 5 spread
+1.5 to 14.8, no playback code changed) and Analyze Library on the NAS, 2.1 to 2.3 s (no
+analysis code changed). The 11 window rows that quit the app (launch, scrolling, page down,
+resize, row height) didn't run: the app hangs in `terminate:` after printing its measurement,
+main's binary too, so they need a run on the owner's Mac. Cost: plan 131k tokens, 31 tool
+calls, 4 min; implementation 920k tokens, 427 calls, 69 min; reviews 405k tokens, 88 calls,
+63 min (the bench 55 of them).
+
+Owner steps (51.39): `xattr -l` and `ls -le@` on one of the 22 MP3s and on a file the app
+never wrote, pasted back, settle whether more than provenance or an ACL needs skipping.
+
+### 52. Discogs API
+
+- [x] **52.1 The token.** An optional Discogs personal access token, the player's first secret:
+      an ADR, the AGENTS.md "no secrets" line rewritten for it, kept only in `config.json` at
+      mode 0600, never copied elsewhere.
+      Without a token the API is used unauthenticated, within its lower rate limit.
+- [x] **52.2 The client.** Search and release requests, paced by the rate-limit headers, with a
+      size cap, a timeout and typed errors, cached in the index by release id. ADR 0025 gains
+      rows for the app's first outbound internet connection. Tests use recorded JSON, never the
+      real API.
+- [x] **52.3 Sources.** The window's API and Both: Both searches the catalog first and the API
+      for albums with no candidate or releases newer than the dump. The matcher and the mapping
+      are the same for both.
+- [x] **52.4 Artwork.** The dumps have no images; with a token, the mapping's Artwork field
+      fetches the release's primary image and writes it as the cover through `TagWriter`.
+- [ ] **Owner check:** the same with the token, on this Mac and the 2015 MacBook Pro, which has
+      no catalog.
+
+Implementation plan, phase 52 (ADRs 0137, 0138, 0139, 0140):
+
+Phase 51h (ADR 0136) runs first. 53's ADRs then start at 0141.
+
+What I found (so the steps below name real things):
+
+- `config.json` is `~/.config/music-player/config.json`, already mode 0600. It holds a
+  `"discogs.token"` key now. No setting by that name exists, so until step 1 lands the config
+  check reports it as `unknown setting "discogs.token"` (a non-blocking problem, rest applies).
+  `ConfigFile.read` reports unknown keys by key name only, never the value.
+- `ConfigStore.write` uses `Data.write(options: .atomic)`, which renames a temp file made with
+  the default mode. Whether it keeps 0600 is not something to rely on; step 1 writes the temp
+  file itself.
+- The settings window lists every setting except `.windowState` and the keys in
+  `GeneralModel.isShown`; the token must be added there or it would get a text field.
+- The matcher is `AlbumMatcher` (Sources/Core/Discogs/AlbumMatcher.swift), built on one
+  read-only `Catalog`. `candidateIDs(for:in:)` (AlbumCandidates.swift) is the only code that
+  asks the catalog for ids; `match` then calls `catalog.release(id:)`. Everything after that
+  works on `CatalogRelease` (ReleaseScore, TieBreak, ReleaseTracklist, ReleaseFields,
+  `changeSet(for:match:mapping:)`), so an API release only has to become a `CatalogRelease`.
+- `matchAlbums(_:catalogAt:choosing:skippingVideo:progress:)` is the async entry point;
+  `TaggerModel.Source` already has `.catalog, .api, .both` with `isAvailable == (self ==
+  .catalog)`, and `TaggerWindow` greys the others ("Comes with the Discogs API").
+- `DiscogsMapping` requires a rule for every `DiscogsField`, and a bad value blocks the whole
+  config (ADR 0082). So 52.4 must not add a `DiscogsField` case: it would invalidate the
+  owner's saved mapping and block the file. Artwork gets its own setting.
+- `TagEdit.art: ArtChange?` (`.replace(Data, mimeType:)`, JPEG or PNG) already exists, written
+  by `TagWriter`. `AlbumChangeSet.edits(including:)` builds the `TagEdit`s Apply hands to
+  `TaggerModel.write`. `thumbnail(of:maxPixelSize:)` (Core/Artwork) is the one image decode
+  (ADR 0025 row 4). `TrackMetadata.art` says whether a file has a cover.
+- `LocalHTTPClient` (Primitives/LocalNetwork) is deliberately local-subnet only (ADR 0039); it
+  can't be reused for the internet. The app makes no other outbound connection today
+  (`rg URLSession Sources` finds nothing).
+- Cached data in the index is a `SchemaPart` (LibrarySchema.swift); `measures` is the pattern
+  for a cache. Adding a part creates only its table and keeps the others (as `analysisRun`
+  did), so it does not trigger 51h's rescan dialog.
+
+Needed from 51h:
+
+- 51.33's header (one row, catalog line): Source must stay a control in it, and its catalog
+  line must tolerate "no catalog" with Source set to API (step 6 changes what "missing"
+  blocks).
+- 51.34 (open on the selection and analyze at once): analyze at once only for Source = Local
+  catalog. The API source is never started without a click, since it makes network calls.
+- 51.35 (why not Exact) words its reasons from what the matcher kept. Step 5 adds one kept
+  fact, `AlbumMatch.origin`, so the reason can say "from the Discogs API".
+- 51.37 (Other Releases / View Release read `releaseSummaries(catalogAt:)`): step 5 adds the
+  cache as a second place those summaries come from. Land 51.37 first so there is one
+  summary function to extend.
+- 51.39 (undo through a replace): cover art goes through the same replace. Nothing else.
+- 51.38 (sheet sizes): the Field Mapping sheet gets one more row (step 7); no conflict.
+
+#### 52a. The token (52.1), ADR 0137
+
+1. **Setting.** `DiscogsToken` in `Core/Settings` (`SettingValue`, a struct over the string,
+   encoded as a plain JSON string). Its `description` and `debugDescription` print
+   `<Discogs token>`, so no log line, error or assertion message can carry it; `problem()`
+   refuses an empty or whitespace-only value and any character outside printable ASCII (a
+   header value must not carry a line break). `SettingKind.secret` is new. `AppSettings`:
+   `discogsToken = Setting<DiscogsToken?>("discogs.token", title: "Discogs Token", default:
+   nil, "A personal access token from discogs.com/settings/developers, for the API.")`. Hidden
+   in `GeneralModel.isShown` (and `row` has no control for `.secret`), so it is edited in the
+   file only, as the dumps folder is (ADR 0130). `fileValue(\.discogsToken)` is the only read.
+2. **Mode 0600.** `ConfigStore.write` goes through a new `writeConfigFile(_:to:)`: a temp file
+   in the same folder created with `open(O_CREAT|O_EXCL, 0o600)`, written, `fsync`ed, renamed
+   over the resolved path (symlinks still resolve as now). Every config write is 0600, token or
+   not: one rule, no branch on content. On read, if the file's token is set and its mode has
+   any group or other bit, the token is not used and a non-blocking `ConfigProblem` says
+   "config.json is readable by other users; run chmod 600 on it to use the Discogs token"
+   (the file is not changed by the app: ADR 0025 row 21 says it is never written over on a
+   problem). The token is also not copied anywhere else: not into `state.json`, the index,
+   the log, the sync folder or the cache; step 3 builds the one header from it.
+3. **AGENTS.md.** The "no secrets" bullet is replaced by: "**One secret: the Discogs token**
+   (optional), kept only in `config.json` at mode 0600 ([ADR 0137](decisions/0137-the-discogs-token.md)). Never log, print,
+   copy or commit it, and never put it in a test or fixture; `DiscogsToken` redacts itself.
+   Any other secret: stop and ask first." The Boundaries bullet on music files gains nothing;
+   a line is added: "No test or tool calls the Discogs API: tests use recorded responses
+   through a stand-in transport."
+4. **Tests** (`Tests/SettingsTests`): the key reads as `DiscogsToken`; `String(describing:)`,
+   `"\(token)"`, `String(reflecting:)` and a thrown decode error never contain the value
+   (the test uses a made-up value); a value with a newline, a space-only value and a number
+   are problems naming the key but not the value; the settings window model has no row for it;
+   a config write leaves mode 0600 (`stat`), including over an existing 0644 file and through
+   a symlink; a 0644 file with a token reports the problem and `fileValue` is nil; a write
+   that fails midway leaves the old file and no temp file. Existing config tests must still
+   pass with the new temp-file write (`aBrokenFileAppliesNothingAndIsNeverWritten`).
+5. **ADR 0137**: why in `config.json` and not the Keychain (the owner decided on 2026-11-07;
+   the Keychain would also need the ad-hoc-signed app to be allowed access on each of three
+   Macs, and the file is already synced by hand), redaction by type, mode, the fail-closed
+   read of a loose file, and what no longer holds in AGENTS.md. Adds ADR 0025 rows 58 and 59
+   (below) and marks 0025 "Amended by".
+
+#### 52b. The client (52.2), ADR 0138
+
+1. **Transport primitive.** `Sources/Primitives/HTTPSClient` (new module, `Foundation` only;
+   tier map in `scripts/arch.swift` and map.md's search recipes need no change, the
+   `Sources/Primitives/*` path pattern already covers it). `HTTPSClient.get(_ url:, headers:,
+   cap:, timeoutSeconds:)` returns status, a header dictionary and the body bytes, or throws a
+   typed `HTTPSError`. It refuses a URL that is not `https`, has a user, a port other than 443
+   or a host not in the client's `allowedHosts`; uses an ephemeral `URLSession` (no cache, no
+   cookies, no credential store, no HTTP/2 push use) built from a `URLSessionConfiguration`
+   the caller can replace; refuses every redirect (a `URLSessionTaskDelegate` returns nil), so
+   a 3xx is just a status; reads `bytes(for:)` and stops past `cap`, throwing `.tooLarge`
+   before buffering more (macOS 12 has `bytes(for:delegate:)`); fails on the timeout. Proxy
+   settings are the system's, which an internet client should honor (unlike
+   `LocalHTTPClient`, whose reason for bypassing them was the LAN). Tests use a `URLProtocol`
+   stub on the replaced configuration: no sockets.
+2. **API client.** In `Core/Discogs` (adds `HTTPSClient` to its dependencies):
+   `DiscogsAPI`, an actor over an `HTTPSTransport` closure type (production: `HTTPSClient`;
+   tests: fixtures). One constant for `https://api.discogs.com`, one for the user agent
+   `MusicPlayer/<CFBundleShortVersionString>` (Discogs rejects clients without one), both
+   defined once. The `Authorization: Discogs token=<token>` header is built in one function,
+   only for `api.discogs.com`. Calls: `release(id:)` (`/releases/{id}`), `master(id:)`
+   (`/masters/{id}`), `search(artist:title:)`, `search(barcode:)`, `search(catalogNumber:label:)`
+   (`/database/search?type=release&…`, parameters percent-encoded by `URLComponents`, per_page
+   25, first page only). Search needs a token: without one it throws `.tokenRequired` without
+   a request (Discogs's database search is authenticated; `/releases` and `/masters` work
+   without). Verify this in the Discogs API docs when starting; if it differs, only
+   `tokenRequired` changes.
+3. **Pacing.** `RateLimiter` (a small struct held by the actor, with an injected `now` and
+   `sleep` so tests don't wait): requests go one at a time. Gap between starts is
+   60 / limit seconds, with the limit from `X-Discogs-Ratelimit` (60 with a token, 25
+   without; those are the starting values until a response says otherwise). When
+   `X-Discogs-Ratelimit-Remaining` is 0 it waits for the window (60 s) before the next one. A
+   429 waits `Retry-After` (else 60 s) and retries, at most twice; a third is
+   `.rateLimited`. Waiting is cancellable, and reports its length through a progress callback
+   so the window can say "Waiting 40 s for Discogs's rate limit".
+4. **Typed errors.** `DiscogsAPIError`: `.tokenRequired`, `.unauthorized` (401, "the Discogs
+   token was refused"), `.notFound` (404), `.rateLimited`, `.status(Int)`, `.offline`,
+   `.timedOut`, `.tooLarge`, `.malformed(String)`, `.refusedAddress`. Each has one sentence of
+   text, kept once; none holds the token, a header or a URL's query. A 404 for one release is
+   "no such release" for that album; 401, offline and timed out stop the run and are reported
+   once (fail loudly: no album silently becomes "No candidate" because the network was down).
+5. **Decoding.** `ApiRelease` (`Decodable`, strict about types, lenient about extra keys,
+   since Discogs adds fields) → `CatalogRelease`: `artists` (name, anv → `nameVariation`, join,
+   id), `labels` (name, catno, id), `formats` (name, qty, text, descriptions), `country`,
+   `released`, `genres`, `styles`, `identifiers` of type Barcode → `barcodes`, `extraartists`
+   → `credits` (role, tracks), `tracklist` → `CatalogTrack` (type_ track, heading, index;
+   `duration` through `CatalogTrack.seconds`; `sub_tracks`), `master_id`. Also kept beside it:
+   `primaryImage: URL?` (the `images` entry of type `primary`, else the first; present only
+   with a token). Limits as hostile input: body 4 MiB, tracklist 2,000 rows, sub-tracks 3 deep
+   (the catalog's `CatalogTrack` allows one; deeper is dropped with a `.malformed`), every
+   string capped at 2,000 characters, `id` must equal the requested id, `primaryImage` must be
+   `https` on an allowed host (`i.discogs.com`). `isMainRelease` isn't in a release response:
+   step 4 of 52c fills it from `/masters/{id}`'s `main_release`, only when two or more fetched
+   candidates share a master.
+6. **Cache.** New `SchemaPart.discogsCache` (comment: a cache; rebuilding discards nothing a
+   fetch can't get again), table `discogs_cache (kind TEXT, id INTEGER, fetched_at REAL,
+   json TEXT, PRIMARY KEY (kind, id)) WITHOUT ROWID`, kinds `release` and `master`.
+   `LibraryIndex.discogsCached(kind:id:)` and `storeDiscogs(kind:id:json:)`, surfaced on
+   `LibraryReader` like `discogsReviews`. The Library module stays ignorant of
+   `CatalogRelease`: it stores the JSON text; `Discogs` encodes the converted release (the
+   catalog's one-letter keys, plus `primaryImage`) so a hit needs no second conversion. An
+   entry older than 30 days (`DiscogsAPI.cacheDays`, once) is fetched again; searches aren't
+   cached (their answer changes; the tagger already remembers reviewed albums). The cache is
+   passed to `DiscogsAPI` as two closures, so `Discogs` tests use a dictionary.
+7. **Fixtures and tests.** `Tests/DiscogsTests/Fixtures/api/` (loaded like
+   `Tests/ReceiverTests/Fixtures`): `release-simple.json`, `release-multi-disc.json`,
+   `release-vinyl-sides.json` (headings, A1/B2 positions), `release-index-tracks.json`
+   (sub-tracks), `release-anv-variations.json`, `release-no-images.json` (no token),
+   `search-barcode.json`, `search-title.json`, `search-empty.json`, `master.json`, plus
+   header sets (`X-Discogs-Ratelimit*`, `Retry-After`). Nothing here is a real recording of a
+   call this plan made; they are written to the shapes in Discogs's API documentation, and the
+   owner check has three `curl` lines to replace them with real ones (see Open questions).
+   Tests (`DiscogsAPITests`): each fixture decodes to the `CatalogRelease` the same release
+   would be in the catalog (compared field by field against a catalog built from the matching
+   dump XML in `DumpFolder`, which proves the matcher sees no difference); the token goes only
+   to `api.discogs.com`, only in the `Authorization` header, never in a URL; no token header
+   without a token and search throws `.tokenRequired` with zero requests; the user agent is
+   sent; spacing at 60 and 25 per minute with a fake clock; `Remaining: 0` waits; a 429 with
+   `Retry-After` waits that long, retries, and a third gives `.rateLimited`; cancelling during
+   a wait stops it; 401/404/500/offline/timed out map to their errors; a body past the cap, a
+   redirect, an `http` or foreign-host image URL, a mismatched id, a 5,000-row tracklist and
+   9-deep sub-tracks are each refused; no error's text contains the token or the query; a
+   cache hit makes no request, a stale entry makes one and stores it; a damaged cache JSON is
+   fetched again and replaced, not trusted.
+8. **ADR 0138**: the transport and why not `LocalHTTPClient` or `NWConnection` (TLS, proxies,
+   HTTP/2 via URLSession; ADR 0039's reasons for bypassing them are LAN-specific), the host
+   allowlist, caps, no redirects, pacing from the headers, the errors, the cache and its age,
+   what is hostile input. It adds ADR 0025 rows 60 to 63 (below) with their test names.
+
+ADR 0025 rows added (each with its test in this phase; the table's "every phase that adds an
+entry point adds its row" rule):
+
+| # | Asset | Attacker | Entry point | Mitigation |
+|---|---|---|---|---|
+| 58 | the Discogs token | another user on the Mac; a backup or sync of `~/.config` | `config.json` | mode 0600 on every write; read fails closed on a looser mode; `DiscogsToken` redacts itself; never in logs, state, index, cache or errors |
+| 59 | the Discogs token | a server that isn't Discogs; a log reader | the `Authorization` header | built in one place, sent only to `api.discogs.com` over https, never in a URL, error or log |
+| 60 | the app's memory, time and connections | the network; a compromised response | the first outbound internet connection | https only, hosts `api.discogs.com` and `i.discogs.com`, port 443, no redirects, ephemeral session, 4 MiB cap on JSON and 10 MiB on an image, 20 s timeout, one request at a time, only on the user's action |
+| 61 | the tagger's matches; the cache | the network; a compromised response | release JSON | strict types, id must match the request, row, depth and string limits, decoded into `CatalogRelease` and nothing else; a cache entry that doesn't decode is refetched |
+| 62 | Discogs's account for the token | the app itself | request rate | pacing from `X-Discogs-Ratelimit*`, `Retry-After` on 429, a third 429 stops the run |
+| 63 | the UI | the network | text from a response (titles, names) | shown as any tag text is (rows 7, 9, 39): escaped in the terminal, kept as text in the window |
+
+#### 52c. Sources (52.3), ADR 0139
+
+1. **Matcher without a catalog.** `AlbumMatcher.catalog` becomes `Catalog?`.
+   `candidateIDs(for:in:)` is split: the tagged-ids step stays, the catalog steps run only
+   when there is a catalog. `match(_:choosing:fetched:)` gains `fetched: [Int: CatalogRelease]`
+   (releases the API returned for this album): their ids are appended to the candidate ids
+   (order kept, each once), and the lookup is `fetched[id] ?? catalog?.release(id:)`. Scoring,
+   `TieBreak`, tiers and thresholds are untouched, so the API and the catalog tier an album the
+   same way. `AlbumMatch` gains `origin: Origin` (`.catalog`, `.api`) for the window (51.35's
+   reason) and for Apply's count.
+2. **Candidates from the API.** `ApiCandidates.releases(for album:, api:)`, in the order
+   `candidateIDs` uses: the album's tagged release ids (fetched by id; this alone is the only
+   thing that works without a token), then a barcode search, label plus catalog number
+   (`labelNames`), then artist and title (`artistNames` x `[title] + CatalogKey.titleVariants`),
+   reusing those functions and not copying their rules. Searches stop at the first that gives
+   candidates for barcode and catalog number; the title search always runs when those found
+   nothing. At most 8 releases are fetched per album (`ApiCandidates.maximumReleases`, once),
+   best search rank first. Masters aren't expanded to all their releases (hundreds of
+   requests); when two or more fetched releases share a `master_id`, `/masters/{id}` is
+   fetched once and `isMainRelease` set from `main_release`.
+3. **The API surface.** `matchAlbums` gains `source: MatchSource` (`.catalog`, `.api`, `.both`;
+   the tagger's `Source` maps onto it) and `api: DiscogsAPI?`. Flow:
+   - `.catalog`: as now.
+   - `.api`: no catalog opened. Per album: `ApiCandidates`, then `match(fetched:)`.
+   - `.both`: the catalog pass runs for every album first (fast, local). Then the API runs
+     only for albums that are `noCandidate`, or `matched` with no release in the catalog (a
+     tagged id newer than the dump), or whose chosen release (a saved review) isn't in the
+     catalog. That is the owner's "releases newer than the dump", decided as "not found in
+     the catalog", because the dump has no per-release date to compare. Those albums are
+     matched again with the catalog's candidates and the fetched ones together.
+   Progress gains `waitingSeconds: Int?` (the limiter's wait) and counts API albums as its own
+   total in `.both` ("Catalog 412 of 412, then Discogs 3 of 17"). Cancelling stops between
+   albums and during a wait. A review's chosen release not in the catalog is fetched by id.
+4. **Releases for the Other Releases and View Release sheets.** `releaseSummaries(_:catalogAt:)`
+   takes the API-found ids too, reading them from the cache (they were stored when fetched),
+   so the sheets work for API releases with no new request.
+5. **The window (TaggerModel/TaggerWindow).** `Source.isAvailable` becomes real: `.api` and
+   `.both` are enabled always. With no token, the pop-up item's tooltip says "No Discogs token
+   in config.json: only releases already tagged with an id are looked up". With no catalog,
+   Source = Discogs API is allowed and 51.13's "no catalog" state blocks only `.catalog` and
+   `.both` (which then runs as API alone and says so in the status line, since `.both`
+   without a catalog is the 2015 MacBook Pro's case). The chosen source is `AppState`
+   (this Mac's), default Local catalog when a catalog exists, else Discogs API. `DiscogsTagger`
+   gets `api: () -> DiscogsAPI?` from the app (built from `fileValue(\.discogsToken)` and the
+   reader's cache), so the feature module never reads settings (map.md rule). The app builds
+   the real `HTTPSClient` transport in `DiscogsCommands.swift` only; tests pass a fake.
+6. **Errors in the window.** A `DiscogsAPIError` that stops a run is one alert via the
+   existing `failed(_:_:)` ("The Discogs token was refused", "No connection to Discogs"); the
+   albums matched so far stay shown as the last run's, as a stopped Analyze already does.
+7. **Tests.** `DiscogsTests`: `.api` on the fixture library matches the catalog's tiers for
+   the same releases (same albums, same fixture releases served both ways: Exact, Likely,
+   Incomplete, No candidate, each the same tier); `.both` calls the API only for the no-candidate
+   and not-in-catalog albums (counted through the fake transport) and never for an Exact one;
+   with no token only tagged-id albums are fetched and nothing searches; the 8-release cap; a
+   shared master fetches the master once and the tie-break picks its main release; a chosen
+   release outside the catalog is fetched; `.api` with no catalog file works and `.catalog`
+   still says "missing"; cancellation during a rate-limit wait; progress and `waitingSeconds`.
+   `DiscogsTaggerTests`: the pop-up items' enabled state in each of token/catalog presence, the
+   source saved and restored, `.both` without a catalog reports it ran as API, the alert for
+   401 and offline, 51.34's auto-analyze does not start for API.
+8. **ADR 0139**: one matcher for both sources, what `.both` sends to the API and why "not in
+   the catalog", the per-album request budget and cap, what works without a token, no master
+   expansion.
+
+#### 52d. Artwork (52.4), ADR 0140
+
+1. **Setting.** `DiscogsArtworkMode` (`SettingChoice`: `off`, `fillEmpty`, `replace`) in
+   `Core/Settings`, setting `discogs.artwork`, default `off`. Separate from `DiscogsMapping`
+   (see "What I found"); presets don't carry it. Shown as a row in the Field Mapping sheet
+   (`MappingSheet`), "Artwork", with the mode pop-up and a note "Needs a Discogs token", and
+   disabled with that note when there is none. `TaggerChoices` carries it like
+   `skipVideo`; `DiscogsCommands` saves it with `settings.set`.
+2. **Fetching.** When the user starts Apply (before the confirmation, with the files
+   being read in `plan(_:)`), for each album with an `.api`-origin or cached release whose
+   `primaryImage` is set: `DiscogsAPI.image(at:)` fetches it (`i.discogs.com` only, 10 MiB cap,
+   20 s, paced like other requests, one image per album, memoized per release for the plan).
+   A catalog-origin release has no image in the catalog, so its album's release is fetched by
+   id through the cache first (one request), which makes a catalog match with artwork on cost
+   one API call per album, and that is said in the confirmation. Without a token no image is
+   asked for and the mode shows "needs a token". Fetch problems are per-album entries in
+   `plan.problems` ("no cover: …"), not a stop; tags still apply.
+3. **Checking.** The bytes must start with the JPEG or PNG signature, pass
+   `thumbnail(of:maxPixelSize:)` (so a huge declared image is refused by the one decode, row
+   4) and be at most 64 MiB (`maximumArtBytes`), else a problem and no cover. `Discogs`
+   gains the `Artwork` dependency for this. The type is read from the signature, not from the
+   server's `Content-Type`.
+4. **Writing.** `AlbumChangeSet` gains `cover: Cover?` (bytes, mime type, pixel size, URL) and
+   each `FileChanges` a `coverState` (`.none`, `.adds`, `.replaces(existing pixel size)`),
+   from `TrackMetadata.art` read with the files. `edits(including:)` sets
+   `edit.art = .replace(data, mimeType:)` for a file when the mode allows (`fillEmpty` skips a
+   file that has art) and the user left the cover ticked. Nothing else writes the image: it
+   goes into `TagWriter` in the same batch and the same undo as the tags, and `TagWriter`'s
+   art limits and 64 MiB check apply unchanged. One more tick-box row in View Changes:
+   "Cover: 600 x 600 JPEG from Discogs (replaces 300 x 300)". The confirmation sheet counts
+   covers beside tags, files and albums. All files of an album get the same image.
+5. **Tests.** `DiscogsTests`: a JPEG and a PNG fixture (generated by the `Fixtures` module, not
+   downloaded) become `.replace` edits that `TagWriter` writes into FLAC, MP3 and M4A clones
+   of the generated fixtures and read back identical; `fillEmpty` leaves a file with art
+   alone; a non-image, a truncated JPEG, a 400-megapixel PNG header, an image over the cap, a
+   `Content-Type: image/jpeg` over PNG bytes (signature wins) and a foreign-host URL are each
+   a per-album problem with the tags still applied; an unticked cover is not written; the
+   whole-batch undo restores the original art and tags. `DiscogsTaggerTests`: the sheet's
+   row disabled without a token; the confirmation counts covers.
+6. **ADR 0140**: why a separate setting and not a mapping field, the extra request per
+   catalog-matched album, what "fill empty" means for art, that the cover write is part of
+   the one confirmation from ADR 0133 (it is a tag edit by `TagWriter`; the boundary in
+   AGENTS.md needs no new exception), image checks. Adds ADR 0025 row 64: the downloaded
+   image (same limits and decode as rows 3 and 4; written only after the confirmation).
+
+#### Commit order
+
+Each commit is one logical change with its tests, and `./scripts/test --changed` before it.
+
+1. `feat(settings): add the Discogs token, hidden and redacted` (52a steps 1, 4 partly)
+2. `fix(settings): write the config file at mode 0600` (52a step 2; its own commit because it
+   changes every config write)
+3. `docs: rewrite the no-secrets boundary for the Discogs token` (AGENTS.md, ADR 0137, ADR 0025
+   rows 58, 59)
+4. `feat(httpsclient): add a capped, https-only client` (52b step 1)
+5. `feat(discogs): add the API client with pacing and typed errors` (52b steps 2, 3, 4, 5, 7)
+6. `feat(library): cache Discogs API releases in the index` (52b step 6; a schema part, so
+   this commit changes the index and is flagged for the owner's rebuild check), then
+   `docs: record the Discogs API client` (ADR 0138, ADR 0025 rows 60 to 63)
+7. `refactor(discogs): let the matcher run without a catalog` (52c step 1, no behavior change,
+   existing tests pass untouched)
+8. `feat(discogs): match albums against the API` (52c steps 2, 3, 4, 7)
+9. `feat(discogstagger): enable the API and Both sources` (52c steps 5, 6, its tests), then
+   `docs: record the API source in matching` (ADR 0139)
+10. `feat(settings): add the Discogs artwork mode` (52d step 1)
+11. `feat(discogs): fetch and write a release's primary image` (52d steps 2 to 5), then
+    `docs: record Discogs cover art` (ADR 0140, ADR 0025 row 64)
+
+Check run: `./scripts/check` once at the end. Steps that read this diff: build and tests, the
+format check, `scripts/arch.swift` (a new primitive), `scripts/surface.swift` (public only
+where another module calls it), `scripts/dupes.swift` (the API's base URL, user agent and
+header names are single string constants), the ADR 0025 test-name check if one exists in
+`scripts/check`, and `scripts/check-signature` (no new entitlements; outbound connections
+need none under the hardened runtime without the sandbox). Info.plist needs nothing:
+`NSAppTransportSecurity` defaults allow https.
+
+#### Owner check
+
+With the token, on this Mac and then the 2015 MacBook Pro (no catalog, Source = Discogs API):
+
+1. Confirm no "unknown setting" banner and that `ls -l ~/.config/music-player/config.json` is
+   `-rw-------` after changing any setting in the app.
+2. Analyze a handful of Likely or No-candidate albums with Both; the status line shows the
+   API count and any rate-limit wait; Stop works mid-wait.
+3. Open Other Releases on an API-found album; Apply with Artwork on Replace for two albums;
+   check the cover in Finder/YATE; Undo Tag Edit restores it.
+4. Remove the token from the file: Source API says what still works.
+5. Optional, to replace the hand-written fixtures with recordings (the agent never calls the
+   API): `curl -sD headers.txt -H 'User-Agent: MusicPlayer/1' -H "Authorization: Discogs
+   token=$TOKEN" https://api.discogs.com/releases/<id> -o release-<id>.json`, the same for a
+   `/masters/<id>` and a `/database/search?type=release&barcode=<code>`; drop the files in
+   `Tests/DiscogsTests/Fixtures/api/` after removing nothing but trailing whitespace (the
+   responses contain no token).
+
+#### Open questions (owner decisions, with my default)
+
+1. **Search needs a token.** I believe `/database/search` rejects unauthenticated calls, so
+   "unauthenticated within the lower limit" (52.1) only covers lookups by release id. Default:
+   as written above (no token: tagged ids only, no search). If the docs say otherwise, only
+   `tokenRequired` goes.
+2. **Fixtures.** Hand-written to the documented shape unless the owner records real ones
+   (curl lines above). Default: hand-written now.
+3. **Image URLs may need the token.** If `i.discogs.com` refuses an unauthenticated GET,
+   either the token is also sent to `i.discogs.com` (a second host for the secret) or covers
+   can't be fetched. Default: token to `api.discogs.com` only; decide after the owner check
+   shows what the images need.
+4. **Cache age.** 30 days. Default kept.
+5. **Both's rule** is "not found in the catalog", not "newer than the dump" (the dump has no
+   per-release date to compare). Default kept.
+
+Result, phase 52: shipped 52.1 to 52.4 (ADRs 0137 to 0140, ADR 0025 rows 58 to 64), with these
+changes from the plan. A token in a config file others can read is withheld with a warning, not
+offered as an obsolete setting, which would delete it. The window and the matcher share one
+`DiscogsSource`, from Settings. The app makes its `DiscogsAPI` in `DiscogsCommands` and makes
+it again only when the token changes, so pacing carries from one Analyze to the next; the
+tagger reads no setting. Cover art is a setting of its own (off, fill empty, replace), not a
+mapping field, so saved mappings still load. A cover must also end with its format's end
+marker (up to 16 bytes of padding after a JPEG's) and be at most 8,000 pixels a side. Both, when
+the API stops (offline, a refused token, rate limits), keeps the catalog's matches and says
+which albums have only those. No test or tool called the real API; the fixtures are written to
+the documented shapes.
+
+Gate, phase 52: four Sonnet reviews (correctness and security, simplify, architecture,
+performance). The security review found no way for the token to leak and no way around the
+https, host and redirect rules. 11 findings fixed in their own commits: a passing cover
+failure no longer cached for the session, a missing token said in the confirmation, a failed
+secure connection named apart from offline, a Retry-After that isn't a number, pacing on the
+uptime clock, a queued request that can be cancelled, a cover checked off the API's actor, the
+wait reporter given back after a run, one rule for a tracklist row's kind, and the HTTPS
+client's surface. A second review found nothing above low; one low, a cached release dated
+ahead of the clock read as missing at any age, fixed. `./scripts/check` passes except
+`theGlassHeadersAreFrosted`, the known agent-session failure. `./scripts/bench`, 69 rows
+without the window rows: no budget missed, nothing over 10% this branch could cause; open
+tagger window 28.7 ms, Discogs analyze 2000 0.34 s, tag write rows within 4% of 51h's. Cost:
+plan 130k tokens, 29 tool calls, 5 min; implementation 1.12M tokens, 437 calls, 83 min;
+reviews 368k tokens, 77 calls, 18 min.
+
+Owner steps: with the token, Analyze with API and with Both on this Mac and on the 2015 MacBook
+Pro (no catalog); a cover fetched with Cover Art on, which settles whether `i.discogs.com` needs
+the token (ADR 0140; a refusal shows as "the Discogs token was refused"); and the first launch
+of this build, which adds the API cache and should ask no rescan.
+
+### 53. Library, browser and settings
+
+From the owner's testing on 2026-11-07. ADRs numbered when it starts, after 52's.
+
+- [x] **53.1 Show in All Music.** In any list but All Music, a command in the track menu and
+      the View menu, ⌥⇧⌘A, switches to All Music with the selected tracks selected and
+      centered, the keys in the track table.
+- [x] **53.2 Drag files out.** Track table and timeline rows also carry the files' URLs, so a
+      drag to the Desktop, a Finder window or another app hands it the files. Outside the app
+      the drag offers copy only, so Finder never moves a library file (an ADR beside the music
+      files boundary). Drags within the app are unchanged.
+- [x] **53.3 Every picture in the art viewer.** When a file holds more than one picture, the
+      art viewer steps through them, by arrow keys and buttons, showing "2 of 3" and the
+      picture's type (front, back, other).
+- [x] **53.4 A Config group.** General's config file rows move into a sunken group titled
+      Config, as Library's are.
+- [x] **53.5 The database in Library.** The Library group shows the index's path, its size
+      (the database and its `-wal`), and a Reveal in Finder button.
+- [x] **53.6 Snapshots.** Once a day, on the scan queue when it's idle (never during a scan or
+      sync), `VACUUM INTO` a temporary file, compressed with gzip (the zlib already linked)
+      to `library-YYYY-MM-DD.sqlite.gz`. It keeps the last 7 daily snapshots and one for each of
+      the 4 weeks before them, and deletes older ones. The folder is a setting, defaulting to
+      `Backups` beside the index in `~/Library/Application Support/MusicPlayer`. A folder inside a watched folder or the sync
+      folder is refused (AGENTS.md). Only the library index is kept; the Discogs catalog is
+      imported again instead. Settings shows the last snapshot's time, and a Back Up Now button.
+      An ADR.
+- [x] **53.7 Restore.** Settings lists the snapshots, with date and size. Restore… confirms,
+      snapshots the current index first, and relaunches with the chosen one in its place.
+- [x] **53.8 The Extras tab.** The tag editor gains an Extras tab: every key the reader found
+      that has no field of its own (custom keys, `TXXX`, MP4 freeform), key and value, in one
+      scrolling list, read only, selectable and copyable. With several files selected, a key
+      that differs shows as mixed.
+- [x] **53.9 Tests.** The command's enabled rule and what it selects; a drag's pasteboard
+      holds the URLs and a copy-only mask outside the app; the viewer over a fixture with three
+      pictures; snapshot naming, rotation over a simulated 60 days, a gzip that opens as the
+      same database, and a refused folder; a restore round trip; Extras over FLAC, MP4 and ID3
+      fixtures.
+- [x] **53.10 Open on Discogs.** A command, Open Discogs Release, in the track menu, the
+      palette and the View menu, with a shortcut free in the registry. It's enabled when the
+      selected track has a Discogs release id, and opens its page in the browser, the URL
+      from `ReleaseFields`'s one builder.
+- [x] **53.11 A Discogs tab in Get Info**, shown when the files have a Discogs release id: the
+      release as the local catalog has it (label and catalog number, country, date, format,
+      genres, styles, credits, tracklist), read only and copyable, with Open on Discogs. A
+      release the catalog doesn't have, or no catalog, says so. Files from several releases
+      show the first and say how many.
+- [x] **53.12 Shorter headers.** Track of Total's header reads "Track No.", and Disc of Total's
+      "Disc No."; the header menu and the smart playlist fields keep the full titles. Both
+      titles defined once, beside the others in `TrackColumnTitle`.
+- [x] **53.13 Re-releases as albums of their own.** An album is its title and artist
+      (`albums_identity`), so a 2025 remaster titled as the original merges with it, two
+      track 1s interleaved. A setting, Separate Releases, adds the Discogs release id to an
+      album's identity when its tracks have one, so the two are two albums, each sorted by its
+      own year. Changing it rebuilds the albums part, with 51.32's dialog. An ADR.
+- [x] **53.14 The palette keeps its query.** ⌘K opens with the last query, selected, so typing
+      replaces it and Return runs the same command again; ⌘K while open clears it. As Sublime
+      Text's.
+- [x] **53.15 Tests.** 53.10's enabled rule and URL; the Discogs tab over a fixture catalog and
+      a missing release; the two headers; Separate Releases on and off over an original and a
+      remaster; the palette's query kept, replaced and cleared.
+- [ ] **Owner check:** each in the running app, with a snapshot restored, a remaster beside its
+      original, and the palette's kept query.
+
+Implementation plan, phase 53 (ADRs 0141, 0142, 0143):
+
+Depends on 51h and 52 being merged. 51h supplies 51.32's rescan dialog (53.13 adds a part to
+it), 51.33 to 51.38's tagger windows (the Discogs tab in 53.11 reuses the View Release
+formatting of 51.37) and `AppState`'s per-sheet frames (untouched here). 52 supplies the API
+source; 53 reads the local catalog only. Where a type below comes from 51h (the dialog's
+wording table), the plan names it by role, since it isn't in the tree yet; the first commit of
+53c reads what 51h built and fits to it.
+
+What exists, found by search (map.md recipes):
+
+- Commands: `CommandID` and the `AppCommands` registry (`Sources/Core/Commands/AppCommands.swift`,
+  `Command(.id, "Title", [chords])`), menus in `AppMenus.swift` (`trackMenu`, `sections`),
+  handlers in `Sources/App/MusicPlayer/*Commands.swift` via `dispatcher.handle(id, enabled:)`
+  (Show Album is in `PlaylistCommands.swift`). Shortcut clashes are checked against the
+  registry by its tests; `⌥⇧⌘A` is free (only `⌥⇧⌘P` Reverse Sort uses that modifier set).
+- Show in Playlist's body, `LibraryBrowser.showSelection(inPlaylist:)` in `LibraryBrowser.swift`,
+  is the template for 53.1: `model.setSource(...)`, `showSource()`, `showRow(row)`.
+- Drag: `Sources/Features/LibraryBrowser/TrackDrag.swift` (`trackDragItem`, `trackIDsType`,
+  whose comment says "never file URLs"), written by `TrackTableController` and
+  `TimelineController` `pasteboardWriterForRow`.
+- Art viewer: `ArtViewer.swift`, opened by `TrackTableController.openArt`. `TrackMetadata.art`
+  is one `EmbeddedArt` (FLAC `pictures.first { type == 3 } ?? first`, ID3 `APIC`, MP4 `covr`);
+  there is no list of a file's pictures, so 53.3 needs a reader.
+- Extras: `TrackTags.custom: [String: String]` already holds every key no field maps (ADR 0129,
+  FLAC/Vorbis, ID3 `TXXX`/`WXXX`/`TIPL`, MP4 freeform). The editor tabs are `TagEditorTab`
+  (`TagEditorTab.swift`) laid out by `TagEditorWindow.swift`; `TagEditorModel` holds the files.
+- Settings: `AppSettings.swift` (`syncFolder`, `conflicts(_:)` checks the sync folder and
+  catalog path against watched folders: the model for the snapshot folder), `SettingKind`,
+  `AppPaths` (`dataDirectory`, `libraryFileURL(in:)` in App), `AppState`. Settings' General
+  pane is `GeneralPane.swift` / `GeneralModel.swift` (`Section` enum with `.library` and
+  titles; `configHeader` is the config file's box).
+- Titles: `TrackColumn.title` in `Sources/Core/Library/TrackColumnTitle.swift`, used by the
+  header (`TrackTableController` 165, 879), the header menu and `SmartFieldTitle`.
+- Discogs URL: `ReleaseFields.swift` has only `private func discogsURL(kind, id)`, used for
+  the artist URL keys. 51.37 makes it the one builder for releases; 53.10 uses that one.
+- Release id: `tracks.discogs_release_id TEXT`, read by `DiscogsMatch` and `DiscogsAlbum`.
+- Album identity: `albums` table and `albums_identity` index in `LibrarySchema.swift` (the
+  SQL is the part's identity, so a change rebuilds the part), filled by
+  `LibraryIndex.albumID(_:artist:)` with the `AlbumKey` cache.
+- gzip: the system zlib is linked only by the `Discogs` target (`Package.swift`, `GzipStream`
+  reads). Nothing writes gzip yet.
+- Palette: `PaletteModel.open(...)` resets `query = ""`; `PaletteController.show` sets
+  `field.stringValue = ""`; ⌘K is `.showPalette` in the registry.
+
+Sub-parts. 53a, 53b and 53c touch disjoint modules and can be separate worktrees; merge in the
+order 53a, 53b, 53c (53c last since it changes the index schema and the dialog).
+
+#### 53a. Browser and tag editor (53.1, 53.2, 53.3, 53.8, 53.12, 53.10, 53.11, 53.14)
+
+Modules: Commands, Library (titles), Metadata, LibraryBrowser, TagEditor, Palette, App,
+Discogs (read only). No schema change.
+
+1. **Headers (53.12).** `TrackColumn.headerTitle` in `TrackColumnTitle.swift`: "Track No." and
+   "Disc No." for `.trackOfTotal` and `.discOfTotal`, `title` otherwise, so both strings live
+   beside the others. `TrackTableController` 165/166 (header cell and tooltip) use it; the
+   header menu (879) and `SmartFieldTitle` keep `title`. Tests in `LibraryTests`: the two
+   headers, and that `title` is unchanged.
+2. **Open Discogs Release (53.10).** `AppCommands.openDiscogsRelease =
+   CommandID("track.openDiscogsRelease")`, "Open Discogs Release", chord `⇧⌘D` unless the
+   registry test finds it taken (`d` is unused in `AppCommands`); added to `trackMenu`, the
+   File section of `sections` beside Show Album, and the palette comes free from the registry.
+   The View menu is where the owner asked; this app's track commands sit in the File section
+   (`sections`), so it goes there and the plan keeps the owner's "View menu" wording for
+   Show in All Music too: both in the section that lists Show Album, whatever its title.
+   Handler in `Sources/App/MusicPlayer` enabled when the first selected track's
+   `discogs_release_id` parses as an Int (a new `LibraryReader` query, `discogsReleaseID(ofTrack:)`,
+   since `TrackRow` doesn't carry it; no per-row cost). The URL comes from 51.37's builder,
+   `ReleaseFields`'s `discogsReleaseURL(_ id: Int) -> URL`, exposed `public` for the app;
+   opened with `NSWorkspace.open`. Tests: enabled rule over a tagged and an untagged track,
+   the URL string.
+3. **Discogs tab (53.11).** `TagEditorTab.discogs`, appended after `.file`, shown only when the
+   files in `TagEditorModel` have a release id (`tags.discogsReleaseID`). `TagEditor` does
+   not import Discogs, and sideways imports are barred; the window gets the release through a
+   closure `releaseText: (Int) async -> ReleasePage?` that the app wires to the catalog
+   (`Catalog` release, label, credits, tracklist; formatting shared with 51.37's View Release
+   as a Core `Discogs` function `ReleasePage` so there is one wording). The tab shows a
+   read-only selectable text view and an Open on Discogs button (the 53.10 URL). Missing
+   release or no catalog: "This release isn't in the local catalog." / "No Discogs catalog is
+   imported." Several releases: first one plus "and N other releases". Tests: a
+   `TagEditorTests` model test over a fixture catalog (`Tests/DiscogsTests` fixtures), a missing
+   release, no catalog, two releases.
+4. **Extras tab (53.8).** `TagEditorTab.extras`, after `.details`. `TagEditorModel` already
+   reads tags per file; add `extras: [ExtraRow]` (key, value or `.mixed`) built from each
+   file's `TrackTags.custom`: union of keys, value shown when every file that has the key
+   agrees and all files have it, otherwise mixed (a key missing from some files is mixed
+   too). A scrolling `NSTableView` with two selectable text columns, copy as `KEY\tvalue`
+   lines. Decision: custom keys that the Discogs tab or another tab already edits (the
+   `DiscogsKey` ones) still appear; Extras is what the reader found, not what is unshown.
+   Tests over FLAC, MP4 and ID3 fixtures from the generator (`Sources/Tools/GenerateFixtures`
+   already makes custom keys for ADR 0129), and a two-file mixed case.
+5. **Every picture (53.3).** `Metadata`: `public struct EmbeddedPicture { art: EmbeddedArt;
+   type: PictureType }` and `readPictures(at:) -> [EmbeddedPicture]`, reusing the FLAC
+   `PICTURE`, ID3 `APIC` (type byte) and MP4 `covr` parsing that find `art` today (those parsers
+   already see every picture; the single `art` stays what the scanner records, derived from
+   the list's front or first, so the index doesn't change). `PictureType` names the ID3/FLAC
+   types: front (3), back (4), other for the rest, with the type's own name where it has one
+   (leaflet, media...). `ArtViewer` takes the list: `←`/`→` and on-screen buttons step,
+   "2 of 3 · Back" label in the dimmed backdrop, each decoded with the existing `ArtworkLoader`
+   per `session`. One picture shows no buttons or count. Opened from the track table, reads
+   the list once on open off the main actor. Tests: `MetadataTests` a three-picture fixture
+   for each format; `LibraryBrowserTests` stepping, wraparound off (stops at ends), label.
+6. **Show in All Music (53.1).** `AppCommands.showInAllMusic = CommandID("track.showInAllMusic")`,
+   "Show in All Music", `⌥⇧⌘A`, in `trackMenu` and the same section as Show Album. In
+   `LibraryBrowser`: `showSelectionInAllMusic()` following `showSelection(inPlaylist:)`:
+   remember the selected track ids, `model.setSource(.library)` (the All Music source; check
+   its case name), select every id present with `model.rows(holding:)`, scroll the first to
+   center (`showRow` centers), `focusTracks()`. Enabled when `hasSelectedTracks` and the
+   shown source isn't All Music. Tests: the enabled rule per source, the selection after
+   the switch, and that keys go to the table.
+7. **Dragging files out (53.2) and ADR 0141.** `trackDragItem(_ id:, url:)` writes both
+   `trackIDsType` and the file URL (`NSPasteboardItem.setString(url.absoluteString,
+   forType: .fileURL)`); the row's path is in the model (`trackRow(row)?.path`), no stat
+   (the arch check bars `fileURLWithPath:` without `isDirectory: false`). Both controllers
+   implement `tableView(_:draggingSession:sourceOperationMaskFor:)`: `.copy` when
+   `context == .outsideApplication`, `.move`-free, and unchanged `.generic`/`.move` within the
+   app. Queue and playlist reorders keep reading `trackIDsType`. The comment on
+   `trackIDsType` is rewritten to match. ADR 0141: a file URL on the pasteboard lets another
+   app read or copy library files; it forbids a move, so Finder never moves or trashes one
+   (a drag to a folder copies), and the music-files boundary in AGENTS.md gains one clause
+   saying so: a drag out copies, the app writes nothing. Playlist-file export is untouched.
+   Tests: the pasteboard holds the id type and a file URL for the same row; the mask is
+   `.copy` for `.outsideApplication` and unchanged `.within`; a unit over a helper
+   `dragOperationMask(for context:)`.
+8. **Palette keeps its query (53.14).** `PaletteModel.open` keeps `query` instead of clearing it
+   (kept in the model for the app's session, not saved to disk; decision: not persisted
+   across launches, since Sublime Text keeps it per window session). `PaletteController.show`
+   fills the field with it, selects all, and `rankNow()` ranks it. ⌘K while open clears it
+   (`close` then the next show is empty, or clearing the field in place: it clears the field
+   and ranks the empty query). Go to Item mode keeps its own last query. Return runs the top
+   result as before. Tests in `PaletteTests`: query kept across close and open, replaced by
+   typing, cleared by the second ⌘K, the empty-query path unchanged when none was typed.
+
+Commits: 1 headers; 2 Open Discogs Release + its builder use; 3 Show in All Music; 4 palette
+query; 5 Extras; 6 Discogs tab; 7 pictures in Metadata; 8 viewer stepping; 9 drag out +
+ADR 0141 + AGENTS.md clause. Docs: `plan.md` ticks.
+
+#### 53b. Settings and snapshots (53.4, 53.5, 53.6, 53.7) (ADR 0142)
+
+Modules: Settings, a new Core module `Snapshot`, SettingsWindow, App. The new module is
+justified: it needs zlib writing (only `Discogs` links `z` and it reads), it is neither
+Library's queries nor a Discogs thing, and Library gains nothing from linking `z`. Package.swift:
+`Snapshot` depends on `Library`, `Log`, `Settings`, `SQLite`, links `z`; `Settings` stays free
+of it. Search found no existing gzip writer, so there is no duplicate to share; the reader in
+`GzipStream` stays where it is (principle 3: the reader and the writer are two different
+sides, and the dumps are never written).
+
+1. **Config group (53.4).** `GeneralPane`: the General section's config rows (`configHeader`
+   and the `copyDefault` row) go into the same sunken titled box as Library's, title "Config".
+   Reuse the function that builds Library's box (the `section(title:...)` helper that makes
+   `panel`), so no second box. Test: a `SettingsWindowTests` model/layout test that General
+   has a "Config" section with the three buttons.
+2. **Database in Library (53.5).** `GeneralPane` Library box: a row with the index path
+   (tilde-abbreviated, monospaced, truncating middle as `configHeader`), size (the file plus
+   `Database.walSuffix`, read on the pane's open off the main actor through `LibraryReader`
+   or a `Snapshot`-free `FileManager` stat in `Settings` as `IndexFiles.size(of:)`), and Reveal
+   in Finder via `SettingsActions.revealIndex` (new closure, like `revealConfigFile`). A
+   `ByteCountFormatter` string. Test: size sums both files; path shown.
+3. **Snapshot writer.** `Snapshot/IndexSnapshot.swift`: `func writeSnapshot(of index: LibraryIndex,
+   into folder: URL, on day: Date) throws -> URL`: `VACUUM INTO` a temp file in the snapshot
+   folder (`.library-YYYY-MM-DD.sqlite.partial`), gzip it with zlib `deflate` (gzip header,
+   level 6, 1 MB chunks, CRC from zlib) to `library-YYYY-MM-DD.sqlite.gz.partial`, then
+   `rename` to the final name, and delete the temp. A day's second snapshot (Back Up Now)
+   replaces that day's file. `VACUUM INTO` is SQLite 3.27; macOS 12 ships 3.37, fine. It is a
+   read on the index's own connection (reader), never writes the index. A name with the day in
+   local time via a fixed-format `DateFormatter` (POSIX locale), defined once as `SnapshotName`.
+4. **Rotation.** `Snapshot/SnapshotRotation.swift`: `kept(_ names: [SnapshotName], today:)`
+   keeps the newest 7 distinct days, then for each of the 4 ISO weeks before them the newest
+   one in that week, and returns what to delete. Pure, tested over a simulated 60 days.
+   Deletes only files whose names parse as `SnapshotName` in the folder (nothing else there
+   is touched).
+5. **Folder setting and the refusal.** `AppSettings.snapshotFolder: Setting<String?>`
+   `library.snapshotFolder`, default nil meaning `Backups` beside the index
+   (`AppPaths.snapshotDirectory`, `dataDirectory/Backups`). `AppSettings.conflicts(_:)` adds the
+   refusal for a path inside a watched folder or the sync folder (reusing `standardized`,
+   `isPath`, `SyncFolder.isInside`'s pattern), reason text in the conflict as the existing two.
+   A network-share folder is not supported: a path only (decision, stated in the setting's
+   summary), so it can't resolve through `ShareLookup`. The key sits under `library.` so
+   `GeneralModel.Section.library` picks it up by prefix. Tests: refused inside a watched folder
+   and inside the sync folder; accepted outside; default.
+6. **Scheduling.** `Snapshot/SnapshotScheduler.swift` (an actor): once a day, on the scan
+   queue's idle (the app already knows when `ScanControl`/the scan queue is idle: it posts to
+   the status bar; check `LibraryScanner`'s idle callback in `WatcherStart.swift`), never
+   during a scan or sync. It runs at launch after the first idle, and again on the next idle
+   once the day changes. The last snapshot's time is the newest file name's day plus its
+   modification time, read from the folder (no state to drift; nothing new in `AppState`).
+   Failures log and show in Problems? Decision: log at error and show in Settings next to the
+   time ("Last snapshot failed: reason"), not a dialog (fail loudly, but not modal on idle).
+   The index isn't written; only the snapshot folder is, which is the app's own, so the
+   AGENTS.md music-files boundary needs no change; its "app state lives in the SQLite index"
+   sentence gets "and its dated snapshots in the snapshot folder (ADR 0142)".
+7. **Settings UI (53.6/53.7).** Library box rows: Snapshot Folder (the setting), Last snapshot
+   time, Back Up Now (calls the scheduler, disabled while a scan runs, with a spinner), and a
+   Snapshots list (`NSTableView`: date, size; gzip'd size on disk) with Restore…. Restore:
+   confirm sheet ("Replace the library index with the one from 2026-11-01? Plays, ratings and
+   playlists in it replace the current ones. The current index is snapshotted first."), then
+   (a) `writeSnapshot` of the current index, (b) gunzip the chosen file to `library.sqlite.restoring`
+   in the data directory, (c) `PRAGMA integrity_check` on it, (d) write a small marker file
+   `restore.pending` naming the file, and relaunch. At launch, before `LibraryIndex(at:)` opens
+   (AppDelegate 236), a `Snapshot.applyPendingRestore(dataDirectory)` swaps the file in and
+   moves the old `library.sqlite`, `-wal` and `-shm` aside to the existing `.unreadable-`
+   scheme's neighbor (`.replaced-<stamp>`, pruned the same way). Doing the swap at launch
+   avoids replacing a database that is open. The relaunch is `NSWorkspace.openApplication` then
+   terminate, as the app already quits for the rescan dialog. A restored index of an older
+   shape is rebuilt by the usual stale-part path (and 51.32's dialog asks first).
+   Unzipping needs an inflate: a small `GzipFile.inflate(to:)` in `Snapshot` (zlib `inflate`
+   with window 31, streaming 1 MB chunks, caps nothing since the file is the app's own, and
+   checks CRC/size from zlib). Tests: naming; rotation over a simulated 60 days (7 daily + 4
+   weekly kept, rest deleted, other files untouched); the gzip opens as a database with the
+   same rows (`LibraryIndex` fixture, compare track count and a play count); a refused folder
+   (a settings conflict test); restore round trip in a temp data directory (snapshot,
+   change index, restore, reopen, rows from the snapshot; the pre-restore snapshot exists);
+   a corrupt gzip is refused before anything is replaced; the scheduler skips while a scan
+   runs and runs once on idle.
+8. **ADR 0142:** snapshots, the format and name, rotation, where the folder may be, why VACUUM
+   INTO a copy not a file copy of a live WAL database, why the swap happens at launch, and
+   that the Discogs catalog is not kept.
+
+Commits: 1 Config group; 2 database row; 3 `Snapshot` module with writer and rotation; 4
+setting and refusal; 5 scheduler; 6 restore; 7 Settings UI; 8 ADR 0142 and AGENTS.md sentence.
+
+#### 53c. Separate Releases (53.13) (ADR 0143)
+
+Modules: Library (`LibrarySchema.swift`, `LibraryIndex.swift`, `RescanNotice.swift`,
+`BrowserGroupingSQL.swift`, `LibraryQueries.swift`), Settings (`AppSettings.swift`), Commands
+(`AppMenus.swift`), App (`AppDelegate.swift`, `SettingsChanges.swift`), LibraryBrowser
+(`RescanAlert.swift`). Merges after 53a and 53b (see "Files shared with 53a and 53b").
+
+What 51h built (read from main, 548d4115):
+
+- `SchemaPart.rescanWhy: String?` (LibrarySchema.swift): one fixed sentence per part, nil for a
+  part a rescan doesn't refill. Today only `.index` has one ("This build stores the index ... in a
+  new shape ..."). It cannot know a direction, so it can't carry "on" or "off".
+- `RescanNotice` (Library/RescanNotice.swift): `init?(parts: [SchemaPart])`, `title` ("Rescan the
+  Library?"), `text` = the parts' `rescanWhy` joined, plus "Every file is read again. Plays,
+  ratings and playlists stay."
+- `LibraryIndex.init(at:movingAsideIfUnreadable:confirmRescan:)`, where `confirmRescan:
+  ((RescanNotice) -> Bool)?` is asked from `prepareSchema` via the private `rescanNotice()`
+  (reads `storedParts()` and `partsToRebuild(stored:)`, writes nothing) before `rebuildStaleParts()`.
+  False throws `LibraryError.rescanDeclined`, file untouched. `public private(set) var
+  rebuiltIndex` is set inside `rebuildStaleParts` (index in `rebuilt` and previously stored);
+  `LibraryBrowser` copies it to `status.rebuildingIndex` (LibraryStatus shows the rebuild).
+- `askToRescan(_:) -> Bool` (Features/LibraryBrowser/RescanAlert.swift): a modal NSAlert, buttons
+  "Rescan Now" / "Quit". Only `AppDelegate.openWindow` passes it (the one launch open, with
+  `movingAsideIfUnreadable: true`); `catch LibraryError.rescanDeclined` there calls
+  `NSApp.terminate`.
+
+What the old 53c got wrong:
+
+1. "Every `LibraryIndex(at:)` caller is updated" is the dangerous part. Besides AppDelegate and
+   ScanCommand there are ~15 in Core/Library alone (`LibraryReader`, `LibraryScanner`,
+   `LibraryWatcher`, `MeasuresCache`, `StatsReader`), plus Tools and 37 test files, and 53b's
+   `SnapshotScheduler` and `SnapshotRestore` add two more. All open the same file. If the option
+   were a plain `Bool` defaulting to off, any of them opening a library built with it on would
+   see a stale index part and drop and rebuild it, and the scanner would insert albums without
+   release ids. So the option cannot be a parameter every open must repeat.
+   Fix: the stored index SQL is the single source of truth. `init` takes `separateReleases: Bool?
+   = nil`. Nil adopts whatever the stored first line says (on a new file: off); only the launch
+   open in `AppDelegate.openWindow` passes the setting's value. `LibraryIndex` keeps the
+   resolved value in a `private(set) var separateReleases: Bool`, read by `albumID`. No other
+   caller changes, and the tests default to nil.
+2. "`SchemaPart.sql` becomes `sql(separateReleases:)`": only `.index` takes it. Keep `var sql`
+   for the others (and `sql` for `.index` = off) and add `func sql(separateReleases: Bool) ->
+   String`; `indexSchema` becomes a function returning the `-- separate releases: on|off\n`
+   line plus the text. `partsToRebuild(stored:)`, `rebuildStaleParts` (`database.execute(part.sql)`
+   and `identity.run(part.rawValue, part.sql)`) and `rescanNotice()` all compare and write
+   `$0.sql`, so they all take the resolved option (a parameter or the stored property, set in
+   `prepareSchema` before `rescanNotice()`, which runs first). Read the stored option from
+   `storedParts()[index]`'s first line.
+3. "A change is applied at the next launch ... 'Cancel' reverts the toggle". The modal at launch
+   has "Rescan Now" / "Quit", not Cancel, and Quit leaves the file untouched so the next launch
+   asks again: a user who flips the setting and quits is asked on every launch until they edit
+   the config by hand. And `rescanWhy` is fixed text. Decision:
+   - `RescanNotice` gains `separateReleases: Bool?` (nil unless this open's change is the
+     option's; `init?(parts:separateReleases:)`). `text` puts the direction sentence first, in
+     words kept once beside the part: on, "Albums are made of each Discogs release, so a
+     reissue tagged with the original's title is an album of its own."; off, "Albums are made of
+     title and artist again, so releases that share them merge." In both, the stock tail ("Every
+     file is read again. Plays, ratings and playlists stay.") is unchanged. The index part's
+     "new shape" sentence is not shown when the only reason is the option: `partsToRebuild` can't
+     tell, so `rescanNotice()` compares the stored SQL with the same part built with the stored
+     option; equal means the option is the only difference.
+   - Runtime toggle: `AppDelegate.settingsChanged` (SettingsChanges.swift), on
+     `schema.separateReleases.key`, compares with `index.separateReleases` and, if different,
+     shows a sheet on the Settings window with `notice.title` / `notice.text`, "Rescan Now" /
+     "Cancel". Cancel calls `settings.set(\.separateReleases, to: old)` (ConfigStore.set exists).
+     Rescan Now relaunches; there is no relaunch code in the tree today, so write the minimal one
+     in App (`NSWorkspace.openApplication(at: Bundle.main.bundleURL, ...)` then terminate) and
+     say so in the ADR. A hand-edit of the config file takes the same path, since it also goes
+     through `settingsChanged`.
+   - Launch with a differing setting (relaunched, or edited while closed): `askToRescan` as is,
+     but a decline there is "Quit" (51h's behavior). Accept that; the owner can revert the
+     setting in the file. If that is not acceptable, the alternative is a third button "Keep"
+     that reopens with the stored option; not in 53c.
+   - `rebuiltIndex` and `LibraryStatus.rebuildingIndex` already say "rebuilding" for any index
+     rebuild. No change.
+4. "The reason sentence is chosen by the direction": see 3; the per-part table is `rescanWhy`, a
+   single string, so the direction text lives on `RescanNotice`, not in `SchemaPart`.
+5. "Album ordering interleaves by album id": the track query's `ORDER BY` already adds
+   `t.album_id` when grouping by album artist and sorting by Artist or Album
+   (LibraryQueries.swift ~l.119), so those orders keep releases together; the other branch's
+   tie-break (`ar/ga.sort_name, al.sort_title, t.disc_number, ...`) has no album id and would
+   interleave two releases. Add `t.album_id` after `al.sort_title` there. The Album pane
+   (`BrowserGroupingSQL`, `.albums`, order `sort_title`) needs `sort_title, <year>` with the
+   same correlated `min(TrackColumn.year.expression)` subquery `.albumsByYear` already uses
+   (extract it once, not copy it; two uses so no third occurrence rule issue, but they must share
+   the text). The track table does not get a year subquery per row (cost on 100k rows; measure
+   with the Bench if wanted); two releases then sort adjacent in insertion order, each whole.
+   `TrackColumnSort` (`.album: "al.sort_title"`) is unchanged.
+6. Release id source: `insertTrack` binds `tags.custom[DiscogsKey.releaseID]` (a String?) into
+   `tracks.discogs_release_id`; there is no `tags.discogsReleaseID`. Pass the same trimmed value
+   to `albumID(_:artist:releaseID:)`.
+
+Steps:
+
+1. **Schema and plumbing.** `albums.release_id TEXT NOT NULL DEFAULT ''`; index
+   `albums_identity ON albums (title, ifnull(artist_id, 0), release_id)`; `AlbumKey` gains
+   `releaseID: String`; the cache query selects `release_id`; the `INSERT INTO albums` binds it.
+   `indexSchema` -> `func indexSchema(separateReleases:)` with the first line; `SchemaPart`
+   `sql(separateReleases:)`; `LibraryIndex.init(... separateReleases: Bool? = nil ...)` with the
+   resolution in point 1/2.
+2. **Insert.** `albumID` uses `separateReleases ? trimmedReleaseID ?? "" : ""`. A track with no
+   id still merges with every other idless one (intended).
+3. **Setting.** `AppSettings.separateReleases = Setting("library.separateReleases", title:
+   "Separate Releases", default: false, "Make an album of each Discogs release ...")`, placed
+   after `groupByAlbumArtist`; `GeneralModel` groups by the `"library."` prefix, so it shows in
+   the Library group with no model change (check after 53b's pane rework). File menu: add
+   `.setting(settings.separateReleases.key)` after `groupByAlbumArtist` in `AppMenus` (~l.119).
+4. **Applying it.** `RescanNotice` direction, `askToRescan` unchanged, `settingsChanged` sheet
+   and relaunch (point 3). `AppDelegate.openWindow` passes `separateReleases: settings[\.separateReleases]`.
+5. **Sort.** Point 5.
+6. **Tests** (new file `Tests/LibraryTests/SeparateReleasesTests.swift`, not edits to
+   `LibraryIndexTests`, which 53b edits; the dialog text in `RescanNoticeTests.swift`): original
+   and 2025 remaster, same title and artist, different ids: one album off, two on, tracks stay
+   with their own; idless track joins off, stays alone on; reopening with nil keeps the stored
+   option and does not rebuild (this is the guard for the snapshot and scanner opens); reopening
+   with the other value asks `confirmRescan` once with a notice carrying the direction, rebuilds
+   only the index and scans parts, keeps ratings (as `quitAtTheRescanQuestionLeavesTheFileAsItWas`
+   does); declined leaves the file byte-equal; Album pane and table order for two releases; the
+   notice text per direction. The Settings-sheet path in `SettingsWindowTests` or a
+   `MusicPlayerTests` fixture only if the sheet is testable without a relaunch; otherwise inject
+   the relaunch.
+7. **ADR 0143** (0141 is 53a's, 0142 is 53b's): identity with the option, setting not rule,
+   release id not master, stored-SQL option with open-by-nil adoption and why (many connections),
+   the toggle's sheet and the relaunch, Quit at launch.
+
+Commits: 1 schema, option and the nil-adopting open; 2 insert and sort; 3 setting, menu, notice
+and sheet; 4 tests with each; 5 ADR.
+
+Files shared with 53a and 53b (`git diff --stat main...HEAD` of each worktree):
+
+- `Sources/App/MusicPlayer/AppDelegate.swift`: 53a (import, `editing.release` ~l.629) and 53b
+  (`applyRestoreAtLaunch`, `SnapshotScheduler(...)` right after the `LibraryIndex(at:
+  movingAsideIfUnreadable:confirmRescan:)` call, ~l.244-260, watcher start ~l.848). 53c edits that
+  same `LibraryIndex(...)` call: expect a textual conflict with 53b; resolve by adding the
+  argument to 53b's version of the call.
+- `Sources/App/MusicPlayer/SettingsChanges.swift`: 53b (`libraryDatabase`/`backUpNow` closures ~l.252).
+  53c adds a block after the `groupByAlbumArtist` one (~l.117): different hunk.
+- `Sources/Core/Library/LibraryIndex.swift`: 53b rewrites `moveAside` and adds `move`,
+  `pruneMovedAside`, `copy(to:)` (l.34-160) immediately above `prepareSchema`; 53c edits `init`
+  doc/signature, `prepareSchema`, `partsToRebuild`, `rebuildStaleParts`, `albumID`, `AlbumKey`.
+  Adjacent, likely a clean merge, but rebase and check `prepareSchema`'s context.
+- `Sources/Core/Settings/AppSettings.swift`: 53b adds `snapshotFolder` after `libraryFolder` and
+  rewrites the conflicts section at the bottom; 53c adds one setting at ~l.83. Clean.
+- `Sources/Core/Commands/AppMenus.swift`: 53a edits the track menu (~l.63) and View (~l.172);
+  53c one line at ~l.119. Clean.
+- `Sources/Core/Library/LibraryQueries.swift`: 53a adds `discogsReleaseID(ofTrack:)` at ~l.213;
+  53c edits the sort tie-break at ~l.119-135. Clean.
+- 53b's `Snapshot/SnapshotScheduler.swift` and `SnapshotRestore.swift` call `LibraryIndex(at:)`;
+  safe only with the nil-adopting open (point 1). Also 53b's restore can put back an index with
+  the other option; the next launch then asks via `askToRescan`, which is correct.
+- `GeneralModel.swift` / `GeneralPane.swift` (53b): 53c has no edit, but confirm the
+  `"library."` prefix grouping survived 53b.
+- Tests: 53b edits `LibraryIndexTests.swift`; 53c adds new files only.
+- Not touched by either: `LibrarySchema.swift`, `RescanNotice.swift`, `RescanAlert.swift`,
+  `BrowserGroupingSQL.swift`, `RescanNoticeTests.swift`.
+
+#### 53.9 and 53.15 tests
+
+Spread across the sub-parts as above; each commit carries its tests. 53.15's last item
+(palette) is in 53a, the rest as listed. `./scripts/test --changed` per commit; one
+`./scripts/check` at the end of each sub-part. The check steps that read the diff: format,
+build, tests, `arch` (new `Snapshot` module and the tier map), `surface` (`public` only where
+another module calls), `dupes` (the three new strings: file-name format, "Reveal in Finder"
+which exists once in `GeneralPane` today and moves with the Config group, and the 53.8/53.11
+messages), and a docs check if ADR files are linted.
+
+#### Owner check
+
+As the plan says: each in the running app, a snapshot restored, a remaster beside its
+original, the palette's kept query; plus a drag of a track out to the Desktop (a copy) and to a
+Finder window on the NAS share (still a copy).
+
+#### Decisions made here
+
+- Palette query lives for the app session, not on disk.
+- Snapshot folder is a plain path, no network share.
+- Restore swaps the file at the next launch, not live.
+- Separate Releases is applied at the next launch with the dialog, default off.
+- Extras lists every key the reader holds in `custom`, including ones other tabs show.
+- Open Discogs Release goes where Show Album is (the File section), with `⇧⌘D` if free.
+
+#### Needs the owner
+
+1. **Open Discogs Release's shortcut and the View menu.** The app has no View-menu section
+   holding track commands; the track commands are in File. Confirm File, or say which menu.
+2. **Separate Releases for tracks with no release id** stay merged with each other. If the
+   owner wants them kept apart from a tagged release of the same title (they are today only
+   by the id differing), that is already so; confirm no third behavior is wanted.
+3. **Restore also restores plays and ratings** (they live in the index file). That is what a
+   restore is, but say so in the dialog; confirm the owner wants the whole file and not the
+   index part only.
+
+Result, phase 53: shipped 53.1 to 53.15 in three parts, merged a, b, c (ADRs 0141 to 0143).
+53a, browser and tag editor: Show in All Music (⌥⇧⌘A) and Open Discogs Release (⇧⌘D) in the
+View menu, the track menu and the palette; rows dragged out of the app carry their files, copy
+only (ADR 0141), and the sidebar takes file URLs only from a drag another app started, so the
+app's own rows still drop on a playlist as tracks; the art viewer steps through every picture;
+Extras and Discogs tabs in Get Info; "Track No." and "Disc No." headers; the palette opens with
+its last query. Changes from the plan: the headers' tooltips keep the full titles; the viewer
+names four picture types (front and back cover, leaflet page, disc label) and calls the rest
+Other; every picture is listed in `TrackMetadata.pictures` beside `art`, only when the art
+viewer asks; TagEditor imports Core/Discogs, where the tagger's field titles and the page URL
+moved; Extras and Discogs are read-only text views, not tables; the viewer reads the file's
+tags once more when it opens. 53b, settings and snapshots: the Config group, the index's path,
+size and Reveal in Finder, a daily gzipped `VACUUM INTO` snapshot between scans (7 daily, 4
+weekly, 3 from before restores), Back Up Now, and Restore…, which snapshots the current index
+under a name of its own and swaps the chosen one in at the next launch (ADR 0142). The swap
+waits while another copy of the app holds the new `library.sqlite.in-use` lock, puts the index
+back if it fails, and stops the launch if it can't. A snapshot folder on a network volume is
+refused, so a restore needs a local one. 53c, Separate Releases (ADR 0143): off by default;
+the index's stored SQL holds the option, so only the app's own open changes it; a change asks,
+in Settings with Rescan Now or Cancel, and relaunches with `--rescan-confirmed on|off`, which
+waives only that question. With it on, Listening Stats, Library Health and the tagger list
+same-titled releases as separate rows.
+
+Gate, phase 53: per part, a correctness review and a quality and architecture review, then a
+second review of the fixes; 53b's restore had a data-safety review. 53a: 10 findings fixed
+(Open Discogs Release's menu check no longer reads every selected row from the database, the
+Discogs tab follows a save, an MP4 cover of an unknown type is skipped). 53b: 14 fixed (a
+same-day restore overwrote the snapshot it restored from; overlapping writes could publish a
+garbled file; no check for another copy of the app; a failed swap could open an empty index),
+then 2 lows. 53c: 7 fixed (the flag waived every question at its launch). `./scripts/check`
+passes except `theGlassHeadersAreFrosted`, the known agent-session failure. `./scripts/bench`,
+78 rows without the window rows: metadata parse was 5.29 s of 5 on the full run, 4.87 to 4.93 s
+alone with and without listing every picture, so the full run's load, not the change; the
+second keystroke during Analyze Library was 23.4 ms of 20 once and 15.6 and 16.1 ms on reruns.
+Sort all columns 26.3 ms, browser pane query 0.81 ms, scan 1.25 s, index 47.4 MB. Cost:
+plans 188k tokens, 37 tool calls, 5 min; implementation, 53a 417 calls and 98 min, 53b 259
+calls and 97 min, 53c 142 calls and 54 min; reviews 656k tokens, 100 calls, 25 min.
+
+Owner steps: each part in the running app: Show in All Music, a drag to the Desktop (a copy,
+the original stays), the art viewer on a file with several pictures, Extras and Discogs tabs,
+the palette's kept query; Back Up Now, then Restore… of that snapshot and the relaunch; Separate
+Releases on with a remaster beside its original, Rescan Now, and Cancel.

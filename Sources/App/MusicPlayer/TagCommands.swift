@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import TagWriter
 
 /// The tag editor's commands. Edit Tags… opens an info window on the selection at any time;
 /// the files are written only when the user saves in it.
@@ -18,7 +19,13 @@ extension AppDelegate {
             .undoTagEdit, enabled: { [weak self] in self?.window != nil },
             run: { [weak self] in
                 guard let self, let window = self.window?.window else { return }
-                self.tagEditing.undo(over: window)
+                // The tagger's when its window or a sheet over it is the key one, asking over
+                // that, the top one; any other is the tag editor's.
+                if let key = NSApp.keyWindow, self.discogsTagger?.isOwnWindow(key) == true {
+                    self.tagEditing.undo(over: key, from: .discogsTagger)
+                } else {
+                    self.tagEditing.undo(over: window, from: .tagEditor)
+                }
             })
         dispatcher.handle(
             .replaceArtwork, enabled: { [weak self] in self?.tagEditing.canReplaceArt == true },

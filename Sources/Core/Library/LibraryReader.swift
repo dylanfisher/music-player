@@ -59,6 +59,16 @@ public actor LibraryReader {
         try index.setDiscogsReview(review, files: fileIDs)
     }
 
+    /// The Discogs API's cached entry for `id` of `kind`, and when it was fetched (ADR 0138).
+    public func discogsCached(kind: String, id: Int) throws -> (fetchedAt: Double, json: String)? {
+        try index.discogsCached(kind: kind, id: id)
+    }
+
+    /// Keeps the Discogs API's `json` for `id` of `kind`, replacing any entry before.
+    public func storeDiscogs(kind: String, id: Int, fetchedAt: Double, json: String) throws {
+        try index.storeDiscogs(kind: kind, id: id, fetchedAt: fetchedAt, json: json)
+    }
+
     /// A connection for Listening Stats' reads, opened off the main thread.
     public nonisolated func statsReader() async throws -> StatsReader {
         let url = databaseURL
