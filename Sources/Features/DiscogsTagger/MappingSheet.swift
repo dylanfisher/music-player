@@ -260,7 +260,7 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         window.makeFirstResponder(nil)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = (draft.chosenName ?? "Field Mapping") + ".json"
+        panel.nameFieldStringValue = draft.chosenName ?? "Field Mapping"
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.export(to: url)
