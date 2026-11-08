@@ -12,7 +12,11 @@ extension LibraryIndex {
     /// new file, and an old one the index still has, exists. A line that can't move anything is
     /// a problem and the rest go on.
     func importMoves(from list: URL) throws -> MoveListImport {
-        let parsed = MoveList(try Data(contentsOf: list))
+        try importMoves(MoveList(try Data(contentsOf: list)))
+    }
+
+    /// Applies `parsed` as `importMoves(from:)` applies the list it reads.
+    func importMoves(_ parsed: MoveList) throws -> MoveListImport {
         var result = MoveListImport(problems: parsed.problems)
         var removedFiles = false
         for start in stride(from: 0, to: parsed.lines.count, by: moveListBatchLines) {

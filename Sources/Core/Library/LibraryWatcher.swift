@@ -265,6 +265,21 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
+    /// Applies `lines`, each an old absolute path and its new one, as `importMoves(from:)`
+    /// applies a list's lines: for an upgrade, whose old files' stats go to the new ones
+    /// (ADR 0139).
+    public func importMoves(lines: [(from: String, to: String)]) async throws -> MoveListImport {
+        try await withCheckedThrowingContinuation { continuation in
+            scanQueue.async { [scanner] in
+                continuation.resume(
+                    with: Result {
+                        try LibraryIndex(at: scanner.databaseURL).importMoves(
+                            MoveList(moves: lines))
+                    })
+            }
+        }
+    }
+
     /// Stop Watching on the last folder: removes every file from the index, as `start` does for
     /// the files outside the folders when there are some. Its stats stay, by path.
     public func removeEveryFile() {
