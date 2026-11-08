@@ -79,6 +79,22 @@ only after step 4's check, which is the guard for it. A file the Trash refuses s
 is; the job is failed at the delete step with the new files already in the library, and Retry
 resumes from there.
 
+**Resuming on another Mac.** The ledger is in each Mac's own index, so Resume Here finishes a
+job another Mac left only if that Mac had moved nothing yet. A job moved in part is refused
+there, with the reason that it can be resumed only on the Mac that started it: the moved files
+took the tags their destinations came from, and the ledger that says which files those are is on
+the first Mac. Neither Mac can half import an album, because the first run refuses the whole
+album when a destination is taken, but a crash after some renames leaves a part-moved album in
+the library until that Mac resumes it.
+
+**Scans during a move.** The library watcher doesn't know an import is running. A scan that
+starts between the first rename and the rescan the import ends with can read the files moved so
+far, so a part of the album is in the tracklist for that time, and for an upgrade the old files
+too. The window is short (the renames are on one volume, and for an upgrade the checks, the delete
+and the carry), the import's own rescan reads the rest, and the index corrects itself on it. A
+guard would need the ledger's share-relative paths mapped to mount points in every scan, which
+the scan doesn't do; this is a known limit rather than something the player prevents.
+
 **Reject** moves and deletes nothing in the player. The service deletes its staged folder, as
 its own ADR says.
 
@@ -99,7 +115,7 @@ its own ADR says.
 
 An upgrade on the NAS can't be undone from the app; the checks before the delete and the
 sheet's wording are what stand in for the Trash. Approve works only where staging and the
-library are on one volume. A crash at any step resumes from the ledger and the file system. The
+library are on one volume. A crash at any step resumes from the ledger and the file system, on the Mac that started the move. The
 staging folder never holds library files, and the library never holds a file Approve didn't
 move.
 
