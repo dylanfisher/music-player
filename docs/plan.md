@@ -680,6 +680,56 @@ From the owner's testing on 2026-11-07, before 51 closes.
 - [ ] **Owner check:** the help, Save As, an export opened in a text editor and imported back,
       the catalog status after the real reimport, and the editor's buttons.
 
+#### 51h. The tagger, second pass
+
+From the owner's testing on 2026-11-08, after 51g ran on the real library.
+
+- [ ] **51.32 Asking before a rescan** (moved from 53.9: the first launch after 51f rescanned
+      the whole library with no word, which looks like a corrupted library). When a new build
+      would drop an index part that a rescan refills, before dropping anything a dialog says
+      which part changed and why, in words kept once with the part, that every file is read
+      again, and that plays, ratings and playlists stay. It offers Rescan Now or Quit. Quit
+      leaves the index as it was and asks again at the next launch. While the rescan runs, the
+      status bar says it's a rebuild, not a first scan. An ADR.
+- [ ] **51.33 A plainer header.** The catalog's state is one short line, "Catalog from the
+      2026-11-01 dump · 3.1 GB", with its path and import date in the tooltip and Reveal in
+      Finder beside it. The rest of the header's controls on one row; nothing wraps at the
+      window's minimum width.
+- [ ] **51.34 Opening on the selection.** With tracks selected in the library, Discogs Tagger
+      opens scoped to their albums and, with a catalog in place, analyzes them at once.
+      Without a selection it opens as now.
+- [ ] **51.35 Why not Exact.** A Likely or Incomplete album says why, under its release title
+      and in its row's tooltip: "2 files have no track on the release", "3 durations differ by
+      over 5 s", "found by title only". Worded from what the matcher already kept for its tier,
+      not scored a second time.
+- [ ] **51.36 The window's height.** The track tables take all the height the header and the
+      buttons leave, and scroll. Right on the first open, after an import, after reopening,
+      and after a resize: the owner saw it too short once and right the next time, so a test
+      checks the tables' frames in each case.
+- [ ] **51.37 Viewing a release.** The Other Releases sheet sorts by any column's header and
+      gains a Tracks column, the release's track count from the catalog. View Release… beside
+      Use Release shows the release before it's used: tracklist (position, title, duration),
+      label, catalog number, format, country and year, as YATE's release view. View Changes
+      and the release area get Open on Discogs, the URL from `ReleaseFields`'s one builder.
+- [ ] **51.38 Sheets keep their size.** Each tagger sheet (Other Releases, View Release, View
+      Changes, Field Mapping) keeps its last size, column widths and sort, per kind of sheet,
+      in `state.json` (`AppState`): this Mac's, not the config.
+- [ ] **51.39 Undoing a tagger write.** Undo Tag Edit after the tagger wrote 22 MP3s on the NAS
+      failed for all of them: "can't copy its extended attributes: Permission denied", from
+      `fcopyfile(COPYFILE_ACL | COPYFILE_XATTR)` in `FileReplace.copyAttributes`. Find which
+      attribute or ACL the SMB server refuses when the tagger's own write of the same files
+      went through, and fix the replace so an undo of any write the app made can run. As
+      Undo Tag Edit undoes the newest edit anywhere, it first asks when that edit wasn't
+      made in the window it's pressed in: "Undo the Discogs tagger's edit of 22 files?".
+- [ ] **51.40 Tests.** The rescan dialog's Quit leaves the index untouched; the header at the
+      minimum width; scoping to a selection; each reason over crafted matches; the tables'
+      frames in each case of 51.36; sorting, the Tracks column and View Release; a sheet's
+      frame, widths and sort back after reopening; an undo through a replace whose attribute
+      copy is refused, through `faults`, and the question for another window's edit.
+- [ ] **Owner check:** the next build that changes the index, the tagger on a selection of
+      Likely albums, a sheet resized and reopened, and Undo Tag Edit after a tagger write on
+      the NAS.
+
 ### 52. Discogs API
 
 - [ ] **52.1 The token.** An optional Discogs personal access token, the player's first secret:
@@ -730,17 +780,36 @@ From the owner's testing on 2026-11-07. ADRs numbered when it starts, after 52's
       that has no field of its own (custom keys, `TXXX`, MP4 freeform), key and value, in one
       scrolling list, read only, selectable and copyable. With several files selected, a key
       that differs shows as mixed.
-- [ ] **53.9 Asking before a rescan.** When a new build would drop an index part that a rescan
-      refills, before dropping anything a dialog says which part changed and why, in words
-      kept once with the part, and that every file is read again. It offers Rescan Now or
-      Quit. Quit leaves the index as it was and asks again at the next launch. An ADR.
-- [ ] **53.10 Tests.** The command's enabled rule and what it selects; a drag's pasteboard
+- [ ] **53.9 Tests.** The command's enabled rule and what it selects; a drag's pasteboard
       holds the URLs and a copy-only mask outside the app; the viewer over a fixture with three
       pictures; snapshot naming, rotation over a simulated 60 days, a gzip that opens as the
       same database, and a refused folder; a restore round trip; Extras over FLAC, MP4 and ID3
-      fixtures; the rescan dialog's Quit leaves the index untouched.
-- [ ] **Owner check:** each in the running app, with a snapshot restored, and the rescan
-      dialog on the next build that changes the tracks part.
+      fixtures.
+- [ ] **53.10 Open on Discogs.** A command, Open Discogs Release, in the track menu, the
+      palette and the View menu, with a shortcut free in the registry. It's enabled when the
+      selected track has a Discogs release id, and opens its page in the browser, the URL
+      from `ReleaseFields`'s one builder.
+- [ ] **53.11 A Discogs tab in Get Info**, shown when the files have a Discogs release id: the
+      release as the local catalog has it (label and catalog number, country, date, format,
+      genres, styles, credits, tracklist), read only and copyable, with Open on Discogs. A
+      release the catalog doesn't have, or no catalog, says so. Files from several releases
+      show the first and say how many.
+- [ ] **53.12 Shorter headers.** Track of Total's header reads "Track No.", and Disc of Total's
+      "Disc No."; the header menu and the smart playlist fields keep the full titles. Both
+      titles defined once, beside the others in `TrackColumnTitle`.
+- [ ] **53.13 Re-releases as albums of their own.** An album is its title and artist
+      (`albums_identity`), so a 2025 remaster titled as the original merges with it, two
+      track 1s interleaved. A setting, Separate Releases, adds the Discogs release id to an
+      album's identity when its tracks have one, so the two are two albums, each sorted by its
+      own year. Changing it rebuilds the albums part, with 51.32's dialog. An ADR.
+- [ ] **53.14 The palette keeps its query.** ⌘K opens with the last query, selected, so typing
+      replaces it and Return runs the same command again; ⌘K while open clears it. As Sublime
+      Text's.
+- [ ] **53.15 Tests.** 53.10's enabled rule and URL; the Discogs tab over a fixture catalog and
+      a missing release; the two headers; Separate Releases on and off over an original and a
+      remaster; the palette's query kept, replaced and cleared.
+- [ ] **Owner check:** each in the running app, with a snapshot restored, a remaster beside its
+      original, and the palette's kept query.
 
 ### 10. Web remote
 
