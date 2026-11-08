@@ -1730,15 +1730,20 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Shows what an import or export did in the status bar, and opens the Problems window on
     /// `rows` when there are any.
     private func finishPlaylistFile(_ summary: String, _ rows: [Problem]) {
-        status.playlistFileReport = rows
-        showStatus()
-        show(failure: summary)
-        if !rows.isEmpty { showProblems() }
+        finish(summary, rows, as: \.playlistFileReport)
     }
 
     /// Says what a drop of files added, and lists what it couldn't in the Problems window.
     func finishAdding(_ summary: String, _ rows: [Problem]) {
-        status.addedFilesReport = rows
+        finish(summary, rows, as: \.addedFilesReport)
+    }
+
+    /// Shows `summary` in the status bar, keeps `rows` as the problems list's `report`, in place
+    /// of the last one, and opens the Problems window on them when there are any.
+    private func finish(
+        _ summary: String, _ rows: [Problem], as report: WritableKeyPath<LibraryStatus, [Problem]>
+    ) {
+        status[keyPath: report] = rows
         showStatus()
         show(failure: summary)
         if !rows.isEmpty { showProblems() }
