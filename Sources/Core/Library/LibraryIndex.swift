@@ -136,6 +136,13 @@ public final class LibraryIndex {
         return aside
     }
 
+    /// Writes a compacted copy of the whole database to a new file at `url`, from one read
+    /// transaction, so it holds every commit up to its start, the write-ahead log's included,
+    /// and none after (ADR 0142). Fails when a file is at `url` already.
+    public func copy(to url: URL) throws {
+        try database.prepare("VACUUM INTO ?").run(url.path)
+    }
+
     private func prepareSchema(confirmRescan: ((RescanNotice) -> Bool)?) throws {
         if let confirmRescan, let notice = try rescanNotice(), !confirmRescan(notice) {
             throw LibraryError.rescanDeclined

@@ -153,6 +153,14 @@ let package = Package(
             linkerSettings: [.linkedLibrary("z")]
         ),
         .target(
+            name: "Snapshot",
+            dependencies: ["Library", "Log", "SQLite"],
+            path: "Sources/Core/Snapshot",
+            swiftSettings: strictSwift,
+            // The system library, which the SDK's zlib module declares.
+            linkerSettings: [.linkedLibrary("z")]
+        ),
+        .target(
             name: "Commands",
             dependencies: ["DisplayText", "KeyChord", "Log", "Receiver", "Settings"],
             path: "Sources/Core/Commands",
@@ -509,6 +517,11 @@ let package = Package(
         .testTarget(
             name: "TagWriterTests",
             dependencies: ["Fixtures", "Metadata", "TagWriter"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "SnapshotTests",
+            dependencies: ["Fixtures", "Library", "Settings", "Snapshot", "SQLite"],
             swiftSettings: strictSwift
         ),
         .testTarget(
