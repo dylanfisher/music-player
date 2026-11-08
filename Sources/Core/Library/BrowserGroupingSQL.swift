@@ -40,10 +40,11 @@ extension BrowserGrouping {
             return .table(
                 rows: artists, column: "group_artist_id", order: "sort_name", albums: false)
         case .albums:
-            // Releases of one title, which Separate Releases keeps apart, in year order.
+            // Releases of one title, which Separate Releases keeps apart, in year order, those
+            // with no year last as in Albums by Year.
             return .table(
-                rows: albumRows, column: "album_id", order: "sort_title, \(albumYear)",
-                albums: true)
+                rows: albumRows, column: "album_id",
+                order: "sort_title, \(albumYear) IS NULL, \(albumYear)", albums: true)
         case .albumsByYear:
             // Albums with no year come last.
             return .table(

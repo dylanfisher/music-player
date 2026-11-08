@@ -211,3 +211,29 @@ private func tablePaths(_ index: LibraryIndex, groupByAlbumArtist: Bool) throws 
         }, separateReleases: true)
     #expect(waived == [true])
 }
+
+@Test func releasesWithNoYearComeLastInBothAlbumOrders() throws {
+    let index = try LibraryIndex(at: libraryURL(), separateReleases: true)
+    try index.store(
+        [
+            Crafted(path: "/m/none/1.flac", album: "Album", custom: release(3)),
+            Crafted(path: "/m/new/1.flac", album: "Album", custom: release(2), date: "2025"),
+            Crafted(path: "/m/old/1.flac", album: "Album", custom: release(1), date: "1975"),
+            Crafted(path: "/m/b/1.flac", album: "B", date: "1960"),
+        ].map(\.scanned))
+    let folders = { (ids: [Int64]) in
+        try ids.map { id in
+            let track = try index.database.prepare(
+                "SELECT file_id FROM tracks WHERE album_id = ?"
+            ).map(binding: [id]) { row in try row.int64(0) }
+            return try #require(index.paths(ids: track).values.first).split(separator: "/")[1]
+        }
+    }
+    #expect(try folders(index.albums().map(\.id)) == ["old", "new", "none", "b"])
+    let byYear = try index.columnEntries(.albumsByYear, TrackFilter(), ignoring: []).map {
+        entry in
+        guard case .id(let id) = entry.value else { throw CocoaError(.featureUnsupported) }
+        return id
+    }
+    #expect(try folders(byYear) == ["b", "old", "new", "none"])
+}
