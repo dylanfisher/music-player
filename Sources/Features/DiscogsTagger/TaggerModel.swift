@@ -94,6 +94,8 @@ final class TaggerModel {
                 @escaping @Sendable (AlbumMatchProgress) -> Void
             ) async throws -> [AlbumMatch]
         var summaries: @Sendable ([Int]) async throws -> [ReleaseSummary]
+        /// A release as View Release shows it; nil when the catalog lacks it.
+        var release: @Sendable (Int) async throws -> ReleaseDetail?
         /// Reads the files by id, telling its last argument how many are done.
         var read:
             @Sendable ([Int64], @escaping @Sendable (Int) -> Void) async throws -> (
@@ -424,6 +426,11 @@ final class TaggerModel {
             album.match.candidates.map { ($0.releaseID, $0.tracklistScore) },
             uniquingKeysWith: { first, _ in first })
         return try await effects.summaries(ids).map { ($0, scores[$0.id]) }
+    }
+
+    /// Release `id` as View Release shows it; nil when the catalog lacks it.
+    func release(_ id: Int) async throws -> ReleaseDetail? {
+        try await effects.release(id)
     }
 
     /// What the mapping would change in the album's files, read now; nil for an album not

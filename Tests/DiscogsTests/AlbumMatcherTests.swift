@@ -648,8 +648,30 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
             ReleaseSummary(
                 id: 10, artist: "Persuader", title: "Stockholm", label: "Svek & Other",
                 catalogNumber: "SK 032", country: "Sweden", year: "2000",
-                format: "Vinyl (LP,Album)")
+                format: "Vinyl (LP,Album)", trackCount: 3)
         ])
+}
+
+/// View Release lists a release's rows as Discogs has them, an index track before its parts;
+/// its track count is the tracks a file can be, as the matcher counts them (51.37).
+@Test func aReleasesDetailListsItsRowsAndCountsItsTracksAsTheMatcherDoes() async throws {
+    let folder = try DumpFolder()
+    try folder.write(
+        "20261101",
+        releases: release(
+            10,
+            tracks: [
+                heading("Side A"), track("A1", "Östermalm", "4:45"),
+                index(
+                    "Suite", [track("A2a", "Part One", "1:00"), track("A2b", "Part Two", "2:00")]),
+            ]))
+    try folder.importCatalog()
+    let detail = try #require(try await releaseDetail(10, catalogAt: folder.catalog))
+    #expect(detail.summary.trackCount == 3)
+    #expect(detail.tracks.map(\.position) == ["", "A1", "", "A2a", "A2b"])
+    #expect(detail.tracks.map(\.title) == ["Side A", "Östermalm", "Suite", "Part One", "Part Two"])
+    #expect(detail.tracks.map(\.seconds) == [nil, 285, 180, 60, 120])
+    #expect(try await releaseDetail(99, catalogAt: folder.catalog) == nil)
 }
 
 /// The progress a run reported, from its thread.

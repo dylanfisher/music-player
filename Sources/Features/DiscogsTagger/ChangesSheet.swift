@@ -27,8 +27,14 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     /// What the user answered: the boxes left unticked, and whether to apply now; nil for
     /// Cancel.
     private(set) var result: (excluded: Set<TagChange.ID>, apply: Bool)?
+    /// The release the changes come from.
+    let releaseID: Int
 
-    init(set: AlbumChangeSet, excluded: Set<TagChange.ID>, title: String) {
+    /// The release's page on Discogs.
+    var discogsURL: URL { discogsPage(releaseID) }
+
+    init(set: AlbumChangeSet, excluded: Set<TagChange.ID>, title: String, releaseID: Int) {
+        self.releaseID = releaseID
         rows = Self.rows(set)
         writable = set.files.filter { $0.unwritable == nil }.count
         self.excluded = excluded
@@ -98,7 +104,8 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         let done = NSButton(title: "Done", target: self, action: #selector(done))
         let apply = NSButton(title: "Apply…", target: self, action: #selector(applyNow))
         apply.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [summary, NSView(), cancel, done, apply])
+        let open = NSButton(title: openOnDiscogsTitle, target: self, action: #selector(open))
+        let buttons = NSStackView(views: [summary, NSView(), open, cancel, done, apply])
         let page = NSStackView(views: [heading, scroll, buttons])
         page.orientation = .vertical
         page.alignment = .leading
@@ -193,6 +200,8 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         toggle(sender.tag)
         table.reloadData(forRowIndexes: [sender.tag], columnIndexes: [0])
     }
+
+    @objc private func open() { NSWorkspace.shared.open(discogsURL) }
 
     @objc private func cancel() { endSheet() }
 

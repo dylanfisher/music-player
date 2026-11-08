@@ -117,7 +117,9 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
             tags: TrackTags()),
         files(3, "1-2"),
     ])
-    let sheet = ChangesSheet(set: set, excluded: [], title: "Persuader – Stockholm")
+    let sheet = ChangesSheet(
+        set: set, excluded: [], title: "Persuader – Stockholm", releaseID: 10)
+    #expect(sheet.discogsURL.absoluteString == "https://www.discogs.com/release/10")
     #expect(sheet.rows.count == 4, "the release id once, a position per file, the DSD file")
     #expect(sheet.text(.fileName, 0) == "All 2 files")
     #expect(sheet.text(.written, 0) == "10")
@@ -143,7 +145,8 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     let summary = { (id: Int, country: String, format: String) in
         ReleaseSummary(
             id: id, artist: "Persuader", title: "Stockholm", label: "Svek",
-            catalogNumber: "SK \(id)", country: country, year: "2000", format: format)
+            catalogNumber: "SK \(id)", country: country, year: "2000", format: format,
+            trackCount: 3)
     }
     let sheet = ReleasesSheet(
         candidates: [
@@ -157,6 +160,63 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(sheet.shown.map(\.summary.id) == [3])
     sheet.filter([.label: "SK 2"])
     #expect(sheet.shown.map(\.summary.id) == [2])
+}
+
+/// Other Releases sorts by any column's header, numbers as numbers, keeping the sort through a
+/// filter, and shows each release's track count (51.37).
+@MainActor
+@Test func otherReleasesSortByEachColumnAndCountTracks() throws {
+    let summary = { (id: Int, artist: String, year: String, tracks: Int) in
+        ReleaseSummary(
+            id: id, artist: artist, title: "Title \(4 - id)", label: "Label \(id % 3)",
+            catalogNumber: "SK \(10 - id)", country: id == 2 ? "UK" : "Sweden", year: year,
+            format: "Format \(id)", trackCount: tracks)
+    }
+    let sheet = ReleasesSheet(
+        candidates: [
+            (summary(1, "Persuader", "2000", 12), nil), (summary(2, "abba", "1999", 9), 0.9),
+            (summary(3, "Cobra", "", 10), 0.95),
+        ],
+        chosen: 1, title: "Stockholm")
+    #expect(sheet.table.tableColumns.allSatisfy { $0.sortDescriptorPrototype != nil })
+    #expect(sheet.table.tableColumns.last?.title == "Tracks")
+    #expect(sheet.text(0, .tracks) == "12")
+    let order = { (column: TaggerColumn, ascending: Bool) in
+        sheet.sort(by: column, ascending: ascending)
+        return sheet.shown.map(\.summary.id)
+    }
+    #expect(order(.tracks, true) == [2, 3, 1], "9 before 10 before 12")
+    #expect(order(.tracks, false) == [1, 3, 2])
+    #expect(order(.score, true) == [2, 3, 1], "the chosen release's fit above any score")
+    #expect(order(.year, true) == [3, 2, 1], "no year first")
+    #expect(order(.artist, true) == [2, 3, 1], "ignoring case")
+    #expect(order(.title, true) == [3, 2, 1])
+    #expect(order(.label, true) == [3, 1, 2])
+    #expect(order(.catalogNumber, true) == [3, 2, 1])
+    #expect(order(.country, false) == [2, 1, 3], "equal values keep the found order")
+    #expect(order(.format, false) == [3, 2, 1])
+    sheet.filter([.country: "swe"])
+    #expect(sheet.shown.map(\.summary.id) == [3, 1], "still by format, descending")
+}
+
+/// View Release shows the release from the catalog, headings included, and Open on Discogs
+/// opens its page from the one URL builder.
+@MainActor
+@Test func viewReleaseShowsTheTracklistAndItsDiscogsPage() async throws {
+    let tagger = await model(
+        Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    let detail = try #require(try await tagger.release(42))
+    let sheet = ViewReleaseSheet(release: detail)
+    #expect(sheet.heading.stringValue == "Persuader – Release 42")
+    #expect(sheet.line.stringValue == "Svek · SK 42 · CD · Sweden · 2000")
+    #expect(sheet.numberOfRows(in: sheet.table) == 3)
+    #expect(
+        (0..<3).map { row in
+            [TaggerColumn.position, .title, .releaseTime].map { sheet.text($0, row) }
+        } == [["", "Side A", ""], ["A1", "Östermalm", "4:45"], ["A2", "Gamla Stan", "6:10"]])
+    #expect(sheet.discogsURL.absoluteString == releaseURL(42))
+    #expect(releaseURL(42) == "https://www.discogs.com/release/42")
+    try snapshot(try #require(sheet.window), "discogs-view-release")
 }
 
 @MainActor
@@ -379,7 +439,8 @@ private final class Checks: @unchecked Sendable {
     let tagger = TaggerModel(
         effects: .init(
             albums: { [] }, reviews: { [:] }, review: { _, _ in },
-            match: { _, _, _, _ in [] }, summaries: { _ in [] }, read: { _, _ in ([], []) },
+            match: { _, _, _, _ in [] }, summaries: { _ in [] }, release: { _ in nil },
+            read: { _, _ in ([], []) },
             checkCatalog: {
                 if checks.next() > 1 { gate.wait() }
                 return readyCatalog

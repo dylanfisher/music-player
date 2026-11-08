@@ -144,7 +144,7 @@ struct ReleaseFields {
 
 /// The Discogs page of release `id`: the one address the release URL tag and every Open on
 /// Discogs use.
-func releaseURL(_ id: Int) -> String { discogsURL("release", id) }
+public func releaseURL(_ id: Int) -> String { discogsURL("release", id) }
 
 /// A Discogs page's address, as YATE writes the `DISCOGS_*_URL` keys.
 private func discogsURL(_ kind: String, _ id: Int) -> String {

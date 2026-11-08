@@ -52,6 +52,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let reasonsLine = NSTextField(labelWithString: "")
     let otherReleasesButton = NSButton(title: "Other Releases…", target: nil, action: nil)
     let changesButton = NSButton(title: "View Changes…", target: nil, action: nil)
+    let discogsButton = NSButton(title: openOnDiscogsTitle, target: nil, action: nil)
     let rejectButton = NSButton(title: "Reject", target: nil, action: nil)
     /// The row of buttons under the tracklists, and the one under the album list and them.
     let reviewButtons = NSStackView()
@@ -73,6 +74,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     private(set) var rows: [TrackComparison] = []
     /// An open sheet's controller, held while it shows.
     private var sheet: NSWindowController?
+    /// View Release…'s sheet, over Other Releases…, held while it shows.
+    private var releaseSheet: ViewReleaseSheet?
 
     init(model: TaggerModel) {
         self.model = model
@@ -114,6 +117,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             (startOverButton, #selector(startImportOver)),
             (otherReleasesButton, #selector(showOtherReleases)),
             (changesButton, #selector(showChanges)), (rejectButton, #selector(toggleRejected)),
+            (discogsButton, #selector(openOnDiscogs)),
             (applyButton, #selector(applyAll)),
         ] {
             button.bezelStyle = .rounded
@@ -193,6 +197,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         reasonsLine.lineBreakMode = .byTruncatingTail
         revealButton.isHidden = true
         reviewButtons.setViews([otherReleasesButton, changesButton, rejectButton], in: .leading)
+        reviewButtons.setViews([discogsButton], in: .trailing)
         reviewButtons.spacing = 8
         let detail = NSStackView(views: [
             releaseTitle, releaseLine, reasonsLine, tracks, reviewButtons,
@@ -369,6 +374,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         let reviewing = album != nil && !model.isBusy
         otherReleasesButton.isEnabled = reviewing
         changesButton.isEnabled = reviewing && summary != nil && album?.isRejected == false
+        discogsButton.isEnabled = summary != nil
         rejectButton.isEnabled = reviewing
         rejectButton.title = album?.isRejected == true ? "Accept" : "Reject"
     }
@@ -573,6 +579,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             let releases = ReleasesSheet(
                 candidates: candidates, chosen: album.match.releaseID,
                 title: albumTitle(album.album))
+            releases.viewRelease = { [self, weak releases] id in
+                guard let over = releases?.window else { return }
+                viewRelease(id, over: over)
+            }
             present(releases, over: window) { [self] in
                 guard let id = releases.result, id != album.match.releaseID else { return }
                 Task { await model.choose(id, for: album.id) }
@@ -580,8 +590,35 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         }
     }
 
+    /// Shows release `id` over Other Releases…, which stays open under it.
+    private func viewRelease(_ id: Int, over sheetWindow: NSWindow) {
+        guard releaseSheet == nil else { return }
+        Task {
+            let detail: ReleaseDetail?
+            do {
+                detail = try await model.release(id)
+            } catch {
+                return alert("The release couldn't be read", ["\(error)"])
+            }
+            guard let detail else {
+                return alert("The release couldn't be read", ["The catalog has no release \(id)."])
+            }
+            let shown = ViewReleaseSheet(release: detail)
+            guard let window = shown.window else { return }
+            releaseSheet = shown
+            sheetWindow.beginSheet(window) { [self] _ in releaseSheet = nil }
+        }
+    }
+
+    @objc private func openOnDiscogs() {
+        guard let id = model.selected?.match.releaseID else { return }
+        NSWorkspace.shared.open(discogsPage(id))
+    }
+
     @objc private func showChanges() {
-        guard let window, let album = model.selected, sheet == nil else { return }
+        guard let window, let album = model.selected, let releaseID = album.match.releaseID,
+            sheet == nil
+        else { return }
         Task {
             let set: AlbumChangeSet
             let problems: [String]
@@ -595,7 +632,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 return alert("\(problems.count) of the album's files can't be read", problems)
             }
             let changes = ChangesSheet(
-                set: set, excluded: album.excluded, title: albumTitle(album.album))
+                set: set, excluded: album.excluded, title: albumTitle(album.album),
+                releaseID: releaseID)
             present(changes, over: window) { [self] in
                 guard let answer = changes.result else { return }
                 model.setExcluded(answer.excluded, for: album.id)

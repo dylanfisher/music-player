@@ -75,6 +75,17 @@ extension NotExactReason {
     }
 }
 
+/// The title of every button that opens a release's page.
+let openOnDiscogsTitle = "Open on Discogs"
+
+/// The Discogs page of release `id`, from the one builder the release URL tag uses.
+func discogsPage(_ id: Int) -> URL {
+    guard let url = URL(string: releaseURL(id)) else {
+        preconditionFailure("\(releaseURL(id)) isn't a URL")
+    }
+    return url
+}
+
 extension TaggerModel.Source {
     var title: String {
         switch self {
@@ -139,7 +150,7 @@ enum TaggerColumn: String {
     // View Changes.
     case include, fileName, field, tag, current, written
     // Other Releases.
-    case score, artist, title, label, catalogNumber, country, year, format
+    case score, artist, title, label, catalogNumber, country, year, format, tracks
     // Field Mapping.
     case discogsField, mode, targets, join, template
 
@@ -169,6 +180,7 @@ enum TaggerColumn: String {
         case .country: DiscogsField.country.title
         case .year: TrackColumn.year.title
         case .format: DiscogsField.media.title
+        case .tracks: "Tracks"
         case .mode: "Mode"
         case .targets: "Tags"
         case .join: "Join"

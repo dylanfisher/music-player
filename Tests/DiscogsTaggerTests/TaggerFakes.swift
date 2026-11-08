@@ -150,8 +150,21 @@ func model(
                 ids.map {
                     ReleaseSummary(
                         id: $0, artist: "Persuader", title: "Release \($0)", label: "Svek",
-                        catalogNumber: "SK \($0)", country: "Sweden", year: "2000", format: "CD")
+                        catalogNumber: "SK \($0)", country: "Sweden", year: "2000", format: "CD",
+                        trackCount: 3)
                 }
+            },
+            release: { id in
+                ReleaseDetail(
+                    summary: ReleaseSummary(
+                        id: id, artist: "Persuader", title: "Release \(id)", label: "Svek",
+                        catalogNumber: "SK \(id)", country: "Sweden", year: "2000", format: "CD",
+                        trackCount: 2),
+                    tracks: [
+                        ReleaseDetail.Track(position: "", title: "Side A", seconds: nil),
+                        ReleaseDetail.Track(position: "A1", title: "Östermalm", seconds: 285),
+                        ReleaseDetail.Track(position: "A2", title: "Gamla Stan", seconds: 370),
+                    ])
             },
             read: { ids, progress in
                 seen.read(ids)

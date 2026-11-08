@@ -56,6 +56,7 @@ public final class DiscogsTagger {
                         $0, catalogAt: catalog, choosing: $1, skippingVideo: $2, progress: $3)
                 },
                 summaries: { try await releaseSummaries($0, catalogAt: catalog) },
+                release: { try await releaseDetail($0, catalogAt: catalog) },
                 read: { ids, progress in
                     let paths = try await reader.paths(ids: ids)
                     let files = ids.compactMap { id in paths[id].map { (id: id, path: $0) } }
