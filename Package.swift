@@ -282,9 +282,8 @@ let package = Package(
         .executableTarget(
             name: "Fuzz",
             dependencies: [
-                "Fixtures", "FuzzCoverage", "HALOutput", "Library", "LocalNetwork", "Log",
-                "Metadata",
-                "Receiver", "SQLite", "Settings", "TagWriter", "UPnP",
+                "Discogs", "Fixtures", "FuzzCoverage", "HALOutput", "Library", "LocalNetwork",
+                "Log", "Metadata", "Receiver", "SQLite", "Settings", "TagWriter", "UPnP",
             ],
             path: "Sources/Tools/Fuzz",
             swiftSettings: strictSwift
