@@ -30,12 +30,10 @@ public final class LibraryIndex {
 
     /// Where the file SQLite couldn't read was moved, when this open moved it.
     public private(set) var movedAside: URL?
-    /// The stored parts this open dropped and made again, empty when it rebuilt none. In
-    /// memory only: a quit in the middle of the rescan reads as a plain scan at the next
-    /// launch (ADR 0136).
-    private(set) var rebuiltParts: [SchemaPart] = []
-    /// Whether this open rebuilt the index, which the scans then fill again.
-    public var rebuiltIndex: Bool { rebuiltParts.contains(.index) }
+    /// Whether this open dropped the index a library held and made it again, which the scans
+    /// then fill. In memory only: a quit in the middle of the rescan reads as a plain scan at
+    /// the next launch (ADR 0136).
+    public private(set) var rebuiltIndex = false
     /// Unreadable files kept beside the library; older ones are deleted when another is moved.
     static let keptUnreadableFiles = 3
     /// The wall clock sync events are stamped by, in milliseconds since 1970; tests set their
@@ -163,10 +161,8 @@ public final class LibraryIndex {
     /// ask: no part a rescan refills is stored in an earlier shape, or the stats are rebuilt
     /// too. Reads only, so a declined rescan leaves the file as it was.
     private func rescanNotice() throws -> RescanNotice? {
-        let identityTables = try database.prepare(
-            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?"
-        ).map(schemaIdentityTable) { try $0.int(0) }
-        guard identityTables.first == 1 else { return nil }
+        let tables = try database.prepare(tableNamesSQL).map { try $0.text(0) }
+        guard tables.contains(schemaIdentityTable) else { return nil }
         let stored = try storedParts()
         let rebuilt = partsToRebuild(stored: stored)
         guard !rebuilt.contains(.stats) else { return nil }
@@ -231,7 +227,7 @@ public final class LibraryIndex {
                 try database.execute(part.sql)
                 try identity.run(part.rawValue, part.sql)
             }
-            rebuiltParts = rebuilt.filter { stored[$0.rawValue] != nil }
+            rebuiltIndex = rebuilt.contains(.index) && stored[SchemaPart.index.rawValue] != nil
         }
     }
 

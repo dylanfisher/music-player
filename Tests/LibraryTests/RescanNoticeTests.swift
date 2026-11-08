@@ -43,7 +43,7 @@ private func olderLibrary() throws -> URL {
     }
     #expect(askedAgain)
     let index = try LibraryIndex(at: url, confirmRescan: { _ in true })
-    #expect(index.rebuiltParts == [.index, .scans])
+    #expect(index.rebuiltIndex)
     #expect(try index.trackCount() == 0)
     #expect(
         try index.database.prepare("SELECT count(*) FROM ratings").map { try $0.int(0) } == [1])
@@ -61,7 +61,7 @@ private func olderLibrary() throws -> URL {
             return false
         })
     #expect(!asked)
-    #expect(new.rebuiltParts.isEmpty)
+    #expect(!new.rebuiltIndex)
     #expect(
         try LibraryIndex(
             at: url,
@@ -70,12 +70,12 @@ private func olderLibrary() throws -> URL {
                 return false
             }
         )
-        .rebuiltParts.isEmpty)
+        .rebuiltIndex == false)
     #expect(!asked)
 
     // Without a question, an open rebuilds as before.
     let older = try olderLibrary()
-    #expect(try LibraryIndex(at: older).rebuiltParts == [.index, .scans])
+    #expect(try LibraryIndex(at: older).rebuiltIndex)
 }
 
 @Test func aStatsRebuildDoesntAskAndAPartARescanDoesntRefillDoesnt() throws {
@@ -91,7 +91,7 @@ private func olderLibrary() throws -> URL {
                 return false
             }
         )
-        .rebuiltParts == [.measures])
+        .rebuiltIndex == false, "a cache, which no rescan refills")
     #expect(!asked)
 
     try LibraryIndex(at: url).database.execute(
@@ -103,7 +103,7 @@ private func olderLibrary() throws -> URL {
             return false
         })
     #expect(!asked)
-    #expect(rebuilt.rebuiltParts.contains(.stats))
+    #expect(rebuilt.rebuiltIndex, "rebuilt with the stats")
     #expect(try rebuilt.discards().count == 1)
 }
 
