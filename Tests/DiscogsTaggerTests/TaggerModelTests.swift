@@ -202,6 +202,23 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
 }
 
 @MainActor
+@Test func viewChangesSaysWhenAFileIsGone() async throws {
+    let seen = Seen()
+    let tagger = await model(
+        seen, albums: [one],
+        matches: { album, _ in
+            match(album, release(10, album.title, titles: stockholm), tier: .exact)
+        },
+        files: { ids in
+            [file(one, 0)].filter { ids.contains($0.id) }
+        })
+    tagger.analyze()
+    await tagger.finished()
+    let (_, problems) = try #require(try await tagger.changeSet(for: one.id))
+    #expect(problems == ["\(one.tracks.count - 1) files no longer in the library"])
+}
+
+@MainActor
 @Test func stoppingApplysReadWritesNothing() async throws {
     let seen = Seen()
     let gate = Gate()

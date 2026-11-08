@@ -357,7 +357,13 @@ final class TaggerModel {
     /// shown.
     func changeSet(for albumID: Int64) async throws -> (AlbumChangeSet, problems: [String])? {
         guard let album = albums.first(where: { $0.id == albumID }) else { return nil }
-        let (files, problems) = try await effects.read(album.album.tracks.map(\.fileID)) { _ in }
+        let (files, read) = try await effects.read(album.album.tracks.map(\.fileID)) { _ in }
+        var problems = read
+        // A file moved or removed since the scan is in neither list; Apply refuses such an album.
+        let missing = album.album.tracks.count - files.count - read.count
+        if missing > 0 {
+            problems.append("\(missing) file\(missing == 1 ? "" : "s") no longer in the library")
+        }
         return (Discogs.changeSet(for: files, match: album.match, mapping: mapping), problems)
     }
 
