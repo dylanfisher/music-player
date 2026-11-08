@@ -239,3 +239,20 @@ private struct Refused: Error {}
     #expect(!left.contains { $0.hasPrefix("library.sqlite.restoring") })
     #expect(!left.contains("restore.pending"))
 }
+
+/// A second Restore… that fails takes the first's marker with it, so the next launch doesn't
+/// say a restore was made.
+@Test func aFailedSecondRestoreLeavesNoMarkerBehind() throws {
+    let (library, before) = try preparedRestore()
+    let damaged = library.snapshotFolder.appendingPathComponent(
+        SnapshotName(of: Date().addingTimeInterval(-2 * 86_400)).fileName)
+    try Data("not gzip".utf8).write(to: damaged)
+    #expect(throws: SnapshotError.self) {
+        try prepareRestore(
+            of: damaged, databaseURL: library.databaseURL,
+            snapshotFolder: library.snapshotFolder, now: Date())
+    }
+    #expect(!(try names(in: library.directory).contains("restore.pending")))
+    #expect(try applyPendingRestore(databaseURL: library.databaseURL) == .none)
+    #expect(try counts(library.index()).plays == before.plays + 1)
+}

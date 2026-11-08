@@ -16,6 +16,9 @@ public func prepareRestore(
     of snapshot: URL, databaseURL: URL, snapshotFolder: URL, now: Date
 ) throws {
     let restoring = restoringFileURL(databaseURL)
+    // An earlier restore's marker goes first: left beside no unpacked file, it would read as
+    // a restore made at the next launch.
+    try removeIfThere(restoreMarkerURL(databaseURL))
     for suffix in ["", Database.walSuffix, Database.shmSuffix] {
         try removeIfThere(URL(fileURLWithPath: restoring.path + suffix, isDirectory: false))
     }
