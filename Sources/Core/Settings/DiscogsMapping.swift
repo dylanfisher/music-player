@@ -51,6 +51,16 @@ public struct DiscogsMapping: SettingValue {
         return mapping
     }
 
+    /// This mapping with every field that fills only empty tags replacing them instead: a
+    /// staged download's tags are its uploader's, so none is kept over the release's (ADR 0146).
+    public func overwriting() -> DiscogsMapping {
+        var mapping = self
+        for field in DiscogsField.allCases where mapping[field].mode == .fillEmpty {
+            mapping[field].mode = .replace
+        }
+        return mapping
+    }
+
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: FieldKey.self)
         var rules: [DiscogsField: DiscogsFieldRule] = [:]

@@ -4,6 +4,7 @@ import Artwork
 import Commands
 import Discogs
 import DiscogsTagger
+import Downloads
 import HALOutput
 import KeyChord
 import Library
@@ -134,6 +135,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) lazy var tagEditing = makeTagEditing()
     /// The Discogs tagger, once first shown.
     var discogsTagger: DiscogsTagger?
+    /// The tagger open on a staged download's discrepancy, while it's open.
+    var stagedTagger: DiscogsTagger?
+    /// The start of the downloads, waiting for this Mac's name; a settings change replaces it.
+    var downloadsStarting: Task<Void, Never>?
+    /// Soulseek downloads, which run while the service is set (phase 54).
+    private(set) lazy var downloads = makeDownloads()
     private(set) var dispatcher: CommandDispatcher?
     /// Runs the tool's requests and links, once playback is ready.
     var scriptRouter: ScriptRouter?
@@ -417,6 +424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startScripting()
         applyReceiverSetting()
         startWatching(settings)
+        applyDownloadsSettings()
         showLibraryAnalysisStanding()
         shareChanges = ShareChangeObserver { [weak self] in self?.watcher?.sharesMayHaveMoved() }
         if let snapshotURL {
@@ -452,9 +460,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.settingsWindow?.barBuilderWindow(AppSettings().headerStatusLayout.key)
                 }
             case .toolbarSheet: { [weak self] in self?.window?.window.attachedSheet }
+            case .downloads: { [weak self] in self?.downloads.window }
             }
         // The palette lists its items, and the tag editor reads its files, first.
-        let wait = snapshotOf == .main ? 0 : snapshotOf == .tags ? 3.0 : 1.0
+        // The downloads wait for their first poll too.
+        let wait =
+            snapshotOf == .main ? 0 : snapshotOf == .tags || snapshotOf == .downloads ? 3.0 : 1.0
         switch snapshotOf {
         case .main: break
         case .health: dispatcher?.run(.checkHealth)
@@ -476,6 +487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .headerStatus:
             settingsWindowController()?.showBarBuilder(AppSettings().headerStatusLayout.key)
         case .toolbarSheet: toolbar?.toolbar.runCustomizationPalette(nil)
+        case .downloads: dispatcher?.run(.showDownloads)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
             do {
@@ -521,6 +533,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         volumeKeyTap?.stop()
         scriptServer?.stop()
         receiver?.stop()
+        downloadsStarting?.cancel()
+        downloads.stop()
         window?.saveToolbarVisibility()
         saver?.flush()
         watcher?.stop()
@@ -985,6 +999,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         \.syncFolder, to: SyncFolder(path: folder.path, share: folder.share))
                 } catch {
                     self?.fail("Couldn't sync through \(url.standardizedFileURL.path)", error)
+                }
+            }
+        }
+    }
+
+    /// Asks for the staging folder, stored by share when it's on one, as a watched folder is.
+    func chooseStagingFolder() {
+        guard let settings else { return }
+        let panel = stagingFolderPanel()
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Task {
+                let found = await blockingFileWork { Result { try folderToWatch(at: url) } }
+                do {
+                    let folder = try found.get()
+                    try settings.set(
+                        \.stagingFolder, to: StagingFolder(path: folder.path, share: folder.share))
+                } catch {
+                    self?.fail("Couldn't stage downloads in \(url.standardizedFileURL.path)", error)
                 }
             }
         }

@@ -34,7 +34,7 @@ private func model() -> (GeneralModel, () -> [String: Any]) {
 @MainActor
 private func actions(
     openConfigFile: @escaping () -> Void = {}, chooseSyncFolder: @escaping () -> Void = {},
-    openSyncFolder: @escaping () -> Void = {},
+    openSyncFolder: @escaping () -> Void = {}, chooseStagingFolder: @escaping () -> Void = {},
     addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in },
     rescanNow: @escaping () -> Void = {}, rescanFolders: @escaping ([Int]) -> Void = { _ in },
     outputs: @escaping () -> [OutputOption] = { [] },
@@ -49,7 +49,8 @@ private func actions(
 ) -> SettingsActions {
     SettingsActions(
         openConfigFile: openConfigFile, revealConfigFile: {}, copyDefaultConfig: {},
-        chooseSyncFolder: chooseSyncFolder, openSyncFolder: openSyncFolder, addFolder: addFolder,
+        chooseSyncFolder: chooseSyncFolder, openSyncFolder: openSyncFolder,
+        chooseStagingFolder: chooseStagingFolder, addFolder: addFolder,
         removeFolder: removeFolder, rescanNow: rescanNow,
         rescanFolders: rescanFolders, outputs: outputs,
         searchOutputs: {}, chooseOutput: chooseOutput, showHealth: showHealth,
@@ -89,7 +90,7 @@ private var appearanceChoices: [SettingKind.Choice] {
         schema.discogsDumpsFolder.key, schema.discogsCatalogPath.key, schema.discogsToken.key,
         schema.discogsMapping.key, schema.discogsSavedMappings.key,
         schema.discogsKeepExistingValues.key, schema.discogsSkipVideo.key,
-        schema.discogsFillSortArtist.key, schema.discogsArtwork.key,
+        schema.discogsFillSortArtist.key, schema.discogsArtwork.key, schema.recommenderToken.key,
     ]
     #expect(
         model.rows.map(\.key) == schema.settings.map(\.key).filter { !inTheFileOnly.contains($0) })
@@ -291,7 +292,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let sections = model.sections
     #expect(
         sections.map(\.section) == [
-            .output, .playCounts, .library, .sync, .receiver, .folderChanges, .libraryFolder,
+            .output, .playCounts, .library, .sync, .receiver, .downloads, .folderChanges,
+            .libraryFolder,
             .networkFolders,
             .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
         ])
@@ -332,7 +334,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
     #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
     let listed = sections.flatMap(\.rows).map(\.key)
-    #expect(listed.count == AppSettings().settings.count - 14)
+    #expect(listed.count == AppSettings().settings.count - 15)
     #expect(!listed.contains(AppSettings().resume.key))
     #expect(!listed.contains(AppSettings().browserGroupings.key))
     #expect(!listed.contains(AppSettings().watchedFolders.key))
@@ -991,6 +993,34 @@ private func visibleLabels(in view: NSView) -> [String] {
     window.layoutIfNeeded()
     #expect(pane.view.frame.height == closed)
     #expect(window.frame.maxY == top)
+}
+
+@MainActor @Test func theServiceSettingsSitInDownloadsWithoutTheToken() throws {
+    let schema = AppSettings()
+    nonisolated(unsafe) var values: [String: Any] = [:]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { values[$0] },
+        set: { key, json in values[key] = json }, isBlocked: { false })
+    #expect(
+        model.sections.first { $0.section == .downloads }?.rows.map(\.key) == [
+            schema.recommenderAddress.key, schema.recommenderPort.key, schema.stagingFolder.key,
+        ])
+    #expect(!model.rows.contains { $0.key == schema.recommenderToken.key })
+    #expect(model.rows.first { $0.key == schema.stagingFolder.key }?.control == .stagingFolder)
+
+    var chosen = 0
+    let pane = GeneralPane(
+        model: model, configPath: "/tmp/config.json",
+        actions: actions(chooseStagingFolder: { chosen += 1 }), sections: [.downloads])
+    #expect(labels(in: pane.view).contains(noValueText))
+    try click(#require(button("Choose…", in: pane.view)))
+    #expect(chosen == 1)
+    values[schema.stagingFolder.key] = ["share": "smb://nas/music", "path": "staging"]
+    pane.reload()
+    #expect(labels(in: pane.view).contains("staging"))
+    #expect(button("Change…", in: pane.view) != nil)
+    try click(#require(button("Clear", in: pane.view)))
+    #expect(values[schema.stagingFolder.key] is NSNull)
 }
 
 /// The section under `view` whose heading is `title`: a stack of the heading and its box.

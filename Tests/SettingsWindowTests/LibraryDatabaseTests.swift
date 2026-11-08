@@ -44,7 +44,8 @@ private func settingsPane(
         model: model, configPath: "/tmp/config.json",
         actions: SettingsActions(
             openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {},
-            chooseSyncFolder: {}, openSyncFolder: {}, addFolder: {}, removeFolder: { _ in },
+            chooseSyncFolder: {}, openSyncFolder: {}, chooseStagingFolder: {}, addFolder: {},
+            removeFolder: { _ in },
             rescanNow: {}, rescanFolders: { _ in }, outputs: { [] }, searchOutputs: {},
             chooseOutput: { _ in }, showHealth: {}, libraryDatabase: { database },
             revealIndex: revealIndex, backUpNow: backUpNow, restoreSnapshot: restore))

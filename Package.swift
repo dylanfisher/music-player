@@ -87,7 +87,9 @@ let package = Package(
         ),
         .target(
             name: "Library",
-            dependencies: ["DisplayText", "Log", "Metadata", "Settings", "SQLite"],
+            dependencies: [
+                "DisplayText", "Log", "Metadata", "Recommender", "Settings", "SQLite",
+            ],
             path: "Sources/Core/Library",
             swiftSettings: strictSwift
         ),
@@ -122,6 +124,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Recommender",
+            dependencies: ["DisplayText", "LocalNetwork", "Settings"],
+            path: "Sources/Core/Recommender",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Settings",
             dependencies: ["KeyChord", "LocalNetwork", "Log", "Metadata", "Playback", "TagWriter"],
             path: "Sources/Core/Settings",
@@ -144,8 +152,8 @@ let package = Package(
         .target(
             name: "Discogs",
             dependencies: [
-                "Artwork", "DisplayText", "HTTPSClient", "Library", "Log", "Metadata", "SQLite",
-                "Settings", "TagWriter",
+                "Artwork", "DisplayText", "HTTPSClient", "Library", "Log", "Metadata",
+                "Recommender", "SQLite", "Settings", "TagWriter",
             ],
             path: "Sources/Core/Discogs",
             swiftSettings: strictSwift,
@@ -205,9 +213,19 @@ let package = Package(
         .target(
             name: "DiscogsTagger",
             dependencies: [
-                "Discogs", "DisplayText", "Library", "Log", "Metadata", "Settings", "TagWriter",
+                "Discogs", "DisplayText", "Library", "Log", "Metadata", "Recommender", "Settings",
+                "TagWriter",
             ],
             path: "Sources/Features/DiscogsTagger",
+            swiftSettings: strictSwift
+        ),
+        .target(
+            name: "Downloads",
+            dependencies: [
+                "Analysis", "Discogs", "DisplayText", "Library", "Log", "Metadata", "Recommender",
+                "Settings", "TagWriter",
+            ],
+            path: "Sources/Features/Downloads",
             swiftSettings: strictSwift
         ),
         .target(
@@ -241,11 +259,11 @@ let package = Package(
             name: "MusicPlayer",
             dependencies: [
                 "Analysis", "Artwork", "Commands", "Discogs", "DiscogsTagger", "DisplayText",
-                "HALOutput", "KeyChord", "Library",
+                "Downloads", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
-                "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Scripting",
-                "SQLite", "Settings", "SettingsWindow", "Snapshot", "Spectrum", "TagEditor",
-                "TagWriter", "UPnP", "UPnPOutput",
+                "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Recommender",
+                "Scripting", "SQLite", "Settings", "SettingsWindow", "Snapshot", "Spectrum",
+                "TagEditor", "TagWriter", "UPnP", "UPnPOutput",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -298,7 +316,8 @@ let package = Package(
             name: "Fuzz",
             dependencies: [
                 "Discogs", "Fixtures", "FuzzCoverage", "HALOutput", "Library", "LocalNetwork",
-                "Log", "Metadata", "Receiver", "SQLite", "Settings", "TagWriter", "UPnP",
+                "Log", "Metadata", "Receiver", "Recommender", "SQLite", "Settings", "TagWriter",
+                "UPnP",
             ],
             path: "Sources/Tools/Fuzz",
             swiftSettings: strictSwift
@@ -341,6 +360,7 @@ let package = Package(
             dependencies: [
                 // DiscogsImport, built for the tests that kill it partway through an import.
                 "Discogs", "DiscogsImport", "Fixtures", "HTTPSClient", "Library", "Metadata",
+                "Recommender",
                 "SQLite", "Settings", "TagWriter",
             ],
             resources: [.copy("Fixtures")],
@@ -349,8 +369,16 @@ let package = Package(
         .testTarget(
             name: "DiscogsTaggerTests",
             dependencies: [
-                "Discogs", "DiscogsTagger", "Fixtures", "Library", "Metadata", "Settings",
-                "TagWriter",
+                "Discogs", "DiscogsTagger", "Fixtures", "Library", "Metadata", "Recommender",
+                "Settings", "TagWriter",
+            ],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "DownloadsTests",
+            dependencies: [
+                "Analysis", "Discogs", "Downloads", "Fixtures", "Library", "LocalNetwork",
+                "Recommender",
             ],
             swiftSettings: strictSwift
         ),
@@ -396,7 +424,9 @@ let package = Package(
         ),
         .testTarget(
             name: "LibraryTests",
-            dependencies: ["Fixtures", "Library", "Metadata", "Settings", "SQLite", "TagWriter"],
+            dependencies: [
+                "Fixtures", "Library", "Metadata", "Recommender", "Settings", "SQLite", "TagWriter",
+            ],
             exclude: ["Crashes"],
             swiftSettings: strictSwift
         ),
@@ -532,6 +562,12 @@ let package = Package(
         .testTarget(
             name: "ReceiverTests",
             dependencies: ["Fixtures", "LocalNetwork", "Receiver", "UPnP"],
+            resources: [.copy("Fixtures")],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "RecommenderTests",
+            dependencies: ["Fixtures", "LocalNetwork", "Recommender", "Settings"],
             resources: [.copy("Fixtures")],
             swiftSettings: strictSwift
         ),

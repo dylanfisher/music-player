@@ -1,0 +1,15 @@
+{
+  "snapshot": {
+    "release_id": 4242,
+    "artist": "Made-Up Artist",
+    "title": "Made-Up Album",
+    "year": 1999,
+    "tracklists": [
+      [{"position": "1", "title": "First Song", "seconds": 245},
+       {"position": "2", "title": "Second Song", "seconds": null}]
+    ]
+  },
+  "format_policy": "flac",
+  "source": "manual",
+  "upgrade": null
+}

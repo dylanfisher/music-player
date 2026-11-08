@@ -20,6 +20,33 @@ enum CatalogKey {
         return String(folded)
     }
 
+    /// The key the matcher compares titles by, music-recommender's too (ADR 0148): `fold`'s
+    /// steps, but with `LatinFold`'s letters mapped first, so `æ`, `ø` and `ł` fold as the
+    /// service folds them. Foundation's case and accent folding then handles every other
+    /// character, so this is at least as lenient as `fold` for all scripts. The service
+    /// lowercases the rest but keeps its marks, so it is the stricter side outside the table
+    /// ("Việt" and "Viet" match here only).
+    static func matchKey(_ text: String, title: Bool = false) -> String {
+        var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = replacing(suffix, in: text)
+        if title { text = replacing(editionWords, in: text) }
+        var mapped = ""
+        for scalar in text.unicodeScalars {
+            if let base = LatinFold.bases[scalar] {
+                mapped += base
+            } else {
+                mapped.unicodeScalars.append(scalar)
+            }
+        }
+        mapped = mapped.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            .replacingOccurrences(of: "&", with: " and ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if mapped.hasPrefix("the ") { mapped.removeFirst(4) }
+        var folded = String.UnicodeScalarView()
+        folded.append(contentsOf: mapped.unicodeScalars.filter(isKept))
+        return String(folded)
+    }
+
     /// `name` without the "(2)" Discogs adds to tell artists or labels of one name apart.
     static func withoutNumberSuffix(_ name: String) -> String { replacing(suffix, in: name) }
 
@@ -79,7 +106,7 @@ enum CatalogKey {
     /// Discogs's suffix that tells apart artists or labels of the same name: "Soleil (2)".
     private static let suffix = regex(#"\s*\(\d+\)$"#)
     /// Words that name an edition of an album rather than the album.
-    private static let editionWordList =
+    static let editionWordList =
         #"remaster\w*|deluxe|edition|sacd|expanded|anniversary|reissue|bonus|mono|stereo|special|limited|collector'?s|hi-?res|24[- ]?bit|\d+ ?khz|cd ?\d+|dis[ck] ?\d+"#
     /// A bracketed part of a title naming an edition rather than the album.
     private static let editionWords = regex(

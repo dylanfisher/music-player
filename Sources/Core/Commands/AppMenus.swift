@@ -105,7 +105,7 @@ public enum AppMenus {
                     .command(.analyzeLibrary), .command(.pauseLibraryAnalysis),
                     .command(.pauseScan), .command(.resumeScan),
                     .command(.showStats), .command(.showYearInReview),
-                    .command(.showDiscogsTagger),
+                    .command(.showDiscogsTagger), .command(.showDownloads),
                     .setting(settings.discogsKeepExistingValues.key),
                     .setting(settings.discogsSkipVideo.key),
                     .setting(settings.discogsFillSortArtist.key),

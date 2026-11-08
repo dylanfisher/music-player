@@ -1,6 +1,7 @@
 /// A problem with a watched folder or one of its directories, as opposed to one file's tags.
-/// Every kind but `symbolicLink` and `networkFolderMarkedLocal` stops the scan removing
-/// anything at or under `path`, so a missing volume never reads as deleted files.
+/// Every kind but `symbolicLink`, `networkFolderMarkedLocal` and `stagingFolderSkipped` stops
+/// the scan removing anything at or under `path`, so a missing volume never reads as deleted
+/// files.
 public struct ScanIssue: Equatable, Sendable, CustomStringConvertible {
     public enum Kind: String, Sendable {
         /// The folder doesn't exist or isn't a directory, as when a NAS isn't mounted.
@@ -16,6 +17,10 @@ public struct ScanIssue: Equatable, Sendable, CustomStringConvertible {
         case symbolicLink
         /// FSEvents doesn't report changes on network volumes, so this folder needs `network`.
         case networkFolderMarkedLocal
+        /// The staging folder is inside the watched folder, where the scan passes over it.
+        case stagingFolderSkipped
+        /// The watched folder is in the staging folder, so it isn't scanned.
+        case insideStagingFolder
     }
 
     public var kind: Kind

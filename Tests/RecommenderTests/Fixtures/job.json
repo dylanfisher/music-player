@@ -1,0 +1,28 @@
+{
+  "id": 42,
+  "revision": 1093,
+  "source": "upgrade",
+  "format_policy": "flac",
+  "release": {"release_id": 4242, "artist": "Made-Up Artist", "title": "Made-Up Album", "year": 1999},
+  "state": "staged",
+  "failed_stage": null,
+  "reason": null,
+  "attempt": 1,
+  "next_attempt_at": null,
+  "progress": null,
+  "candidate": {"peer": "made-up-peer", "format": "flac", "bit_depth": 16, "sample_rate": 44100,
+                "bitrate": null, "variable_bitrate": null, "file_count": 4, "bytes": 147849216,
+                "tracklist": 0},
+  "files": [
+    {"name": "01 - First Song.flac", "size": 24117248, "position": "1"},
+    {"name": "02 - Second Song.flac", "size": 31457280, "position": "2"}
+  ],
+  "staged_path": "job-42",
+  "tagging": {"status": "clean", "reasons": []},
+  "lease": null,
+  "review": {"machine": "Living Room", "expires_at": 1794150000},
+  "upgrade": {"current_quality": "MP3 320", "old_paths": ["library/Made-Up Artist/Made-Up Album/01 First Song.mp3"]},
+  "cleanup_pending": false,
+  "created_at": 1794060000,
+  "updated_at": 1794063600
+}

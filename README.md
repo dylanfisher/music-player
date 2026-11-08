@@ -70,7 +70,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 |---|---|
 | Install / bootstrap | `./scripts/setup` |
 | Run the app | `./scripts/dev` (`--home <folder>` keeps the config file, library and state in one folder; `--settings <file>` names another config file) |
-| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|toolbar\|folders\|shortcuts\|statusBar\|headerStatus\|toolbarSheet]` |
+| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|toolbar\|folders\|shortcuts\|statusBar\|headerStatus\|toolbarSheet\|downloads]` |
 | Run tests: only the targets edited since the last pass (`--fresh` for all), or those changed since a commit | `./scripts/test [--fresh]`, `./scripts/test --changed [ref]` |
 | Build the `.app`, signed ad hoc with the hardened runtime (debug also lets lldb attach) | `./scripts/bundle [debug\|release]` |
 | Check a release bundle's signature and entitlements, and that it launches hardened (not in `check`) | `./scripts/check-signature "<Music Player.app>" [--launch]` |

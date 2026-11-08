@@ -63,6 +63,9 @@ extension CommandID {
     public static let showYearInReview = CommandID("library.yearInReview")
     /// Opens the Discogs tagger, which writes tags only after the user confirms (ADR 0133).
     public static let showDiscogsTagger = CommandID("library.discogsTagger")
+    /// Opens the Downloads window: albums music-recommender found on Soulseek, staged for
+    /// review, which reach the library only on Approve (ADR 0147).
+    public static let showDownloads = CommandID("downloads.show")
     public static let rescanNow = CommandID("library.rescanNow")
     /// Analyzes every file not analyzed yet, or changed since, until paused (ADR 0116); once
     /// every file was tried, the whole library again (ADR 0119).
@@ -241,6 +244,7 @@ public enum AppCommands {
                 .showStats, "Show Listening Stats", argument: statsPeriodArgument, replies: true),
             Command(.showYearInReview, "Show Year in Review"),
             Command(.showDiscogsTagger, "Discogs Tagger…"),
+            Command(.showDownloads, "Downloads…"),
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
             Command(.rescanNow, "Rescan All"),
             // Not from links either: it reads every file on the NAS.

@@ -50,6 +50,12 @@ enum SchemaPart: String, CaseIterable {
     /// others (ADR 0133), keyed by path ID, so a second session doesn't redo it. A part of its
     /// own for the same reason as `loved`.
     case discogsReviews
+    /// What this Mac did toward importing music-recommender's downloads (ADR 0147): the reports
+    /// it owes the service and the import steps it took. Keyed by the service's job id, the
+    /// release id and paths relative to the staging folder or the library's share, never by a
+    /// path or album ID of this index, so an index rebuild finds them again. An outbox and a
+    /// hint only: every step can be told again from the files.
+    case importJobs
     /// Releases and masters the Discogs API returned, by kind and id, as JSON (ADR 0138). A
     /// cache: rebuilding it discards nothing a fetch can't get again.
     case discogsCache
@@ -72,6 +78,7 @@ enum SchemaPart: String, CaseIterable {
         case .measures: measuresSchema
         case .analysisRun: analysisRunSchema
         case .discogsReviews: discogsReviewsSchema
+        case .importJobs: importJobsSchema
         case .discogsCache: discogsCacheSchema
         }
     }
@@ -111,6 +118,7 @@ enum SchemaPart: String, CaseIterable {
         case .measures: [measuresTable]
         case .analysisRun: [analysisRunTable, measuredAtTable, analysisFailuresTable]
         case .discogsReviews: [discogsReviewsTable]
+        case .importJobs: [importOutboxTable, importStepsTable]
         case .discogsCache: [discogsCacheTable]
         }
     }
@@ -139,6 +147,8 @@ let analysisRunTable = "analysis_run"
 let measuredAtTable = "measured_at"
 let analysisFailuresTable = "analysis_failures"
 let discogsReviewsTable = "discogs_reviews"
+let importOutboxTable = "import_outbox"
+let importStepsTable = "import_steps"
 let discogsCacheTable = "discogs_cache"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
@@ -432,6 +442,29 @@ private let measuresSchema = """
         true_peak_dbtp REAL,
         clipped_runs INTEGER NOT NULL,
         dynamic_range INTEGER
+    ) WITHOUT ROWID;
+    """
+
+private let importJobsSchema = """
+    -- A report for music-recommender this Mac hasn't delivered: a handoff's body for the job,
+    -- sent in seq order, and deleted once the service has answered it.
+    CREATE TABLE \(importOutboxTable) (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id INTEGER NOT NULL,
+        release_id INTEGER NOT NULL,
+        body TEXT NOT NULL
+    );
+    -- An import step taken for a job, one row for each file and kind: a staged file moved in
+    -- (path relative to the staging folder, destination relative to the library's share), an
+    -- old file trashed or its stats carried (path relative to the library's share).
+    CREATE TABLE \(importStepsTable) (
+        job_id INTEGER NOT NULL,
+        release_id INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        path TEXT NOT NULL,
+        destination TEXT,
+        size_bytes INTEGER,
+        PRIMARY KEY (job_id, kind, path)
     ) WITHOUT ROWID;
     """
 

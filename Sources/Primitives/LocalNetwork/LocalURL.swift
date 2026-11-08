@@ -70,6 +70,14 @@ public struct LocalURL: Hashable, Sendable, CustomStringConvertible {
         self.interface = interface
     }
 
+    /// The URL of `path` at `host` and `port`, for a device the owner named by address rather
+    /// than one the network described. `path` starts with "/".
+    public init(host: IPAddress, port: UInt16, path: String, on interface: NetworkInterface)
+        throws(Refusal)
+    {
+        try self.init("http://\(host.urlHost):\(port)\(path)", on: interface)
+    }
+
     /// A URL a description names, relative to this one, held to the same host and port.
     public func resolving(_ reference: String) throws(Refusal) -> LocalURL {
         guard let base = URL(string: description),

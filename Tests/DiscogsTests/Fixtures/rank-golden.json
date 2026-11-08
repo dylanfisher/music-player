@@ -1,0 +1,3304 @@
+{
+  "about": "Golden cases for music-recommender's and music-player's second copy of the matching rules (music-recommender ADR 0010, music-player ADR 0140). Both repos commit this file byte for byte; each checks its SHA-256.",
+  "edition_words": "remaster\\w*|deluxe|edition|sacd|expanded|anniversary|reissue|bonus|mono|stereo|special|limited|collector'?s|hi-?res|24[- ]?bit|\\d+ ?khz|cd ?\\d+|dis[ck] ?\\d+",
+  "fold": [
+    {
+      "key": "persuader",
+      "text": "The Persuader",
+      "title": false,
+      "words": "persuader"
+    },
+    {
+      "key": "mrjamesbarthandad",
+      "text": "Mr. James Barth & A.D.",
+      "title": false,
+      "words": "mr james barth and a d"
+    },
+    {
+      "key": "soleil",
+      "text": "Soleil (2)",
+      "title": false,
+      "words": "soleil"
+    },
+    {
+      "key": "jesperdahlback",
+      "text": "Jesper Dahlbäck",
+      "title": false,
+      "words": "jesper dahlback"
+    },
+    {
+      "key": "sigurros",
+      "text": "  Sigur Rós  ",
+      "title": false,
+      "words": "sigur ros"
+    },
+    {
+      "key": "intothevoid",
+      "text": "Into The Void",
+      "title": false,
+      "words": "into the void"
+    },
+    {
+      "key": "the",
+      "text": "The",
+      "title": false,
+      "words": "the"
+    },
+    {
+      "key": "佐瑟溫克",
+      "text": "佐瑟溫克",
+      "title": false,
+      "words": "佐瑟溫克"
+    },
+    {
+      "key": "stockholm",
+      "text": "Stockholm (Remastered)",
+      "title": true,
+      "words": "stockholm"
+    },
+    {
+      "key": "selectedambientworks",
+      "text": "Selected Ambient Works [Deluxe Edition]",
+      "title": true,
+      "words": "selected ambient works"
+    },
+    {
+      "key": "kindofblue",
+      "text": "Kind of Blue (SACD)",
+      "title": true,
+      "words": "kind of blue"
+    },
+    {
+      "key": "album",
+      "text": "Album (2009 Remaster)",
+      "title": true,
+      "words": "album"
+    },
+    {
+      "key": "live",
+      "text": "Live (Disc 2)",
+      "title": true,
+      "words": "live"
+    },
+    {
+      "key": "untitledblack",
+      "text": "Untitled (Black)",
+      "title": true,
+      "words": "untitled black"
+    },
+    {
+      "key": "albumremastered",
+      "text": "Album (Remastered)",
+      "title": false,
+      "words": "album remastered"
+    },
+    {
+      "key": "strasseandaerooeuvre",
+      "text": "Straße & Ærø — Œuvre",
+      "title": false,
+      "words": "strasse and aero oeuvre"
+    },
+    {
+      "key": "lodzdakovo",
+      "text": "Łódź/Đakovo",
+      "title": false,
+      "words": "lodz dakovo"
+    },
+    {
+      "key": "thorunndora",
+      "text": "Þórunn Ðóra",
+      "title": false,
+      "words": "thorunn dora"
+    },
+    {
+      "key": "ijsselmeer",
+      "text": "Ĳsselmeer",
+      "title": false,
+      "words": "ijsselmeer"
+    },
+    {
+      "key": "strasse",
+      "text": "ſtraſſe",
+      "title": false,
+      "words": "strasse"
+    },
+    {
+      "key": "aeoayy",
+      "text": "ÆØÅ ÿŸ",
+      "title": false,
+      "words": "aeoa yy"
+    },
+    {
+      "key": "кино",
+      "text": "Кино",
+      "title": false,
+      "words": "кино"
+    },
+    {
+      "key": "аквариумandбг",
+      "text": "Аквариум & БГ",
+      "title": false,
+      "words": "аквариум and бг"
+    },
+    {
+      "key": "δελτα",
+      "text": "ΔΕΛΤΑ",
+      "title": false,
+      "words": "δελτα"
+    },
+    {
+      "key": "½live²",
+      "text": "½ Live ²",
+      "title": false,
+      "words": "½ live ²"
+    },
+    {
+      "key": "acdc",
+      "text": "AC/DC (3)",
+      "title": false,
+      "words": "ac dc"
+    },
+    {
+      "key": "soleil2live",
+      "text": "Soleil (2) Live",
+      "title": false,
+      "words": "soleil 2 live"
+    },
+    {
+      "key": "",
+      "text": "(2)",
+      "title": false,
+      "words": ""
+    },
+    {
+      "key": "track",
+      "text": "Track ()",
+      "title": false,
+      "words": "track"
+    },
+    {
+      "key": "beatles",
+      "text": "The  Beatles",
+      "title": false,
+      "words": "beatles"
+    },
+    {
+      "key": "the",
+      "text": "the the",
+      "title": false,
+      "words": "the"
+    },
+    {
+      "key": "thermal",
+      "text": "Thermal",
+      "title": false,
+      "words": "thermal"
+    },
+    {
+      "key": "theend",
+      "text": "The\tEnd",
+      "title": false,
+      "words": "the end"
+    },
+    {
+      "key": "rockandroll",
+      "text": "Rock & Roll",
+      "title": false,
+      "words": "rock and roll"
+    },
+    {
+      "key": "randb",
+      "text": "R&B",
+      "title": false,
+      "words": "r and b"
+    },
+    {
+      "key": "and",
+      "text": "&",
+      "title": false,
+      "words": "and"
+    },
+    {
+      "key": "album",
+      "text": "Album (24-bit 96 kHz) [CD2]",
+      "title": true,
+      "words": "album"
+    },
+    {
+      "key": "hireshires",
+      "text": "Hi-Res (Hires) (hi res)",
+      "title": true,
+      "words": "hi res hi res"
+    },
+    {
+      "key": "song",
+      "text": "Song (Collector's Edition)",
+      "title": true,
+      "words": "song"
+    },
+    {
+      "key": "song",
+      "text": "Song (Collectors)",
+      "title": true,
+      "words": "song"
+    },
+    {
+      "key": "songcd12a",
+      "text": "Song (CD12a)",
+      "title": true,
+      "words": "song cd12a"
+    },
+    {
+      "key": "songlive",
+      "text": "Song (Remastered 2011) (Live)",
+      "title": true,
+      "words": "song live"
+    },
+    {
+      "key": "albumlive",
+      "text": "Album (Live) [Deluxe]",
+      "title": true,
+      "words": "album live"
+    },
+    {
+      "key": "nested",
+      "text": "Nested (a (Deluxe))",
+      "title": true,
+      "words": "nested"
+    },
+    {
+      "key": "uncloseddeluxe",
+      "text": "Unclosed (Deluxe",
+      "title": true,
+      "words": "unclosed deluxe"
+    },
+    {
+      "key": "album",
+      "text": "Album (Disk 1) (Disc1)",
+      "title": true,
+      "words": "album"
+    },
+    {
+      "key": "album",
+      "text": "Album (cd 3)",
+      "title": true,
+      "words": "album"
+    },
+    {
+      "key": "album",
+      "text": "Album (44.1kHz)",
+      "title": true,
+      "words": "album"
+    },
+    {
+      "key": "albumx96khz",
+      "text": "Album (x96khz)",
+      "title": true,
+      "words": "album x96khz"
+    },
+    {
+      "key": "album",
+      "text": "Album (Mono / Stereo)",
+      "title": true,
+      "words": "album"
+    },
+    {
+      "key": "album",
+      "text": "Album  [Bonus Tracks]",
+      "title": true,
+      "words": "album"
+    },
+    {
+      "key": "album",
+      "text": "Album (Remastering)",
+      "title": true,
+      "words": "album"
+    },
+    {
+      "key": "albumunremastered",
+      "text": "Album (Unremastered)",
+      "title": true,
+      "words": "album unremastered"
+    },
+    {
+      "key": "01firstsong",
+      "text": "01 - First Song",
+      "title": false,
+      "words": "01 first song"
+    },
+    {
+      "key": "snakecase",
+      "text": "snake_case",
+      "title": false,
+      "words": "snake case"
+    },
+    {
+      "key": "cafedelmar",
+      "text": "Café Del Mar (2)",
+      "title": true,
+      "words": "cafe del mar"
+    },
+    {
+      "key": "caplanepourmoi",
+      "text": "Ça Plane Pour Moi",
+      "title": false,
+      "words": "ca plane pour moi"
+    }
+  ],
+  "ranking": [
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "made-up-peer-flac",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "a complete FLAC folder, its cover left out",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": null,
+              "bitrate": null,
+              "length": null,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\cover.jpg",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "made-up-peer-flac"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "reason": "FLAC, 3 of 4 tracks"
+      },
+      "name": "a missing track",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac"
+              },
+              {
+                "name": "05 - Bonus Remix.flac",
+                "position": null,
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\05 - Bonus Remix.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "p",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "a bonus track",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 300,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\05 - Bonus Remix.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "reason": "only MP3 found"
+      },
+      "name": "MP3 under flac",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 245,
+              "path": "music\\Made-Up Artist - Made-Up Album (1999) [V0]\\01 First Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 312,
+              "path": "music\\Made-Up Artist - Made-Up Album (1999) [V0]\\02 Second Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 198,
+              "path": "music\\Made-Up Artist - Made-Up Album (1999) [V0]\\03 Third Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 750,
+              "path": "music\\Made-Up Artist - Made-Up Album (1999) [V0]\\04 The Long One.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "reason": "only MP3 or Ogg found"
+      },
+      "name": "MP3 and Ogg under flac",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 245,
+              "path": "a\\Album\\01 First Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 312,
+              "path": "a\\Album\\02 Second Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 198,
+              "path": "a\\Album\\03 Third Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 750,
+              "path": "a\\Album\\04 The Long One.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        },
+        {
+          "files": [
+            {
+              "bit_depth": null,
+              "bitrate": 192,
+              "length": 245,
+              "path": "b\\Album\\01 First Song.ogg",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 192,
+              "length": 312,
+              "path": "b\\Album\\02 Second Song.ogg",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 192,
+              "length": 198,
+              "path": "b\\Album\\03 Third Song.ogg",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 192,
+              "length": 750,
+              "path": "b\\Album\\04 The Long One.ogg",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "q"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "p",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "mixed formats, judged on the majority",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 245,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "CD1/1-01 First Song.flac",
+                "position": "1-1",
+                "remote": "D:\\Rips\\Made-Up Artist\\1999 - Made-Up Album\\CD1\\1-01 First Song.flac"
+              },
+              {
+                "name": "CD1/1-02 Second Song.flac",
+                "position": "1-2",
+                "remote": "D:\\Rips\\Made-Up Artist\\1999 - Made-Up Album\\CD1\\1-02 Second Song.flac"
+              },
+              {
+                "name": "CD2/2-01 Third Song.flac",
+                "position": "2-1",
+                "remote": "D:\\Rips\\Made-Up Artist\\1999 - Made-Up Album\\CD2\\2-01 Third Song.flac"
+              },
+              {
+                "name": "CD2/2-02 The Long One.flac",
+                "position": "2-2",
+                "remote": "D:\\Rips\\Made-Up Artist\\1999 - Made-Up Album\\CD2\\2-02 The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "p",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "CD1 and CD2 merged under their folder",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "D:\\Rips\\Made-Up Artist\\1999 - Made-Up Album\\CD1\\1-01 First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "D:\\Rips\\Made-Up Artist\\1999 - Made-Up Album\\CD1\\1-02 Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "D:\\Rips\\Made-Up Artist\\1999 - Made-Up Album\\CD2\\2-01 Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "D:\\Rips\\Made-Up Artist\\1999 - Made-Up Album\\CD2\\2-02 The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1-1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "1-2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "2-1",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "2-2",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - Artist A - Song One.flac",
+                "position": "1",
+                "remote": "VA\\Made-Up Hits (2001)\\01 - Artist A - Song One.flac"
+              },
+              {
+                "name": "02 - Artist B - Song Two.flac",
+                "position": "2",
+                "remote": "VA\\Made-Up Hits (2001)\\02 - Artist B - Song Two.flac"
+              },
+              {
+                "name": "03 - Artist C - Song Three.flac",
+                "position": "3",
+                "remote": "VA\\Made-Up Hits (2001)\\03 - Artist C - Song Three.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "p",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "Various Artists",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 200,
+              "path": "VA\\Made-Up Hits (2001)\\01 - Artist A - Song One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 211,
+              "path": "VA\\Made-Up Hits (2001)\\02 - Artist B - Song Two.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 219,
+              "path": "VA\\Made-Up Hits (2001)\\03 - Artist C - Song Three.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Various",
+        "title": "Made-Up Hits",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 200,
+              "title": "Song One"
+            },
+            {
+              "position": "2",
+              "seconds": 210,
+              "title": "Song Two"
+            },
+            {
+              "position": "3",
+              "seconds": 220,
+              "title": "Song Three"
+            }
+          ]
+        ],
+        "year": 2001
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01.flac",
+                "position": "1",
+                "remote": "Music\\Made-Up Artist - Made-Up Album (1999)\\01.flac"
+              },
+              {
+                "name": "02.flac",
+                "position": "2",
+                "remote": "Music\\Made-Up Artist - Made-Up Album (1999)\\02.flac"
+              },
+              {
+                "name": "03.flac",
+                "position": "3",
+                "remote": "Music\\Made-Up Artist - Made-Up Album (1999)\\03.flac"
+              },
+              {
+                "name": "04.flac",
+                "position": "4",
+                "remote": "Music\\Made-Up Artist - Made-Up Album (1999)\\04.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "p",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "names that are only numbers, in a folder naming the release",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "Music\\Made-Up Artist - Made-Up Album (1999)\\01.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "Music\\Made-Up Artist - Made-Up Album (1999)\\02.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "Music\\Made-Up Artist - Made-Up Album (1999)\\03.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "Music\\Made-Up Artist - Made-Up Album (1999)\\04.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "reason": "file names are only numbers"
+      },
+      "name": "names that are only numbers, in a folder that doesn't",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "Music\\rips\\01.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "Music\\rips\\02.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "Music\\rips\\03.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "Music\\rips\\04.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "y\\Made-Up Album\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "y\\Made-Up Album\\02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "y\\Made-Up Album\\03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "y\\Made-Up Album\\04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "full",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "a locked file leaves a track missing; the full folder wins",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "x\\Made-Up Album\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "locked": true,
+              "path": "x\\Made-Up Album\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "x\\Made-Up Album\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "x\\Made-Up Album\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "locked"
+        },
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "y\\Made-Up Album\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "y\\Made-Up Album\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "y\\Made-Up Album\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "y\\Made-Up Album\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "full"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "reason": "durations agree 0%"
+      },
+      "name": "the same titles with every duration wrong",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 60,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 60,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 60,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 60,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "queued",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "a perfect folder from a peer with a long queue is accepted",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": false,
+          "queue_length": 480,
+          "username": "queued"
+        },
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "@@kq3zv\\Music\\Made-Up Artist\\Made-Up Album (1999) [FLAC]\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": false,
+          "queue_length": 740,
+          "username": "too-long"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "..\\..\\Made-Up Album\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second\u0007 Song.flac",
+                "position": "2",
+                "remote": "..\\..\\Made-Up Album\\02 - Second\u0007 Song.flac"
+              },
+              {
+                "name": "03 - Third Song xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.flac",
+                "position": "3",
+                "remote": "..\\..\\Made-Up Album\\03 - Third Song xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "..\\..\\Made-Up Album\\04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "p",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "hostile names are carried as they are, for the stager to sanitize",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "..\\..\\Made-Up Album\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "..\\..\\Made-Up Album\\02 - Second\u0007 Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "..\\..\\Made-Up Album\\03 - Third Song xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "..\\..\\Made-Up Album\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "/home/u/Made-Up Album/01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "/home/u/Made-Up Album/02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "/home/u/Made-Up Album/03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "/home/u/Made-Up Album/04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "p",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "slash paths read like backslash paths",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "/home/u/Made-Up Album/01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "/home/u/Made-Up Album/02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "/home/u/Made-Up Album/03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "/home/u/Made-Up Album/04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "c\\Made-Up Album\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "c\\Made-Up Album\\02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "c\\Made-Up Album\\03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "c\\Made-Up Album\\04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "b-cd",
+            "tracklist": 0
+          },
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "h\\Made-Up Album\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "h\\Made-Up Album\\02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "h\\Made-Up Album\\03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "h\\Made-Up Album\\04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "a-hires",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "24-bit isn't preferred over 16-bit",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 24,
+              "bitrate": null,
+              "length": 245,
+              "path": "h\\Made-Up Album\\01 - First Song.flac",
+              "sample_rate": 96000,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 24,
+              "bitrate": null,
+              "length": 312,
+              "path": "h\\Made-Up Album\\02 - Second Song.flac",
+              "sample_rate": 96000,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 24,
+              "bitrate": null,
+              "length": 198,
+              "path": "h\\Made-Up Album\\03 - Third Song.flac",
+              "sample_rate": 96000,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 24,
+              "bitrate": null,
+              "length": 750,
+              "path": "h\\Made-Up Album\\04 - The Long One.flac",
+              "sample_rate": 96000,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 5,
+          "username": "a-hires"
+        },
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "c\\Made-Up Album\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "c\\Made-Up Album\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "c\\Made-Up Album\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "c\\Made-Up Album\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "b-cd"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 First Song.mp3",
+                "position": "1",
+                "remote": "c\\Made-Up Album\\01 First Song.mp3"
+              },
+              {
+                "name": "02 Second Song.mp3",
+                "position": "2",
+                "remote": "c\\Made-Up Album\\02 Second Song.mp3"
+              },
+              {
+                "name": "03 Third Song.mp3",
+                "position": "3",
+                "remote": "c\\Made-Up Album\\03 Third Song.mp3"
+              },
+              {
+                "name": "04 The Long One.mp3",
+                "position": "4",
+                "remote": "c\\Made-Up Album\\04 The Long One.mp3"
+              }
+            ],
+            "format": "mp3",
+            "peer": "cbr",
+            "tracklist": 0
+          },
+          {
+            "files": [
+              {
+                "name": "01 First Song.mp3",
+                "position": "1",
+                "remote": "v\\Made-Up Album\\01 First Song.mp3"
+              },
+              {
+                "name": "02 Second Song.mp3",
+                "position": "2",
+                "remote": "v\\Made-Up Album\\02 Second Song.mp3"
+              },
+              {
+                "name": "03 Third Song.mp3",
+                "position": "3",
+                "remote": "v\\Made-Up Album\\03 Third Song.mp3"
+              },
+              {
+                "name": "04 The Long One.mp3",
+                "position": "4",
+                "remote": "v\\Made-Up Album\\04 The Long One.mp3"
+              }
+            ],
+            "format": "mp3",
+            "peer": "v0",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "mp3_320 takes V0 and CBR 320",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 245,
+              "path": "v\\Made-Up Album\\01 First Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 312,
+              "path": "v\\Made-Up Album\\02 Second Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 198,
+              "path": "v\\Made-Up Album\\03 Third Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 258,
+              "length": 750,
+              "path": "v\\Made-Up Album\\04 The Long One.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": true
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "v0"
+        },
+        {
+          "files": [
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 245,
+              "path": "c\\Made-Up Album\\01 First Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 312,
+              "path": "c\\Made-Up Album\\02 Second Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 198,
+              "path": "c\\Made-Up Album\\03 Third Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 750,
+              "path": "c\\Made-Up Album\\04 The Long One.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "cbr"
+        }
+      ],
+      "policy": "mp3_320",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "reason": "MP3 at 192 kbps"
+      },
+      "name": "mp3_320 refuses CBR 192",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": null,
+              "bitrate": 192,
+              "length": 245,
+              "path": "c\\Made-Up Album\\01 First Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 192,
+              "length": 312,
+              "path": "c\\Made-Up Album\\02 Second Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 192,
+              "length": 198,
+              "path": "c\\Made-Up Album\\03 Third Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 192,
+              "length": 750,
+              "path": "c\\Made-Up Album\\04 The Long One.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "mp3_320",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.m4a",
+                "position": "1",
+                "remote": "a\\Made-Up Album\\01 - First Song.m4a"
+              },
+              {
+                "name": "02 - Second Song.m4a",
+                "position": "2",
+                "remote": "a\\Made-Up Album\\02 - Second Song.m4a"
+              },
+              {
+                "name": "03 - Third Song.m4a",
+                "position": "3",
+                "remote": "a\\Made-Up Album\\03 - Third Song.m4a"
+              },
+              {
+                "name": "04 - The Long One.m4a",
+                "position": "4",
+                "remote": "a\\Made-Up Album\\04 - The Long One.m4a"
+              }
+            ],
+            "format": "alac",
+            "peer": "p",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "lossless takes ALAC",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "a\\Made-Up Album\\01 - First Song.m4a",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "a\\Made-Up Album\\02 - Second Song.m4a",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "a\\Made-Up Album\\03 - Third Song.m4a",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "a\\Made-Up Album\\04 - The Long One.m4a",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "lossless",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 - First Song.flac",
+                "position": "1",
+                "remote": "f\\Made-Up Album\\01 - First Song.flac"
+              },
+              {
+                "name": "02 - Second Song.flac",
+                "position": "2",
+                "remote": "f\\Made-Up Album\\02 - Second Song.flac"
+              },
+              {
+                "name": "03 - Third Song.flac",
+                "position": "3",
+                "remote": "f\\Made-Up Album\\03 - Third Song.flac"
+              },
+              {
+                "name": "04 - The Long One.flac",
+                "position": "4",
+                "remote": "f\\Made-Up Album\\04 - The Long One.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "flac",
+            "tracklist": 0
+          },
+          {
+            "files": [
+              {
+                "name": "01 First Song.mp3",
+                "position": "1",
+                "remote": "m\\Made-Up Album\\01 First Song.mp3"
+              },
+              {
+                "name": "02 Second Song.mp3",
+                "position": "2",
+                "remote": "m\\Made-Up Album\\02 Second Song.mp3"
+              },
+              {
+                "name": "03 Third Song.mp3",
+                "position": "3",
+                "remote": "m\\Made-Up Album\\03 Third Song.mp3"
+              },
+              {
+                "name": "04 The Long One.mp3",
+                "position": "4",
+                "remote": "m\\Made-Up Album\\04 The Long One.mp3"
+              }
+            ],
+            "format": "mp3",
+            "peer": "mp3",
+            "tracklist": 0
+          }
+        ]
+      },
+      "name": "any puts lossless before a higher-bitrate lossy folder",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 245,
+              "path": "m\\Made-Up Album\\01 First Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 312,
+              "path": "m\\Made-Up Album\\02 Second Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 198,
+              "path": "m\\Made-Up Album\\03 Third Song.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            },
+            {
+              "bit_depth": null,
+              "bitrate": 320,
+              "length": 750,
+              "path": "m\\Made-Up Album\\04 The Long One.mp3",
+              "sample_rate": null,
+              "size": 1000,
+              "variable_bitrate": false
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "mp3"
+        },
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 245,
+              "path": "f\\Made-Up Album\\01 - First Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 312,
+              "path": "f\\Made-Up Album\\02 - Second Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 198,
+              "path": "f\\Made-Up Album\\03 - Third Song.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 750,
+              "path": "f\\Made-Up Album\\04 - The Long One.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 50,
+          "username": "flac"
+        }
+      ],
+      "policy": "any",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "reason": "no audio found"
+      },
+      "name": "no audio at all",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": null,
+              "path": "x\\cover.jpg",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": null,
+              "path": "x\\rip.log",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 245,
+              "title": "First Song"
+            },
+            {
+              "position": "2",
+              "seconds": 312,
+              "title": "Second Song"
+            },
+            {
+              "position": "3",
+              "seconds": 198,
+              "title": "Third Song"
+            },
+            {
+              "position": "4",
+              "seconds": 750,
+              "title": "The Long One"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    },
+    {
+      "expected": {
+        "accepted": [
+          {
+            "files": [
+              {
+                "name": "01 Opening.flac",
+                "position": "1",
+                "remote": "s\\Made-Up Album\\01 Opening.flac"
+              },
+              {
+                "name": "02 Suite.flac",
+                "position": "2",
+                "remote": "s\\Made-Up Album\\02 Suite.flac"
+              },
+              {
+                "name": "03 Closing.flac",
+                "position": "3",
+                "remote": "s\\Made-Up Album\\03 Closing.flac"
+              }
+            ],
+            "format": "flac",
+            "peer": "p",
+            "tracklist": 1
+          }
+        ]
+      },
+      "name": "an index track as one file fits the second flattening",
+      "peers": [
+        {
+          "files": [
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 200,
+              "path": "s\\Made-Up Album\\01 Opening.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 611,
+              "path": "s\\Made-Up Album\\02 Suite.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            },
+            {
+              "bit_depth": 16,
+              "bitrate": null,
+              "length": 221,
+              "path": "s\\Made-Up Album\\03 Closing.flac",
+              "sample_rate": 44100,
+              "size": 1000,
+              "variable_bitrate": null
+            }
+          ],
+          "free_slot": true,
+          "queue_length": 0,
+          "username": "p"
+        }
+      ],
+      "policy": "flac",
+      "release": {
+        "artist": "Made-Up Artist",
+        "title": "Made-Up Album",
+        "tracklists": [
+          [
+            {
+              "position": "1",
+              "seconds": 200,
+              "title": "Opening"
+            },
+            {
+              "position": "2a",
+              "seconds": 300,
+              "title": "Suite Part One"
+            },
+            {
+              "position": "2b",
+              "seconds": 310,
+              "title": "Suite Part Two"
+            },
+            {
+              "position": "3",
+              "seconds": 220,
+              "title": "Closing"
+            }
+          ],
+          [
+            {
+              "position": "1",
+              "seconds": 200,
+              "title": "Opening"
+            },
+            {
+              "position": "2",
+              "seconds": 610,
+              "title": "Suite"
+            },
+            {
+              "position": "3",
+              "seconds": 220,
+              "title": "Closing"
+            }
+          ]
+        ],
+        "year": 1999
+      }
+    }
+  ],
+  "score": [
+    {
+      "durations_agreeing": 2,
+      "durations_compared": 2,
+      "files": [
+        {
+          "seconds": 245.0,
+          "title": "First Song"
+        },
+        {
+          "seconds": 312.0,
+          "title": "Second Song"
+        }
+      ],
+      "mapping": [
+        0,
+        1
+      ],
+      "name": "same count, in order",
+      "same_count": true,
+      "titles_in_order": true,
+      "tracklist": 1.0,
+      "tracks": [
+        {
+          "seconds": 245,
+          "title": "First Song"
+        },
+        {
+          "seconds": 310,
+          "title": "Second Song"
+        }
+      ]
+    },
+    {
+      "durations_agreeing": 0,
+      "durations_compared": 0,
+      "files": [
+        {
+          "seconds": null,
+          "title": "First Song"
+        },
+        {
+          "seconds": null,
+          "title": "Something Else"
+        }
+      ],
+      "mapping": [
+        0,
+        1
+      ],
+      "name": "same count, one title off",
+      "same_count": true,
+      "titles_in_order": false,
+      "tracklist": 0.6153846153846154,
+      "tracks": [
+        {
+          "seconds": null,
+          "title": "First Song"
+        },
+        {
+          "seconds": null,
+          "title": "Second Song"
+        }
+      ]
+    },
+    {
+      "durations_agreeing": 1,
+      "durations_compared": 2,
+      "files": [
+        {
+          "seconds": 101.0,
+          "title": "One"
+        },
+        {
+          "seconds": null,
+          "title": "Bonus Mix"
+        },
+        {
+          "seconds": 300.0,
+          "title": "Two"
+        }
+      ],
+      "mapping": [
+        0,
+        null,
+        1
+      ],
+      "name": "a bonus track",
+      "same_count": false,
+      "titles_in_order": false,
+      "tracklist": 0.6666666666666666,
+      "tracks": [
+        {
+          "seconds": 100,
+          "title": "One"
+        },
+        {
+          "seconds": 200,
+          "title": "Two"
+        }
+      ]
+    },
+    {
+      "durations_agreeing": 0,
+      "durations_compared": 0,
+      "files": [
+        {
+          "seconds": null,
+          "title": "One"
+        },
+        {
+          "seconds": null,
+          "title": "Three"
+        }
+      ],
+      "mapping": [
+        0,
+        2
+      ],
+      "name": "a missing track",
+      "same_count": false,
+      "titles_in_order": false,
+      "tracklist": 0.6666666666666666,
+      "tracks": [
+        {
+          "seconds": null,
+          "title": "One"
+        },
+        {
+          "seconds": null,
+          "title": "Two"
+        },
+        {
+          "seconds": null,
+          "title": "Three"
+        }
+      ]
+    },
+    {
+      "durations_agreeing": 0,
+      "durations_compared": 3,
+      "files": [
+        {
+          "seconds": 10.0,
+          "title": "One"
+        },
+        {
+          "seconds": 20.0,
+          "title": "Two"
+        },
+        {
+          "seconds": 30.0,
+          "title": "Three"
+        }
+      ],
+      "mapping": [
+        0,
+        1,
+        2
+      ],
+      "name": "every duration wrong",
+      "same_count": true,
+      "titles_in_order": true,
+      "tracklist": 1.0,
+      "tracks": [
+        {
+          "seconds": 100,
+          "title": "One"
+        },
+        {
+          "seconds": 200,
+          "title": "Two"
+        },
+        {
+          "seconds": 300,
+          "title": "Three"
+        }
+      ]
+    },
+    {
+      "durations_agreeing": 0,
+      "durations_compared": 0,
+      "files": [],
+      "mapping": [],
+      "name": "no files",
+      "same_count": false,
+      "titles_in_order": false,
+      "tracklist": 0.0,
+      "tracks": [
+        {
+          "seconds": null,
+          "title": "One"
+        }
+      ]
+    },
+    {
+      "durations_agreeing": 0,
+      "durations_compared": 0,
+      "files": [
+        {
+          "seconds": null,
+          "title": "Two"
+        },
+        {
+          "seconds": null,
+          "title": "One"
+        }
+      ],
+      "mapping": [
+        0,
+        1
+      ],
+      "name": "swapped titles",
+      "same_count": true,
+      "titles_in_order": false,
+      "tracklist": 0.0,
+      "tracks": [
+        {
+          "seconds": null,
+          "title": "One"
+        },
+        {
+          "seconds": null,
+          "title": "Two"
+        }
+      ]
+    }
+  ],
+  "similarity": [
+    {
+      "a": "First Song",
+      "b": "first song!",
+      "similarity": 1.0
+    },
+    {
+      "a": "Track",
+      "b": "Track (Original Mix)",
+      "similarity": 0.9
+    },
+    {
+      "a": "ab",
+      "b": "abcd",
+      "similarity": 0.5
+    },
+    {
+      "a": "",
+      "b": "x",
+      "similarity": 0.0
+    },
+    {
+      "a": "kitten",
+      "b": "sitting",
+      "similarity": 0.5714285714285714
+    },
+    {
+      "a": "Café",
+      "b": "Cafe",
+      "similarity": 1.0
+    },
+    {
+      "a": "Track (Remastered)",
+      "b": "Track",
+      "similarity": 1.0
+    },
+    {
+      "a": "Part 1",
+      "b": "Part 2",
+      "similarity": 0.8
+    },
+    {
+      "a": "Intro",
+      "b": "Outro",
+      "similarity": 0.6
+    },
+    {
+      "a": "The Long One",
+      "b": "Long One",
+      "similarity": 1.0
+    },
+    {
+      "a": "Second Song",
+      "b": "Secnd Song",
+      "similarity": 0.9
+    },
+    {
+      "a": "Rock & Roll",
+      "b": "Rock and Roll",
+      "similarity": 1.0
+    },
+    {
+      "a": "abc",
+      "b": "xabcx",
+      "similarity": 0.9
+    },
+    {
+      "a": "Interlude",
+      "b": "Interlude (Reprise)",
+      "similarity": 0.9
+    },
+    {
+      "a": "Ænima",
+      "b": "Aenima",
+      "similarity": 1.0
+    },
+    {
+      "a": "Кино",
+      "b": "кино",
+      "similarity": 1.0
+    },
+    {
+      "a": "ΔΕΛΤΑ",
+      "b": "δελτα",
+      "similarity": 1.0
+    }
+  ],
+  "table": [
+    [
+      "a",
+      "ÀÁÂÃÄÅàáâãäåĀāĂăĄą"
+    ],
+    [
+      "ae",
+      "Ææ"
+    ],
+    [
+      "c",
+      "ÇçĆćĈĉĊċČč"
+    ],
+    [
+      "d",
+      "ÐðĎďĐđ"
+    ],
+    [
+      "e",
+      "ÈÉÊËèéêëĒēĔĕĖėĘęĚě"
+    ],
+    [
+      "g",
+      "ĜĝĞğĠġĢģ"
+    ],
+    [
+      "h",
+      "ĤĥĦħ"
+    ],
+    [
+      "i",
+      "ÌÍÎÏìíîïĨĩĪīĬĭĮįİı"
+    ],
+    [
+      "ij",
+      "Ĳĳ"
+    ],
+    [
+      "j",
+      "Ĵĵ"
+    ],
+    [
+      "k",
+      "Ķķĸ"
+    ],
+    [
+      "l",
+      "ĹĺĻļĽľĿŀŁł"
+    ],
+    [
+      "n",
+      "ÑñŃńŅņŇňŉŊŋ"
+    ],
+    [
+      "o",
+      "ÒÓÔÕÖØòóôõöøŌōŎŏŐő"
+    ],
+    [
+      "oe",
+      "Œœ"
+    ],
+    [
+      "r",
+      "ŔŕŖŗŘř"
+    ],
+    [
+      "s",
+      "ŚśŜŝŞşŠšſ"
+    ],
+    [
+      "ss",
+      "ß"
+    ],
+    [
+      "t",
+      "ŢţŤťŦŧ"
+    ],
+    [
+      "th",
+      "Þþ"
+    ],
+    [
+      "u",
+      "ÙÚÛÜùúûüŨũŪūŬŭŮůŰűŲų"
+    ],
+    [
+      "w",
+      "Ŵŵ"
+    ],
+    [
+      "y",
+      "ÝýÿŶŷŸ"
+    ],
+    [
+      "z",
+      "ŹźŻżŽž"
+    ]
+  ],
+  "thresholds": {
+    "contained_letters": 3,
+    "contained_title": 0.9,
+    "duration_fraction": 0.05,
+    "duration_seconds": 8.0,
+    "duration_weight": 0.25,
+    "likely_tracklist": 0.6,
+    "paired_title": 0.5,
+    "same_title": 0.85
+  }
+}

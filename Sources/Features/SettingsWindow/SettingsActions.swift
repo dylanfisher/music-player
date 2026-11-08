@@ -10,6 +10,8 @@ public struct SettingsActions {
     public var chooseSyncFolder: () -> Void
     /// Opens the sync folder in Finder where it is now.
     public var openSyncFolder: () -> Void
+    /// Asks for a folder and makes it the staging folder.
+    public var chooseStagingFolder: () -> Void
     /// Asks for a folder to watch.
     public var addFolder: () -> Void
     /// Asks to stop watching the folder at this position in the setting.
@@ -37,7 +39,7 @@ public struct SettingsActions {
     public init(
         openConfigFile: @escaping () -> Void, revealConfigFile: @escaping () -> Void,
         copyDefaultConfig: @escaping () -> Void, chooseSyncFolder: @escaping () -> Void,
-        openSyncFolder: @escaping () -> Void,
+        openSyncFolder: @escaping () -> Void, chooseStagingFolder: @escaping () -> Void,
         addFolder: @escaping () -> Void, removeFolder: @escaping (Int) -> Void,
         rescanNow: @escaping () -> Void, rescanFolders: @escaping ([Int]) -> Void,
         outputs: @escaping () -> [OutputOption],
@@ -52,6 +54,7 @@ public struct SettingsActions {
         self.copyDefaultConfig = copyDefaultConfig
         self.chooseSyncFolder = chooseSyncFolder
         self.openSyncFolder = openSyncFolder
+        self.chooseStagingFolder = chooseStagingFolder
         self.addFolder = addFolder
         self.removeFolder = removeFolder
         self.rescanNow = rescanNow

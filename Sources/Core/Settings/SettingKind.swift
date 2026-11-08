@@ -17,6 +17,7 @@ public indirect enum SettingKind: Sendable, Equatable {
     case watchedFolder
     case syncFolder
     case dumpsFolder
+    case stagingFolder
     /// The Discogs tagger's field mapping, which its own sheet edits (ADR 0132).
     case discogsMapping
     /// A color with its opacity, which the settings window picks in a color well.

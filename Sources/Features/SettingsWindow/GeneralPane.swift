@@ -501,6 +501,19 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             let stack = NSStackView(views: [folder, change, open, clear])
             stack.identifier = NSUserInterfaceItemIdentifier(row.key)
             return stack
+        case .stagingFolder:
+            let folder = NSTextField(labelWithString: "")
+            folder.lineBreakMode = .byTruncatingTail
+            folder.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            folder.setAccessibilityLabel(row.title)
+            let change = button("", #selector(chooseStagingFolder))
+            let clear = button("Clear", #selector(clearSyncFolder(_:)))
+            clear.identifier = NSUserInterfaceItemIdentifier(row.key)
+            folderLabels[row.key] = folder
+            folderButtons[row.key] = (change, clear)
+            let stack = NSStackView(views: [folder, change, clear])
+            stack.identifier = NSUserInterfaceItemIdentifier(row.key)
+            return stack
         case .folder:
             let folder = NSTextField(labelWithString: "")
             folder.lineBreakMode = .byTruncatingMiddle
@@ -604,6 +617,12 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             syncFolderButtons?.change.title = name == nil ? "Choose…" : "Change…"
             syncFolderButtons?.open.isEnabled = name != nil
             syncFolderButtons?.clear.isEnabled = name != nil
+        case .stagingFolder:
+            let name = model.syncFolderName(row.key)
+            folderLabels[row.key]?.stringValue = name ?? noValueText
+            folderLabels[row.key]?.toolTip = model.syncFolder(row.key)
+            folderButtons[row.key]?.change.title = name == nil ? "Choose…" : "Change…"
+            folderButtons[row.key]?.clear.isEnabled = name != nil
         case .folder(let emptyText, _):
             let path = model.text(row.key)
             let enabled = model.isEnabled(row.key)
@@ -672,6 +691,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     @objc private func chooseSyncFolder() { actions.chooseSyncFolder() }
+
+    @objc private func chooseStagingFolder() { actions.chooseStagingFolder() }
 
     /// Asks for a folder row's folder in a sheet. Only its path is stored, so nothing here
     /// reads the volume.

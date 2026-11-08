@@ -3,9 +3,7 @@ import Foundation
 /// The folder machines share their logs through (ADR 0038): a path, or on a network share the
 /// share's URL and the path inside it, found wherever the share is mounted, as a watched folder
 /// is (ADR 0028).
-public struct SyncFolder: SettingValue {
-    /// An absolute path; for a folder on a share, its path inside the share, with no leading
-    /// slash, and empty for the share itself.
+public struct SyncFolder: FolderSetting {
     public var path: String
     public var share: String?
 
@@ -14,21 +12,8 @@ public struct SyncFolder: SettingValue {
         self.share = share
     }
 
-    private enum CodingKeys: String, CodingKey, CaseIterable {
-        case path, share
-    }
-
-    public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        path = try container.decode(String.self, forKey: .path)
-        share = try container.decodeIfPresent(String.self, forKey: .share)
-    }
-
     public static var typeName: String { "a sync folder (path, optional share)" }
     public static var kind: SettingKind { .syncFolder }
-
-    public func problem() -> String? { folderLocationProblem(path: path, share: share) }
 
     /// Names the folder in `sync_state`, so a log pushed to one folder starts again in another.
     public var identity: String { share.map { "\($0) \(path)" } ?? path }
@@ -37,19 +22,28 @@ public struct SyncFolder: SettingValue {
     /// stored by share and one by path can't be compared until they're found, so the sync
     /// checks the found paths too.
     func isInside(_ folder: WatchedFolder) -> Bool {
-        switch (share.flatMap(ShareURL.init), folder.share.flatMap(ShareURL.init)) {
-        case (nil, nil):
-            return isPath(standardized(path), inOrAt: standardized(folder.path))
-        case (let mine?, let theirs?):
-            // Hosts differ between Macs, so a share with the same name is taken to be the same.
-            return mine.hasSameName(as: theirs)
-                && (folder.path.isEmpty
-                    || isPath(
-                        path.precomposedStringWithCanonicalMapping,
-                        inOrAt: folder.path.precomposedStringWithCanonicalMapping))
-        default:
-            return false
-        }
+        isFolder(path, share: share, inOrAt: folder.path, share: folder.share)
+    }
+}
+
+/// Whether the folder at `path`, in `share` when it has one, is the folder at `folderPath` or
+/// inside it, when both are stored the same way; false when one is stored by share and the
+/// other by path.
+func isFolder(_ path: String, share: String?, inOrAt folderPath: String, share folderShare: String?)
+    -> Bool
+{
+    switch (share.flatMap(ShareURL.init), folderShare.flatMap(ShareURL.init)) {
+    case (nil, nil):
+        return isPath(standardized(path), inOrAt: standardized(folderPath))
+    case (let mine?, let theirs?):
+        // Hosts differ between Macs, so a share with the same name is taken to be the same.
+        return mine.hasSameName(as: theirs)
+            && (folderPath.isEmpty
+                || isPath(
+                    path.precomposedStringWithCanonicalMapping,
+                    inOrAt: folderPath.precomposedStringWithCanonicalMapping))
+    default:
+        return false
     }
 }
 

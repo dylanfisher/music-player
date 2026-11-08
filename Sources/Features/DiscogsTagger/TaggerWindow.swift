@@ -303,7 +303,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             window?.contentView?.layoutSubtreeIfNeeded()
         }
         sourcePopUp.selectItem(at: DiscogsSource.allCases.firstIndex(of: model.source)!)
-        sourcePopUp.isEnabled = !model.isBusy
+        sourcePopUp.isEnabled = !model.isBusy && !model.isStaged
         let tokenTip = model.hasToken() ? nil : Self.noTokenTip
         for (item, source) in zip(sourcePopUp.itemArray, DiscogsSource.allCases) {
             item.toolTip = source == .catalog ? nil : tokenTip
@@ -716,7 +716,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                         ? ["The albums' files already hold what the mapping writes."]
                         : plan.problems)
             }
-            let (message, detail) = TaggerModel.confirmation(plan)
+            let (message, detail) = TaggerModel.confirmation(plan, staged: model.isStaged)
             let question = NSAlert()
             question.messageText = message
             question.informativeText = detail

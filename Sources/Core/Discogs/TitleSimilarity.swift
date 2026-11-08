@@ -1,17 +1,19 @@
-/// How alike an album's track titles are to a release's, folded as the catalog folds titles,
+/// How alike an album's track titles are to a release's, folded by `CatalogKey.matchKey`,
 /// remembered per release title: a master's releases mostly share one tracklist.
 final class TitleSimilarity {
     private let albumTitles: [[Unicode.Scalar]]
     private var known: [String: [Double]] = [:]
 
     init(_ titles: [String?]) {
-        albumTitles = titles.map { Array(CatalogKey.fold($0 ?? "", title: true).unicodeScalars) }
+        albumTitles = titles.map {
+            Array(CatalogKey.matchKey($0 ?? "", title: true).unicodeScalars)
+        }
     }
 
     /// The similarity, from 0 to 1, of each of the album's titles to `title`.
     func similarities(to title: String) -> [Double] {
         if let similarities = known[title] { return similarities }
-        let folded = Array(CatalogKey.fold(title, title: true).unicodeScalars)
+        let folded = Array(CatalogKey.matchKey(title, title: true).unicodeScalars)
         let similarities = albumTitles.map { Self.similarity($0, folded) }
         known[title] = similarities
         return similarities

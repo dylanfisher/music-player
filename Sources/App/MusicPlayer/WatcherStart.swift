@@ -21,6 +21,7 @@ func startedWatcher(
         databaseURL: databaseURL, networkReaders: settings[\.networkScanReaders], events: events)
     watcher.start(
         folders: folders, syncFolder: settings[\.syncFolder],
+        stagingFolder: settings[\.stagingFolder],
         rescanNetworkFoldersAtLaunch: settings[\.rescanNetworkFoldersAtLaunch],
         pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback],
         options: ScanOptions(

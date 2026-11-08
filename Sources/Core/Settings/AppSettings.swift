@@ -80,6 +80,18 @@ public struct AppSettings: SettingsSchema {
     public let discogsFillSortArtist = Setting(
         "discogs.fillSortArtist", title: "Fill Sort Artist from Album Artist", default: false,
         "The Discogs tagger gives files without a sort artist the album artist.")
+    public let recommenderAddress = Setting<IPAddressSetting?>(
+        "recommender.address", title: "Service Address", default: nil,
+        "The IP address of the Mac running music-recommender; host names aren't taken.")
+    public let recommenderPort = Setting(
+        "recommender.port", title: "Service Port", default: 7878, range: 1...65535,
+        "The port music-recommender's API listens on.")
+    public let recommenderToken = Setting<ServiceToken?>(
+        "recommender.token", title: "Service Token", default: nil,
+        "The token music-recommender's config holds as player_token, kept in this file only.")
+    public let stagingFolder = Setting<StagingFolder?>(
+        "import.stagingFolder", title: "Staging Folder", default: nil,
+        "Where music-recommender puts downloads for review, outside your music folders.")
     public let discogsArtwork = Setting(
         "discogs.artwork", title: "Discogs Artwork", default: DiscogsArtworkMode.off,
         "The Discogs tagger writes the release's cover: never, where none, or always.")
@@ -99,7 +111,7 @@ public struct AppSettings: SettingsSchema {
     public let receiverEnabled = Setting(
         "receiver.enabled", title: "Control the Receiver with the Volume Keys", default: false,
         "The volume keys set a connected Denon or Marantz receiver's volume.")
-    public let receiverAddress = Setting<ReceiverAddress?>(
+    public let receiverAddress = Setting<IPAddressSetting?>(
         "receiver.address", title: "Receiver Address", default: nil,
         "Its IP address: for a Marantz, or a Denon the search misses.")
     public let appearance = Setting(
@@ -206,6 +218,23 @@ public struct AppSettings: SettingsSchema {
                         key: snapshotFolder.key,
                         reason: "it's inside the sync folder \"\(sync.path)\"; the app writes only"
                             + " its own log there"))
+            }
+        }
+        if let staging = values[stagingFolder.key] as? StagingFolder {
+            var others = folders.map { (path: $0.path, share: $0.share) }
+            for key in [libraryFolder.key, snapshotFolder.key] {
+                if let path = values[key] as? String { others.append((path: path, share: nil)) }
+            }
+            if let sync = values[syncFolder.key] as? SyncFolder {
+                others.append((path: sync.path, share: sync.share))
+            }
+            if let other = staging.overlap(others) {
+                conflicts.append(
+                    SettingConflict(
+                        key: stagingFolder.key,
+                        reason: "it overlaps \"\(other)\"; the staging folder must be apart from"
+                            + " the watched, library, sync and snapshot folders, since the service"
+                            + " deletes in it and the app moves files out of it"))
             }
         }
         return conflicts

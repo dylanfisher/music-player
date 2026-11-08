@@ -137,10 +137,12 @@ extension AppDelegate {
             tagger.window?.close()
             discogsTagger = nil
         }
+        if !keys.isDisjoint(with: Self.downloadsKeys(schema)) { applyDownloadsSettings() }
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
             schema.pausePollingDuringPlayback.key, schema.syncFolder.key,
-            schema.removeMissingTracks.key, schema.rescanModifiedFiles.key,
+            schema.stagingFolder.key, schema.removeMissingTracks.key,
+            schema.rescanModifiedFiles.key,
         ]
         if !keys.isDisjoint(with: library) { changedFolders(settings) }
         if keys.contains(schema.groupByAlbumArtist.key), let browser {
@@ -259,6 +261,7 @@ extension AppDelegate {
                     guard let window = self?.settingsWindow?.window else { return }
                     self?.openSyncFolder(over: window)
                 },
+                chooseStagingFolder: { [weak self] in self?.chooseStagingFolder() },
                 addFolder: { [weak self] in
                     guard let window = self?.settingsWindow?.window else { return }
                     self?.addFolder(over: window)
@@ -344,14 +347,31 @@ func syncFolderProblem(_ place: SyncFolderPlace, share: String) -> (String, Stri
 /// nil.
 @MainActor
 func syncFolderPanel(at path: String?) -> NSOpenPanel {
+    folderPanel(
+        at: path, prompt: "Sync Here",
+        message: "Choose a folder outside your music for the Macs that play this library to"
+            + " share their stats through. The app writes only its own log there.")
+}
+
+/// The panel that asks for the staging folder.
+@MainActor
+func stagingFolderPanel() -> NSOpenPanel {
+    folderPanel(
+        at: nil, prompt: "Stage Here",
+        message: "Choose the folder music-recommender puts downloads in for review, outside"
+            + " your music, on the same share as the library folder.")
+}
+
+/// A panel that asks for one folder, which it can create, open at `path`, or where macOS opens
+/// one when it's nil.
+@MainActor
+private func folderPanel(at path: String?, prompt: String, message: String) -> NSOpenPanel {
     let panel = NSOpenPanel()
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
     panel.canCreateDirectories = true
-    panel.prompt = "Sync Here"
-    panel.message =
-        "Choose a folder outside your music for the Macs that play this library to share"
-        + " their stats through. The app writes only its own log there."
+    panel.prompt = prompt
+    panel.message = message
     panel.directoryURL = path.map { URL(fileURLWithPath: $0, isDirectory: true) }
     return panel
 }

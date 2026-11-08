@@ -5,9 +5,11 @@
 - **Amends:** [0020](0020-tag-writing.md), [0023](0023-failure-table.md)
 - **Amended by:** [0118](0118-hog-mode-fix-plays-the-chosen-track-and-log-values.md): row
   35, the playback modules log their values public and a track's path hashed;
-  [0137](0137-the-discogs-token.md): rows 58 and 59, the Discogs token, the app's one secret;
+  [0137](0137-the-discogs-token.md): rows 58 and 59, the Discogs token, the app's first secret;
   [0138](0138-the-discogs-api-client.md): rows 60 to 63, the Discogs API;
-  [0140](0140-discogs-cover-art.md): row 64, a cover downloaded from Discogs.
+  [0140](0140-discogs-cover-art.md): row 64, a cover downloaded from Discogs;
+  [0145](0145-the-recommender-client.md): row 65, music-recommender's replies and the app's
+  second secret, the service token.
 
 ## Context
 
@@ -100,6 +102,7 @@ and `scripts/bundle`. It found no secret anywhere in the tree.
 | 62 | Discogs's account for the token | the app itself | the request rate | requests spaced by `X-Discogs-Ratelimit`, a minute's wait when none remain, `Retry-After` on a 429 and a third 429 stops the run | `requestsAreSpacedByTheRateLimit`, `noneRemainingWaitsTheWholeWindow`, `a429WaitsAsToldAndTheThirdStopsTheRun` |
 | 63 | the UI; the owner's terminal | the network | text from a response: titles, names, roles | the same `CatalogRelease` text the catalog gives, shown and escaped as tag text is (rows 7, 9, 39); an error's text never quotes a response | `eachReleaseFromTheAPIIsWhatTheCatalogHoldsForIt`, `noErrorTextHoldsTheTokenOrTheQuery` |
 | 64 | the app's memory; the music files | the network; a compromised response | a cover downloaded from `i.discogs.com` ([0140](0140-discogs-cover-art.md)) | https on the image host only, no token, 10 MiB, 20 s; JPEG or PNG by signature and end marker, never by `Content-Type`; at most 8,000 pixels a side and decoded only by `thumbnail(of:maxPixelSize:)` (rows 3 and 4); written only by `TagWriter`, after the one confirmation, in the batch and undo of the tags | `anImageThatIsntAWholeSmallJPEGOrPNGIsNoCover`, `theTypeIsReadFromTheBytesNotTheServersContentType`, `anImageOffTheImageHostIsNeverFetchedAndWithoutATokenNothingIs`, `aCoverIsWrittenWithTheTagsAndUndoneWithThem`, `applyCountsTheCoversAndWritesThemWithTheTagsInOneBatch` |
+| 65 | the service token; the app | LAN device | music-recommender's replies, and anything answering at its address | the address only a configured IP literal, another device's on a local subnet; POST to that address alone, no redirects, 1 MiB and 5 s; the token only in the `Authorization` header, never in a URL, an error, a log line or a problem, and kept in `config.json` as the Discogs token is ([0137](0137-the-discogs-token.md), [0144](0144-the-service-token.md)): every write mode 0600, a token in a file others can read not used, `ServiceToken` printing as `<service token>`; every reply decoded strictly at every level, unknown fields, codes and values refused, an unknown job state an error; the service's text escaped; `list` paging that must advance; the token in plaintext on the LAN ([0145](0145-the-recommender-client.md)) | `aCallPostsTheBearerTokenAndItsJSONBody`, `a401IsUnauthorizedAndNamesTheAddressButNeverTheToken`, `anAddressOffEverySubnetOrThisMacsOwnIsRefused`, `aReplyOverTheCapIsRefused`, `repliesOfAnyOtherShapeAreUnreadable`, `aJobWithAFieldMissingUnknownOrOutOfTheContractIsUnreadable`, `anUnknownStateIsAnErrorOfItsOwnNeverASkippedJob`, `aPageThatDoesntAdvanceIsUnreadable`, `theServiceTokenNeverPrintsItsValue`, `aRefusedServiceTokenIsNotInTheProblem`, `aServiceTokenInAFileOthersCanReadIsntUsed`; `scripts/fuzz recommender-reply` |
 
 **What the SQL audit found.** `rg -n '\\\(' Sources/Core/Library Sources/Primitives/SQLite
 Sources/App/MusicPlayer/ScanCommand.swift`, read for every string that reaches `prepare`,

@@ -19,6 +19,8 @@ public final class GeneralModel {
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
         case syncFolder
+        /// The staging folder, with buttons to choose one and to clear it.
+        case stagingFolder
         /// A folder's path, with buttons to choose one and to clear it: `emptyText` shows while
         /// it's null, and the panel that asks for one says `message`.
         case folder(emptyText: String, message: String)
@@ -70,7 +72,7 @@ public final class GeneralModel {
     enum Section: CaseIterable {
         /// The Playback pane's.
         case output, playCounts
-        case library, sync, receiver
+        case library, sync, receiver, downloads
         /// Shown under the Watched Folders pane's list, as Swinsian has them.
         case folderChanges, libraryFolder, networkFolders
         /// The Appearance pane's.
@@ -87,6 +89,7 @@ public final class GeneralModel {
             case .library: "Library"
             case .sync: "Sync"
             case .receiver: "Receiver"
+            case .downloads: "Downloads"
             case .folderChanges: "Folder Changes"
             case .libraryFolder: AppSettings().libraryFolder.title
             case .networkFolders: "Network Folders"
@@ -108,6 +111,7 @@ public final class GeneralModel {
             case .library: ["library."]
             case .sync: ["sync."]
             case .receiver: ["receiver."]
+            case .downloads: ["recommender.", "import."]
             case .folderChanges: [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key]
             case .libraryFolder: [schema.copyAddedFiles.key, schema.libraryFolder.key]
             case .networkFolders:
@@ -189,7 +193,8 @@ public final class GeneralModel {
     /// in the config file (ADR 0067). The Discogs window picks the dumps folder, and the
     /// catalog's path is for a Mac short of space, so both are edited there or in the file
     /// (ADR 0130); the field mappings are edited in its Field Mapping sheet, and its choices
-    /// beside it (ADR 0132). The Discogs token is a secret, kept in the file only (ADR 0137).
+    /// beside it (ADR 0132). The Discogs and service tokens are secrets, kept in the file only
+    /// (ADR 0137, ADR 0144).
     private static func isShown(_ key: String, searcherInstalled: Bool) -> Bool {
         let schema = AppSettings()
         return switch key {
@@ -197,7 +202,7 @@ public final class GeneralModel {
             schema.discogsCatalogPath.key, schema.discogsToken.key, schema.discogsMapping.key,
             schema.discogsSavedMappings.key, schema.discogsKeepExistingValues.key,
             schema.discogsSkipVideo.key, schema.discogsFillSortArtist.key,
-            schema.discogsArtwork.key:
+            schema.discogsArtwork.key, schema.recommenderToken.key:
             false
         case schema.fileViewer.key: searcherInstalled
         default: true
@@ -231,6 +236,7 @@ public final class GeneralModel {
             case .template(let tokens): .template(tokens)
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
+            case .optional(.stagingFolder): .stagingFolder
             case .barLayout(let bar):
                 .barLayout(bar, defaultLayout: barLayout(setting.defaultValue))
             case .color: .color(optional: false)
@@ -356,12 +362,13 @@ public final class GeneralModel {
         try set(key, folders)
     }
 
-    /// The sync folder as `folders` shows a folder; nil for none.
+    /// The sync or staging folder as `folders` shows a folder; nil for none.
     public func syncFolder(_ key: String) -> String? {
         (value(key) as? [String: Any]).flatMap(folderText)
     }
 
-    /// The sync folder's own name, or its share's for the share itself; nil for none.
+    /// The sync or staging folder's own name, or its share's for the share itself; nil for
+    /// none.
     func syncFolderName(_ key: String) -> String? {
         guard let folder = value(key) as? [String: Any], let path = folder["path"] as? String
         else { return nil }
@@ -434,7 +441,8 @@ public final class GeneralModel {
             // at the end, writes nothing.
             guard trimmed != self.text(key) else { return }
             try set(key, trimmed)
-        case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .barLayout, .color,
+        case .checkbox, .popUp, .folders, .syncFolder, .stagingFolder, .output, .renderer,
+            .barLayout, .color,
             .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }

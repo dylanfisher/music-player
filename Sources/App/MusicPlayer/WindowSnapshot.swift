@@ -8,7 +8,7 @@ import AppKit
 enum SnapshotTarget: String, CaseIterable {
     case main, health, stats, review, palette, playlist, tags, settings, playback, appearance,
         toolbar, folders, shortcuts
-    case statusBar, headerStatus, toolbarSheet
+    case statusBar, headerStatus, toolbarSheet, downloads
 }
 
 /// `--snapshot <file>`: draws the window, toolbar included, into a PNG, for checking the

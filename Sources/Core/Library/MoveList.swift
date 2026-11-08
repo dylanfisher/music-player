@@ -16,6 +16,12 @@ struct MoveList {
     /// Each line that doesn't parse.
     var problems: [MoveListProblem] = []
 
+    /// The list of `moves`, each an old absolute path and its new one, as its lines would be
+    /// written; a path holding a tab or a newline is a problem, as in a list read from disk.
+    init(moves: [(from: String, to: String)]) {
+        self.init(Data(moves.map { $0.from + "\t" + $0.to + "\n" }.joined().utf8))
+    }
+
     init(_ data: Data) {
         var parts = data.split(separator: 0x0A, omittingEmptySubsequences: false)
         // A list that ends in a newline, as each line written does, ends in an empty part.
