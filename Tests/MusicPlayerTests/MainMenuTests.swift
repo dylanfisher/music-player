@@ -124,6 +124,22 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     #expect(item.0.keyEquivalent == "z" && item.0.keyEquivalentModifierMask == .control)
 }
 
+@MainActor @Test func undoTagEditFollowsRedoInTheEditMenuOnOptionCommandZ() throws {
+    let (main, dispatcher) = try menu()
+    let undo = try #require(
+        items(main.bar).first { ($0.0.representedObject as? CommandID) == .undoTagEdit })
+    #expect(undo.1 == "Edit")
+    #expect(undo.0.keyEquivalent == "z")
+    #expect(undo.0.keyEquivalentModifierMask == [.command, .option])
+    let edit = items(main.bar).filter { $0.1 == "Edit" }.map(\.0).filter { !$0.isHidden }
+    let redo = try #require(edit.firstIndex { $0.title == "Redo" })
+    #expect(edit[redo + 1].title == "Undo Tag Edit")
+    #expect(
+        dispatcher.bindings.registry.command(for: KeyChord("z", [.command, .option]))
+            == .undoTagEdit)
+    #expect(!items(main.bar).contains { $0.1 == "File" && $0.0.title == "Undo Tag Edit" })
+}
+
 @MainActor @Test func focusPreviousAreaFollowsFocusNextAreaOnShiftTab() throws {
     let (main, dispatcher) = try menu()
     let view = items(main.bar).filter { $0.1 == "View" }.map(\.0).filter { !$0.isHidden }

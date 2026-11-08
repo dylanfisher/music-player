@@ -27,8 +27,8 @@ removes art. Every action is a registry command (phase 6), and the App tier only
 - **Several values.** When the user edits a field whose frame or item holds several values in
   any of the files, the sheet says so in orange before Save ("Artist holds several values in 3
   files. Saving keeps only the value shown."), and saving logs it.
-- **Commands:** Edit Tags… (⌘I, Searcher's Get Info), Undo Tag Edit, Replace Artwork… and Remove
-  Artwork, in the File menu. The sheet's art buttons run the last two through the dispatcher.
+- **Commands:** Edit Tags… (⌘I, Searcher's Get Info), Replace Artwork… and Remove Artwork, in
+  the File menu, and Undo Tag Edit (⌥⌘Z), in the Edit menu under Redo since 51f. The sheet's art buttons run the last two through the dispatcher.
   Save writes one file directly; more than one asks first ("Change the tags of 12 files?").
 - **After a write**, `LibraryWatcher.rescan(directories:)` queues the edited folders, network
   ones too, since FSEvents reports nothing there; a network rescan waits for playback as polls

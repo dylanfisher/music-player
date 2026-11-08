@@ -253,7 +253,7 @@ public enum AppCommands {
             Command(.removeTracks, "Remove…", [.init(.delete)]),
             Command(.editTags, "Get Info", [.init("i", cmd)]),
             Command(.showSpectrum, "Show Spectrum", replies: true, paths: true),
-            Command(.undoTagEdit, "Undo Tag Edit"),
+            Command(.undoTagEdit, "Undo Tag Edit", [.init("z", [opt, cmd])]),
             Command(.replaceArtwork, "Replace Artwork…"),
             Command(.removeArtwork, "Remove Artwork"),
             Command(.removeFromQueue, "Remove from Queue or Playlist", [.init(.delete, cmd)]),

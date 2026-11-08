@@ -119,7 +119,7 @@ public enum AppMenus {
                     .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),
                     .command(.showInPlaylist), .command(.showAlbum), .command(.showArtist),
                     .separator, .command(.editTags), .command(.showSpectrum),
-                    .command(.undoTagEdit), .command(.replaceArtwork), .command(.removeArtwork),
+                    .command(.replaceArtwork), .command(.removeArtwork),
                     .submenu(
                         ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
                     .command(.toggleLoved), .command(.toggleDisliked), .separator,
@@ -130,7 +130,7 @@ public enum AppMenus {
                 entries: [
                     .standard(StandardItem("Undo", "undo:", KeyChord("z", cmd))),
                     .standard(StandardItem("Redo", "redo:", KeyChord("z", [cmd, .shift]))),
-                    .separator,
+                    .command(.undoTagEdit), .separator,
                     .standard(StandardItem("Cut", "cut:", KeyChord("x", cmd))),
                     .standard(StandardItem("Copy", "copy:", KeyChord("c", cmd))),
                     .standard(StandardItem("Paste", "paste:", KeyChord("v", cmd))),
