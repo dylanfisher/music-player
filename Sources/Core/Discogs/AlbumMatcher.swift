@@ -38,21 +38,27 @@ func isReported(_ done: Int, of count: Int) -> Bool {
     done == count || done % max(1, count / 200) == 0
 }
 
-/// Matches albums with one catalog, on one thread, as its connection is.
+/// Matches albums with one catalog, on one thread, as its connection is, or with releases the
+/// API fetched and no catalog.
 final class AlbumMatcher {
-    let catalog: Catalog
+    let catalog: Catalog?
     /// Whether a release that is only video is left out, unless the tracks' ids name it or the
     /// user chose it.
     let skipsVideo: Bool
 
-    init(_ catalog: Catalog, skippingVideo: Bool) {
+    init(_ catalog: Catalog?, skippingVideo: Bool) {
         self.catalog = catalog
         skipsVideo = skippingVideo
     }
 
-    /// `album`'s match; `choice`, a release the user chose, is the match when the catalog has
-    /// it, tiered by its own score alone, and is a candidate even when no key finds it.
-    func match(_ album: DiscogsAlbum, choosing choice: Int? = nil) throws -> AlbumMatch {
+    /// `album`'s match; `choice`, a release the user chose, is the match when the catalog or
+    /// `fetched` has it, tiered by its own score alone, and is a candidate even when no key
+    /// finds it. `found` are candidates the API found, after the catalog's, and `fetched` the
+    /// releases it returned, which are read before the catalog.
+    func match(
+        _ album: DiscogsAlbum, choosing choice: Int? = nil,
+        found extra: [(id: Int, foundBy: CandidateKey)] = [], fetched: [Int: CatalogRelease] = [:]
+    ) throws -> AlbumMatch {
         let ids = album.tracks.map(\.releaseID)
         let tagged = Set(ids.compactMap { $0 })
         let isMatched = tagged.count == 1 && !ids.contains(nil)
@@ -60,12 +66,14 @@ final class AlbumMatcher {
         let seconds = album.tracks.map(\.seconds)
         var releases: [Int: CatalogRelease] = [:]
         var scores: [ReleaseScore] = []
-        let found = try candidateIDs(for: album, in: catalog)
+        var found = try candidateIDs(for: album, in: catalog)
+        var seen = Set(found.map(\.id))
+        for candidate in extra where seen.insert(candidate.id).inserted { found.append(candidate) }
         let foundBy = Dictionary(uniqueKeysWithValues: found.map { ($0.id, $0.foundBy) })
         var candidates = found.map(\.id)
         if let choice, !candidates.contains(choice) { candidates.append(choice) }
         for id in candidates {
-            guard let release = try catalog.release(id: id) else { continue }
+            guard let release = try fetched[id] ?? catalog?.release(id: id) else { continue }
             if skipsVideo, release.isVideo, id != choice, !tagged.contains(String(id)) {
                 continue
             }
