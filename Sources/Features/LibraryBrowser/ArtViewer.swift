@@ -104,17 +104,28 @@ final class ArtViewer {
         }
     }
 
-    /// Steps through `pictures` from `current`, which shows already.
+    /// Steps through `pictures` from `current`, which shows already. When the file changed
+    /// since the row's art was read and `current` isn't among them, it shows the first, so
+    /// the picture and the line saying which agree.
     func show(
         _ pictures: [EmbeddedPicture], current: EmbeddedArt, path: String,
         _ failed: @escaping (String) -> Void
     ) {
         self.pictures = pictures
-        shown = pictures.firstIndex { $0.art == current } ?? 0
         file = (path, failed)
         view.showsSteps = pictures.count > 1
+        if let index = pictures.firstIndex(where: { $0.art == current }) {
+            shown = index
+        } else if let first = pictures.first {
+            shown = 0
+            session += 1
+            load(first.art, path: path, failed: failed)
+        }
         showPlace()
     }
+
+    /// The image shown, for tests.
+    var image: NSImage? { view.image }
 
     /// "2 of 3 · Back Cover", or "2 of 3" for a picture of no type; empty for one picture.
     var placeText: String {

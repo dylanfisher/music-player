@@ -110,3 +110,26 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     viewer.step(by: 1)
     #expect(viewer.shown == 0)
 }
+
+/// A file whose pictures changed since its row's art was read opens on its first picture, so
+/// the picture and the line agree.
+@MainActor @Test func artNoLongerInTheFileShowsTheFirstPicture() async throws {
+    let url = try flacWithPictures([4, 3])
+    let metadata = try readMetadata(at: url).metadata
+    let viewer = ArtViewer(
+        image: NSImage(size: NSSize(width: 99, height: 99)), screen: try #require(NSScreen.main),
+        owner: nil)
+    viewer.show()
+    defer { viewer.close() }
+    let stale = EmbeddedArt(offset: 1, byteCount: 1, mimeType: "image/png", unsynchronised: false)
+    viewer.show(metadata.pictures, current: stale, path: url.path) { Issue.record("\($0)") }
+    #expect(viewer.shown == 0)
+    #expect(viewer.placeText == "1 of 2 · Back Cover")
+    // The first picture is 10 pixels wide, the opening image 99 points. Another test's posting
+    // that the app resigned active closes the viewer and drops the decode, so it's waited for
+    // only while the viewer is open.
+    try await waitFor("the first picture") {
+        !viewer.window.isVisible || viewer.image?.size.width != 99
+    }
+    if viewer.window.isVisible { #expect(viewer.image?.size.width == 10) }
+}
