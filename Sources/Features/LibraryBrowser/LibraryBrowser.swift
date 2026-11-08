@@ -1473,14 +1473,24 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             !ids.isEmpty
         else { return }
         Task {
-            _ = await model.showAll()
+            // Already All Music: the selection is there to center.
+            guard await model.showAll() else { return showSelectedTrack() }
             if !searchField.stringValue.isEmpty { searchField.stringValue = "" }
             showSource()
-            table.select(model.rows(holding: Set(ids)))
+            let rows = model.rows(holding: Set(ids))
+            guard !rows.isEmpty else {
+                beep()
+                return show(failure: Self.notInAllMusicText)
+            }
+            table.select(rows)
             table.centerSelection()
             focusTracks()
         }
     }
+
+    /// What Show in All Music says when the library no longer lists any selected track, as
+    /// after a rescan removed them.
+    static let notInAllMusicText = "None of the selected tracks is in All Music any more"
 
     /// What Open Discogs Release says when the first selected track has no release id.
     static let noReleaseIDText = "The selected track has no Discogs release ID"

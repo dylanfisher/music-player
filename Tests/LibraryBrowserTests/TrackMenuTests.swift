@@ -81,6 +81,25 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     #expect(!browser.canShowSelectionInAllMusic)
 }
 
+/// Tracks the library no longer lists, as after a rescan removed them, are said to be gone
+/// rather than leaving All Music with nothing selected.
+@MainActor @Test func showInAllMusicSaysSoWhenNoneOfTheTracksIsListed() async throws {
+    let (browser, index) = try await browser(selecting: [])
+    var beeps = 0
+    browser.beep = { beeps += 1 }
+    let gone = browser.model.trackIDs[10]
+    let mix = try index.createPlaylist(named: "Mix")
+    _ = try index.addToPlaylist(mix, trackIDs: [gone])
+    await browser.model.setSource(.playlist(mix))
+    browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
+    try index.database.prepare("DELETE FROM tracks WHERE file_id = ?").run(gone)
+    browser.showSelectionInAllMusic()
+    try await waitFor("the message") { browser.statusText == LibraryBrowser.notInAllMusicText }
+    #expect(browser.showsAllMusic)
+    #expect(beeps == 1)
+    #expect(browser.table.table.selectedRowIndexes.isEmpty)
+}
+
 /// Open Discogs Release reads the first selected row's release id when it runs, and says so
 /// when that track has none.
 @MainActor @Test func openDiscogsReleaseOpensTheFirstSelectedTracksRelease() async throws {
