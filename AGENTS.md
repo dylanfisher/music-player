@@ -42,7 +42,7 @@ Non-negotiable, regardless of stack. Rationale: [docs/principles.md](docs/princi
 - **The real-time audio thread is C-only.** Nothing reachable from the CoreAudio IO proc allocates, locks, logs, or calls Swift/ObjC; it goes through `Sources/Primitives/RingBuffer`.
 - **Commit locally; never push.** No `git push`, no `gh`. The owner pushes. Once a worktree's commits are on main, remove it and its branch (`git worktree remove`, `git branch -D`).
 - **Pre-release:** breaking changes are fine. Stored data has one shape — no version fields, migrations, or compatibility shims; data that doesn't match is discarded. Delete this line at the first production release.
-- The app has no secrets. If one appears, stop and ask before adding any secret handling.
+- **One secret: the Discogs token** (optional), kept only in `config.json` at mode 0600 ([ADR 0137](docs/decisions/0137-the-discogs-token.md)). Never log, print, copy or commit it, and never put it in a test or fixture; `DiscogsToken` redacts itself. No test or tool calls the Discogs API: tests use written responses through a stand-in transport. Any other secret: stop and ask first.
 
 ## Definition of done
 
