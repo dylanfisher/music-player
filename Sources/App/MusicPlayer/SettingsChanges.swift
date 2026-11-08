@@ -55,21 +55,24 @@ extension AppDelegate {
     private func askToSeparateReleases(_ settings: ConfigStore<AppSettings>) {
         let on = settings[\.separateReleases]
         let shown = settingsWindow.map(\.window).flatMap { $0.isVisible ? $0 : nil }
-        guard let inUse = separatesReleases, on != inUse,
+        guard let inUse = separatesReleases, SeparateReleasesChange(inUse: inUse).asks(on),
             let over = shown ?? window?.window, over.attachedSheet == nil
         else { return }
+        let change = SeparateReleasesChange(inUse: inUse)
         askToRescan(RescanNotice(separatingReleases: on), over: over) { [weak self] rescan in
             guard let self else { return }
-            if rescan {
+            switch change.answer(rescan: rescan, setting: settings[\.separateReleases]) {
+            case .relaunch(let value):
                 relaunch(
-                    adding: rescanConfirmedArguments(on),
+                    adding: rescanConfirmedArguments(value),
                     failing: "The app couldn't open again; open it to rescan the library")
-            } else {
+            case .revert:
                 do {
                     try settings.set(\.separateReleases, to: inUse)
                 } catch {
                     fail("Couldn't turn Separate Releases back", error)
                 }
+            case .nothing: break
             }
         }
     }

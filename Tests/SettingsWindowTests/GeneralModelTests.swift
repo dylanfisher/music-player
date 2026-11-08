@@ -309,6 +309,9 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         ])
     #expect(
         sections.first { $0.section == .playCounts }?.rows.map(\.key) == [schema.playedPercent.key])
+    #expect(
+        sections.first { $0.section == .library }?.rows.map(\.key).contains(
+            schema.separateReleases.key) == true)
     func keys(_ section: GeneralModel.Section) -> [String] {
         sections.first { $0.section == section }?.rows.map(\.key) ?? []
     }
