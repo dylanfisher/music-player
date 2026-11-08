@@ -87,8 +87,8 @@ func runImport(
     checkpointBytes: Int = checkpointBytes, progress report: (CatalogImportProgress) -> Void
 ) throws(CatalogImportError) -> CatalogImportSummary {
     let started = Date()
-    let catalogPath = comparable(catalog.path)
-    if let watched = watchedFolders.first(where: { isPath(catalogPath, inOrAt: comparable($0)) }) {
+    let catalogPath = standardized(catalog.path)
+    if let watched = watchedFolders.first(where: { isPath(catalogPath, inOrAt: standardized($0)) }) {
         throw .catalogInsideWatchedFolder(catalog: catalog.path, folder: watched)
     }
     let set = try DumpSet.newest(in: folder)
@@ -306,9 +306,4 @@ private func flush(_ url: URL) throws {
     let handle = try FileHandle(forUpdating: url)
     try handle.synchronize()
     try handle.close()
-}
-
-/// `path` with `.`, `..` and repeated slashes resolved, in NFC, to compare with another.
-private func comparable(_ path: String) -> String {
-    (path.precomposedStringWithCanonicalMapping as NSString).standardizingPath
 }

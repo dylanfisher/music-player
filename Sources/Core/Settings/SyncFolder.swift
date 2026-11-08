@@ -54,7 +54,7 @@ public struct SyncFolder: SettingValue {
 }
 
 /// `path` in NFC with `.`, `..` and repeated slashes resolved, to compare with another.
-func standardized(_ path: String) -> String {
+public func standardized(_ path: String) -> String {
     (path.precomposedStringWithCanonicalMapping as NSString).standardizingPath
 }
 
