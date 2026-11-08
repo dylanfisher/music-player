@@ -123,13 +123,11 @@ private final class DiscogsAPIs {
 }
 
 /// The tagger window's choices as the settings hold them.
-
 @MainActor func taggerChoices(_ settings: ConfigStore<AppSettings>) -> TaggerChoices {
     TaggerChoices(
         keepExistingValues: settings[\.discogsKeepExistingValues],
         skipVideo: settings[\.discogsSkipVideo], fillSortArtist: settings[\.discogsFillSortArtist],
         artwork: settings[\.discogsArtwork])
-
 }
 
 /// The watched folders' paths where they are now; one on a share that isn't mounted holds

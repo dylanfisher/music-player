@@ -19,8 +19,8 @@ the release's primary image and write it as the cover, through `TagWriter`.
   replace), default off. `DiscogsMapping` needs a rule for every `DiscogsField` and a bad value
   blocks the config file (ADR 0082), so a new field would make the owner's saved mapping, and
   every saved one, refuse to load. Presets don't carry it. The Field Mapping sheet shows it under
-  the fields, disabled with "Needs a Discogs token" when there is none, and OK saves it with the
-  mapping. It is in the menus with the tagger's other choices.
+  the fields, disabled with "Needs a Discogs token in config.json" when there is none, and OK
+  saves it with the mapping. It is in the menus with the tagger's other choices.
 - **When it's fetched.** When View Changes opens or Apply plans, with the files being read,
   before the confirmation: the release through the cache, then its primary image, once a
   release a session. A catalog match has no image in the catalog, so it costs one request for

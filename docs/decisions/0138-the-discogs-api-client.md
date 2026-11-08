@@ -35,6 +35,11 @@ the only HTTP client was `LocalHTTPClient`, which talks to devices on the local 
   catalog number, and by artist and title, first page of 25 only. Discogs answers searches
   only with a token, so without one a search throws `tokenRequired` and sends nothing;
   `/releases` and `/masters` work without.
+- **One client a token.** The app makes the `DiscogsAPI` in `DiscogsCommands`, from the
+  config file's token (`fileValue(\.discogsToken)`) each time the tagger asks, and makes it
+  again only when the token has changed, so pacing and the 429 count carry from one Analyze to
+  the next. The tagger feature reads no setting and never sees the token; the transport is
+  built there and nowhere else.
 - **Pacing.** Requests go one at a time. They start `60 / limit` seconds apart, the limit
   read from `X-Discogs-Ratelimit` (60 with a token and 25 without until a reply says, at most
   240 believed); when `X-Discogs-Ratelimit-Remaining` is 0 the next waits a whole minute. A
