@@ -31,17 +31,18 @@ public final class PaletteModel {
         self.now = now
     }
 
-    /// Starts a listing of `items` with an empty query, as when the palette opens, and returns
-    /// its session. The change is made before this returns, so an `append` made after builds on
+    /// Starts a listing of `items` with `query`, as when the palette opens, and returns its
+    /// session. The change is made before this returns, so an `append` made after builds on
     /// it. Call `rank` or `rankNow` to rank it.
     public func open(
-        _ items: [PaletteItem], byKind: Bool, emptyQueryKinds: Set<PaletteItem.Kind>? = nil
+        _ items: [PaletteItem], byKind: Bool, emptyQueryKinds: Set<PaletteItem.Kind>? = nil,
+        query: String = ""
     ) -> Int {
         session += 1
         self.items = items
         self.byKind = byKind
         self.emptyQueryKinds = emptyQueryKinds
-        query = ""
+        self.query = query
         return session
     }
 

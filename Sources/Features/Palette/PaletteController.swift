@@ -83,7 +83,8 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         if isShowing { close(restoringKeys: false) }
         self.mode = mode
         previousResponder = window.firstResponder
-        field.stringValue = ""
+        let query = lastQueries[mode] ?? ""
+        field.stringValue = query
         field.placeholderString =
             mode == .commands
             ? "Commands, settings, outputs, playlists, genres" : "Artists, albums, tracks"
@@ -93,15 +94,36 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         panel.setFrame(frame, display: false)
         shownAt = frame
         let session = model.open(
-            items, byKind: mode == .goToItem, emptyQueryKinds: mode == .commands ? [.command] : nil)
+            items, byKind: mode == .goToItem, emptyQueryKinds: mode == .commands ? [.command] : nil,
+            query: query)
         // Listed before the panel shows, so its first frame has the rows rather than the last
         // listing's or none. Laid out first, since a row's height depends on the table's width,
-        // which the table has only after its first layout.
+        // which the table has only after its first layout. Go to Item's kept query is ranked
+        // after, since its rows can be too many to match in a frame; until then it shows the
+        // rows that query listed last time.
         panel.contentView?.layoutSubtreeIfNeeded()
-        model.rankNow()
+        if mode == .goToItem, !query.isEmpty {
+            Task { await model.rank() }
+        } else {
+            model.rankNow()
+        }
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(field)
+        // Selected, so typing replaces the kept query and Return runs its top result again.
+        field.selectText(nil)
         return session
+    }
+
+    /// Each mode's last query, which it opens with again for the rest of the app's session,
+    /// as Sublime Text's palette does.
+    private var lastQueries: [PaletteMode: String] = [:]
+
+    /// Clears the query in place, as the palette's own chord does while it has one.
+    private func clearQuery() {
+        guard let mode else { return }
+        field.stringValue = ""
+        lastQueries[mode] = ""
+        Task { await model.setQuery("") }
     }
 
     /// Adds items that arrived after the palette opened `session`. They're dropped when it has
@@ -172,6 +194,11 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
             runSelected(filters: true)
             return true
         }
+        // Its own chord clears a query first, and closes it once the field is empty.
+        if !field.stringValue.isEmpty, chords.contains(where: closingChords(mode).contains) {
+            clearQuery()
+            return true
+        }
         let close = closingChords(mode) + [KeyChord("w", .command)]
         if chords.contains(where: close.contains) {
             self.close()
@@ -206,6 +233,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
 
     public func controlTextDidChange(_ notification: Notification) {
         let text = field.stringValue
+        if let mode { lastQueries[mode] = text }
         Task { await model.setQuery(text) }
     }
 
