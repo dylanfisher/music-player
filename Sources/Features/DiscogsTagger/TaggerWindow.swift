@@ -585,7 +585,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     @objc private func choiceToggled() {
         let choices = TaggerChoices(
             keepExistingValues: keepBox.state == .on, skipVideo: skipVideoBox.state == .on,
-            fillSortArtist: sortArtistBox.state == .on)
+            fillSortArtist: sortArtistBox.state == .on, artwork: model.choices.artwork)
         model.setChoices(choices)
         choicesChosen(choices)
     }
@@ -593,11 +593,18 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     @objc private func showMapping() {
         guard let window, sheet == nil else { return }
         let mapping = MappingSheet(
-            draft: MappingDraft(mapping: model.mapping, saved: model.savedMappings))
+            draft: MappingDraft(mapping: model.mapping, saved: model.savedMappings),
+            artwork: model.choices.artwork, hasToken: model.hasToken())
         present(mapping, over: window) { [weak self] in
-            guard let draft = mapping.result else { return }
-            self?.mappingChosen(draft.mapping, draft.saved)
+            guard let self, let draft = mapping.result else { return }
+            mappingChosen(draft.mapping, draft.saved)
+            guard mapping.artwork != model.choices.artwork else { return }
+            var choices = model.choices
+            choices.artwork = mapping.artwork
+            model.setChoices(choices)
+            choicesChosen(choices)
         }
+
     }
 
     @objc private func showOtherReleases() {

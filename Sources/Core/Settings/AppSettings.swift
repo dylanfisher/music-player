@@ -77,6 +77,9 @@ public struct AppSettings: SettingsSchema {
     public let discogsFillSortArtist = Setting(
         "discogs.fillSortArtist", title: "Fill Sort Artist from Album Artist", default: false,
         "The Discogs tagger gives files without a sort artist the album artist.")
+    public let discogsArtwork = Setting(
+        "discogs.artwork", title: "Discogs Artwork", default: DiscogsArtworkMode.off,
+        "The Discogs tagger writes the release's cover: never, where none, or always.")
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")

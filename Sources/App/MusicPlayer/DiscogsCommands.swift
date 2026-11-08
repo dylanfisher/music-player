@@ -63,6 +63,7 @@ extension AppDelegate {
                 try settings.set(\.discogsKeepExistingValues, to: choices.keepExistingValues)
                 try settings.set(\.discogsSkipVideo, to: choices.skipVideo)
                 try settings.set(\.discogsFillSortArtist, to: choices.fillSortArtist)
+                try settings.set(\.discogsArtwork, to: choices.artwork)
             } catch {
                 self?.fail("Couldn't save the Discogs tagger's choices", error)
             }
@@ -126,7 +127,9 @@ private final class DiscogsAPIs {
 @MainActor func taggerChoices(_ settings: ConfigStore<AppSettings>) -> TaggerChoices {
     TaggerChoices(
         keepExistingValues: settings[\.discogsKeepExistingValues],
-        skipVideo: settings[\.discogsSkipVideo], fillSortArtist: settings[\.discogsFillSortArtist])
+        skipVideo: settings[\.discogsSkipVideo], fillSortArtist: settings[\.discogsFillSortArtist],
+        artwork: settings[\.discogsArtwork])
+
 }
 
 /// The watched folders' paths where they are now; one on a share that isn't mounted holds

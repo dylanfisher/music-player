@@ -6,7 +6,8 @@ import UniformTypeIdentifiers
 /// its tags, the join between its values and a template; a preset or a saved mapping to start
 /// from, and Save As to keep this one by name; Import…, Paste and Export… for the mapping as
 /// JSON. OK saves it as the mapping in use. A key spelled per format or numbered is shown, and
-/// edited in the config file.
+/// edited in the config file. Under the fields, Artwork says whether the release's cover is
+/// written, a setting of its own beside the mapping (ADR 0140), which needs a Discogs token.
 @MainActor
 final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource,
     NSTableViewDelegate, NSTextFieldDelegate
@@ -28,15 +29,31 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     private var help: NSPopover?
     /// The mapping and saved ones on OK; nil for Cancel.
     private(set) var result: MappingDraft?
+    /// The artwork mode shown, which OK saves with the mapping.
+    private(set) var artwork: DiscogsArtworkMode
+    let artworkPopUp = NSPopUpButton()
+    let artworkNote = NSTextField(labelWithString: "")
+    static let artworkTitle = "Artwork"
+    static let needsTokenNote = "Needs a Discogs token in config.json"
 
-    init(draft: MappingDraft) {
+    init(draft: MappingDraft, artwork: DiscogsArtworkMode, hasToken: Bool) {
         self.draft = draft
+        self.artwork = artwork
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
             styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.minSize = NSSize(width: 700, height: 360)
         super.init(window: window)
         build(in: window)
+        artworkPopUp.addItems(withTitles: DiscogsArtworkMode.allCases.map(\.title))
+        artworkPopUp.selectItem(at: DiscogsArtworkMode.allCases.firstIndex(of: artwork)!)
+        artworkPopUp.target = self
+        artworkPopUp.action = #selector(artworkChosen)
+        artworkPopUp.isEnabled = hasToken
+        artworkNote.stringValue =
+            hasToken
+            ? "The release's primary image, written as each file's cover" : Self.needsTokenNote
+        artworkNote.textColor = .secondaryLabelColor
         confirmReplace = { [weak self] name, answer in self?.askToReplace(name, answer) }
         refused = { [weak self] message, detail in self?.showRefusal(message, detail) }
         refresh()
@@ -77,12 +94,15 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         file[2].toolTip = "Writes the mapping shown as JSON, as the config file holds it"
         let buttons = NSStackView(
             views: file + [problemLabel, NSView(), cancel, okButton])
-        let page = NSStackView(views: [top, scroll, buttons])
+        let art = NSStackView(views: [
+            NSTextField(labelWithString: "\(Self.artworkTitle):"), artworkPopUp, artworkNote,
+        ])
+        let page = NSStackView(views: [top, scroll, art, buttons])
         page.orientation = .vertical
         page.alignment = .leading
         page.spacing = 10
         page.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
-        for view in [top, scroll, buttons] {
+        for view in [top, scroll, art, buttons] {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -32).isActive = true
         }
         window.contentView = page
@@ -308,7 +328,12 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
 
     @objc private func cancel() { endSheet() }
 
+    @objc private func artworkChosen() {
+        artwork = DiscogsArtworkMode.allCases[artworkPopUp.indexOfSelectedItem]
+    }
+
     @objc private func ok() {
+
         // Ending the edit in a field commits its text to the draft, so check it after.
         window?.makeFirstResponder(nil)
         guard draft.problem == nil else { return NSSound.beep() }

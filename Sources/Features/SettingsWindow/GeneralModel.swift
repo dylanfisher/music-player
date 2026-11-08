@@ -195,7 +195,8 @@ public final class GeneralModel {
         case schema.networkScanReaders.key, schema.discogsDumpsFolder.key,
             schema.discogsCatalogPath.key, schema.discogsToken.key, schema.discogsMapping.key,
             schema.discogsSavedMappings.key, schema.discogsKeepExistingValues.key,
-            schema.discogsSkipVideo.key, schema.discogsFillSortArtist.key:
+            schema.discogsSkipVideo.key, schema.discogsFillSortArtist.key,
+            schema.discogsArtwork.key:
             false
         case schema.fileViewer.key: searcherInstalled
         default: true

@@ -98,7 +98,7 @@ extension AppDelegate {
         }
         let choices = [
             schema.discogsKeepExistingValues.key, schema.discogsSkipVideo.key,
-            schema.discogsFillSortArtist.key,
+            schema.discogsFillSortArtist.key, schema.discogsArtwork.key,
         ]
         if !keys.isDisjoint(with: choices) {
             discogsTagger?.choicesChanged(taggerChoices(settings))

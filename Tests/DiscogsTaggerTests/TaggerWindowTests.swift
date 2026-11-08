@@ -222,7 +222,8 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
 @MainActor
 @Test func theFieldMappingSheetListsEveryFieldAndEditsTheDraft() throws {
     let sheet = MappingSheet(
-        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []))
+        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []), artwork: .off,
+        hasToken: true)
     #expect(sheet.numberOfRows(in: sheet.table) == DiscogsField.allCases.count)
     #expect(MappingSheet.fields.first == .releaseID)
     #expect(MappingSheet.fields.last == .involvedPeople)
@@ -312,7 +313,8 @@ private final class Imports: @unchecked Sendable {
 @Test func saveAsChoosesTheNewNameAndAsksBeforeReplacingOne() throws {
     let mine = NamedDiscogsMapping(name: "Mine", mapping: DiscogsPreset.minimal.mapping)
     let sheet = MappingSheet(
-        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: [mine]))
+        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: [mine]),
+        artwork: .off, hasToken: true)
     var asked: [String] = []
     var answer = false
     sheet.confirmReplace = { name, reply in
@@ -347,7 +349,8 @@ private final class Imports: @unchecked Sendable {
 @Test func aMappingExportedImportedAndPastedBackIsTheOneExported() throws {
     var mapping = DiscogsPreset.yate.mapping
     mapping[.genres].format.template = "{genre} - {styles}"
-    let sheet = MappingSheet(draft: MappingDraft(mapping: mapping, saved: []))
+    let sheet = MappingSheet(
+        draft: MappingDraft(mapping: mapping, saved: []), artwork: .off, hasToken: true)
     var refusals: [String] = []
     sheet.refused = { message, _ in refusals.append(message) }
     let folder = FileManager.default.temporaryDirectory
@@ -360,7 +363,8 @@ private final class Imports: @unchecked Sendable {
     #expect(text == AppSettings().discogsMapping.text(mapping), "the config file's shape")
 
     let other = MappingSheet(
-        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []))
+        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []), artwork: .off,
+        hasToken: true)
     other.refused = { message, _ in refusals.append(message) }
     other.importFile(at: file)
     #expect(other.draft.mapping == mapping)
@@ -371,7 +375,8 @@ private final class Imports: @unchecked Sendable {
     let pasteboard = NSPasteboard.withUniqueName()
     defer { pasteboard.releaseGlobally() }
     let pasted = MappingSheet(
-        draft: MappingDraft(mapping: DiscogsPreset.minimal.mapping, saved: []))
+        draft: MappingDraft(mapping: DiscogsPreset.minimal.mapping, saved: []), artwork: .off,
+        hasToken: true)
     pasted.pasteboard = pasteboard
     pasted.refused = { message, _ in refusals.append(message) }
     pasteboard.clearContents()
