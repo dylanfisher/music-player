@@ -24,25 +24,44 @@ private func result(_ tier: MatchTier, chose: Int?, tracks: Int = 2) -> AlbumMat
         mapping: [:], candidates: [])
 }
 
-@Test func theBarCountsTwinsAsTheReleaseAndLeavesOutIncompletesForAnotherCount() {
-    let albums = (1...6).map { tuning($0) }
+@Test func theBarLeavesOutWhatNothingCouldFitAndCountsTwinsAsTheRelease() {
+    let albums = (1...9).map { tuning($0) }
     let matches = [
         result(.exact, chose: 1),  // the tagged release
         result(.exact, chose: 99),  // a twin
         result(.exact, chose: 98),  // neither
-        result(.incomplete, chose: 4, tracks: 3),  // another count: left out
+        result(.incomplete, chose: 4, tracks: 3),  // kept at another count: left out
         result(.likely, chose: 97),  // a Likely with neither: a miss
-        result(.incomplete, chose: 96, tracks: 3),  // another release: counted, a miss
+        result(.exact, chose: 96),  // neither, the tags outdated: a known miss
+        result(.exact, chose: 95),  // the tagged release not in the dump: left out
+        result(.exact, chose: 94),  // the tagged release another count: left out
+        result(.likely, chose: 8),  // the tagged release's titles changed: left out
     ]
-    let kinships: [Kinship] = [.same, .twin, .other, .same, .other, .other]
-    let lines = tuningLines(albums, matches, kinships: kinships, seconds: 1, heading: "h")
-    #expect(
-        lines.contains(
-            "Incomplete for another count, with the tagged release or a twin, left out: 1"))
-    #expect(lines.contains("chosen a twin of the tagged release: 1"))
-    #expect(lines.contains("Exact or Likely with the tagged release or a twin: 2 of 5 (40.0%)"))
-    #expect(lines.contains("Exact with a release neither the tagged one nor a twin: 1"))
-    // The raw numbers, as before.
-    #expect(lines.contains("Exact or Likely with the tagged release: 1 (16.7%)"))
-    #expect(lines.contains("Exact with another release: 2"))
+    let outcomes = [
+        TuningOutcome(kinship: .same, taggedFit: .fits),
+        TuningOutcome(kinship: .twin, taggedFit: .fits),
+        TuningOutcome(kinship: .other, taggedFit: .fits),
+        TuningOutcome(kinship: .same, taggedFit: .fits),
+        TuningOutcome(kinship: .other, taggedFit: .fits),
+        TuningOutcome(kinship: .other, taggedFit: .fits, tagsOutdated: true),
+        TuningOutcome(kinship: .other, taggedFit: nil),
+        TuningOutcome(kinship: .other, taggedFit: .otherCount),
+        TuningOutcome(kinship: .same, taggedFit: .otherTitles),
+    ]
+    let lines = tuningLines(albums, matches, outcomes: outcomes, seconds: 1, heading: "h")
+    for expected in [
+        "left out, the tagged release not in the dump: 1",
+        "left out, the tagged release another count than the files: 1",
+        "left out, the tagged release's titles not the files': 1",
+        "left out, Incomplete with the tagged release or a twin, the files another count: 1",
+        "counted: 5", "chosen a twin of the tagged release: 1",
+        "Exact or Likely with the tagged release or a twin: 2 of 5 (40.0%)",
+        "Exact with a release neither the tagged one nor a twin: 2 of 5 (40.0%)",
+        "known misses, the tags' date or MEDIA one the tagged release no longer has: 1",
+        // The raw numbers, as before.
+        "Exact or Likely with the tagged release: 2 (22.2%)",
+        "Exact with another release: 5",
+    ] {
+        #expect(lines.contains(expected), "\(expected)")
+    }
 }

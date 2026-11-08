@@ -3,10 +3,11 @@ import Library
 
 /// The order for releases that fit an album's tracklist equally, which the owner approved on
 /// 2026-11-07 (ADR 0131): a barcode or catalog number spelled as the tags spell it, then one
-/// that folds the same, then the format the tags' `MEDIA` names, then the tags' `DATE`, then a
-/// digital or CD format rather than vinyl or another, then the master's main release. `MEDIA`
-/// and `DATE` match as written first, then as Discogs has since filled them in: more
-/// descriptions, a fuller date. A number on the first label, which is the one YATE writes,
+/// that folds the same, then the format the tags' `MEDIA` names, then the tags' `DATE`, then
+/// their country, then a digital or CD format rather than vinyl or another, then the master's
+/// main release. `MEDIA`, `DATE` and the country match as written first, then as Discogs has
+/// since filled them in or changed them: more descriptions, a fuller date, a region that names
+/// the country. A number on the first label, which is the one YATE writes,
 /// beats one on another, and a release with both the barcode and the number beats one with
 /// either. Each step keeps the scores that pass it best, when any pass; more than one left
 /// is still a tie.
@@ -15,7 +16,7 @@ func tieBreak(
 ) -> [ReleaseScore] {
     let barcode = album.barcode.map(CatalogKey.barcode).flatMap { $0.isEmpty ? nil : $0 }
     let number = album.catalogNumber.flatMap(CatalogKey.catalogNumber)
-    let spelledBarcode = album.barcode?.trimmingCharacters(in: .whitespaces)
+    let spelledBarcode = barcode == nil ? nil : album.barcode?.trimmingCharacters(in: .whitespaces)
     let spelledNumber = album.catalogNumber?.trimmingCharacters(in: .whitespaces)
     // Each step gives a release a weight; the releases of the highest weight above 0 stay.
     // A catalog number counts double on the first label, which `CATALOGNUMBER` is (ADR 0128).
@@ -46,6 +47,11 @@ func tieBreak(
         { release in
             guard let date = album.date, let released = release.released else { return 0 }
             return datesFit(date, released) ? 1 : 0
+        },
+        { release in album.country != nil && release.country == album.country ? 1 : 0 },
+        { release in
+            guard let country = album.country, let released = release.country else { return 0 }
+            return countriesFit(country, released) ? 1 : 0
         },
         { release in release.formats.contains { preferredFormats.contains($0.name) } ? 1 : 0 },
         { release in release.isMainRelease ? 1 : 0 },
@@ -90,4 +96,14 @@ func datesFit(_ a: String, _ b: String) -> Bool {
     }
     let (a, b) = (known(a), known(b))
     return a.count >= 4 && b.count >= 4 && (a.hasPrefix(b) || b.hasPrefix(a))
+}
+
+/// Whether two countries as Discogs writes them name one place: the same once folded, or one
+/// a part of the other's " & " list ("UK" and "UK & Europe").
+func countriesFit(_ a: String, _ b: String) -> Bool {
+    func parts(_ text: String) -> Set<String> {
+        Set(text.components(separatedBy: " & ").map { CatalogKey.fold($0) }.filter { !$0.isEmpty })
+    }
+    let (a, b) = (parts(a), parts(b))
+    return !a.isEmpty && !b.isEmpty && (a.isSubset(of: b) || b.isSubset(of: a))
 }

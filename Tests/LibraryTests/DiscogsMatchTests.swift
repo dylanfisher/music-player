@@ -58,8 +58,10 @@ private func track(_ path: String, album: String, release: String?, master: Stri
         ).scanned,
         Crafted(
             path: "/m/a/2.flac", title: "Two", album: "A", albumArtist: "Band", disc: 1,
-            number: 2, rateHz: 48000, label: "Svek & Other", catalogNumber: "SK 032",
-            barcode: "0 1234", date: "1999-03-00", media: "Vinyl (LP,Album)"
+            number: 2, rateHz: 48000,
+            custom: ["COUNTRY": "US", "DISCOGS_ALBUM_RELEASECOUNTRY": "UK"], label: "Svek & Other",
+            catalogNumber: "SK 032", barcode: "0 1234", date: "1999-03-00",
+            media: "Vinyl (LP,Album)"
         ).scanned,
         Crafted(path: "/m/b/1.flac", title: "Solo", album: "B").scanned,
     ])
@@ -72,6 +74,8 @@ private func track(_ path: String, album: String, release: String?, master: Stri
     #expect(album.barcode == "0 1234")
     #expect(album.date == "1999-03-00")
     #expect(album.media == "Vinyl (LP,Album)")
+    // YATE's own key before the COUNTRY beside it.
+    #expect(album.country == "UK")
     #expect(album.tracks.map(\.title) == ["One", "Two", "Three"])
     #expect(album.tracks.map(\.seconds) == [10, 200, 30])
     #expect(album.tracks.map(\.discNumber) == [1, 1, 2])

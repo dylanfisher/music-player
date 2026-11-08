@@ -204,6 +204,8 @@ private let indexSchema = """
         discogs_master_id TEXT,
         -- MEDIA, which YATE writes as the release's format, for the Discogs tie-break (ADR 0131).
         media TEXT,
+        -- The release's country, from YATE's custom keys, for the same tie-break.
+        country TEXT,
         codec TEXT NOT NULL,
         sample_rate_hz INTEGER NOT NULL,
         bits_per_sample INTEGER,

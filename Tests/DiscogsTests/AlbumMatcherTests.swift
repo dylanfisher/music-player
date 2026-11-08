@@ -10,6 +10,7 @@ private func release(
     master: Int? = nil, main: Bool = false, label: String = "Svek", catno: String = "SK 032",
     secondCatno: String? = nil,
     format: String = "CD", descriptions: [String] = [], released: String? = nil,
+    country: String? = nil,
     barcode: String? = nil, tracks: [String]
 ) -> String {
     let descriptionsXML =
@@ -18,7 +19,9 @@ private func release(
         : "<descriptions>"
             + descriptions.map { "<description>\($0)</description>" }.joined()
             + "</descriptions>"
-    let releasedXML = released.map { "<released>\($0)</released>" } ?? ""
+    let releasedXML =
+        (released.map { "<released>\($0)</released>" } ?? "")
+        + (country.map { "<country>\($0)</country>" } ?? "")
     let secondXML = secondCatno.map { #"<label name="Other" catno="\#($0)" id="6"/>"# } ?? ""
     let anvXML = anv.map { "<anv>\($0)</anv>" } ?? ""
     let masterXML =
@@ -60,12 +63,12 @@ private let stockholm = [
 private func album(
     _ titles: [String], seconds: [Double] = [285, 370, 300], artist: String? = "Persuader",
     title: String = "Stockholm", label: String? = nil, catalogNumber: String? = nil,
-    barcode: String? = nil, date: String? = nil, media: String? = nil,
+    barcode: String? = nil, date: String? = nil, media: String? = nil, country: String? = nil,
     releaseIDs: [String?] = []
 ) -> DiscogsAlbum {
     DiscogsAlbum(
         id: 1, title: title, artist: artist, label: label, catalogNumber: catalogNumber,
-        barcode: barcode, date: date, media: media,
+        barcode: barcode, date: date, media: media, country: country,
         tracks: titles.enumerated().map { number, title in
             DiscogsAlbum.Track(
                 fileID: Int64(100 + number), title: title,
@@ -233,6 +236,48 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(datesFit("1965-01-15", "1965-01-00"))
     #expect(!datesFit("1965-02-00", "1965-01-00"))
     #expect(!datesFit("196", "1965"))
+}
+
+@Test func theTagsCountrySettlesReleasesTheDateDoesNot() throws {
+    let releases =
+        release(10, master: 100, main: true, released: "1965", country: "Canada", tracks: stockholm)
+        + release(11, master: 100, released: "1965", country: "UK &amp; Europe", tracks: stockholm)
+        + release(12, master: 100, released: "1965", country: "US", tracks: stockholm)
+    let exact = try match(
+        album(stockholmTitles, date: "1965", country: "US"), masters: master(100, main: 10),
+        releases: releases)
+    #expect(exact.tier == .exact)
+    #expect(exact.releaseID == 12)
+    // Discogs has since widened the country to a region.
+    let fitted = try match(
+        album(stockholmTitles, date: "1965", country: "UK"), masters: master(100, main: 10),
+        releases: releases)
+    #expect(fitted.tier == .exact)
+    #expect(fitted.releaseID == 11)
+    #expect(countriesFit("UK", "UK & Europe"))
+    #expect(countriesFit("UK & Europe", "europe"))
+    #expect(!countriesFit("UK", "US"))
+    #expect(!countriesFit("", "US"))
+}
+
+@Test func aReleaseFitsTheFilesOrSaysWhyNotAndTagsCanBeOutdated() {
+    let release = CatalogRelease(
+        id: 1, title: "Stockholm", formats: [.init(name: "Vinyl", descriptions: ["LP", "Album"])],
+        released: "1999-03-00",
+        tracks: stockholmTitles.enumerated().map {
+            CatalogTrack(kind: .track, position: "\($0.offset + 1)", title: $0.element)
+        })
+    #expect(releaseFit(album(stockholmTitles), release) == .fits)
+    #expect(releaseFit(album(["Östermalm", "Gamla Stan"]), release) == .otherCount)
+    #expect(releaseFit(album(["A", "B", "C"]), release) == .otherTitles)
+    #expect(
+        !tagsOutdate(album(stockholmTitles, date: "1999-03-00", media: "Vinyl (LP,Album)"), release)
+    )
+    // A date or descriptions Discogs has filled in since are a change too.
+    #expect(tagsOutdate(album(stockholmTitles, date: "1999"), release))
+    #expect(tagsOutdate(album(stockholmTitles, media: "Vinyl (LP)"), release))
+    #expect(tagsOutdate(album(stockholmTitles, date: "2001"), release))
+    #expect(tagsOutdate(album(stockholmTitles, media: "CD (Album)"), release))
 }
 
 @Test func aTwinIsTheSameReleaseInEveryTagTheMatcherCompares() {

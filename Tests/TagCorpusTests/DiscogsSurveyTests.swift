@@ -162,6 +162,8 @@ private func temporaryFolder() throws -> URL {
     var first = record("/m/a/2.flac", album: "One", releaseID: "7", label: "Svek")
     first.trackNumber = 2
     first.custom["DISCOGS RELEASE ORDINAL POSITION"] = "2"
+    first.custom["COUNTRY"] = "US"
+    first.custom["DISCOGS ALBUM RELEASE COUNTRY"] = "UK & Europe"
     var second = record("/m/a/1.flac", album: "One", releaseID: "7")
     second.trackNumber = 1
     second.catalogNumber = "SK 032"
@@ -177,9 +179,12 @@ private func temporaryFolder() throws -> URL {
     #expect(album.tracks.allSatisfy { $0.releaseID == nil })
     #expect(album.label == "Svek")
     #expect(album.catalogNumber == "SK 032")
+    // YATE's own key before the COUNTRY it writes beside it.
+    #expect(album.country == "UK & Europe")
     #expect(albums[0].ordinals == [album.tracks[1].fileID: 2])
     let bare = tuningAlbums(records, titlesOnly: true)[0].album
     #expect(bare.label == nil && bare.catalogNumber == nil && bare.barcode == nil)
+    #expect(bare.country == nil)
     #expect(argumentProblem([discogsTuningFlag]) == nil)
     #expect(argumentProblem([discogsTuningFlag, catalogFlag, "/c.sqlite"]) == nil)
     #expect(argumentProblem([discogsTuningFlag, catalogFlag]) != nil)
