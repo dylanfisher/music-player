@@ -38,10 +38,12 @@ public final class TagEditing {
             @Sendable ([String], @escaping @Sendable () -> Bool) -> (
                 tracks: [EditableTrack], problems: [String]
             )
-        /// Writes an edit, telling its last argument how far it's got, from any thread.
+        /// Writes each file its edit, telling its last argument how far it's got, from any
+        /// thread.
         var write:
-            @Sendable (TagEdit, [String], @escaping @Sendable (TagWriteProgress) -> Void) ->
-                TagWriteReport
+            @Sendable (
+                [(path: String, edit: TagEdit)], @escaping @Sendable (TagWriteProgress) -> Void
+            ) -> TagWriteReport
         var undo: @Sendable () -> TagWriteReport
         /// Shows an info window in front, beside the main window: at the place given, past the
         /// other info windows' top left corners.
@@ -82,7 +84,7 @@ public final class TagEditing {
     public init(writer: TagWriter) {
         effects = Effects(
             read: { readEditableTracks($0, isStopped: $1) },
-            write: { writer.write($0, to: $1, progress: $2) }, undo: { writer.undoLast() },
+            write: { writer.write($0, progress: $1) }, undo: { writer.undoLast() },
             present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask,
             alert: showProblems)
         // A write in place a crash cut short is finished before anything reads the file
@@ -239,16 +241,26 @@ public final class TagEditing {
             return
         }
         let write = effects.write
+        let files = paths.map { (path: $0, edit: edit) }
         guard paths.count > 1 else {
             editor.close()
-            enqueue("write the tags", over: window) { write(edit, paths, $0) }
+            enqueue("write the tags", over: window) { write(files, $0) }
             return
         }
         effects.confirm(.writing(paths.count), editor.window) { [weak self, weak editor] yes in
             guard yes, let self else { return }
             editor?.close()
-            self.enqueue("write the tags", over: window) { write(edit, paths, $0) }
+            self.enqueue("write the tags", over: window) { write(files, $0) }
         }
+    }
+
+    /// Writes each file its own edit as one undoable edit, after the writes queued before it,
+    /// with a save's progress and its alert over `window` for what failed. The caller has
+    /// asked the user: the Discogs tagger's Apply, after its confirmation (ADR 0133).
+    public func write(_ files: [(path: String, edit: TagEdit)], over window: NSWindow) {
+        guard !files.isEmpty else { return }
+        let write = effects.write
+        enqueue("write the tags", over: window) { write(files, $0) }
     }
 
     /// Queues `work`, which is handed what to tell of its progress.

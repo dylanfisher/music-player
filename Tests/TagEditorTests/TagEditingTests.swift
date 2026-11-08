@@ -24,6 +24,7 @@ private final class Seen: @unchecked Sendable {
     private var _work: [String] = []
     private var _reads: [[String]] = []
     private var _places: [NSPoint?] = []
+    private var _edits: [[TagEdit]] = []
 
     var presented: [[String]] { lock.withLock { _presented } }
     var alerts: [String] { lock.withLock { _alerts } }
@@ -34,6 +35,8 @@ private final class Seen: @unchecked Sendable {
     var reads: [[String]] { lock.withLock { _reads } }
     /// Where each window was asked to open.
     var places: [NSPoint?] { lock.withLock { _places } }
+    /// Each write's edits, a file's each.
+    var edits: [[TagEdit]] { lock.withLock { _edits } }
 
     func present(_ paths: [String], at place: NSPoint?) {
         lock.withLock {
@@ -46,6 +49,7 @@ private final class Seen: @unchecked Sendable {
     func wrote(_ paths: [String]) { lock.withLock { _written.append(paths) } }
     func ran(_ work: String) { lock.withLock { _work.append(work) } }
     func read(_ paths: [String]) { lock.withLock { _reads.append(paths) } }
+    func edited(_ edits: [TagEdit]) { lock.withLock { _edits.append(edits) } }
 }
 
 private func editable(_ path: String, title: String? = nil) -> EditableTrack {
@@ -79,10 +83,12 @@ private func makeEditing(
                 let (tracks, problems) = read(paths, isStopped)
                 return (tracks, problems)
             },
-            write: { edit, paths, report in
+            write: { files, report in
+                let paths = files.map(\.path)
                 seen.ran("write \(paths.joined(separator: " "))")
                 for step in progress { report(step) }
-                return write(edit, paths)
+                seen.edited(files.map(\.edit))
+                return write(files[0].edit, paths)
             },
             undo: {
                 seen.ran("undo")
@@ -414,4 +420,35 @@ private final class Titles: @unchecked Sendable {
     #expect(seen.work == ["write /a.flac"])
     #expect(seen.confirmations.isEmpty, "one file is written, so nothing asks")
     #expect(try dsd.map { try Data(contentsOf: $0) } == before)
+}
+
+/// The Discogs tagger's Apply hands each file its own edit: one write, queued after the
+/// others, asking nothing more, with a save's progress (ADR 0133).
+@MainActor
+@Test func aBatchOfEditsPerFileIsOneWriteAfterThoseQueued() async throws {
+    let seen = Seen()
+    let gate = Gate()
+    let editing = makeEditing(
+        seen,
+        write: { _, paths in
+            if paths == ["/a.flac"] { gate.wait() }
+            var report = TagWriteReport()
+            report.changed = paths
+            return report
+        })
+    var shown: [String?] = []
+    editing.saving = { shown.append($0?.text) }
+    editing.open(["/a.flac"], over: window)
+    try await eventually { editor(editing, ["/a.flac"])?.isLoaded == true }
+    editor(editing, ["/a.flac"])?.saved(TagEdit(values: [.title: "New"]))
+    let edits = [TagEdit(values: [.title: "One"]), TagEdit(values: [.title: "Two"])]
+    editing.write([("/b.flac", edits[0]), ("/c.flac", edits[1])], over: window)
+    editing.write([], over: window)
+    gate.open()
+    try await eventually { !editing.isWriting }
+    #expect(seen.work == ["write /a.flac", "write /b.flac /c.flac"])
+    #expect(seen.edits.last == edits)
+    #expect(seen.confirmations.isEmpty)
+    #expect(seen.written == [["/a.flac"], ["/b.flac", "/c.flac"]])
+    #expect(shown.last == .some(nil))
 }
