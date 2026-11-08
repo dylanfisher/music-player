@@ -78,7 +78,7 @@ struct ApiRelease: Decodable {
 public struct FetchedRelease: Equatable, Sendable {
     public internal(set) var release: CatalogRelease
     /// Discogs gives images only to a request with a token.
-    public internal(set) var primaryImage: URL?
+    var primaryImage: URL?
 }
 
 /// Limits on a release from the API, which is input from the network.

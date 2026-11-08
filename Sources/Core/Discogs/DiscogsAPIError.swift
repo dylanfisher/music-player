@@ -42,7 +42,7 @@ public enum DiscogsAPIError: Error, Equatable, Sendable, CustomStringConvertible
     /// Whether the run stops: the network, the token or the rate limit fails every album
     /// alike, so none is left as No Candidate because of it. A release that's missing or
     /// unusable is left out of its album's candidates alone.
-    public var stopsRun: Bool {
+    var stopsRun: Bool {
         switch self {
         case .notFound, .malformed, .tooLarge: false
         default: true

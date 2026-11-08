@@ -8,7 +8,7 @@ public enum DiscogsArtworkMode: String, SettingChoice {
         switch self {
         case .off: "Off"
         case .fillEmpty: "Fill Empty"
-        case .replace: "Replace"
+        case .replace: "Replace All"
         }
     }
 }

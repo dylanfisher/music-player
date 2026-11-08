@@ -10,7 +10,7 @@ import Settings
 /// The Discogs API for the window's row, which never connects: the bench opens no socket to
 /// the internet.
 private let offlineDiscogs = DiscogsAPI(
-    token: nil, userAgent: DiscogsAPI.userAgent(version: "bench"),
+    token: nil, userAgent: DiscogsAPI.userAgent(version: "offline"),
     transport: { _, _, _, _ throws(HTTPSError) in throw .offline },
     cache: DiscogsCache(read: { _, _ in nil }, store: { _, _, _ in }))
 

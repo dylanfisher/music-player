@@ -17,7 +17,7 @@ import Testing
         draft: MappingDraft(mapping: DiscogsPreset.minimal.mapping, saved: []),
         artwork: .fillEmpty, hasToken: true)
     #expect(with.artworkPopUp.isEnabled)
-    #expect(with.artworkPopUp.itemArray.map(\.title) == ["Off", "Fill Empty", "Replace"])
+    #expect(with.artworkPopUp.itemArray.map(\.title) == ["Off", "Fill Empty", "Replace All"])
     #expect(with.artworkPopUp.indexOfSelectedItem == 1)
     with.artworkPopUp.selectItem(at: 2)
     _ = with.artworkPopUp.target?.perform(with.artworkPopUp.action, with: with.artworkPopUp)

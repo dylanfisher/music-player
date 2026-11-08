@@ -15,12 +15,12 @@ public typealias HTTPSTransport =
 /// Discogs says and is tried again twice. The token goes only into the `Authorization` header
 /// of a request to `host`.
 public actor DiscogsAPI {
-    public static let host = "api.discogs.com"
+    static let host = "api.discogs.com"
     /// Where Discogs serves images.
-    public static let imageHost = "i.discogs.com"
+    static let imageHost = "i.discogs.com"
     static let baseURL = URL(string: "https://\(host)")!
     /// How long a cached release or master is used before it's fetched again.
-    public static let cacheDays = 30.0
+    static let cacheDays = 30.0
     static let jsonCap = 4 * 1024 * 1024
     static let timeoutSeconds = 20.0
     /// Results a search asks for; only the first page is read.
@@ -77,7 +77,7 @@ public actor DiscogsAPI {
     /// Whether there's a token, without which nothing searches.
     public nonisolated var hasToken: Bool { token != nil }
 
-    public func setWaiting(_ waiting: @escaping @Sendable (Int?) -> Void) {
+    func setWaiting(_ waiting: @escaping @Sendable (Int?) -> Void) {
         self.waiting = waiting
     }
 
@@ -104,7 +104,7 @@ public actor DiscogsAPI {
 
     /// The release `id` as the cache holds it, at any age, with no request: for the sheets that
     /// list releases a run already fetched. Nil when the cache has no readable entry.
-    public func cachedRelease(id: Int) async -> FetchedRelease? {
+    func cachedRelease(id: Int) async -> FetchedRelease? {
         await cachedRelease(id: id, maximumAgeDays: .infinity)
     }
 

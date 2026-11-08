@@ -33,7 +33,7 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     private(set) var artwork: DiscogsArtworkMode
     let artworkPopUp = NSPopUpButton()
     let artworkNote = NSTextField(labelWithString: "")
-    static let artworkTitle = "Artwork"
+    static let artworkTitle = "Cover Art"
     static let needsTokenNote = "Needs a Discogs token in config.json"
 
     init(draft: MappingDraft, artwork: DiscogsArtworkMode, hasToken: Bool) {

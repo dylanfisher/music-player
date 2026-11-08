@@ -182,7 +182,7 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         case .cover(let cover, let adds, let replaces):
             switch id {
             case .fileName: return filesText(Array(repeating: "", count: adds + replaces))
-            case .field: return "Cover"
+            case .field: return MappingSheet.artworkTitle
             case .current:
                 return replaces == 0 ? "" : "replaces the cover in \(count(replaces, "file"))"
             case .written: return "\(cover.text) from Discogs"
