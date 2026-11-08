@@ -63,11 +63,11 @@ private final class StagingEvents: @unchecked Sendable {
     }
 }
 
+/// Polls `condition` every 100 ms, for up to `seconds` of those waits.
 private func eventually(within seconds: Double, _ condition: () throws -> Bool) async throws
     -> Bool
 {
-    let deadline = Date().addingTimeInterval(seconds)
-    while Date() < deadline {
+    for _ in 0..<Int(seconds * 10) {
         if try condition() { return true }
         try await Task.sleep(nanoseconds: 100_000_000)
     }
@@ -89,9 +89,15 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
     #expect(events.scanned.first?.issues.map(\.kind) == [.stagingFolderSkipped])
     #expect(try index.trackCount() == library.readableCount)
 
-    // A file the service stages later comes as an FSEvents batch, and stays out too.
+    // A file the service stages later comes as an FSEvents batch, and stays out too. A file
+    // added to the library after it marks the point by which the batches have been scanned.
     try FileManager.default.copyItem(atPath: staged, toPath: staging + "/job-42/02 Second.flac")
-    try await Task.sleep(nanoseconds: 3_000_000_000)
+    let source = library.path(library.manifest.files.first { $0.malformation == nil }!)
+    try FileManager.default.copyItem(
+        atPath: source,
+        toPath: (source as NSString).deletingLastPathComponent + "/copied in.flac")
+    #expect(
+        try await eventually(within: 20) { try index.trackCount() == library.readableCount + 1 })
     #expect(try index.knownFiles(under: staging).isEmpty)
 }
 
