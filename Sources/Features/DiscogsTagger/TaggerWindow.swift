@@ -9,9 +9,10 @@ import TagWriter
 /// The tagger's window (51.11): the toolbar's source, scope and Analyze; Field Mapping… and the
 /// choices beside it (51.23); a tab
 /// per tier with its count, each an album list; the selected album's release beside its
-/// tracklist, file against track; and the buttons that review it and apply a tier. Without a
-/// catalog it says so and offers the import, and Analyze stays off. After an import stopped
-/// before it finished it offers Resume Import and Start Over.
+/// tracklist, file against track; and the buttons that review it and apply a tier. With a
+/// catalog it says which dump it's of, when it was imported, its size and where it is; without
+/// one it says so and offers the import, and Analyze stays off. After an import stopped before
+/// it finished it offers Resume Import and Start Over.
 @MainActor
 final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     static let title = "Discogs Tagger"
@@ -28,10 +29,14 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         checkboxWithTitle: "Skip Blu-ray, DVD and video", target: nil, action: nil)
     let sortArtistBox = NSButton(
         checkboxWithTitle: "Fill sort artist from album artist", target: nil, action: nil)
-    let importButton = NSButton(title: "Import Discogs Dump…", target: nil, action: nil)
+    static let importTitle = "Import Discogs Dump…"
+    static let reimportTitle = "Reimport Discogs Dump…"
+    let importButton = NSButton(title: TaggerWindow.importTitle, target: nil, action: nil)
     let progress = NSProgressIndicator()
     let statusLabel = NSTextField(labelWithString: "")
     let catalogLabel = NSTextField(wrappingLabelWithString: "")
+    let catalogImportButton = NSButton(title: TaggerWindow.importTitle, target: nil, action: nil)
+    let revealButton = NSButton(title: "Reveal in Finder", target: nil, action: nil)
     let catalogBox = NSStackView()
     let resumeLabel = NSTextField(wrappingLabelWithString: "")
     let resumeButton = NSButton(title: "Resume Import", target: nil, action: nil)
@@ -98,7 +103,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         scopePopUp.action = #selector(scopeChosen)
         for (button, action) in [
             (analyzeButton, #selector(analyzeOrStop)), (mappingButton, #selector(showMapping)),
-            (importButton, #selector(chooseDumps)), (resumeButton, #selector(resumeImport)),
+            (importButton, #selector(chooseDumps)), (catalogImportButton, #selector(chooseDumps)),
+            (revealButton, #selector(revealCatalog)), (resumeButton, #selector(resumeImport)),
             (startOverButton, #selector(startImportOver)),
             (otherReleasesButton, #selector(showOtherReleases)),
             (changesButton, #selector(showChanges)), (rejectButton, #selector(toggleRejected)),
@@ -117,6 +123,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             + " whatever the mapping says."
         skipVideoBox.toolTip = "Releases that are only Blu-ray, DVD or video are never candidates."
         sortArtistBox.toolTip = "Files with no sort artist get the album artist as one."
+        mappingButton.toolTip =
+            "Choose which tags each Discogs field writes, and how, for every album."
+        importButton.toolTip =
+            "Builds the local catalog from the newest Discogs dumps in a folder. Your music"
+            + " files aren't touched."
         analyzeButton.keyEquivalent = "\r"
         progress.style = .bar
         progress.isIndeterminate = false
@@ -138,10 +149,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         ])
         choices.spacing = 12
 
-        let catalogImport = NSButton(
-            title: "Import Discogs Dump…", target: self, action: #selector(chooseDumps))
-        catalogImport.bezelStyle = .rounded
-        catalogBox.setViews([catalogLabel, catalogImport], in: .leading)
+        catalogBox.setViews([catalogLabel, catalogImportButton, revealButton], in: .leading)
         catalogBox.spacing = 12
         catalogLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         resumeBox.setViews([resumeLabel, resumeButton, startOverButton], in: .leading)
@@ -218,16 +226,24 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Shows the model as it is now: the catalog, the work running, the tabs, the albums and
     /// the selected album.
     func refresh() {
+        catalogBox.isHidden = model.catalog == .checking
+        catalogImportButton.isHidden = false
+        revealButton.isHidden = true
+        importButton.title = Self.importTitle
         switch model.catalog {
-        case .checking, .ready:
-            catalogBox.isHidden = true
+        case .checking:
+            break
+        case .ready(let status):
+            catalogLabel.stringValue = status.shown
+            catalogLabel.toolTip = status.url.path
+            catalogImportButton.isHidden = true
+            revealButton.isHidden = false
+            importButton.title = Self.reimportTitle
         case .missing:
-            catalogBox.isHidden = false
             catalogLabel.stringValue =
                 "There's no Discogs catalog on this Mac, so there's nothing to match with."
                 + " Import Discogs Dump… builds one from the dumps folder."
         case .unusable(let why):
-            catalogBox.isHidden = false
             catalogLabel.stringValue = "The Discogs catalog can't be used: \(why)."
         }
         resumeBox.isHidden = model.unfinished == nil || model.isBusy
@@ -438,6 +454,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     @objc private func analyzeOrStop() {
         model.isBusy ? model.stop() : model.analyze()
+    }
+
+    @objc private func revealCatalog() {
+        guard case .ready(let status) = model.catalog else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([status.url])
     }
 
     @objc private func chooseDumps() {

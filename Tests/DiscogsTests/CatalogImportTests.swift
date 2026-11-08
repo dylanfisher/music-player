@@ -194,3 +194,24 @@ private func expectFailure(
         return path == catalog.appendingPathExtension("importing").path
     }
 }
+
+@Test func aCatalogsStatusIsItsDumpDateItsImportItsSizeAndItsPlace() throws {
+    let folder = try DumpFolder()
+    #expect(throws: CatalogError.missing(folder.catalog.path)) {
+        try CatalogStatus(at: folder.catalog)
+    }
+    try folder.write(newDate, releases: newRelease)
+    let started = Date()
+    let summary = try folder.importCatalog()
+    let status = try CatalogStatus(at: folder.catalog)
+    #expect(status.dumpDate == newDate)
+    #expect(status.sizeBytes == summary.catalogBytes)
+    #expect(status.url == folder.catalog)
+    // File times are kept to the second on some file systems.
+    #expect(status.importedAt >= started.addingTimeInterval(-1))
+    #expect(status.importedAt <= Date())
+    _ = try Catalog(at: folder.catalog).release(id: 1)
+    #expect(
+        try CatalogStatus(at: folder.catalog).importedAt == status.importedAt, "reads don't move it"
+    )
+}

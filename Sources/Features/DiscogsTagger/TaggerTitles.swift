@@ -1,5 +1,6 @@
 import AppKit
 import Discogs
+import DisplayText
 import Library
 import Settings
 
@@ -25,6 +26,17 @@ extension TaggerModel.Scope {
         case .selection: "Albums Selected in the Library"
         case .unmatched: "Unmatched Albums"
         }
+    }
+}
+
+extension CatalogStatus {
+    /// The line the window shows of a catalog in place.
+    var shown: String {
+        let imported = DateFormatter.localizedString(
+            from: importedAt, dateStyle: .medium, timeStyle: .short)
+        return
+            "The catalog of the \(dumpDate) Discogs dump, imported \(imported):"
+            + " \(fileSizeText(sizeBytes)), at \((url.path as NSString).abbreviatingWithTildeInPath)"
     }
 }
 

@@ -234,7 +234,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
                 try Task.checkCancellation()
                 return ([], [])
             },
-            checkCatalog: { .ready }, unfinishedImport: { nil },
+            checkCatalog: { readyCatalog }, unfinishedImport: { nil },
             importCatalog: { _, _, _ in throw CatalogImportError.stopped }),
         mapping: DiscogsPreset.minimal.mapping, savedMappings: [], choices: defaultChoices)
     await tagger.checkCatalog()
@@ -259,7 +259,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
             match: { _, _, _, _ in [] }, summaries: { _ in [] }, read: { _, _ in ([], []) },
             checkCatalog: {
                 checks.read([])
-                return .ready
+                return readyCatalog
             },
             unfinishedImport: { UnfinishedImport(dumpDate: "20261101", fraction: 0.42) },
             importCatalog: { _, _, _ in
@@ -273,7 +273,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     gate.open()
     // checkCatalog sets the catalog, then awaits the unfinished import.
     try await eventually {
-        checks.reads.count == 1 && tagger.catalog == .ready && tagger.unfinished != nil
+        checks.reads.count == 1 && tagger.catalog == readyCatalog && tagger.unfinished != nil
     }
     #expect(tagger.status == "Import stopped; Resume Import carries on from here")
     #expect(tagger.unfinished == UnfinishedImport(dumpDate: "20261101", fraction: 0.42))

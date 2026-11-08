@@ -30,7 +30,7 @@ final class TaggerModel {
 
     enum CatalogState: Equatable {
         case checking
-        case ready
+        case ready(CatalogStatus)
         /// No catalog on this Mac, as on one that never imported a dump.
         case missing
         /// One the app can't use, with why: built by another version, or unreadable.
@@ -186,7 +186,9 @@ final class TaggerModel {
     }
 
     var isBusy: Bool { activity != .idle }
-    var canAnalyze: Bool { catalog == .ready && !isBusy }
+    var canAnalyze: Bool {
+        if case .ready = catalog { !isBusy } else { false }
+    }
 
     /// The albums of `tier`, by artist and then title.
     func albums(in tier: MatchTier) -> [Album] {

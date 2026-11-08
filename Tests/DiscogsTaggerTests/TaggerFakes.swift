@@ -107,6 +107,13 @@ func file(_ album: DiscogsAlbum, _ index: Int, _ tags: TrackTags = TrackTags()) 
 }
 
 /// The choices as the settings' defaults make them.
+/// A catalog in place, as the window describes it.
+let readyCatalog = TaggerModel.CatalogState.ready(
+    CatalogStatus(
+        dumpDate: "20261101", importedAt: Date(timeIntervalSince1970: 1_794_000_000),
+        sizeBytes: 12_345_000_000,
+        url: URL(fileURLWithPath: "/Volumes/Scratch/discogs-catalog.sqlite", isDirectory: false)))
+
 let defaultChoices = TaggerChoices(
     keepExistingValues: false, skipVideo: true, fillSortArtist: false)
 
@@ -118,7 +125,7 @@ func model(
     matches: @escaping @Sendable (DiscogsAlbum, Int?) -> AlbumMatch,
     reviews: [Int64: DiscogsReview] = [:],
     files: @escaping @Sendable ([Int64]) -> [AlbumFile] = { _ in [] },
-    catalog: TaggerModel.CatalogState = .ready, gate: Gate? = nil,
+    catalog: TaggerModel.CatalogState = readyCatalog, gate: Gate? = nil,
     mapping: DiscogsMapping = DiscogsPreset.minimal.mapping,
     choices: TaggerChoices = defaultChoices, unfinished: UnfinishedImport? = nil,
     importing: @escaping DiscogsTagger.Import = { _, _, _ in throw CatalogImportError.stopped }

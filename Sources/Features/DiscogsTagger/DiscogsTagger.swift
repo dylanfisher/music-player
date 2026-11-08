@@ -124,12 +124,11 @@ public final class DiscogsTagger {
     }
 }
 
-/// Whether the catalog at `url` can be opened, as the window shows it.
+/// Whether the catalog at `url` can be opened, and what it is, as the window shows it.
 private func catalogState(at url: URL) async -> TaggerModel.CatalogState {
     await blockingFileWork {
         do {
-            _ = try Catalog(at: url)
-            return .ready
+            return .ready(try CatalogStatus(at: url))
         } catch CatalogError.missing {
             return .missing
         } catch {

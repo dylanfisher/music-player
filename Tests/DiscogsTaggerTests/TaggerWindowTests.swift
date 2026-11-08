@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Foundation
 import Library
 import Testing
@@ -58,6 +59,9 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(window.catalogLabel.stringValue.contains("Import Discogs Dump…"))
     #expect(!window.analyzeButton.isEnabled)
     #expect(window.importButton.isEnabled)
+    #expect(window.importButton.title == "Import Discogs Dump…")
+    #expect(!window.catalogImportButton.isHidden)
+    #expect(window.revealButton.isHidden)
     #expect(window.sourcePopUp.itemArray.map { $0.isEnabled } == [true, false, false])
     window.window?.close()
 }
@@ -67,7 +71,7 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     let tagger = await analyzed()
     let controller = TaggerWindow(model: tagger)
     let window = try #require(controller.window)
-    #expect(controller.catalogBox.isHidden)
+    #expect(!controller.catalogBox.isHidden, "the catalog in place")
     #expect(controller.tabs.label(forSegment: 0) == "Exact (1)")
     #expect(controller.tabs.label(forSegment: 1) == "Likely (1)")
     #expect(controller.applyButton.title == "Apply to All in Exact…")
@@ -306,4 +310,31 @@ private final class Imports: @unchecked Sendable {
     other.importFile(at: folder.appendingPathComponent("missing.json", isDirectory: false))
     #expect(other.draft.mapping == mapping)
     #expect(refusals.last == "The file couldn't be read")
+}
+
+@MainActor
+@Test func withACatalogTheWindowSaysWhatItIsAndOffersAReimport() async throws {
+    let tagger = await model(
+        Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    guard case .ready(let status) = readyCatalog else {
+        Issue.record("a ready catalog")
+        return
+    }
+    let controller = TaggerWindow(model: tagger)
+    try snapshot(try #require(controller.window), "discogs-tagger-catalog")
+    #expect(!controller.catalogBox.isHidden)
+    let line = controller.catalogLabel.stringValue
+    #expect(line.hasPrefix("The catalog of the 20261101 Discogs dump, imported "))
+    #expect(
+        line.contains(
+            DateFormatter.localizedString(
+                from: status.importedAt, dateStyle: .medium, timeStyle: .short)))
+    #expect(line.contains(fileSizeText(status.sizeBytes)))
+    #expect(line.hasSuffix("/Volumes/Scratch/discogs-catalog.sqlite"))
+    #expect(!controller.revealButton.isHidden)
+    #expect(controller.catalogImportButton.isHidden)
+    #expect(controller.importButton.title == "Reimport Discogs Dump…")
+    #expect(controller.importButton.toolTip?.isEmpty == false)
+    #expect(controller.mappingButton.toolTip?.isEmpty == false)
+    controller.window?.close()
 }
