@@ -18,6 +18,8 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
     /// A share folder's new mount point inside its old one, or the old inside the new, whose
     /// paths a rewrite would mix up.
     case nestedRoots(String, String)
+    /// A path an import step names that isn't relative to its folder or leaves it.
+    case notRelative(String)
 
     var description: String {
         switch self {
@@ -35,6 +37,9 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
         case .nestedRoots(let old, let new):
             "a share folder moved from \(old) to \(new), one inside the other, so its paths"
                 + " weren't rewritten"
+        case .notRelative(let path):
+            "\(path.debugDescription) isn't a path inside its folder, so the import step wasn't"
+                + " recorded"
         }
     }
 }
