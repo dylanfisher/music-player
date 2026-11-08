@@ -97,11 +97,8 @@ public final class DiscogsTagger {
             guard let self, let window = made?.window else { return }
             write(files, window, completion)
         }
-        made.mappingChosen = { [weak self] mapping, saved in
-            self?.model.mapping = mapping
-            self?.model.savedMappings = saved
-            self?.mappingChosen(mapping, saved)
-        }
+        // The model takes the mapping from `mappingChanged`, once the settings have saved it.
+        made.mappingChosen = { [weak self] mapping, saved in self?.mappingChosen(mapping, saved) }
         made.dumpsFolder = { [weak self] in self?.dumpsFolder() }
         made.dumpsFolderChosen = { [weak self] in self?.dumpsFolderChosen($0) }
         controller = made
