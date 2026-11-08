@@ -44,6 +44,9 @@ public struct AppSettings: SettingsSchema {
     public let libraryFolder = Setting<String?>(
         "library.folder", title: "Library Folder", default: nil,
         "Where added files are copied; it's watched once they are.")
+    public let snapshotFolder = Setting<String?>(
+        "library.snapshotFolder", title: "Snapshot Folder", default: nil,
+        "A local folder outside your music for daily snapshots; none uses Backups.")
     /// What `networkScanReaders` and `--scan --readers` accept; a scan starts that many threads.
     public static let networkScanReadersRange = 1...64
     public let networkScanReaders = Setting<Int?>(
@@ -187,6 +190,27 @@ public struct AppSettings: SettingsSchema {
                     key: discogsCatalogPath.key,
                     reason: "it's inside the watched folder \"\(watched.path)\"; the catalog must"
                         + " be outside every watched folder, since the app writes it"))
+        }
+        if let snapshots = values[snapshotFolder.key] as? String {
+            let path = standardized(snapshots)
+            if let watched = folders.first(where: {
+                $0.share == nil && isPath(path, inOrAt: standardized($0.path))
+            }) {
+                conflicts.append(
+                    SettingConflict(
+                        key: snapshotFolder.key,
+                        reason: "it's inside the watched folder \"\(watched.path)\"; the snapshot"
+                            + " folder must be outside every watched folder, since the app writes"
+                            + " the library's snapshots there"))
+            } else if let sync = values[syncFolder.key] as? SyncFolder, sync.share == nil,
+                isPath(path, inOrAt: standardized(sync.path))
+            {
+                conflicts.append(
+                    SettingConflict(
+                        key: snapshotFolder.key,
+                        reason: "it's inside the sync folder \"\(sync.path)\"; the app writes only"
+                            + " its own log there"))
+            }
         }
         return conflicts
     }
