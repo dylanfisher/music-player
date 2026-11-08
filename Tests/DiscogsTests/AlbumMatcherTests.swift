@@ -472,6 +472,14 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(tagged.tier == .exact)
 }
 
+@Test func progressIsReportedAboutTwoHundredTimes() {
+    #expect((1...3).allSatisfy { isReported($0, of: 3) }, "every step of a few")
+    let reported = (1...5_000).filter { isReported($0, of: 5_000) }
+    #expect(reported.count == 200)
+    #expect(reported.last == 5_000)
+    #expect((1...1_001).filter { isReported($0, of: 1_001) }.last == 1_001, "the last, off the stride")
+}
+
 @Test func matchingReportsProgressAndStopsWhenCancelled() async throws {
     let folder = try DumpFolder()
     try folder.write("20261101", releases: release(10, tracks: stockholm))

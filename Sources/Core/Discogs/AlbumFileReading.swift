@@ -22,7 +22,8 @@ public func readAlbumFiles(
             } catch {
                 results.store(.failure(ReadProblem(text: error.description)), at: index)
             }
-            read(results.done)
+            let done = results.done
+            if isReported(done, of: files.count) { read(done) }
         }
     }
     var read: [AlbumFile] = []
