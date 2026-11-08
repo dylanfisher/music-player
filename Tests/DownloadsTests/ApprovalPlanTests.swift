@@ -64,7 +64,9 @@ private let lossy = StagedOrigin(
 }
 
 @Test func aFileTheMoveRefusesBlocksApproveButNotAResume() {
-    #expect(plan(movesProblem: "already in the library: x").approved(ticked: [], acknowledgedOrigins: false) == nil)
+    #expect(
+        plan(movesProblem: "already in the library: x").approved(
+            ticked: [], acknowledgedOrigins: false) == nil)
     #expect(
         plan(resuming: true, movesProblem: "x").approved(ticked: [], acknowledgedOrigins: false)?
             .state == .importing)
@@ -94,5 +96,8 @@ private let lossy = StagedOrigin(
     click(sheet.acknowledgeBox)
     #expect(sheet.approveButton.isEnabled)
     #expect(sheet.blockersLabel.isHidden)
-    #expect(ApproveSheet.originLines(sheet.plan) == ["01 First Song.flac: suspect lossy origin: cutoff at 16.0 kHz"])
+    #expect(
+        ApproveSheet.originLines(sheet.plan) == [
+            "01 First Song.flac: suspect lossy origin: cutoff at 16.0 kHz"
+        ])
 }

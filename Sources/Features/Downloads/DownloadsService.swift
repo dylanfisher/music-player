@@ -8,8 +8,7 @@ package struct DownloadsService: Sendable {
     /// Sends an event for the job with this id, as this Mac, and returns the job as it now is.
     var handoff: @Sendable (Int, HandoffEvent) async throws(RecommenderError) -> DownloadJob
     /// Queues a release, returning the new job.
-    var create:
-        @Sendable (ReleaseSnapshot, JobOrder) async throws(RecommenderError) -> DownloadJob
+    var create: @Sendable (ReleaseSnapshot, JobOrder) async throws(RecommenderError) -> DownloadJob
     /// Starts a failed or unfound job again, with a new policy for one that searches again.
     var retry: @Sendable (Int, FormatPolicy?) async throws(RecommenderError) -> DownloadJob
     var cancel: @Sendable (Int) async throws(RecommenderError) -> DownloadJob

@@ -65,7 +65,8 @@ enum DownloadAction: CaseIterable, Sendable {
     /// and the service refuses one on any other.
     static func retrySearches(_ job: DownloadJob) -> Bool {
         job.state == .notFound
-            || (job.state == .failed && (job.failedStage == .search || job.failedStage == .download))
+            || (job.state == .failed
+                && (job.failedStage == .search || job.failedStage == .download))
     }
 }
 

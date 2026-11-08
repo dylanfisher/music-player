@@ -3,7 +3,8 @@
 extension RecommenderClient {
     /// Queues `snapshot`'s release. Refused with `already_active` while a job for it isn't
     /// terminal, with that job's id.
-    package func create(_ snapshot: ReleaseSnapshot, _ order: JobOrder) async throws(RecommenderError)
+    package func create(_ snapshot: ReleaseSnapshot, _ order: JobOrder)
+        async throws(RecommenderError)
         -> DownloadJob
     {
         try await call(

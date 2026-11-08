@@ -433,7 +433,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         // The palette lists its items, and the tag editor reads its files, first.
         // The downloads wait for their first poll too.
-        let wait = snapshotOf == .main ? 0 : snapshotOf == .tags || snapshotOf == .downloads ? 3.0 : 1.0
+        let wait =
+            snapshotOf == .main ? 0 : snapshotOf == .tags || snapshotOf == .downloads ? 3.0 : 1.0
         switch snapshotOf {
         case .main: break
         case .health: dispatcher?.run(.checkHealth)

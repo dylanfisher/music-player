@@ -134,7 +134,8 @@ final class FakeService: @unchecked Sendable {
         DownloadsService(
             refreshed: { jobs throws(RecommenderError) in try self.refreshed(jobs) },
             handoff: { id, event throws(RecommenderError) in try self.handoff(id, event) },
-            create: { snapshot, order throws(RecommenderError) in try self.create(snapshot, order) },
+            create: { snapshot, order throws(RecommenderError) in try self.create(snapshot, order)
+            },
             retry: { id, policy throws(RecommenderError) in try self.retry(id, policy) },
             cancel: { id throws(RecommenderError) in try self.cancel(id) })
     }

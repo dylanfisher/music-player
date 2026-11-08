@@ -111,7 +111,9 @@ private func importPlaces(staging: StagingFolder?, libraryFolder: String?) async
             }
             let shareRoot: String
             if let share = staging.share {
-                guard case .found(let root) = locate(StagingFolder(path: "", share: share), among: shares)
+                guard
+                    case .found(let root) = locate(
+                        StagingFolder(path: "", share: share), among: shares)
                 else { throw DownloadsSetupProblem("the share \(share) isn't mounted") }
                 shareRoot = root
             } else {

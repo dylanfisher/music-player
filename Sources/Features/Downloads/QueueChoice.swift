@@ -34,7 +34,8 @@ struct QueueChoice: Equatable, Sendable {
         return albums.filter { album in album.tracks.contains { wanted.contains($0.fileID) } }
             .map { album in
                 let releases = Set(album.tracks.map(\.releaseID))
-                let release = releases.count == 1 ? releases.first.flatMap { $0.flatMap(Int.init) } : nil
+                let release =
+                    releases.count == 1 ? releases.first.flatMap { $0.flatMap(Int.init) } : nil
                 return QueueChoice(
                     title: albumTitle(album.artist, album.title),
                     detail: release.map(DownloadRow.releaseName) ?? "",

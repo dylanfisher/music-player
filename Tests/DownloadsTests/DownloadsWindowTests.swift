@@ -11,7 +11,9 @@ import Testing
 
 private func rows() -> [DownloadRow] {
     [
-        job(1) { $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["a track missing"]) },
+        job(1) {
+            $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["a track missing"])
+        },
         job(2, .downloading) {
             $0.progress = try? replyDecoder.decode(
                 DownloadJob.Progress.self,
@@ -100,7 +102,8 @@ private func rows() -> [DownloadRow] {
             == "Can't reach the service: music-recommender at http://192.0.2.7:8080 didn't answer."
             + " The rows are as they were at 10:20. There's no Discogs catalog on this Mac, so it"
             + " can't queue or tag downloads. job 3's report was refused")
-    #expect(DownloadsModel.status(.answering, canAdd: true, problems: [], formatted: { _ in "" }) == "")
+    #expect(
+        DownloadsModel.status(.answering, canAdd: true, problems: [], formatted: { _ in "" }) == "")
 }
 
 @MainActor

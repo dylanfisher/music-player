@@ -37,7 +37,10 @@ private func album(_ id: Int64, _ releases: [String?]) -> DiscogsAlbum {
         album(4, ["x", "x"]),
     ]
     let choices = QueueChoice.selection([10, 11, 20, 40], albums: albums)
-    #expect(choices.map(\.title) == ["Made-Up Artist - Album 1", "Made-Up Artist - Album 2", "Made-Up Artist - Album 4"])
+    #expect(
+        choices.map(\.title) == [
+            "Made-Up Artist - Album 1", "Made-Up Artist - Album 2", "Made-Up Artist - Album 4",
+        ])
     #expect(choices.map(\.releaseID) == [4242, nil, nil])
     #expect(choices[0].refusal == nil)
     #expect(choices[1].refusal?.hasPrefix("Tag first") == true)

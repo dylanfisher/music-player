@@ -1,5 +1,5 @@
-import AppKit
 import Analysis
+import AppKit
 import Library
 
 /// Approve… (54.13, ADR 0139): what moves where; for an upgrade, the old files deleted, which
@@ -26,7 +26,8 @@ final class ApproveSheet: NSWindowController {
     init(plan: ApprovalPlan, album: String) {
         self.plan = plan
         approveButton = NSButton(
-            title: plan.resuming ? DownloadAction.resumeHere.title : "Approve", target: nil, action: nil)
+            title: plan.resuming ? DownloadAction.resumeHere.title : "Approve", target: nil,
+            action: nil)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
             styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -60,7 +61,8 @@ final class ApproveSheet: NSWindowController {
             views.append(
                 NSTextField(
                     labelWithString:
-                        "Moves \(plan.moves.count) file\(plan.moves.count == 1 ? "" : "s") into the library:"))
+                        "Moves \(plan.moves.count) file\(plan.moves.count == 1 ? "" : "s") into the library:"
+                ))
             views.append(lines(plan.moves.map { "\($0.name)  →  \($0.destination)" }, height: 110))
         }
 

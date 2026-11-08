@@ -45,7 +45,8 @@ package final class Downloads {
             catalog: URL, mapping: DiscogsMapping, share: String?,
             places: @escaping @Sendable () async throws -> ImportPlaces,
             trash: @escaping @Sendable ([URL]) async -> String?,
-            carry: @escaping @Sendable ([(from: String, to: String)]) async throws
+            carry:
+                @escaping @Sendable ([(from: String, to: String)]) async throws
                 -> MoveListImport,
             rescan: @escaping @Sendable ([String]) -> Void
         ) {
@@ -226,7 +227,9 @@ package final class Downloads {
         let status = DownloadsModel.status(
             session.model.connection, canAdd: session.canTag || session.coordinator == nil,
             problems: session.problems,
-            formatted: { DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short) })
+            formatted: {
+                DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short)
+            })
         controller.show(
             session.model.rows, status: status,
             canAdd: session.canTag && sheet == nil && session.model.connection == .answering)
@@ -395,7 +398,9 @@ package final class Downloads {
             }
             Task {
                 let found = await blockingFileWork {
-                    Result { try LibraryIndex(at: setup.databaseURL).upgradeCandidates(onShare: share) }
+                    Result {
+                        try LibraryIndex(at: setup.databaseURL).upgradeCandidates(onShare: share)
+                    }
                 }
                 let candidates: [UpgradeCandidate]
                 do {
@@ -418,7 +423,8 @@ package final class Downloads {
                 return alert("The selection couldn't be read", ["\(error)"])
             }
             guard !selected.isEmpty else {
-                return alert("No tracks are selected", ["Select an album's tracks in the library first."])
+                return alert(
+                    "No tracks are selected", ["Select an album's tracks in the library first."])
             }
             Task {
                 let found = await blockingFileWork {
@@ -445,7 +451,9 @@ package final class Downloads {
         tickingAll: Bool
     ) {
         guard !choices.isEmpty else {
-            return alert("Nothing to queue", [upgrade ? "No library album can be upgraded." : "The selection holds no album."])
+            return alert(
+                "Nothing to queue",
+                [upgrade ? "No library album can be upgraded." : "The selection holds no album."])
         }
         let queueSheet = QueueSheet(
             heading: heading, note: note, choices: choices,
@@ -479,11 +487,16 @@ package final class Downloads {
             guard response == .alertFirstButtonReturn else { return }
             guard let id = QueueChoice.pastedReleaseID(field.stringValue) else {
                 self.alert(
-                    "That isn't a Discogs release", ["\(field.stringValue.debugDescription) has no release id."])
+                    "That isn't a Discogs release",
+                    ["\(field.stringValue.debugDescription) has no release id."])
                 return
             }
             self.queue(
-                [QueueChoice(title: DownloadRow.releaseName(id), detail: "", releaseID: id, upgrade: nil, refusal: nil)],
+                [
+                    QueueChoice(
+                        title: DownloadRow.releaseName(id), detail: "", releaseID: id, upgrade: nil,
+                        refusal: nil)
+                ],
                 policies[popUp.indexOfSelectedItem])
         }
     }
@@ -497,7 +510,8 @@ package final class Downloads {
             var problems: [String] = []
             for choice in choices {
                 guard let release = choice.releaseID, let order = choice.order(policy) else {
-                    problems.append("\(choice.title): can't be queued as \(DownloadRow.policyName(policy))")
+                    problems.append(
+                        "\(choice.title): can't be queued as \(DownloadRow.policyName(policy))")
                     continue
                 }
                 let built = await blockingFileWork {

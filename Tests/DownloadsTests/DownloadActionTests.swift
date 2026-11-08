@@ -67,7 +67,8 @@ func aJobAnotherMacReviewsTakesOnlyResumeHere(action: DownloadAction, applies: B
 @Test func withoutACatalogTheTaggerDoesntOpen() {
     let job = job(1) { $0.tagging.status = .discrepancy }
     #expect(
-        !DownloadAction.applies(.openInTagger, to: job, machine: me, answering: true, canTag: false))
+        !DownloadAction.applies(.openInTagger, to: job, machine: me, answering: true, canTag: false)
+    )
     #expect(DownloadAction.applies(.reject, to: job, machine: me, answering: true, canTag: false))
 }
 

@@ -32,7 +32,8 @@ extension ReleaseSnapshot {
     /// The snapshot of the release `releaseID` in the catalog at `catalog`, for a new job.
     /// Throws `Problem.notInCatalog` when the catalog doesn't have it, so a pasted release is
     /// refused when it's queued, never after a download. Reads the catalog on this thread.
-    package static func queueable(releaseID: Int, catalogAt catalog: URL) throws -> ReleaseSnapshot {
+    package static func queueable(releaseID: Int, catalogAt catalog: URL) throws -> ReleaseSnapshot
+    {
         guard let release = try Catalog(at: catalog).release(id: releaseID) else {
             throw Problem.notInCatalog(releaseID: releaseID)
         }

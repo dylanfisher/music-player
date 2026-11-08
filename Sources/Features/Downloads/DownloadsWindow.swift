@@ -268,8 +268,9 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     func tooltip(_ column: DownloadColumn, _ row: Int) -> String? {
         let shown = rows[row]
         switch column {
-        case .source: return [text(.source, row), shown.replaces].compactMap { $0 }
-            .joined(separator: ": ")
+        case .source:
+            return [text(.source, row), shown.replaces].compactMap { $0 }
+                .joined(separator: ": ")
         case .album: return DownloadRow.releaseName(shown.releaseID)
         case .tagging:
             return shown.tagging.reasons.isEmpty
@@ -283,7 +284,8 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     func color(_ column: DownloadColumn, _ row: DownloadRow) -> NSColor {
         if column == .state, row.style.isFailed { return .systemRed }
         if column == .tagging, row.style.warnsTagging { return .systemOrange }
-        return row.style.isDimmed ? NSColor.secondaryLabelColor.withAlphaComponent(0.5) : .labelColor
+        return row.style.isDimmed
+            ? NSColor.secondaryLabelColor.withAlphaComponent(0.5) : .labelColor
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) { enableButtons() }

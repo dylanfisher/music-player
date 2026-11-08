@@ -22,7 +22,10 @@ final class QueueSheet: NSWindowController, NSTableViewDataSource, NSTableViewDe
     /// The albums to queue, and the policy; nil for Cancel.
     private(set) var result: (choices: [QueueChoice], policy: FormatPolicy)?
 
-    init(heading: String, note: String, choices: [QueueChoice], policies: [FormatPolicy], tickingAll: Bool) {
+    init(
+        heading: String, note: String, choices: [QueueChoice], policies: [FormatPolicy],
+        tickingAll: Bool
+    ) {
         self.choices = choices
         self.policies = policies
         ticked = tickingAll ? Set(choices.indices.filter { choices[$0].refusal == nil }) : []
