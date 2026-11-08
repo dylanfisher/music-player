@@ -39,6 +39,8 @@ public struct AlbumMatch: Sendable {
     public var mapping: [Int64: Int]
     /// The other releases found, the best first.
     public var candidates: [MatchCandidate]
+    /// Why a Likely or Incomplete album isn't Exact; empty for any other tier.
+    public internal(set) var reasons: [NotExactReason] = []
 
     public var releaseID: Int? { release?.id }
 

@@ -382,6 +382,54 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(result.tier == .likely)
     #expect(result.releaseID == 10)
     #expect(result.candidates.map(\.releaseID) == [11, 12])
+    #expect(result.reasons == [.tiedAfterTieBreak, .foundByTitleOnly])
+}
+
+/// A Likely or Incomplete album says why it isn't Exact, from the chosen release's score and
+/// how it was found; Exact and Matched albums say nothing (ADR 0136).
+@Test func anAlbumThatIsntExactSaysWhy() throws {
+    let releases = release(10, tracks: stockholm)
+    let bonus = try match(
+        album(
+            ["Östermalm", "Bonus Beat", "Other Bonus", "Gamla Stan", "Kungsholmen"],
+            seconds: [285, 100, 100, 370, 300]),
+        releases: releases)
+    #expect(bonus.tier == .incomplete)
+    #expect(
+        bonus.reasons == [
+            .countDiffers(files: 5, tracks: 3), .filesWithoutTrack(2), .foundByTitleOnly,
+        ])
+
+    let hidden = try match(
+        album(stockholmTitles),
+        releases: release(10, tracks: stockholm + [track("4", "Untitled Hidden Track", "1:00")]))
+    #expect(
+        hidden.reasons == [
+            .countDiffers(files: 3, tracks: 4), .tracksWithoutFile(1), .foundByTitleOnly,
+        ])
+
+    let lengths = try match(
+        album(stockholmTitles, seconds: [200, 200, 300], barcode: "123"),
+        releases: release(10, barcode: "123", tracks: stockholm))
+    #expect(lengths.tier == .likely)
+    #expect(lengths.reasons == [.durationsDiffer(2)], "found by its barcode")
+
+    let titles = try match(
+        album(["Östermalm", "Gamla Stan", "Something Else Entirely"]), releases: releases)
+    #expect(titles.tier == .likely)
+    #expect(titles.reasons == [.titlesDiffer(1), .foundByTitleOnly])
+
+    let mixed = try match(
+        album(stockholmTitles, title: "Unfindable", releaseIDs: ["10", nil, "10"]),
+        releases: releases)
+    #expect(mixed.tier == .incomplete)
+    #expect(mixed.reasons == [.releaseIDsDiffer], "found by the id its tracks carry")
+
+    #expect(try match(album(stockholmTitles), releases: releases).reasons.isEmpty)
+    let matched = try match(
+        album(stockholmTitles, releaseIDs: ["10", "10", "10"]), releases: releases)
+    #expect(matched.tier == .matched)
+    #expect(matched.reasons.isEmpty)
 }
 
 @Test func aMultiDiscSetWithHeadingsIsExact() throws {

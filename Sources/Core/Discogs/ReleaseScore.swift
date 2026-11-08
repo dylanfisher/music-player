@@ -14,6 +14,8 @@ struct ReleaseScore: Equatable, Sendable {
     /// Paired tracks whose Discogs length is known, and those whose file agrees with it.
     var durationsCompared: Int
     var durationsAgreeing: Int
+    /// With the same count, the files whose title isn't the same as their track's.
+    var titlesDiffering = 0
 
     var durationsAgree: Bool { durationsAgreeing == durationsCompared }
 
@@ -54,13 +56,17 @@ struct ReleaseScore: Equatable, Sendable {
         let sameCount = tracks.count == seconds.count
         var mapping: [Int?]
         var total = 0.0
+        var titlesDiffering = 0
         var inOrder = sameCount && !tracks.isEmpty
         if sameCount {
             // Same count: file i is track i, as Exact asks.
             mapping = Array(tracks.indices)
             for (index, row) in rows.enumerated() {
                 total += row[index]
-                if row[index] < MatchThreshold.sameTitle { inOrder = false }
+                if row[index] < MatchThreshold.sameTitle {
+                    inOrder = false
+                    titlesDiffering += 1
+                }
             }
         } else {
             (mapping, total) = aligned(rows, files: seconds.count)
@@ -78,7 +84,8 @@ struct ReleaseScore: Equatable, Sendable {
         return ReleaseScore(
             releaseID: releaseID, tracks: tracks, mapping: mapping, sameCount: sameCount,
             tracklist: longer == 0 ? 0 : total / Double(longer), titlesInOrder: inOrder,
-            durationsCompared: compared, durationsAgreeing: agreeing)
+            durationsCompared: compared, durationsAgreeing: agreeing,
+            titlesDiffering: titlesDiffering)
     }
 
     /// Whether a file of `seconds` is a Discogs track of `expected` seconds.

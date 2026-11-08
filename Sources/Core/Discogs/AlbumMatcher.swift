@@ -60,7 +60,9 @@ final class AlbumMatcher {
         let seconds = album.tracks.map(\.seconds)
         var releases: [Int: CatalogRelease] = [:]
         var scores: [ReleaseScore] = []
-        var candidates = try candidateIDs(for: album, in: catalog)
+        let found = try candidateIDs(for: album, in: catalog)
+        let foundBy = Dictionary(uniqueKeysWithValues: found.map { ($0.id, $0.foundBy) })
+        var candidates = found.map(\.id)
         if let choice, !candidates.contains(choice) { candidates.append(choice) }
         for id in candidates {
             guard let release = try catalog.release(id: id) else { continue }
@@ -73,6 +75,7 @@ final class AlbumMatcher {
 
         let tier: MatchTier
         let chosen: ReleaseScore?
+        var tied = false
         if let choice, let score = scores.first(where: { $0.releaseID == choice }) {
             chosen = score
             if isMatched, tagged.first == String(choice) {
@@ -90,7 +93,8 @@ final class AlbumMatcher {
         } else if scores.isEmpty {
             (tier, chosen) = (.noCandidate, nil)
         } else {
-            let (best, tied) = choose(scores, releases: releases, album: album)
+            let best: ReleaseScore
+            (best, tied) = choose(scores, releases: releases, album: album)
             chosen = best
             if !tagged.isEmpty {
                 tier = .incomplete
@@ -115,7 +119,10 @@ final class AlbumMatcher {
             .map { MatchCandidate(releaseID: $0.element.releaseID, score: $0.element) }
         return AlbumMatch(
             albumID: album.id, tier: tier, release: chosen.flatMap { releases[$0.releaseID] },
-            tracks: chosen?.tracks ?? [], mapping: mapping, candidates: others)
+            tracks: chosen?.tracks ?? [], mapping: mapping, candidates: others,
+            reasons: NotExactReason.reasons(
+                tier, chosen, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
+                mixedIDs: !tagged.isEmpty && !isMatched))
     }
 
     /// The best of `scores`, and whether others were as good after the tie-break. The best are
