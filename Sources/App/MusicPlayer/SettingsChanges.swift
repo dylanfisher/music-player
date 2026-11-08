@@ -108,6 +108,7 @@ extension AppDelegate {
             tagger.window?.close()
             discogsTagger = nil
         }
+        if !keys.isDisjoint(with: Self.downloadsKeys(schema)) { applyDownloadsSettings() }
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
             schema.pausePollingDuringPlayback.key, schema.syncFolder.key,

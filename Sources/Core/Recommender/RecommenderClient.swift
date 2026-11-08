@@ -14,7 +14,7 @@ package struct RecommenderClient: Sendable {
     /// `address` and `port` are `recommender.address` and `recommender.port`; `interfaces`
     /// lists the interfaces that are up. Refused unless the address is another device's on one
     /// of their subnets, as `receiver.address` is (ADR 0039).
-    package init(address: IPAddress, port: UInt16, token: ServiceToken, interfaces: [NetworkInterface])
+    init(address: IPAddress, port: UInt16, token: ServiceToken, interfaces: [NetworkInterface])
         throws(RecommenderError)
     {
         guard let interface = LocalSubnets(interfaces).interface(forHost: address) else {
@@ -24,6 +24,20 @@ package struct RecommenderClient: Sendable {
         self.port = port
         self.token = token
         self.interface = interface
+    }
+
+    /// The client for `address` and `port` on the interfaces up now, which App makes for each
+    /// call, so a network that comes up later is found.
+    package init(address: IPAddress, port: UInt16, token: ServiceToken)
+        throws(RecommenderError)
+    {
+        let interfaces: [NetworkInterface]
+        do throws(LocalNetworkError) {
+            interfaces = try currentInterfaces()
+        } catch {
+            throw RecommenderError(service: "\(address) port \(port)", kind: .unreachable(error))
+        }
+        try self.init(address: address, port: port, token: token, interfaces: interfaces)
     }
 
     /// The service's version: checks the address and the token.

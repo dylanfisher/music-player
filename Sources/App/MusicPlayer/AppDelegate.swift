@@ -3,6 +3,7 @@ import AppKit
 import Artwork
 import Commands
 import DiscogsTagger
+import Downloads
 import HALOutput
 import KeyChord
 import Library
@@ -121,6 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) lazy var tagEditing = makeTagEditing()
     /// The Discogs tagger, once first shown.
     var discogsTagger: DiscogsTagger?
+    /// The tagger open on a staged download's discrepancy, while it's open.
+    var stagedTagger: DiscogsTagger?
+    /// Soulseek downloads, which run while the service is set (phase 54).
+    private(set) lazy var downloads = makeDownloads()
     private(set) var dispatcher: CommandDispatcher?
     /// Runs the tool's requests and links, once playback is ready.
     var scriptRouter: ScriptRouter?
@@ -388,6 +393,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startScripting()
         applyReceiverSetting()
         startWatching(settings)
+        applyDownloadsSettings()
         showLibraryAnalysisStanding()
         shareChanges = ShareChangeObserver { [weak self] in self?.watcher?.sharesMayHaveMoved() }
         if let snapshotURL {
@@ -492,6 +498,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         volumeKeyTap?.stop()
         scriptServer?.stop()
         receiver?.stop()
+        downloads.stop()
         window?.saveToolbarVisibility()
         saver?.flush()
         watcher?.stop()

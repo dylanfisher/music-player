@@ -74,13 +74,13 @@ public struct AppSettings: SettingsSchema {
     public let discogsFillSortArtist = Setting(
         "discogs.fillSortArtist", title: "Fill Sort Artist from Album Artist", default: false,
         "The Discogs tagger gives files without a sort artist the album artist.")
-    let recommenderAddress = Setting<IPAddressSetting?>(
+    public let recommenderAddress = Setting<IPAddressSetting?>(
         "recommender.address", title: "Service Address", default: nil,
         "The IP address of the Mac running music-recommender; host names aren't taken.")
-    let recommenderPort = Setting(
+    public let recommenderPort = Setting(
         "recommender.port", title: "Service Port", default: 7878, range: 1...65535,
         "The port music-recommender's API listens on.")
-    let recommenderToken = Setting<ServiceToken?>(
+    public let recommenderToken = Setting<ServiceToken?>(
         "recommender.token", title: "Service Token", default: nil,
         "The token music-recommender's config holds; the file is then yours alone.")
     public let stagingFolder = Setting<StagingFolder?>(

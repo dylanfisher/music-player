@@ -3,6 +3,7 @@ import Discogs
 import Foundation
 import Library
 import Metadata
+import Recommender
 import Settings
 import TagWriter
 
@@ -78,6 +79,44 @@ public final class DiscogsTagger {
 
     init(model: TaggerModel) {
         self.model = model
+    }
+
+    /// The tagger for one staged job with a discrepancy (ADR 0138), opened from Downloads: it
+    /// reads the job's files under `stagingRoot`, matches them with the job's release in the
+    /// catalog only, and writes through `StagedWriter`, whose journal is under
+    /// `dataDirectory`. `resolved` hears the verdict once Apply has written.
+    package convenience init(
+        stagedJob job: StagedJob, stagingRoot: String, dataDirectory: URL, catalog: URL,
+        mapping: DiscogsMapping, savedMappings: [NamedDiscogsMapping], choices: TaggerChoices,
+        resolved: @escaping (AutoTagRun.Verdict) -> Void
+    ) {
+        let writer = StagedWriter(stagingRoot: stagingRoot, dataDirectory: dataDirectory)
+        let effects = TaggerModel.StagedEffects(
+            read: {
+                await blockingFileWork {
+                    let staged = StagedAlbum(job, stagingRoot: stagingRoot)
+                    return (staged.album, staged.files, staged.problems)
+                }
+            },
+            match: { album, release in
+                let matches = try await matchAlbums(
+                    [album], catalogAt: catalog, choosing: [album.id: release],
+                    skippingVideo: false, progress: { _ in })
+                // A release the catalog lacks isn't chosen, and the matcher picks its own.
+                guard let match = matches.first, match.releaseID == release else {
+                    throw ReleaseSnapshot.Problem.notInCatalog(releaseID: release)
+                }
+                return match
+            },
+            summaries: { try await releaseSummaries($0, catalogAt: catalog) },
+            checkCatalog: { await catalogState(at: catalog) },
+            write: { edits in
+                try await blockingFileWork { Result { try writer.write(edits) } }.get()
+            })
+        self.init(
+            model: TaggerModel(
+                stagedJob: job, effects: effects, mapping: mapping, savedMappings: savedMappings,
+                choices: choices, resolved: resolved))
     }
 
     /// The window, once shown.

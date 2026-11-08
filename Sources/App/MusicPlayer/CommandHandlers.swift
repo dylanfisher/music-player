@@ -18,6 +18,7 @@ extension AppDelegate {
         registerTagCommands(dispatcher)
         registerSpectrumCommands(dispatcher)
         registerDiscogsCommands(dispatcher)
+        registerDownloadsCommands(dispatcher)
         registerReceiverCommands(dispatcher)
         dispatcher.handle(.addFolder, enabled: hasWindow) { [weak self] in
             guard let window = self?.window?.window else { return }
