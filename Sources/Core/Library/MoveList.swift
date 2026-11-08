@@ -58,7 +58,8 @@ struct MoveList {
             else {
                 problems.append(
                     MoveListProblem(
-                        line: number, reason: "it moves \(terminalSafe(from)) onto itself"))
+                        line: number,
+                        reason: "its old and new paths are the same: \(terminalSafe(from))"))
                 continue
             }
             lines.append(Line(number: number, from: from, to: to))

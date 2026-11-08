@@ -32,8 +32,8 @@ import Testing
     #expect(told.map(\.0) == ["Moved the stats of 3 tracks"])
     #expect(
         told.first?.1
-            == "2 moved, 1 merged with stats the new path had, 4 already moved, 1 line with"
-            + " problems, listed in the Problems window, where ⌘C copies them.")
+            == "2 moved, 1 merged with stats the new path had, 4 already moved, 1 not moved,"
+            + " listed in the Problems window, where ⌘C copies them.")
     #expect(told.first?.2 === window)
     #expect(browser.status.importedMovesReport.map(\.line) == [problem.description])
     #expect(edits == 1)

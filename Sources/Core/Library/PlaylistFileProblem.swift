@@ -43,6 +43,9 @@ public struct PlaylistFileProblem: Equatable, Sendable, CustomStringConvertible 
             case .tooManyLines:
                 "past \(PlaylistFile.maximumLines) lines; the rest weren't read"
             }
-        return "line \(line): \(what)"
+        return lineProblem(line, what)
     }
 }
+
+/// "line 3: <what>", how a problem in a text file names its line.
+func lineProblem(_ line: Int, _ what: String) -> String { "line \(line): \(what)" }

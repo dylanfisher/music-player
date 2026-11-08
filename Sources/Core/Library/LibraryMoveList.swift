@@ -60,7 +60,8 @@ extension LibraryIndex {
         return .ready(oldFileGone: !FileManager.default.fileExists(atPath: line.from))
     }
 
-    private func hasFile(_ id: Int64) throws -> Bool {
+    /// Whether the index has a file for the path `id`.
+    func hasFile(_ id: Int64) throws -> Bool {
         try !statement("SELECT 1 FROM files WHERE id = ?").map(id, row: { _ in () }).isEmpty
     }
 

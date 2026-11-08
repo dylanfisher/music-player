@@ -237,10 +237,7 @@ extension LibraryIndex {
         let newNFC = toPath.precomposedStringWithCanonicalMapping
         guard oldNFC != newNFC else { return "it moves \(clipped(from)) onto itself" }
         let old = try existingPathID(oldNFC)
-        if let old,
-            try !statement("SELECT 1 FROM files WHERE id = ?").map(old, row: { _ in () })
-                .isEmpty
-        {
+        if let old, try hasFile(old) {
             // The file is still here as far as this index knows; its own scan matches the move.
             return "this Mac still has \(clipped(from)), so the move to \(clipped(to)) waits for"
                 + " its own scan"

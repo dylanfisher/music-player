@@ -258,7 +258,7 @@ private func expectStats(_ library: MoveListLibrary, _ name: String, id: Int64) 
     #expect(result.problems[3].reason.contains("A/04.flac isn't there"))
     #expect(result.problems[4].reason.contains("A/03.m4a is still there"))
     #expect(result.problems[5].reason.contains("A/05.m4a isn't in the library"))
-    #expect(result.problems[6].reason.contains("onto itself"))
+    #expect(result.problems[6].reason.contains("are the same"))
     #expect(result.problems[8].reason.contains("doesn't end in a newline"))
     #expect(result.problems[0].description.hasPrefix("line 2: "))
     #expect(try library.index.existingPathID(library.path("A/01.flac")) == one)
@@ -314,7 +314,9 @@ private func expectStats(_ library: MoveListLibrary, _ name: String, id: Int64) 
         if case .move = $0 { true } else { false }
     }
     #expect(moves == [.move(from: "music/library/A/01.m4a", to: "music/library/A/01.flac")])
-    #expect(try library.index.resolvedSyncPath("music/library/A/01.m4a") == "music/library/A/01.flac")
+    #expect(
+        try library.index.resolvedSyncPath("music/library/A/01.m4a")
+            == "music/library/A/01.flac")
 }
 
 @Test func aLongListMovesInLinearTime() throws {

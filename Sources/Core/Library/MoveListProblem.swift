@@ -4,5 +4,5 @@ public struct MoveListProblem: Equatable, Sendable, CustomStringConvertible {
     public var line: Int
     public var reason: String
 
-    public var description: String { "line \(line): \(reason)" }
+    public var description: String { lineProblem(line, reason) }
 }
