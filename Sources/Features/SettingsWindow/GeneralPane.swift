@@ -9,14 +9,16 @@ private let logger = moduleLogger()
 /// What a setting or a shortcut with no value shows.
 let noValueText = "None"
 
-/// Settings ▸ General: the config file's place and buttons, then the settings from the schema,
-/// a titled box for each section. A checkbox carries its setting's title on its right; a pop-up
+/// Settings ▸ General: the config file's place and buttons in a box titled Config, then the
+/// settings from the schema, a titled box for each section. A checkbox carries its setting's title on its right; a pop-up
 /// or a field has the title on its left, in one column for the whole pane. Each setting's
 /// summary is under it. Settings ▸ Playback, Appearance and Toolbar are one too, with their
 /// sections and no config file, and the Watched Folders pane holds one for its sections.
 @MainActor
 final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let width = 640.0
+    /// The title of the box of the config file's place and buttons.
+    static let configTitle = "Config"
     /// How long Copy Default Config's button says "Copied".
     static let copiedSeconds = 1.5
     /// How long a color well's color stays the same before it's saved: a drag in the color
@@ -103,11 +105,11 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             }
             .compactMap { $0.contentView?.fittingSize.width }.max() ?? 0
         for grid in grids { grid.column(at: 0).width = labelWidth }
-        let boxes = zip(shown, grids).map { box($0.section.title, $1) }
+        let config = configPath.map { [box(Self.configTitle, configHeader($0))] } ?? []
+        let boxes = config + zip(shown, grids).map { box($0.section.title, $1) }
         errorLabel.textColor = .systemRed
         errorLabel.isHidden = true
-        let views = configPath.map { [configHeader($0)] } ?? []
-        let stack = NSStackView(views: views + boxes + [errorLabel])
+        let stack = NSStackView(views: boxes + [errorLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14

@@ -977,3 +977,29 @@ private func visibleLabels(in view: NSView) -> [String] {
     #expect(pane.view.frame.height == closed)
     #expect(window.frame.maxY == top)
 }
+
+/// The section under `view` whose heading is `title`: a stack of the heading and its box.
+@MainActor
+private func section(titled title: String, in view: NSView) -> NSStackView? {
+    if let stack = view as? NSStackView, stack.arrangedSubviews.count == 2,
+        (stack.arrangedSubviews.first as? NSTextField)?.stringValue == title
+    {
+        return stack
+    }
+    return view.subviews.lazy.compactMap { section(titled: title, in: $0) }.first
+}
+
+/// The config file's place and its three buttons sit in a box titled Config, as the sections'
+/// rows do.
+@MainActor @Test func theConfigFileRowsAreInAConfigBox() throws {
+    let (model, _) = model()
+    let pane = GeneralPane(model: model, configPath: "/tmp/config.json", actions: actions())
+    let config = try #require(section(titled: GeneralPane.configTitle, in: pane.view))
+    for title in [
+        AppCommands.title(of: .openConfigFile), "Reveal in Finder",
+        AppCommands.title(of: .copyDefaultConfig),
+    ] {
+        #expect(button(title, in: config) != nil, "\(title)")
+    }
+    #expect(labels(in: config).contains("/tmp/config.json"))
+}
