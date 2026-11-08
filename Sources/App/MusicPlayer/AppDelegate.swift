@@ -21,6 +21,7 @@ import SQLite
 import Scripting
 import Settings
 import SettingsWindow
+import Snapshot
 import TagEditor
 import TagWriter
 import UPnPOutput
@@ -81,6 +82,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dockMenu: DockMenu?
     private(set) var queue: QueuePanel?
     private(set) var watcher: LibraryWatcher?
+    /// The library's snapshots (ADR 0142), made with the window.
+    private(set) var snapshotScheduler: SnapshotScheduler?
+    /// Asks for the day's snapshot every hour, once the launch's scans have ended.
+    var snapshotTimer: Timer?
     private var shareChanges: ShareChangeObserver?
     private(set) var output: DeviceOutput?
     /// Each device's state before playback first changed it, shared by every provider made for
@@ -248,6 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so it alone may move an unreadable file aside, before any other connection opens.
         let index = try LibraryIndex(
             at: databaseURL, movingAsideIfUnreadable: true, confirmRescan: askToRescan)
+        snapshotScheduler = SnapshotScheduler(databaseURL: databaseURL)
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,
@@ -845,15 +851,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher?.stop()
         watcher = nil
         guard let browser else { return }
+        // A run Bench measures, or one drawing a PNG, takes no snapshots, which would add
+        // their reads to what it measures.
+        let snapshotting = measuring == nil && !reportingLaunch && snapshotURL == nil
+        let events = analysisStandingFollowing(
+            reportingLaunch ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents)
         guard
             let watcher = startedWatcher(
                 settings, databaseURL: libraryFileURL(in: paths.dataDirectory),
-                events: analysisStandingFollowing(
-                    reportingLaunch
-                        ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents))
+                events: snapshotting ? startingSnapshotsAfterLaunch(events) : events)
         else {
             // No folder has a scan to wait for.
             if reportingLaunch { FileHandle.standardOutput.write(launchedLine) }
+            if snapshotting { startDailySnapshots() }
             return
         }
         if activity != .stopped {

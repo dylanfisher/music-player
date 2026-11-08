@@ -244,8 +244,8 @@ let package = Package(
                 "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Scripting",
-                "SQLite", "Settings", "SettingsWindow", "Spectrum", "TagEditor", "TagWriter",
-                "UPnP", "UPnPOutput",
+                "SQLite", "Settings", "SettingsWindow", "Snapshot", "Spectrum", "TagEditor",
+                "TagWriter", "UPnP", "UPnPOutput",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
