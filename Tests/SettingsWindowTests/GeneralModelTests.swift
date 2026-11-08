@@ -78,9 +78,10 @@ private var appearanceChoices: [SettingKind.Choice] {
         isBlocked: { false })
     let inTheFileOnly: Set<String> = [
         schema.networkScanReaders.key, schema.resume.key, schema.browserGroupings.key,
-        schema.discogsDumpsFolder.key, schema.discogsCatalogPath.key, schema.discogsMapping.key,
-        schema.discogsSavedMappings.key, schema.discogsKeepExistingValues.key,
-        schema.discogsSkipVideo.key, schema.discogsFillSortArtist.key,
+        schema.discogsDumpsFolder.key, schema.discogsCatalogPath.key, schema.discogsToken.key,
+        schema.discogsMapping.key, schema.discogsSavedMappings.key,
+        schema.discogsKeepExistingValues.key, schema.discogsSkipVideo.key,
+        schema.discogsFillSortArtist.key,
     ]
     #expect(
         model.rows.map(\.key) == schema.settings.map(\.key).filter { !inTheFileOnly.contains($0) })
@@ -264,6 +265,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(!keys.contains(schema.networkScanReaders.key))
     #expect(!keys.contains(schema.discogsDumpsFolder.key))
     #expect(!keys.contains(schema.discogsCatalogPath.key))
+    #expect(!keys.contains(schema.discogsToken.key))
     #expect(!keys.contains(schema.discogsMapping.key))
     #expect(!keys.contains(schema.discogsSavedMappings.key))
     #expect(!keys.contains(schema.discogsKeepExistingValues.key))
@@ -318,7 +320,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
     #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
     let listed = sections.flatMap(\.rows).map(\.key)
-    #expect(listed.count == AppSettings().settings.count - 12)
+    #expect(listed.count == AppSettings().settings.count - 13)
     #expect(!listed.contains(AppSettings().resume.key))
     #expect(!listed.contains(AppSettings().browserGroupings.key))
     #expect(!listed.contains(AppSettings().watchedFolders.key))

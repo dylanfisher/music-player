@@ -21,6 +21,9 @@ public indirect enum SettingKind: Sendable, Equatable {
     case discogsMapping
     /// A color with its opacity, which the settings window picks in a color well.
     case color
+    /// A secret, which no window shows and which the config file gives only while other users
+    /// can't read it (ADR 0137).
+    case secret
     /// Window layout the app saves as it changes; the settings window shows no control for it.
     case windowState
 

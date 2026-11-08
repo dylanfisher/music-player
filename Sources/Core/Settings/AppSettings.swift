@@ -59,6 +59,9 @@ public struct AppSettings: SettingsSchema {
     public let discogsCatalogPath = Setting<String?>(
         "discogs.catalogPath", title: "Discogs Catalog", filePath: nil,
         "The catalog's file, outside your music; none keeps it with the library.")
+    public let discogsToken = Setting<DiscogsToken?>(
+        "discogs.token", title: "Discogs Token", default: nil,
+        "A personal access token from discogs.com/settings/developers, for the API.")
     public let discogsMapping = Setting(
         "discogs.mapping", title: "Discogs Field Mapping", default: DiscogsPreset.oneToOne.mapping,
         "Where the Discogs tagger writes each field, and how.")
