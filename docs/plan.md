@@ -828,16 +828,20 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       Positions the service can't take are refused at queue time: an index track without one
       takes its parts' joined with "+", a list with none is numbered, anything else is refused.
       Fixtures from the service's `api.md` examples.
-- [ ] **54.3 Library.** `import_jobs` as a schema part of its own (an outbox of reports, a ledger
+- [x] **54.3 Library.** `import_jobs` as a schema part of its own (an outbox of reports, a ledger
       of steps, cached edits), `LibraryIndex.upgradeCandidates()` (albums whose every track has a
       release id and is lossy), an album's library-share-relative paths and quality. The scanner
       skips the staging folder, with a test. Tests on a temporary index.
-      Partly built: `import_jobs` (`import_outbox` and `import_steps`, keyed by job id, release
-      id and folder-relative paths, kept by an index rebuild); every scan passes over the found
-      staging folder, a watched folder inside it isn't scanned, and a sync folder found in or
-      around it is refused (`stagingOverlap`, the found-path check ADR 0136 deferred; the
-      library folder's turn is 54.6's move). Still to do: cached edits (their shape is 54.4's),
-      `upgradeCandidates()`, and an album's share-relative paths and quality.
+      Result: `import_jobs` (`import_outbox` and `import_steps`, keyed by job id, release id and
+      folder-relative paths, kept by an index rebuild); every scan passes over the found staging
+      folder, a watched folder inside it isn't scanned, and a sync folder found in or around it
+      is refused (`stagingOverlap`, the found-path check ADR 0136 deferred; the library folder's
+      turn is 54.6's move). `upgradeCandidates(onShare:)` lists the albums whose every file is
+      AAC or MP3, carries one numeric release id and lies in a watched folder on the share, each
+      with its paths relative to the share (from `share_roots`) and its quality ("MP3 320
+      kbps", the average bit rate less the art). No cached edits: AutoTag works the edits out
+      from the files on every run, and a takeover reruns from the read (design step 7), so
+      there is nothing to cache; see 54.4.
 - [ ] **54.4 StagedAlbum and AutoTag.** `Core/Discogs/{StagedAlbum,AutoTag}.swift`, without
       writing: `readAlbumFiles` on the staged paths with synthetic negative ids; a missing or junk
       title filled from the file name; `matchAlbums(choosing:)` on the job's release; clean or a

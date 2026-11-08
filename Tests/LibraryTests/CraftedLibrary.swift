@@ -28,6 +28,7 @@ struct Crafted {
     var genre: String? = nil
     var mood: String? = nil
     var grouping: String? = nil
+    var sizeBytes = 1
 
     var scanned: ScannedFile {
         var tags = TrackTags()
@@ -58,7 +59,7 @@ struct Crafted {
         let warnings =
             warning ? [MetadataWarning(kind: .badNumber, offset: 4, detail: "track \"1x\"")] : []
         return ScannedFile(
-            path: path, sizeBytes: 1, modifiedSeconds: 1, known: nil,
+            path: path, sizeBytes: sizeBytes, modifiedSeconds: 1, known: nil,
             outcome: .success(
                 ParsedFile(metadata: metadata, warnings: warnings, bytesRead: 0, readCount: 0)))
     }
