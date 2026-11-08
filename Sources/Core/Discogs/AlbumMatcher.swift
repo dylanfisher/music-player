@@ -40,24 +40,33 @@ public func matchAlbums(
             source == .api
             ? Array(albums.indices)
             : albums.indices.filter { needsAPI(matches[$0], choosing: chosen[albums[$0].id]) }
-        await api.setWaiting { reporter.waiting($0) }
-        var done = 0
-        for index in indices {
-            try Task.checkCancellation()
-            let album = albums[index]
-            let match = try await matchWithAPI(
-                album, choosing: chosen[album.id], matcher: matcher, api: api)
-            if source == .api { matches.append(match) } else { matches[index] = match }
-            done += 1
-            if source == .api {
-                reporter.report(albumsDone: done, albumCount: indices.count)
-            } else {
-                reporter.report(
-                    albumsDone: albums.count, albumCount: albums.count, apiAlbumsDone: done,
-                    apiAlbumCount: indices.count)
+        // The run's waits go to its own progress; a run within it, as choosing a release is,
+        // gives them back when it ends.
+        let previous = await api.setWaiting { reporter.waiting($0) }
+        do {
+            var done = 0
+            for index in indices {
+                try Task.checkCancellation()
+                let album = albums[index]
+                let match = try await matchWithAPI(
+                    album, choosing: chosen[album.id], matcher: matcher, api: api)
+                if source == .api { matches.append(match) } else { matches[index] = match }
+                done += 1
+                if source == .api {
+                    reporter.report(albumsDone: done, albumCount: indices.count)
+                } else {
+                    reporter.report(
+                        albumsDone: albums.count, albumCount: albums.count, apiAlbumsDone: done,
+                        apiAlbumCount: indices.count)
+                }
             }
+        } catch {
+            await api.setWaiting(previous)
+            throw error
         }
+        await api.setWaiting(previous)
         return matches
+
     }
     return try await withTaskCancellationHandler {
         do {

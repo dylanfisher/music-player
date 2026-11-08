@@ -83,8 +83,14 @@ public actor DiscogsAPI {
     /// Whether there's a token, without which nothing searches.
     public nonisolated var hasToken: Bool { token != nil }
 
-    func setWaiting(_ waiting: @escaping @Sendable (Int?) -> Void) {
+    /// Makes `waiting` hear the long waits, and returns the one that heard them before.
+    @discardableResult
+    func setWaiting(_ waiting: @escaping @Sendable (Int?) -> Void)
+        -> @Sendable (Int?) -> Void
+    {
+        let previous = self.waiting
         self.waiting = waiting
+        return previous
     }
 
     // MARK: Calls

@@ -235,3 +235,16 @@ private func renumbered(_ name: String, _ id: Int) -> [UInt8] {
         try await releaseSummaries([1005], catalogAt: folder.catalog)
     }
 }
+
+@Test func aRunWithinARunGivesTheWaitsBackWhenItEnds() async throws {
+    let folder = try DumpFolder()
+    let fake = FakeDiscogs()
+    let api = fake.api()
+    let outer = Recorded<Int?>()
+    await api.setWaiting { outer.add($0) }
+    // A short run, as choosing a release makes, with its own progress.
+    _ = try await run([tiered[0]], .api, catalog: folder.catalog, api: api)
+    fake.queue("/releases/1002", status: 429, headers: ["Retry-After": "40"])
+    _ = try await api.release(id: 1002)
+    #expect(outer.all == [40, nil])
+}
