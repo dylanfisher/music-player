@@ -206,20 +206,26 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
         return true
     }
     // `covr` holds a `data` atom a picture; every other item, one value.
+    // A picture of a type it can't show is left out and the rest kept; only a `covr` with
+    // none it can show is reported, as one of a single picture always was.
     if case .cover = kind {
+        var skipped: ParseFailure?
         for data in datas {
             let (type, valueRange) = try dataValue(data, of: item, reader)
             let offset = valueRange.lowerBound
             let head = try reader.bytes(offset..<min(valueRange.upperBound, offset + 8))
             guard let mime = artTypes[type] ?? (type == 0 ? sniffedMIMEType(head.array) : nil)
             else {
-                throw .unsupported(at: data.start, "MP4 cover art with data type \(type)")
+                skipped =
+                    skipped ?? .unsupported(at: data.start, "MP4 cover art with data type \(type)")
+                continue
             }
             let art = EmbeddedArt(
                 offset: offset, byteCount: valueRange.count, mimeType: mime, unsynchronised: false)
             items.pictures.append(EmbeddedPicture(art: art, type: nil))
             if items.art == nil { items.art = art }
         }
+        if items.pictures.isEmpty, let skipped { throw skipped }
         return
     }
     guard let data = datas.first else { return }

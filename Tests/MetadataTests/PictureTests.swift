@@ -59,6 +59,23 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
     #expect(try pictureBytes(file) == images)
 }
 
+/// A cover of a data type it can't show is left out, the ones around it kept, with no
+/// warning.
+@Test func mp4SkipsACoverItCantShowAndKeepsTheRest() throws {
+    let covers = atom(
+        "covr",
+        [(13, images[0]), (99, images[1]), (14, images[2])]
+            .map { atom("data", bigEndian32($0.0) + bigEndian32(0) + $0.1) }.reduce(Data(), +))
+    let file = mp4File(
+        moov(
+            entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
+            duration: 4410, items: covers))
+    let parsed = try parse(file)
+    #expect(parsed.metadata.pictures.map(\.art.mimeType) == ["image/jpeg", "image/png"])
+    #expect(parsed.warnings.isEmpty)
+    #expect(try pictureBytes(file) == [images[0], images[2]])
+}
+
 @Test func aTypeOtherThanTheCoversLeafletAndDiscIsOther() {
     let art = EmbeddedArt(offset: 0, byteCount: 1, mimeType: "image/png", unsynchronised: false)
     #expect(EmbeddedPicture(art: art, type: 5).typeName == "Leaflet Page")
