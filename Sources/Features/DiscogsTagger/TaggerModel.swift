@@ -367,7 +367,7 @@ final class TaggerModel {
         // A file moved or removed since the scan is in neither list; Apply refuses such an album.
         let missing = album.album.tracks.count - files.count - read.count
         if missing > 0 {
-            problems.append("\(missing) file\(missing == 1 ? "" : "s") no longer in the library")
+            problems.append("\(DisplayText.count(missing, "file")) no longer in the library")
         }
         return (Discogs.changeSet(for: files, match: album.match, mapping: mapping), problems)
     }
@@ -390,7 +390,8 @@ final class TaggerModel {
     /// nil when stopped.
     func plan(_ albumIDs: [Int64]) async -> ApplyPlan? {
         guard !isBusy else { return nil }
-        let chosen = albums.filter { albumIDs.contains($0.id) }
+        let wanted = Set(albumIDs)
+        let chosen = albums.filter { wanted.contains($0.id) }
         let fileIDs = chosen.flatMap { $0.album.tracks.map(\.fileID) }
         run += 1
         let current = run
@@ -455,7 +456,7 @@ final class TaggerModel {
         let albums = plan.albumIDs.count
         let message =
             "Change \(number(plan.fieldCount)) tags in \(number(plan.files.count)) files of "
-            + "\(number(albums)) album\(albums == 1 ? "" : "s")?"
+            + "\(DisplayText.count(albums, "album"))?"
         var detail =
             "Each file gets the values the field mapping writes, as View Changes shows them."
             + " Undo Tag Edit puts them all back."
@@ -476,7 +477,7 @@ final class TaggerModel {
             albums[index].applied = false
         }
         status =
-            "\(number(failed.count)) album\(failed.count == 1 ? "" : "s") not fully written;"
+            "\(DisplayText.count(failed.count, "album")) not fully written;"
             + " Apply can try again"
         changed()
     }
@@ -485,7 +486,8 @@ final class TaggerModel {
     func apply(_ plan: ApplyPlan) {
         guard !plan.files.isEmpty else { return }
         write(plan.files) { [weak self] unwritten in self?.reopen(plan, unwritten: unwritten) }
-        for index in albums.indices where plan.albumIDs.contains(albums[index].id) {
+        let applied = Set(plan.albumIDs)
+        for index in albums.indices where applied.contains(albums[index].id) {
             albums[index].applied = true
         }
         status =
