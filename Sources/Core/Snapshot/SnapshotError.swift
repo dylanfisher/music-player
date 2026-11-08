@@ -26,7 +26,8 @@ public enum SnapshotError: Error, Equatable, CustomStringConvertible {
         case .restoreMissing(let path):
             "the snapshot to restore was to be at \(path), but it's gone; the library is as it was"
         case .networkFolder(let path):
-            "the snapshot folder \(path) is on a network volume; choose a folder on this Mac"
+            "the snapshot folder \(path) is on a network volume; choose a folder on this Mac,"
+                + " which a restore needs too, since it snapshots the library first"
         case .notRotated(let detail):
             "the snapshot was written, but older ones couldn't be deleted: \(detail)"
         case .indexNotPutBack(let path, let detail):

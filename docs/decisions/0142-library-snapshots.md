@@ -49,7 +49,8 @@ was the live file. Phase 53.6 and 53.7 ask for a dated copy each day and a way b
   sync folder is refused in the config file, as the sync folder and the catalog are (AGENTS.md):
   the app writes there. A folder on a network volume is refused when a snapshot is written:
   that covers a watched share wherever it's mounted, which a path can't, and keeps snapshots off
-  the NAS they'd be lost with; an external disk on this Mac is local, and works.
+  the NAS they'd be lost with; an external disk on this Mac is local, and works. A restore
+  needs a local snapshot folder too, since it snapshots the index there first, and says so.
 - **Restore.** Settings lists the snapshots with Restore…, which says the snapshot's plays,
   ratings and playlists replace the current ones. It unpacks the snapshot to
   `library.sqlite.restoring` beside the index, runs `PRAGMA integrity_check` on it, then
