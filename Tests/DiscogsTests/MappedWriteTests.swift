@@ -12,7 +12,7 @@ import Testing
 // Only copies in a temp folder are written.
 
 /// A fixture library of this target's own, apart from the other targets'.
-private let library = Result { () throws -> (URL, FixtureManifest) in
+let fixtureLibrary = Result { () throws -> (URL, FixtureManifest) in
     let root = URL(fileURLWithPath: #filePath, isDirectory: false)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent(".build/discogs-tests", isDirectory: true)
@@ -38,7 +38,7 @@ enum WrittenSample: String, CaseIterable, CustomTestStringConvertible {
 
     /// Two copies of one fixture in a new temp folder, which the test may write.
     func copies() throws -> [URL] {
-        let (root, manifest) = try library.get()
+        let (root, manifest) = try fixtureLibrary.get()
         let file = try #require(manifest.files.first(where: matches), "no \(rawValue) fixture")
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("discogs-\(UUID().uuidString)", isDirectory: true)

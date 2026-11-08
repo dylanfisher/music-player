@@ -62,8 +62,8 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     }
 
     /// The Soulseek folder chosen, as its peer reported it.
-    struct Candidate: Equatable, Sendable, Decodable {
-        enum Format: String, Equatable, Sendable, Decodable {
+    package struct Candidate: Equatable, Sendable, Decodable {
+        package enum Format: String, Equatable, Sendable, Decodable {
             case flac, alac, mp3, ogg, opus, wav, ape, wv
         }
 
@@ -89,7 +89,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             case bytes, tracklist
         }
 
-        init(from decoder: any Decoder) throws {
+        package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             peer = try container.decode(String.self, forKey: .peer)
             format = try container.decode(Format.self, forKey: .format)
@@ -105,12 +105,12 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
 
     /// One of the job's files: until `staged` the remote file's name, from then on its path
     /// under `stagedPath`, `/`-separated.
-    struct File: Equatable, Sendable, Decodable {
-        var name: String
-        var sizeBytes: Int
+    package struct File: Equatable, Sendable, Decodable {
+        package var name: String
+        package var sizeBytes: Int
         /// The matched track's position in the snapshot's tracklist `candidate.tracklist`;
         /// nil for an extra file.
-        var position: String?
+        package var position: String?
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case name
@@ -124,7 +124,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             self.position = position
         }
 
-        init(from decoder: any Decoder) throws {
+        package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             name = try container.decode(String.self, forKey: .name)
             sizeBytes = try container.decode(Int.self, forKey: .sizeBytes)

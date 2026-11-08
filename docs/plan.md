@@ -842,13 +842,26 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       kbps", the average bit rate less the art). No cached edits: AutoTag works the edits out
       from the files on every run, and a takeover reruns from the read (design step 7), so
       there is nothing to cache; see 54.4.
-- [ ] **54.4 StagedAlbum and AutoTag.** `Core/Discogs/{StagedAlbum,AutoTag}.swift`, without
+- [x] **54.4 StagedAlbum and AutoTag.** `Core/Discogs/{StagedAlbum,AutoTag}.swift`, without
       writing: `readAlbumFiles` on the staged paths with synthetic negative ids; a missing or junk
       title filled from the file name; `matchAlbums(choosing:)` on the job's release; clean or a
       discrepancy with reasons from `comparison(of:)`; the edits from a fixed overwrite mapping.
       ADR 0140 records the player's copy of the matching rules and the SHA-256 of
       `rank-golden.json`, which a test asserts. Tests: exact and clean, wrong title, a missing
       track, 40 s off, an extra file, an unreadable file, DSD, untagged titles.
+      Result: `autoTag` runs design steps 1–5 and 7 without writing: `StagedAlbum` reads the
+      job's files with ids from -1, refusing a missing file, one over 2048 MB or one whose size
+      isn't the service's; fills a missing or junk title from the file name as the service reads
+      it; drops any uploader's release id; and orders by tags, else the names' leading numbers,
+      else the names. `matchAlbums(choosing:)` on the release; clean is Exact, every file mapped
+      to the position the service reported (`ReleaseSnapshot.positions`), each file's codec the
+      candidate's format (an AAC `.m4a` taken for ALAC is a discrepancy) and every file
+      writable, else a discrepancy with reasons from `comparison(of:)`. The edits come from
+      `DiscogsMapping.overwriting()`. Edits aren't cached (54.3): every run works them out
+      from the files. ADR 0140: the matcher's titles now fold with the service's Latin table
+      (`CatalogKey.matchKey`), which agrees on all 56 fold, 16 similarity and 7 score cases;
+      the Foundation fold missed 7 and 2. Catalog keys stay on Foundation. 11 AutoTag tests,
+      each check also caught by a mutation.
 - [ ] **54.5 StagedWriter.** `Core/Discogs/StagedWriter.swift`: `TagWriter.write` with a second
       `TagUndoJournal` in its own folder and a write closure that doesn't call the watcher, the
       staging folder guard, a read-back that must find no changes. Tests: a path outside staging
