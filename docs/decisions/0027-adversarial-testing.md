@@ -55,7 +55,7 @@ manufacturers and models must hold no control character) and `soap-reply` (a
 chunked HTTP body, never past its cap) ([0039](0039-network-control.md)). Phase 9b's:
 `avtransport-reply` (`GetTransportInfo` and `GetPositionInfo` replies; states hold no control
 character and times are finite and in range) and `service-description` (an action list, at
-most 256 names), `http-request` (a request head and its `Range`; a served range stays in the file) and `didl-lite` (a track's tags in DIDL-Lite in a SetAVTransportURI request must read back as written) ([0041](0041-upnp-output.md)). A broken invariant is a
+most 256 names), `http-request` (a request head and its `Range`; a served range stays in the file) and `didl-lite` (a track's tags in DIDL-Lite in a SetAVTransportURI request must read back as written) ([0041](0041-upnp-output.md)). Phase 51e's: `discogs-dump` (a batch of a Discogs dump's records, no more records than start tags) ([0134](0134-resuming-a-discogs-import.md)). A broken invariant is a
 `preconditionFailure`, which the fuzzer catches like any crash.
 
 **Seeds.** The parsers' seeds are a generated library of `coveringLibraryFileCount` files
