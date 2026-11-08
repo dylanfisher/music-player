@@ -591,3 +591,23 @@ private struct FolderSchema: SettingsSchema {
     #expect(settings.blocked)
     #expect(settings.problems.count == 1)
 }
+
+@MainActor @Test func editsCountTheFilesChangesFromOutsideTheAppOnly() throws {
+    let url = configURL()
+    try write("{\"a.old\": 1}\n", to: url)
+    let settings = store(url)
+    var reports = 0
+    settings.problemsChanged = { reports += 1 }
+    let first = settings.edits
+    settings.read(confirmed: true)
+    #expect(settings.edits == first, "a reread of the same bytes")
+    try settings.set(\.count, to: 4)
+    settings.read(confirmed: true)
+    #expect(settings.edits == first, "the app's own patch")
+    #expect(reports == 0)
+    try write(try read(url) + " ", to: url)
+    settings.read(confirmed: true)
+    #expect(settings.edits == first + 1, "an editor's save")
+    #expect(settings.problems.count == 1)
+    #expect(reports == 1, "reported with the same problem, for the banner")
+}

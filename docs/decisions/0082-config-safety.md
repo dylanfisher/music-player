@@ -71,6 +71,13 @@ their old path IDs, with their stats.
   directly under the opening brace, with no blank line before the key, is taken as the first
   key's own, since that's how a new file writes each key's comment; a header comment needs a
   blank line under it to stay.
+- **A warning can be closed; a blocking problem can't** (51.30). While every problem in the
+  banner leaves the rest of the file applying, it has a close button. The problems closed stay
+  hidden until the file is edited from outside the app (`ConfigStore.edits`), so a key the user
+  keeps on purpose, such as a setting of a later build, stops nagging. A reread of the same
+  bytes doesn't bring them back, nor does the app's own patch: it changes only its own key's
+  text, and a new problem it causes isn't one that was closed, so it shows. A blocking problem
+  has no close button, since the file then applies nothing.
 - **Never, for a network folder's rescans** (34.4): `pollIntervalMinutes` is `null`. The folder
   is rescanned only by Rescan or Rescan All, and after a share moves, since its files are then
   at new paths. Never also skips the launch rescan `library.rescanNetworkFoldersAtLaunch` asks

@@ -263,7 +263,7 @@ extension AppDelegate {
             problems: settings.problems, writeFailure: settings.writeFailure,
             path: settings.fileURL.path, unwatched: unwatchedNotice(settings),
             stateFailure: saver?.failure,
-            stateDiscarded: state?.discardReason)
+            stateDiscarded: state?.discardReason, configEdits: settings.edits)
     }
 }
 

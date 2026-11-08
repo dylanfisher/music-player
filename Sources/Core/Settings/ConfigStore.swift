@@ -103,6 +103,13 @@ public final class ConfigStore<Schema: SettingsSchema> {
         given.contains(schema[keyPath: setting].key) ? self[setting] : nil
     }
 
+    /// How many times a read found the file's contents changed by something other than the
+    /// app, such as an editor's save; a reread of an unchanged file, or the app's own patch,
+    /// doesn't count. The banner keeps a dismissed problem hidden until it moves.
+    public private(set) var edits = 0
+    /// `edits` when `problemsChanged` was last called.
+    private var reportedEdits = 0
+
     /// Whether the file applies nothing until it's fixed, as opposed to skipping unknown keys.
     public var blocked: Bool { problems.contains(where: \.blocks) }
 
@@ -260,6 +267,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
             }
             return
         }
+        if bytes != lastBytes { edits += 1 }
         lastBytes = bytes
         guard let bytes else {
             logger.notice("\(self.fileURL.path) is gone; using the defaults")
@@ -324,8 +332,11 @@ public final class ConfigStore<Schema: SettingsSchema> {
     }
 
     private func setProblems(_ new: [ConfigProblem]) {
-        guard new != problems else { return }
+        // An edit that keeps the same problems is reported too: a warning closed in the banner
+        // shows again after one.
+        guard new != problems || (!new.isEmpty && reportedEdits != edits) else { return }
         problems = new
+        reportedEdits = edits
         problemsChanged()
     }
 

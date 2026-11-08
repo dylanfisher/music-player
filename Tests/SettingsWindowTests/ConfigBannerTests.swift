@@ -11,25 +11,25 @@ import Testing
             ConfigProblem(line: 3, message: #"unknown setting "a.flg""#),
             ConfigProblem(line: 5, message: "isn't valid JSON"),
         ], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-        stateDiscarded: nil)
+        stateDiscarded: nil, configEdits: 1)
     #expect(!banner.view.isHidden)
     #expect(banner.text.hasPrefix(#"config.json: line 3: unknown setting "a.flg" (1 more)."#))
     banner.show(
         problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-        stateDiscarded: nil)
+        stateDiscarded: nil, configEdits: 1)
     #expect(banner.view.isHidden)
     banner.show(
         problems: [], writeFailure: "disk full", path: "/x/config.json", stateFailure: nil,
-        stateDiscarded: nil)
+        stateDiscarded: nil, configEdits: 1)
     #expect(banner.text == "config.json: couldn't save: disk full.")
     banner.show(
         problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: "disk full",
-        stateDiscarded: nil)
+        stateDiscarded: nil, configEdits: 1)
     #expect(!banner.view.isHidden)
     #expect(banner.text == "couldn't save the window layout: disk full.")
     banner.show(
         problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-        stateDiscarded: "not JSON")
+        stateDiscarded: "not JSON", configEdits: 1)
     #expect(banner.text == "the saved window layout was reset: not JSON.")
     #expect(banner.removeButtonTitle == nil)
 }
@@ -42,7 +42,7 @@ import Testing
     func show(_ problems: [ConfigProblem]) {
         banner.show(
             problems: problems, writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-            stateDiscarded: nil)
+            stateDiscarded: nil, configEdits: 1)
     }
     show([old])
     #expect(
@@ -60,6 +60,37 @@ import Testing
     #expect(banner.removeButtonTitle == nil)
     banner.show(
         problems: [], writeFailure: nil, path: "/x/config.json", unwatched: "not watched",
-        stateFailure: nil, stateDiscarded: nil)
+        stateFailure: nil, stateDiscarded: nil, configEdits: 1)
     #expect(banner.text == "config.json: not watched.")
+}
+
+@MainActor @Test func aWarningClosedStaysHiddenUntilTheFileIsEditedAndABlockingOneCantClose() {
+    let banner = ConfigBanner()
+    let token = ConfigProblem(
+        line: 2, message: #"unknown setting "discogs.token""#, obsoleteKey: ["discogs.token"])
+    func show(_ problems: [ConfigProblem], edits: Int, writeFailure: String? = nil) {
+        banner.show(
+            problems: problems, writeFailure: writeFailure, path: "/x/config.json",
+            stateFailure: nil, stateDiscarded: nil, configEdits: edits)
+    }
+    show([token], edits: 1)
+    #expect(banner.canDismiss)
+    banner.dismissWarnings()
+    #expect(banner.view.isHidden)
+    show([token], edits: 1)
+    #expect(banner.view.isHidden, "a reread of the same file, or the app's own change")
+    show([token], edits: 1, writeFailure: "disk full")
+    #expect(!banner.view.isHidden)
+    #expect(banner.text == "config.json: couldn't save: disk full.", "only the warning hides")
+    #expect(!banner.canDismiss)
+    show([token], edits: 2)
+    #expect(!banner.view.isHidden, "back once the file is edited")
+    #expect(banner.text.hasPrefix(#"config.json: line 2: unknown setting "discogs.token""#))
+
+    let blocking = ConfigProblem(line: 3, message: "isn't valid JSON")
+    show([token, blocking], edits: 3)
+    #expect(!banner.canDismiss)
+    banner.dismissWarnings()
+    #expect(!banner.view.isHidden, "a problem that blocks the file can't be closed")
+    #expect(banner.text.hasSuffix(ConfigBanner.blockedText))
 }
