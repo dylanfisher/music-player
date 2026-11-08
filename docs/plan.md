@@ -798,11 +798,17 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       and checked again whenever any of them changes. ADR 0136. Tests: the 0600 write, each
       refusal, a watched folder change that would hold the staging folder, the token in no log
       line or problem.
-- [ ] **P0.2 Client.** A new `Core/Recommender`: `post` with the bearer header on
+- [x] **P0.2 Client.** A new `Core/Recommender`: `post` with the bearer header on
       `LocalHTTPClient` (no change to the client beyond what `post(… fields:)` allows), strict
       models for `ping` and the config route, typed errors (unreachable, 401, 400, `ok:false`,
       oversize, unknown state) naming the address tried. A fuzz target. ADR 0137. Tests on the
       loopback stub with recorded replies.
+      Result: `RecommenderClient` posts with the bearer and JSON fields, `keepingRefusals`, to
+      another device's address on a local subnet; `ping` and `downloadsConfig`; errors name the
+      URL, never the token. `LocalURL(host:port:path:on:)` is the one `LocalNetwork` change.
+      Replies decode with every field present and none unknown. ADR 0137 proposed, its threat
+      model row waiting on approval. The `recommender-reply` fuzz target came with 54.2, to run
+      every reply shape: 60 s, 108k inputs, no crash.
 
 #### 54b. Tagging staged albums
 
@@ -811,15 +817,27 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       a guard that refuses any path outside the staging folder. ADR 0139, the move into the
       library and the upgrade's order, with the trash-on-SMB rule (the NAS has no Trash, so the
       upgrade's delete is permanent). Each proposes its AGENTS.md wording. Docs only.
-- [ ] **54.2 Job calls and the snapshot.** The downloads routes in `Core/Recommender` (create,
+- [x] **54.2 Job calls and the snapshot.** The downloads routes in `Core/Recommender` (create,
       list with epoch, reset and paging by revision with `more`, retry, cancel, handoff);
       `Core/Discogs/ReleaseSnapshot.swift`, built from `CatalogRelease` with both
       `ReleaseTracklist.flattenings`; a release not in the local catalog refused at queue time.
       Tests on the loopback stub and a temporary catalog.
+      Result: typed `create`, `retry`, `cancel`, `handoff` and `refreshed`; an upgrade's order
+      takes only `flac` or `lossless`. `DownloadJobs.take` pages by the last job's revision,
+      drops every row on a reset wherever it comes, and refuses a page that doesn't advance.
+      Positions the service can't take are refused at queue time: an index track without one
+      takes its parts' joined with "+", a list with none is numbered, anything else is refused.
+      Fixtures from the service's `api.md` examples.
 - [ ] **54.3 Library.** `import_jobs` as a schema part of its own (an outbox of reports, a ledger
       of steps, cached edits), `LibraryIndex.upgradeCandidates()` (albums whose every track has a
       release id and is lossy), an album's library-share-relative paths and quality. The scanner
       skips the staging folder, with a test. Tests on a temporary index.
+      Partly built: `import_jobs` (`import_outbox` and `import_steps`, keyed by job id, release
+      id and folder-relative paths, kept by an index rebuild); every scan passes over the found
+      staging folder, a watched folder inside it isn't scanned, and a sync folder found in or
+      around it is refused (`stagingOverlap`, the found-path check ADR 0136 deferred; the
+      library folder's turn is 54.6's move). Still to do: cached edits (their shape is 54.4's),
+      `upgradeCandidates()`, and an album's share-relative paths and quality.
 - [ ] **54.4 StagedAlbum and AutoTag.** `Core/Discogs/{StagedAlbum,AutoTag}.swift`, without
       writing: `readAlbumFiles` on the staged paths with synthetic negative ids; a missing or junk
       title filled from the file name; `matchAlbums(choosing:)` on the job's release; clean or a

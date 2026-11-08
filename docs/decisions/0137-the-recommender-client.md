@@ -57,6 +57,13 @@ only `flac` and `lossless`, so an upgrade can't ask for a lossy policy. A `hando
 stage is one the player reports (`tag`, `move`, `delete`, `carry`). `list`'s `epoch` is sent as
 `null` on the first request, not left out.
 
+**The snapshot is built in `Discogs`** from the local catalog, and refused at queue time when
+the release isn't there or the service would refuse it: no artist or title, a tracklist of none
+or over 500 tracks, or positions missing or repeated. A position is how the service names each
+file's track, so it must be unique and not empty: a track's own; for an index track without
+one, its parts' joined with "+"; for a list where no track has one, its place from 1. 54.4's
+mapping names tracks the same way, through `ReleaseSnapshot.positions`.
+
 **The job list is paged to the end and replaced on a reset.** `DownloadJobs` holds the rows by
 id, the epoch and the revision of the last job taken. A refresh asks with them until `more` is
 false, taking `after` from the last job of each page. A `reset` drops every row before taking
