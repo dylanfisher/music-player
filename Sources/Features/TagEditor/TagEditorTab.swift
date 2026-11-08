@@ -2,9 +2,9 @@ import TagWriter
 
 /// A tab of the info window and the fields it lays out, grouped as YATE groups them: the main
 /// tags first, each sort field above the field it sorts, then credits, details, rights and
-/// label, webpages (URLs), lyrics, the art and the file.
+/// label, webpages (URLs), lyrics, the art and the file. Extras lists the keys no field maps.
 enum TagEditorTab: String, CaseIterable {
-    case info, sorting, credits, details, rights, webpages, lyrics, artwork, file
+    case info, sorting, credits, details, extras, rights, webpages, lyrics, artwork, file
 
     var title: String {
         switch self {
@@ -12,6 +12,7 @@ enum TagEditorTab: String, CaseIterable {
         case .sorting: "Sorting"
         case .credits: "Credits"
         case .details: "Details"
+        case .extras: "Extras"
         case .rights: "Rights & Label"
         case .webpages: "URLs"
         case .lyrics: TagEditField.lyrics.title
@@ -20,7 +21,8 @@ enum TagEditorTab: String, CaseIterable {
         }
     }
 
-    /// The tab's rows of fields, top to bottom. The Artwork and File tabs show no fields.
+    /// The tab's rows of fields, top to bottom. The Extras, Artwork and File tabs show no
+    /// fields.
     var rows: [TagEditorRow] {
         switch self {
         case .info:
@@ -54,7 +56,7 @@ enum TagEditorTab: String, CaseIterable {
                 .paymentURL, .publisherURL, .radioStationURL,
             ].map(TagEditorRow.wide)
         case .lyrics: [.area(.lyrics)]
-        case .artwork, .file: []
+        case .extras, .artwork, .file: []
         }
     }
 }

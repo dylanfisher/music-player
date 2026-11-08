@@ -52,6 +52,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// The buttons that run a registry command, each with its command.
     private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
+    /// The Extras tab's keys and values, one a line.
+    let extrasText = readOnlyText()
     /// Spins in the buttons row while the files are read; it keeps its space once stopped.
     private let spinner = NSProgressIndicator()
     /// One line beside the buttons: "Reading tags…", then why some files can't be saved, or why
@@ -291,6 +293,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             case .artwork: artworkView()
             case .file: fileView()
             case .lyrics: areaView(.lyrics)
+            case .extras: readOnlyTextView(extrasText)
             default: grid(tab.rows)
             }
         let container = NSView()
@@ -305,7 +308,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             content.bottomAnchor.constraint(
                 lessThanOrEqualTo: container.bottomAnchor, constant: -inset),
         ])
-        if tab == .lyrics {
+        if [.lyrics, .extras].contains(tab) {
             content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -inset)
                 .isActive = true
         }
@@ -507,6 +510,15 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         return stack
     }
 
+    /// `text`, made by `readOnlyText`, in a scroll view.
+    private func readOnlyTextView(_ text: NSTextView) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.borderType = .bezelBorder
+        scroll.hasVerticalScroller = true
+        scroll.documentView = text
+        return scroll
+    }
+
     private func fileView() -> NSView {
         let rows = FileRow.allCases.map { row -> [NSView] in
             let title = NSTextField(labelWithString: row.title)
@@ -569,8 +581,44 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         }
         showArt()
         showFile()
+        showExtras()
         showEdited()
     }
+
+    /// The Extras tab: a line a key, its value after a tab, or "Mixed" where the tracks differ.
+    private func showExtras() {
+        guard let model else { return }
+        let rows = model.extras
+        let plain: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
+            .foregroundColor: NSColor.labelColor, .paragraphStyle: Self.extrasParagraph,
+        ]
+        var dimmed = plain
+        dimmed[.foregroundColor] = NSColor.secondaryLabelColor
+        let text = NSMutableAttributedString()
+        if rows.isEmpty {
+            text.append(NSAttributedString(string: "The files hold no other tags.", attributes: dimmed))
+        }
+        for (index, row) in rows.enumerated() {
+            if index > 0 { text.append(NSAttributedString(string: "\n", attributes: plain)) }
+            text.append(NSAttributedString(string: row.key + "\t", attributes: dimmed))
+            text.append(
+                NSAttributedString(
+                    string: row.value ?? mixedPlaceholder,
+                    attributes: row.value == nil ? dimmed : plain))
+        }
+        extrasText.textStorage?.setAttributedString(text)
+    }
+
+    /// The values start at one tab stop, and a long value's later lines start there too.
+    private static let extrasParagraph: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        let column = 220.0
+        style.tabStops = [NSTextTab(textAlignment: .left, location: column)]
+        style.headIndent = column
+        style.paragraphSpacing = 3
+        return style
+    }()
 
     private func showAreaPlaceholders() {
         guard let model else { return }
@@ -703,6 +751,20 @@ extension TagEditorWindow: NSTabViewDelegate {
         }
         Self.lastTab = tab
     }
+}
+
+/// A text view to select and copy from but not edit, which grows down with its text.
+@MainActor
+private func readOnlyText() -> NSTextView {
+    let text = NSTextView()
+    text.isEditable = false
+    text.isSelectable = true
+    text.isRichText = false
+    text.textContainerInset = NSSize(width: 2, height: 4)
+    text.autoresizingMask = .width
+    text.isVerticallyResizable = true
+    text.textContainer?.widthTracksTextView = true
+    return text
 }
 
 /// "JPEG, 700 × 700, 126 KB": the image's type, pixels and size.
