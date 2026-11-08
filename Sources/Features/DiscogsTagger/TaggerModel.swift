@@ -161,11 +161,21 @@ final class TaggerModel {
     /// Analyze of the scope; the others apply to the changes worked out next.
     func setChoices(_ new: TaggerChoices) {
         guard new != choices else { return }
-        let rescore = new.skipVideo != choices.skipVideo && !albums.isEmpty
+        let analyzing = if case .analyzing = activity { true } else { false }
+        let rescore = new.skipVideo != choices.skipVideo && (!albums.isEmpty || analyzing)
         choices = new
         changed()
-        if rescore { analyze() }
+        // The menu can change the skip while work runs, which matched with the old one.
+        guard rescore else { return }
+        if isBusy {
+            rescoreWhenIdle = true
+        } else {
+            analyze()
+        }
     }
+
+    /// Whether the skip changed while work ran, so the albums are matched again once it ends.
+    private var rescoreWhenIdle = false
 
     /// The changes `album`'s files would get from the mapping, with the choices applied.
     private func changeSet(_ files: [AlbumFile], _ album: Album) -> AlbumChangeSet {
@@ -333,6 +343,10 @@ final class TaggerModel {
         activity = .idle
         work = nil
         changed()
+        if rescoreWhenIdle {
+            rescoreWhenIdle = false
+            analyze()
+        }
     }
 
     // MARK: - Reviewing an album

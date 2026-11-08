@@ -326,6 +326,22 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
 }
 
 @MainActor
+@Test func aSkipChangedWhileAnalyzeRunsRescoresWhenItEnds() async throws {
+    let seen = Seen()
+    let gate = Gate()
+    let tagger = await model(seen, albums: [one], matches: matches, gate: gate)
+    tagger.analyze()
+    var choices = defaultChoices
+    choices.skipVideo = false
+    tagger.setChoices(choices)
+    gate.open()
+    try await eventually { seen.skips.count == 2 }
+    gate.open()
+    try await eventually { tagger.activity == .idle }
+    #expect(seen.skips == [true, false])
+}
+
+@MainActor
 @Test func applySaysAnAlbumsFileIsGoneAsViewChangesDoes() async throws {
     let seen = Seen()
     let tagger = await model(
