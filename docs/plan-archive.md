@@ -8057,3 +8057,420 @@ calls, 4 min; implementation 920k tokens, 427 calls, 69 min; reviews 405k tokens
 
 Owner steps (51.39): `xattr -l` and `ls -le@` on one of the 22 MP3s and on a file the app
 never wrote, pasted back, settle whether more than provenance or an ACL needs skipping.
+
+### 52. Discogs API
+
+- [x] **52.1 The token.** An optional Discogs personal access token, the player's first secret:
+      an ADR, the AGENTS.md "no secrets" line rewritten for it, kept only in `config.json` at
+      mode 0600, never copied elsewhere.
+      Without a token the API is used unauthenticated, within its lower rate limit.
+- [x] **52.2 The client.** Search and release requests, paced by the rate-limit headers, with a
+      size cap, a timeout and typed errors, cached in the index by release id. ADR 0025 gains
+      rows for the app's first outbound internet connection. Tests use recorded JSON, never the
+      real API.
+- [x] **52.3 Sources.** The window's API and Both: Both searches the catalog first and the API
+      for albums with no candidate or releases newer than the dump. The matcher and the mapping
+      are the same for both.
+- [x] **52.4 Artwork.** The dumps have no images; with a token, the mapping's Artwork field
+      fetches the release's primary image and writes it as the cover through `TagWriter`.
+- [ ] **Owner check:** the same with the token, on this Mac and the 2015 MacBook Pro, which has
+      no catalog.
+
+Implementation plan, phase 52 (ADRs 0137, 0138, 0139, 0140):
+
+Phase 51h (ADR 0136) runs first. 53's ADRs then start at 0141.
+
+What I found (so the steps below name real things):
+
+- `config.json` is `~/.config/music-player/config.json`, already mode 0600. It holds a
+  `"discogs.token"` key now. No setting by that name exists, so until step 1 lands the config
+  check reports it as `unknown setting "discogs.token"` (a non-blocking problem, rest applies).
+  `ConfigFile.read` reports unknown keys by key name only, never the value.
+- `ConfigStore.write` uses `Data.write(options: .atomic)`, which renames a temp file made with
+  the default mode. Whether it keeps 0600 is not something to rely on; step 1 writes the temp
+  file itself.
+- The settings window lists every setting except `.windowState` and the keys in
+  `GeneralModel.isShown`; the token must be added there or it would get a text field.
+- The matcher is `AlbumMatcher` (Sources/Core/Discogs/AlbumMatcher.swift), built on one
+  read-only `Catalog`. `candidateIDs(for:in:)` (AlbumCandidates.swift) is the only code that
+  asks the catalog for ids; `match` then calls `catalog.release(id:)`. Everything after that
+  works on `CatalogRelease` (ReleaseScore, TieBreak, ReleaseTracklist, ReleaseFields,
+  `changeSet(for:match:mapping:)`), so an API release only has to become a `CatalogRelease`.
+- `matchAlbums(_:catalogAt:choosing:skippingVideo:progress:)` is the async entry point;
+  `TaggerModel.Source` already has `.catalog, .api, .both` with `isAvailable == (self ==
+  .catalog)`, and `TaggerWindow` greys the others ("Comes with the Discogs API").
+- `DiscogsMapping` requires a rule for every `DiscogsField`, and a bad value blocks the whole
+  config (ADR 0082). So 52.4 must not add a `DiscogsField` case: it would invalidate the
+  owner's saved mapping and block the file. Artwork gets its own setting.
+- `TagEdit.art: ArtChange?` (`.replace(Data, mimeType:)`, JPEG or PNG) already exists, written
+  by `TagWriter`. `AlbumChangeSet.edits(including:)` builds the `TagEdit`s Apply hands to
+  `TaggerModel.write`. `thumbnail(of:maxPixelSize:)` (Core/Artwork) is the one image decode
+  (ADR 0025 row 4). `TrackMetadata.art` says whether a file has a cover.
+- `LocalHTTPClient` (Primitives/LocalNetwork) is deliberately local-subnet only (ADR 0039); it
+  can't be reused for the internet. The app makes no other outbound connection today
+  (`rg URLSession Sources` finds nothing).
+- Cached data in the index is a `SchemaPart` (LibrarySchema.swift); `measures` is the pattern
+  for a cache. Adding a part creates only its table and keeps the others (as `analysisRun`
+  did), so it does not trigger 51h's rescan dialog.
+
+Needed from 51h:
+
+- 51.33's header (one row, catalog line): Source must stay a control in it, and its catalog
+  line must tolerate "no catalog" with Source set to API (step 6 changes what "missing"
+  blocks).
+- 51.34 (open on the selection and analyze at once): analyze at once only for Source = Local
+  catalog. The API source is never started without a click, since it makes network calls.
+- 51.35 (why not Exact) words its reasons from what the matcher kept. Step 5 adds one kept
+  fact, `AlbumMatch.origin`, so the reason can say "from the Discogs API".
+- 51.37 (Other Releases / View Release read `releaseSummaries(catalogAt:)`): step 5 adds the
+  cache as a second place those summaries come from. Land 51.37 first so there is one
+  summary function to extend.
+- 51.39 (undo through a replace): cover art goes through the same replace. Nothing else.
+- 51.38 (sheet sizes): the Field Mapping sheet gets one more row (step 7); no conflict.
+
+#### 52a. The token (52.1), ADR 0137
+
+1. **Setting.** `DiscogsToken` in `Core/Settings` (`SettingValue`, a struct over the string,
+   encoded as a plain JSON string). Its `description` and `debugDescription` print
+   `<Discogs token>`, so no log line, error or assertion message can carry it; `problem()`
+   refuses an empty or whitespace-only value and any character outside printable ASCII (a
+   header value must not carry a line break). `SettingKind.secret` is new. `AppSettings`:
+   `discogsToken = Setting<DiscogsToken?>("discogs.token", title: "Discogs Token", default:
+   nil, "A personal access token from discogs.com/settings/developers, for the API.")`. Hidden
+   in `GeneralModel.isShown` (and `row` has no control for `.secret`), so it is edited in the
+   file only, as the dumps folder is (ADR 0130). `fileValue(\.discogsToken)` is the only read.
+2. **Mode 0600.** `ConfigStore.write` goes through a new `writeConfigFile(_:to:)`: a temp file
+   in the same folder created with `open(O_CREAT|O_EXCL, 0o600)`, written, `fsync`ed, renamed
+   over the resolved path (symlinks still resolve as now). Every config write is 0600, token or
+   not: one rule, no branch on content. On read, if the file's token is set and its mode has
+   any group or other bit, the token is not used and a non-blocking `ConfigProblem` says
+   "config.json is readable by other users; run chmod 600 on it to use the Discogs token"
+   (the file is not changed by the app: ADR 0025 row 21 says it is never written over on a
+   problem). The token is also not copied anywhere else: not into `state.json`, the index,
+   the log, the sync folder or the cache; step 3 builds the one header from it.
+3. **AGENTS.md.** The "no secrets" bullet is replaced by: "**One secret: the Discogs token**
+   (optional), kept only in `config.json` at mode 0600 ([ADR 0137](decisions/0137-the-discogs-token.md)). Never log, print,
+   copy or commit it, and never put it in a test or fixture; `DiscogsToken` redacts itself.
+   Any other secret: stop and ask first." The Boundaries bullet on music files gains nothing;
+   a line is added: "No test or tool calls the Discogs API: tests use recorded responses
+   through a stand-in transport."
+4. **Tests** (`Tests/SettingsTests`): the key reads as `DiscogsToken`; `String(describing:)`,
+   `"\(token)"`, `String(reflecting:)` and a thrown decode error never contain the value
+   (the test uses a made-up value); a value with a newline, a space-only value and a number
+   are problems naming the key but not the value; the settings window model has no row for it;
+   a config write leaves mode 0600 (`stat`), including over an existing 0644 file and through
+   a symlink; a 0644 file with a token reports the problem and `fileValue` is nil; a write
+   that fails midway leaves the old file and no temp file. Existing config tests must still
+   pass with the new temp-file write (`aBrokenFileAppliesNothingAndIsNeverWritten`).
+5. **ADR 0137**: why in `config.json` and not the Keychain (the owner decided on 2026-11-07;
+   the Keychain would also need the ad-hoc-signed app to be allowed access on each of three
+   Macs, and the file is already synced by hand), redaction by type, mode, the fail-closed
+   read of a loose file, and what no longer holds in AGENTS.md. Adds ADR 0025 rows 58 and 59
+   (below) and marks 0025 "Amended by".
+
+#### 52b. The client (52.2), ADR 0138
+
+1. **Transport primitive.** `Sources/Primitives/HTTPSClient` (new module, `Foundation` only;
+   tier map in `scripts/arch.swift` and map.md's search recipes need no change, the
+   `Sources/Primitives/*` path pattern already covers it). `HTTPSClient.get(_ url:, headers:,
+   cap:, timeoutSeconds:)` returns status, a header dictionary and the body bytes, or throws a
+   typed `HTTPSError`. It refuses a URL that is not `https`, has a user, a port other than 443
+   or a host not in the client's `allowedHosts`; uses an ephemeral `URLSession` (no cache, no
+   cookies, no credential store, no HTTP/2 push use) built from a `URLSessionConfiguration`
+   the caller can replace; refuses every redirect (a `URLSessionTaskDelegate` returns nil), so
+   a 3xx is just a status; reads `bytes(for:)` and stops past `cap`, throwing `.tooLarge`
+   before buffering more (macOS 12 has `bytes(for:delegate:)`); fails on the timeout. Proxy
+   settings are the system's, which an internet client should honor (unlike
+   `LocalHTTPClient`, whose reason for bypassing them was the LAN). Tests use a `URLProtocol`
+   stub on the replaced configuration: no sockets.
+2. **API client.** In `Core/Discogs` (adds `HTTPSClient` to its dependencies):
+   `DiscogsAPI`, an actor over an `HTTPSTransport` closure type (production: `HTTPSClient`;
+   tests: fixtures). One constant for `https://api.discogs.com`, one for the user agent
+   `MusicPlayer/<CFBundleShortVersionString>` (Discogs rejects clients without one), both
+   defined once. The `Authorization: Discogs token=<token>` header is built in one function,
+   only for `api.discogs.com`. Calls: `release(id:)` (`/releases/{id}`), `master(id:)`
+   (`/masters/{id}`), `search(artist:title:)`, `search(barcode:)`, `search(catalogNumber:label:)`
+   (`/database/search?type=release&…`, parameters percent-encoded by `URLComponents`, per_page
+   25, first page only). Search needs a token: without one it throws `.tokenRequired` without
+   a request (Discogs's database search is authenticated; `/releases` and `/masters` work
+   without). Verify this in the Discogs API docs when starting; if it differs, only
+   `tokenRequired` changes.
+3. **Pacing.** `RateLimiter` (a small struct held by the actor, with an injected `now` and
+   `sleep` so tests don't wait): requests go one at a time. Gap between starts is
+   60 / limit seconds, with the limit from `X-Discogs-Ratelimit` (60 with a token, 25
+   without; those are the starting values until a response says otherwise). When
+   `X-Discogs-Ratelimit-Remaining` is 0 it waits for the window (60 s) before the next one. A
+   429 waits `Retry-After` (else 60 s) and retries, at most twice; a third is
+   `.rateLimited`. Waiting is cancellable, and reports its length through a progress callback
+   so the window can say "Waiting 40 s for Discogs's rate limit".
+4. **Typed errors.** `DiscogsAPIError`: `.tokenRequired`, `.unauthorized` (401, "the Discogs
+   token was refused"), `.notFound` (404), `.rateLimited`, `.status(Int)`, `.offline`,
+   `.timedOut`, `.tooLarge`, `.malformed(String)`, `.refusedAddress`. Each has one sentence of
+   text, kept once; none holds the token, a header or a URL's query. A 404 for one release is
+   "no such release" for that album; 401, offline and timed out stop the run and are reported
+   once (fail loudly: no album silently becomes "No candidate" because the network was down).
+5. **Decoding.** `ApiRelease` (`Decodable`, strict about types, lenient about extra keys,
+   since Discogs adds fields) → `CatalogRelease`: `artists` (name, anv → `nameVariation`, join,
+   id), `labels` (name, catno, id), `formats` (name, qty, text, descriptions), `country`,
+   `released`, `genres`, `styles`, `identifiers` of type Barcode → `barcodes`, `extraartists`
+   → `credits` (role, tracks), `tracklist` → `CatalogTrack` (type_ track, heading, index;
+   `duration` through `CatalogTrack.seconds`; `sub_tracks`), `master_id`. Also kept beside it:
+   `primaryImage: URL?` (the `images` entry of type `primary`, else the first; present only
+   with a token). Limits as hostile input: body 4 MiB, tracklist 2,000 rows, sub-tracks 3 deep
+   (the catalog's `CatalogTrack` allows one; deeper is dropped with a `.malformed`), every
+   string capped at 2,000 characters, `id` must equal the requested id, `primaryImage` must be
+   `https` on an allowed host (`i.discogs.com`). `isMainRelease` isn't in a release response:
+   step 4 of 52c fills it from `/masters/{id}`'s `main_release`, only when two or more fetched
+   candidates share a master.
+6. **Cache.** New `SchemaPart.discogsCache` (comment: a cache; rebuilding discards nothing a
+   fetch can't get again), table `discogs_cache (kind TEXT, id INTEGER, fetched_at REAL,
+   json TEXT, PRIMARY KEY (kind, id)) WITHOUT ROWID`, kinds `release` and `master`.
+   `LibraryIndex.discogsCached(kind:id:)` and `storeDiscogs(kind:id:json:)`, surfaced on
+   `LibraryReader` like `discogsReviews`. The Library module stays ignorant of
+   `CatalogRelease`: it stores the JSON text; `Discogs` encodes the converted release (the
+   catalog's one-letter keys, plus `primaryImage`) so a hit needs no second conversion. An
+   entry older than 30 days (`DiscogsAPI.cacheDays`, once) is fetched again; searches aren't
+   cached (their answer changes; the tagger already remembers reviewed albums). The cache is
+   passed to `DiscogsAPI` as two closures, so `Discogs` tests use a dictionary.
+7. **Fixtures and tests.** `Tests/DiscogsTests/Fixtures/api/` (loaded like
+   `Tests/ReceiverTests/Fixtures`): `release-simple.json`, `release-multi-disc.json`,
+   `release-vinyl-sides.json` (headings, A1/B2 positions), `release-index-tracks.json`
+   (sub-tracks), `release-anv-variations.json`, `release-no-images.json` (no token),
+   `search-barcode.json`, `search-title.json`, `search-empty.json`, `master.json`, plus
+   header sets (`X-Discogs-Ratelimit*`, `Retry-After`). Nothing here is a real recording of a
+   call this plan made; they are written to the shapes in Discogs's API documentation, and the
+   owner check has three `curl` lines to replace them with real ones (see Open questions).
+   Tests (`DiscogsAPITests`): each fixture decodes to the `CatalogRelease` the same release
+   would be in the catalog (compared field by field against a catalog built from the matching
+   dump XML in `DumpFolder`, which proves the matcher sees no difference); the token goes only
+   to `api.discogs.com`, only in the `Authorization` header, never in a URL; no token header
+   without a token and search throws `.tokenRequired` with zero requests; the user agent is
+   sent; spacing at 60 and 25 per minute with a fake clock; `Remaining: 0` waits; a 429 with
+   `Retry-After` waits that long, retries, and a third gives `.rateLimited`; cancelling during
+   a wait stops it; 401/404/500/offline/timed out map to their errors; a body past the cap, a
+   redirect, an `http` or foreign-host image URL, a mismatched id, a 5,000-row tracklist and
+   9-deep sub-tracks are each refused; no error's text contains the token or the query; a
+   cache hit makes no request, a stale entry makes one and stores it; a damaged cache JSON is
+   fetched again and replaced, not trusted.
+8. **ADR 0138**: the transport and why not `LocalHTTPClient` or `NWConnection` (TLS, proxies,
+   HTTP/2 via URLSession; ADR 0039's reasons for bypassing them are LAN-specific), the host
+   allowlist, caps, no redirects, pacing from the headers, the errors, the cache and its age,
+   what is hostile input. It adds ADR 0025 rows 60 to 63 (below) with their test names.
+
+ADR 0025 rows added (each with its test in this phase; the table's "every phase that adds an
+entry point adds its row" rule):
+
+| # | Asset | Attacker | Entry point | Mitigation |
+|---|---|---|---|---|
+| 58 | the Discogs token | another user on the Mac; a backup or sync of `~/.config` | `config.json` | mode 0600 on every write; read fails closed on a looser mode; `DiscogsToken` redacts itself; never in logs, state, index, cache or errors |
+| 59 | the Discogs token | a server that isn't Discogs; a log reader | the `Authorization` header | built in one place, sent only to `api.discogs.com` over https, never in a URL, error or log |
+| 60 | the app's memory, time and connections | the network; a compromised response | the first outbound internet connection | https only, hosts `api.discogs.com` and `i.discogs.com`, port 443, no redirects, ephemeral session, 4 MiB cap on JSON and 10 MiB on an image, 20 s timeout, one request at a time, only on the user's action |
+| 61 | the tagger's matches; the cache | the network; a compromised response | release JSON | strict types, id must match the request, row, depth and string limits, decoded into `CatalogRelease` and nothing else; a cache entry that doesn't decode is refetched |
+| 62 | Discogs's account for the token | the app itself | request rate | pacing from `X-Discogs-Ratelimit*`, `Retry-After` on 429, a third 429 stops the run |
+| 63 | the UI | the network | text from a response (titles, names) | shown as any tag text is (rows 7, 9, 39): escaped in the terminal, kept as text in the window |
+
+#### 52c. Sources (52.3), ADR 0139
+
+1. **Matcher without a catalog.** `AlbumMatcher.catalog` becomes `Catalog?`.
+   `candidateIDs(for:in:)` is split: the tagged-ids step stays, the catalog steps run only
+   when there is a catalog. `match(_:choosing:fetched:)` gains `fetched: [Int: CatalogRelease]`
+   (releases the API returned for this album): their ids are appended to the candidate ids
+   (order kept, each once), and the lookup is `fetched[id] ?? catalog?.release(id:)`. Scoring,
+   `TieBreak`, tiers and thresholds are untouched, so the API and the catalog tier an album the
+   same way. `AlbumMatch` gains `origin: Origin` (`.catalog`, `.api`) for the window (51.35's
+   reason) and for Apply's count.
+2. **Candidates from the API.** `ApiCandidates.releases(for album:, api:)`, in the order
+   `candidateIDs` uses: the album's tagged release ids (fetched by id; this alone is the only
+   thing that works without a token), then a barcode search, label plus catalog number
+   (`labelNames`), then artist and title (`artistNames` x `[title] + CatalogKey.titleVariants`),
+   reusing those functions and not copying their rules. Searches stop at the first that gives
+   candidates for barcode and catalog number; the title search always runs when those found
+   nothing. At most 8 releases are fetched per album (`ApiCandidates.maximumReleases`, once),
+   best search rank first. Masters aren't expanded to all their releases (hundreds of
+   requests); when two or more fetched releases share a `master_id`, `/masters/{id}` is
+   fetched once and `isMainRelease` set from `main_release`.
+3. **The API surface.** `matchAlbums` gains `source: MatchSource` (`.catalog`, `.api`, `.both`;
+   the tagger's `Source` maps onto it) and `api: DiscogsAPI?`. Flow:
+   - `.catalog`: as now.
+   - `.api`: no catalog opened. Per album: `ApiCandidates`, then `match(fetched:)`.
+   - `.both`: the catalog pass runs for every album first (fast, local). Then the API runs
+     only for albums that are `noCandidate`, or `matched` with no release in the catalog (a
+     tagged id newer than the dump), or whose chosen release (a saved review) isn't in the
+     catalog. That is the owner's "releases newer than the dump", decided as "not found in
+     the catalog", because the dump has no per-release date to compare. Those albums are
+     matched again with the catalog's candidates and the fetched ones together.
+   Progress gains `waitingSeconds: Int?` (the limiter's wait) and counts API albums as its own
+   total in `.both` ("Catalog 412 of 412, then Discogs 3 of 17"). Cancelling stops between
+   albums and during a wait. A review's chosen release not in the catalog is fetched by id.
+4. **Releases for the Other Releases and View Release sheets.** `releaseSummaries(_:catalogAt:)`
+   takes the API-found ids too, reading them from the cache (they were stored when fetched),
+   so the sheets work for API releases with no new request.
+5. **The window (TaggerModel/TaggerWindow).** `Source.isAvailable` becomes real: `.api` and
+   `.both` are enabled always. With no token, the pop-up item's tooltip says "No Discogs token
+   in config.json: only releases already tagged with an id are looked up". With no catalog,
+   Source = Discogs API is allowed and 51.13's "no catalog" state blocks only `.catalog` and
+   `.both` (which then runs as API alone and says so in the status line, since `.both`
+   without a catalog is the 2015 MacBook Pro's case). The chosen source is `AppState`
+   (this Mac's), default Local catalog when a catalog exists, else Discogs API. `DiscogsTagger`
+   gets `api: () -> DiscogsAPI?` from the app (built from `fileValue(\.discogsToken)` and the
+   reader's cache), so the feature module never reads settings (map.md rule). The app builds
+   the real `HTTPSClient` transport in `DiscogsCommands.swift` only; tests pass a fake.
+6. **Errors in the window.** A `DiscogsAPIError` that stops a run is one alert via the
+   existing `failed(_:_:)` ("The Discogs token was refused", "No connection to Discogs"); the
+   albums matched so far stay shown as the last run's, as a stopped Analyze already does.
+7. **Tests.** `DiscogsTests`: `.api` on the fixture library matches the catalog's tiers for
+   the same releases (same albums, same fixture releases served both ways: Exact, Likely,
+   Incomplete, No candidate, each the same tier); `.both` calls the API only for the no-candidate
+   and not-in-catalog albums (counted through the fake transport) and never for an Exact one;
+   with no token only tagged-id albums are fetched and nothing searches; the 8-release cap; a
+   shared master fetches the master once and the tie-break picks its main release; a chosen
+   release outside the catalog is fetched; `.api` with no catalog file works and `.catalog`
+   still says "missing"; cancellation during a rate-limit wait; progress and `waitingSeconds`.
+   `DiscogsTaggerTests`: the pop-up items' enabled state in each of token/catalog presence, the
+   source saved and restored, `.both` without a catalog reports it ran as API, the alert for
+   401 and offline, 51.34's auto-analyze does not start for API.
+8. **ADR 0139**: one matcher for both sources, what `.both` sends to the API and why "not in
+   the catalog", the per-album request budget and cap, what works without a token, no master
+   expansion.
+
+#### 52d. Artwork (52.4), ADR 0140
+
+1. **Setting.** `DiscogsArtworkMode` (`SettingChoice`: `off`, `fillEmpty`, `replace`) in
+   `Core/Settings`, setting `discogs.artwork`, default `off`. Separate from `DiscogsMapping`
+   (see "What I found"); presets don't carry it. Shown as a row in the Field Mapping sheet
+   (`MappingSheet`), "Artwork", with the mode pop-up and a note "Needs a Discogs token", and
+   disabled with that note when there is none. `TaggerChoices` carries it like
+   `skipVideo`; `DiscogsCommands` saves it with `settings.set`.
+2. **Fetching.** When the user starts Apply (before the confirmation, with the files
+   being read in `plan(_:)`), for each album with an `.api`-origin or cached release whose
+   `primaryImage` is set: `DiscogsAPI.image(at:)` fetches it (`i.discogs.com` only, 10 MiB cap,
+   20 s, paced like other requests, one image per album, memoized per release for the plan).
+   A catalog-origin release has no image in the catalog, so its album's release is fetched by
+   id through the cache first (one request), which makes a catalog match with artwork on cost
+   one API call per album, and that is said in the confirmation. Without a token no image is
+   asked for and the mode shows "needs a token". Fetch problems are per-album entries in
+   `plan.problems` ("no cover: …"), not a stop; tags still apply.
+3. **Checking.** The bytes must start with the JPEG or PNG signature, pass
+   `thumbnail(of:maxPixelSize:)` (so a huge declared image is refused by the one decode, row
+   4) and be at most 64 MiB (`maximumArtBytes`), else a problem and no cover. `Discogs`
+   gains the `Artwork` dependency for this. The type is read from the signature, not from the
+   server's `Content-Type`.
+4. **Writing.** `AlbumChangeSet` gains `cover: Cover?` (bytes, mime type, pixel size, URL) and
+   each `FileChanges` a `coverState` (`.none`, `.adds`, `.replaces(existing pixel size)`),
+   from `TrackMetadata.art` read with the files. `edits(including:)` sets
+   `edit.art = .replace(data, mimeType:)` for a file when the mode allows (`fillEmpty` skips a
+   file that has art) and the user left the cover ticked. Nothing else writes the image: it
+   goes into `TagWriter` in the same batch and the same undo as the tags, and `TagWriter`'s
+   art limits and 64 MiB check apply unchanged. One more tick-box row in View Changes:
+   "Cover: 600 x 600 JPEG from Discogs (replaces 300 x 300)". The confirmation sheet counts
+   covers beside tags, files and albums. All files of an album get the same image.
+5. **Tests.** `DiscogsTests`: a JPEG and a PNG fixture (generated by the `Fixtures` module, not
+   downloaded) become `.replace` edits that `TagWriter` writes into FLAC, MP3 and M4A clones
+   of the generated fixtures and read back identical; `fillEmpty` leaves a file with art
+   alone; a non-image, a truncated JPEG, a 400-megapixel PNG header, an image over the cap, a
+   `Content-Type: image/jpeg` over PNG bytes (signature wins) and a foreign-host URL are each
+   a per-album problem with the tags still applied; an unticked cover is not written; the
+   whole-batch undo restores the original art and tags. `DiscogsTaggerTests`: the sheet's
+   row disabled without a token; the confirmation counts covers.
+6. **ADR 0140**: why a separate setting and not a mapping field, the extra request per
+   catalog-matched album, what "fill empty" means for art, that the cover write is part of
+   the one confirmation from ADR 0133 (it is a tag edit by `TagWriter`; the boundary in
+   AGENTS.md needs no new exception), image checks. Adds ADR 0025 row 64: the downloaded
+   image (same limits and decode as rows 3 and 4; written only after the confirmation).
+
+#### Commit order
+
+Each commit is one logical change with its tests, and `./scripts/test --changed` before it.
+
+1. `feat(settings): add the Discogs token, hidden and redacted` (52a steps 1, 4 partly)
+2. `fix(settings): write the config file at mode 0600` (52a step 2; its own commit because it
+   changes every config write)
+3. `docs: rewrite the no-secrets boundary for the Discogs token` (AGENTS.md, ADR 0137, ADR 0025
+   rows 58, 59)
+4. `feat(httpsclient): add a capped, https-only client` (52b step 1)
+5. `feat(discogs): add the API client with pacing and typed errors` (52b steps 2, 3, 4, 5, 7)
+6. `feat(library): cache Discogs API releases in the index` (52b step 6; a schema part, so
+   this commit changes the index and is flagged for the owner's rebuild check), then
+   `docs: record the Discogs API client` (ADR 0138, ADR 0025 rows 60 to 63)
+7. `refactor(discogs): let the matcher run without a catalog` (52c step 1, no behavior change,
+   existing tests pass untouched)
+8. `feat(discogs): match albums against the API` (52c steps 2, 3, 4, 7)
+9. `feat(discogstagger): enable the API and Both sources` (52c steps 5, 6, its tests), then
+   `docs: record the API source in matching` (ADR 0139)
+10. `feat(settings): add the Discogs artwork mode` (52d step 1)
+11. `feat(discogs): fetch and write a release's primary image` (52d steps 2 to 5), then
+    `docs: record Discogs cover art` (ADR 0140, ADR 0025 row 64)
+
+Check run: `./scripts/check` once at the end. Steps that read this diff: build and tests, the
+format check, `scripts/arch.swift` (a new primitive), `scripts/surface.swift` (public only
+where another module calls it), `scripts/dupes.swift` (the API's base URL, user agent and
+header names are single string constants), the ADR 0025 test-name check if one exists in
+`scripts/check`, and `scripts/check-signature` (no new entitlements; outbound connections
+need none under the hardened runtime without the sandbox). Info.plist needs nothing:
+`NSAppTransportSecurity` defaults allow https.
+
+#### Owner check
+
+With the token, on this Mac and then the 2015 MacBook Pro (no catalog, Source = Discogs API):
+
+1. Confirm no "unknown setting" banner and that `ls -l ~/.config/music-player/config.json` is
+   `-rw-------` after changing any setting in the app.
+2. Analyze a handful of Likely or No-candidate albums with Both; the status line shows the
+   API count and any rate-limit wait; Stop works mid-wait.
+3. Open Other Releases on an API-found album; Apply with Artwork on Replace for two albums;
+   check the cover in Finder/YATE; Undo Tag Edit restores it.
+4. Remove the token from the file: Source API says what still works.
+5. Optional, to replace the hand-written fixtures with recordings (the agent never calls the
+   API): `curl -sD headers.txt -H 'User-Agent: MusicPlayer/1' -H "Authorization: Discogs
+   token=$TOKEN" https://api.discogs.com/releases/<id> -o release-<id>.json`, the same for a
+   `/masters/<id>` and a `/database/search?type=release&barcode=<code>`; drop the files in
+   `Tests/DiscogsTests/Fixtures/api/` after removing nothing but trailing whitespace (the
+   responses contain no token).
+
+#### Open questions (owner decisions, with my default)
+
+1. **Search needs a token.** I believe `/database/search` rejects unauthenticated calls, so
+   "unauthenticated within the lower limit" (52.1) only covers lookups by release id. Default:
+   as written above (no token: tagged ids only, no search). If the docs say otherwise, only
+   `tokenRequired` goes.
+2. **Fixtures.** Hand-written to the documented shape unless the owner records real ones
+   (curl lines above). Default: hand-written now.
+3. **Image URLs may need the token.** If `i.discogs.com` refuses an unauthenticated GET,
+   either the token is also sent to `i.discogs.com` (a second host for the secret) or covers
+   can't be fetched. Default: token to `api.discogs.com` only; decide after the owner check
+   shows what the images need.
+4. **Cache age.** 30 days. Default kept.
+5. **Both's rule** is "not found in the catalog", not "newer than the dump" (the dump has no
+   per-release date to compare). Default kept.
+
+Result, phase 52: shipped 52.1 to 52.4 (ADRs 0137 to 0140, ADR 0025 rows 58 to 64), with these
+changes from the plan. A token in a config file others can read is withheld with a warning, not
+offered as an obsolete setting, which would delete it. The window and the matcher share one
+`DiscogsSource`, from Settings. The app makes its `DiscogsAPI` in `DiscogsCommands` and makes
+it again only when the token changes, so pacing carries from one Analyze to the next; the
+tagger reads no setting. Cover art is a setting of its own (off, fill empty, replace), not a
+mapping field, so saved mappings still load. A cover must also end with its format's end
+marker (up to 16 bytes of padding after a JPEG's) and be at most 8,000 pixels a side. Both, when
+the API stops (offline, a refused token, rate limits), keeps the catalog's matches and says
+which albums have only those. No test or tool called the real API; the fixtures are written to
+the documented shapes.
+
+Gate, phase 52: four Sonnet reviews (correctness and security, simplify, architecture,
+performance). The security review found no way for the token to leak and no way around the
+https, host and redirect rules. 11 findings fixed in their own commits: a passing cover
+failure no longer cached for the session, a missing token said in the confirmation, a failed
+secure connection named apart from offline, a Retry-After that isn't a number, pacing on the
+uptime clock, a queued request that can be cancelled, a cover checked off the API's actor, the
+wait reporter given back after a run, one rule for a tracklist row's kind, and the HTTPS
+client's surface. A second review found nothing above low; one low, a cached release dated
+ahead of the clock read as missing at any age, fixed. `./scripts/check` passes except
+`theGlassHeadersAreFrosted`, the known agent-session failure. `./scripts/bench`, 69 rows
+without the window rows: no budget missed, nothing over 10% this branch could cause; open
+tagger window 28.7 ms, Discogs analyze 2000 0.34 s, tag write rows within 4% of 51h's. Cost:
+plan 130k tokens, 29 tool calls, 5 min; implementation 1.12M tokens, 437 calls, 83 min;
+reviews 368k tokens, 77 calls, 18 min.
+
+Owner steps: with the token, Analyze with API and with Both on this Mac and on the 2015 MacBook
+Pro (no catalog); a cover fetched with Cover Art on, which settles whether `i.discogs.com` needs
+the token (ADR 0140; a refusal shows as "the Discogs token was refused"); and the first launch
+of this build, which adds the API cache and should ask no rescan.
