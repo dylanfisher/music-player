@@ -235,7 +235,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             stoppable = true
             show(done, of: total, "Reading \(number(done)) of \(number(total)) files")
         case .importing(let step):
-            stoppable = true
+            // Building the indexes is one statement that a stop can't interrupt.
+            stoppable = step?.stage != .indexing
             progress.isHidden = false
             progress.doubleValue = step?.fraction ?? 0
             statusLabel.stringValue = step?.text ?? "Starting the import"
