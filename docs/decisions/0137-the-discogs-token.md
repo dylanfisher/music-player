@@ -22,7 +22,7 @@ stop and ask before adding any. The owner decided on 2026-11-07 that the token g
   log, an error or a test. The settings window has no row for it (`SettingKind.secret`, hidden
   in `GeneralModel.isShown`), so it is edited in the file, as the dumps folder is. The app
   reads it only through `fileValue(\.discogsToken)`, and builds the one `Authorization`
-  header from it, for `api.discogs.com` alone (ADR 0138).
+  header from it, for `api.discogs.com` alone ([0138](0138-the-discogs-api-client.md)).
 - **Redaction by type.** `DiscogsToken`'s `description`, `debugDescription` and mirror all
   give `<Discogs token>`, so interpolation, `String(reflecting:)`, `dump` and a failed
   `#expect` can't print the value. A value that isn't a token (empty, a space, a line break,
