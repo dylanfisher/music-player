@@ -11,7 +11,7 @@ func writeConfigFile(
     _ bytes: [UInt8], to url: URL,
     writing: (Int32, [UInt8]) throws -> Void = writeAll
 ) throws {
-    let temp = url.path + ".sb-" + UUID().uuidString
+    let temp = url.path + leftoverInfix + UUID().uuidString
     let descriptor = open(temp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
     guard descriptor >= 0 else { throw posixError() }
     do {

@@ -3,11 +3,14 @@ import Log
 
 private let logger = moduleLogger()
 
+/// What a temp file's name puts between the file's name and its own id.
+let leftoverInfix = ".sb-"
+
 /// The temp files a save leaves beside `file` when the process dies mid-write, named
 /// `<name>.sb-<id>` as Foundation's atomic write and `writeConfigFile` name them, by path.
 public func leftoverAtomicWrites(beside file: URL) -> [String] {
     let folder = file.deletingLastPathComponent()
-    let prefix = file.lastPathComponent + ".sb-"
+    let prefix = file.lastPathComponent + leftoverInfix
     let names: [String]
     do {
         names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
