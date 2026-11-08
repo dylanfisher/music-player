@@ -685,7 +685,7 @@ From the owner's testing on 2026-11-07, before 51 closes.
 ### 52. Discogs API
 
 - [ ] **52.1 The token.** An optional Discogs personal access token, a second secret kept as
-      [ADR 0136](decisions/0136-the-service-token.md) keeps the service's: an ADR, the AGENTS.md
+      [ADR 0144](decisions/0144-the-service-token.md) keeps the service's: an ADR, the AGENTS.md
       secrets line extended for it, kept only in `config.json` at mode 0600, never copied
       elsewhere.
       Without a token the API is used unauthenticated, within its lower rate limit.
@@ -760,9 +760,9 @@ them in a Downloads window, and moves them into the library on Approve.
 Runs on the branch `phase/54-soulseek-imports`, which `main` doesn't take until the owner has
 reviewed it. 54.1 is docs only and comes first, so the owner reads the boundary changes before
 code depends on them; then P0.1, P0.2 and 54.2 onward in order. P0.2 and everything after it
-need the service's `docs/api.md`. ADR numbers: 0136 to P0.1 (the service token, the app's first
-secret; 52.1 links to it), 0137 to P0.2 (the client), 0138 and 0139 to 54.1, 0140 to 54.4 (the
-player's copy of the matching rules). ADRs 0136, 0138 and 0139 are Proposed until the owner
+need the service's `docs/api.md`. ADR numbers: 0144 to P0.1 (the service token, the app's first
+secret; 52.1 links to it), 0145 to P0.2 (the client), 0146 and 0147 to 54.1, 0148 to 54.4 (the
+player's copy of the matching rules). ADRs 0144, 0146 and 0147 are Proposed until the owner
 approves them, and AGENTS.md changes only then, with the wording each ADR proposes.
 
 Settled on 2026-11-08. The owner asked for the feature in the words above and chose who talks to
@@ -772,9 +772,9 @@ settled the rest while the owner was away, for the owner's review with the branc
 | Question | Answer |
 |---|---|
 | Who talks to slskd | The service only, holding its API key; the player talks to the service by an IP address, a port and a bearer token typed into Settings. No Bonjour yet |
-| Staged tag writes | Automatic after a clean match (tier Exact, no unmapped file, the player's mapping agrees with the service's); a discrepancy writes nothing until resolved in the tagger (ADR 0138) |
-| Approve | The confirmation for the move into the library: staged files are renamed into the library folder (ADR 0139) |
-| Upgrade | The old files go through `moveToTrash`, which on the NAS deletes them, and their stats move to the new files (ADR 0139) |
+| Staged tag writes | Automatic after a clean match (tier Exact, no unmapped file, the player's mapping agrees with the service's); a discrepancy writes nothing until resolved in the tagger (ADR 0146) |
+| Approve | The confirmation for the move into the library: staged files are renamed into the library folder (ADR 0147) |
+| Upgrade | The old files go through `moveToTrash`, which on the NAS deletes them, and their stats move to the new files (ADR 0147) |
 | Reject | The service deletes the staged folder |
 | Staging folder | `/Volumes/music/staging` on the player Macs, beside `library` on the same share: a setting, and the service reports each job's folder relative to it |
 | Queueing | Manual only: library albums with a release id, or a pasted Discogs release id or URL found in the local catalog. Recommendations are later |
@@ -795,27 +795,27 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       is kept only in `config.json`, which a `ConfigStore` extension writes at mode 0600 once
       a token is set; it is never logged, shown in a problem's text or copied elsewhere. The
       staging folder is refused inside a watched folder, the library folder or the sync folder,
-      and checked again whenever any of them changes. ADR 0136. Tests: the 0600 write, each
+      and checked again whenever any of them changes. ADR 0144. Tests: the 0600 write, each
       refusal, a watched folder change that would hold the staging folder, the token in no log
       line or problem.
 - [x] **P0.2 Client.** A new `Core/Recommender`: `post` with the bearer header on
       `LocalHTTPClient` (no change to the client beyond what `post(… fields:)` allows), strict
       models for `ping` and the config route, typed errors (unreachable, 401, 400, `ok:false`,
-      oversize, unknown state) naming the address tried. A fuzz target. ADR 0137. Tests on the
+      oversize, unknown state) naming the address tried. A fuzz target. ADR 0145. Tests on the
       loopback stub with recorded replies.
       Result: `RecommenderClient` posts with the bearer and JSON fields, `keepingRefusals`, to
       another device's address on a local subnet (`ping` and `downloadsConfig` were removed
       once nothing but tests called them); errors name the
       URL, never the token. `LocalURL(host:port:path:on:)` is the one `LocalNetwork` change.
-      Replies decode with every field present and none unknown. ADR 0137 proposed, its threat
+      Replies decode with every field present and none unknown. ADR 0145 proposed, its threat
       model row waiting on approval. The `recommender-reply` fuzz target came with 54.2, to run
       every reply shape: 60 s, 108k inputs, no crash.
 
 #### 54b. Tagging staged albums
 
-- [ ] **54.1 ADRs.** ADR 0138, staged tag writes: `TagWriter` writes staged files once, after a
+- [ ] **54.1 ADRs.** ADR 0146, staged tag writes: `TagWriter` writes staged files once, after a
       clean match, with no confirmation of its own; a fixed overwrite mapping, a second journal,
-      a guard that refuses any path outside the staging folder. ADR 0139, the move into the
+      a guard that refuses any path outside the staging folder. ADR 0147, the move into the
       library and the upgrade's order, with the trash-on-SMB rule (the NAS has no Trash, so the
       upgrade's delete is permanent). Each proposes its AGENTS.md wording. Docs only.
 - [x] **54.2 Job calls and the snapshot.** The downloads routes in `Core/Recommender` (create,
@@ -836,7 +836,7 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       Result: `import_jobs` (`import_outbox` and `import_steps`, keyed by job id, release id and
       folder-relative paths, kept by an index rebuild); every scan passes over the found staging
       folder, a watched folder inside it isn't scanned, and a sync folder found in or around it
-      is refused (`stagingOverlap`, the found-path check ADR 0136 deferred; the library folder's
+      is refused (`stagingOverlap`, the found-path check ADR 0144 deferred; the library folder's
       turn is 54.6's move). `upgradeCandidates(onShare:)` lists the albums whose every file is
       AAC or MP3, carries one numeric release id and lies in a watched folder on the share, each
       with its paths relative to the share (from `share_roots`) and its quality ("MP3 320
@@ -847,7 +847,7 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       writing: `readAlbumFiles` on the staged paths with synthetic negative ids; a missing or junk
       title filled from the file name; `matchAlbums(choosing:)` on the job's release; clean or a
       discrepancy with reasons from `comparison(of:)`; the edits from a fixed overwrite mapping.
-      ADR 0140 records the player's copy of the matching rules and the SHA-256 of
+      ADR 0148 records the player's copy of the matching rules and the SHA-256 of
       `rank-golden.json`, which a test asserts. Tests: exact and clean, wrong title, a missing
       track, 40 s off, an extra file, an unreadable file, DSD, untagged titles.
       Result: `autoTag` runs design steps 1–5 and 7 without writing: `StagedAlbum` reads the
@@ -859,7 +859,7 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       candidate's format (an AAC `.m4a` taken for ALAC is a discrepancy) and every file
       writable, else a discrepancy with reasons from `comparison(of:)`. The edits come from
       `DiscogsMapping.overwriting()`. Edits aren't cached (54.3): every run works them out
-      from the files. ADR 0140: the matcher's titles now fold with the service's Latin table
+      from the files. ADR 0148: the matcher's titles now fold with the service's Latin table
       (`CatalogKey.matchKey`), which agrees on all 56 fold, 16 similarity and 7 score cases;
       the Foundation fold missed 7 and 2. Catalog keys stay on Foundation. 11 AutoTag tests,
       each check also caught by a mutation.
@@ -874,7 +874,7 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       before any write if one is outside the staging folder or missing. The files are then
       read back and the overwrite change set must be empty. Its `write(_:)` is the closure the
       staged tagger (54.11) will use. Nothing calls it yet, so no staged file is written until
-      54.10 wires it after ADR 0138's approval. 5 tests; the guard and the journal's folder
+      54.10 wires it after ADR 0146's approval. 5 tests; the guard and the journal's folder
       each caught by a mutation.
 
 #### 54c. Approve
@@ -897,7 +897,7 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       checked again on every rename. The file system calls are a `MoveCalls` value tests
       replace; `SimulatedNAS` stands in for a scan's reads, not renames, so the tests use
       temporary folders. 13 tests; each guard, the fallback's `lstat` and both size checks
-      caught by a mutation. Nothing calls it until ADR 0139 is approved.
+      caught by a mutation. Nothing calls it until ADR 0147 is approved.
 - [x] **54.7 Upgrade mapping and stats.** `Core/Library/UpgradeMapping.swift` (old tracks to new
       through the release's track index; the ones with no counterpart listed);
       `LibraryWatcher.importMoves(lines:)` and a `MoveList` from lines. Tests with a temporary

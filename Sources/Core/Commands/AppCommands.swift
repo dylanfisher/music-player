@@ -64,7 +64,7 @@ extension CommandID {
     /// Opens the Discogs tagger, which writes tags only after the user confirms (ADR 0133).
     public static let showDiscogsTagger = CommandID("library.discogsTagger")
     /// Opens the Downloads window: albums music-recommender found on Soulseek, staged for
-    /// review, which reach the library only on Approve (ADR 0139).
+    /// review, which reach the library only on Approve (ADR 0147).
     public static let showDownloads = CommandID("downloads.show")
     public static let rescanNow = CommandID("library.rescanNow")
     /// Analyzes every file not analyzed yet, or changed since, until paused (ADR 0116); once

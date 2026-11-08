@@ -5,10 +5,10 @@ import Testing
 @testable import Discogs
 
 // music-recommender's golden cases for its copy of the matching rules, run against the
-// player's (ADR 0140). Both repos commit `rank-golden.json` byte for byte; a change on one side
+// player's (ADR 0148). Both repos commit `rank-golden.json` byte for byte; a change on one side
 // fails the SHA-256 check here until the ADR and the file change on both.
 
-/// The golden file's SHA-256, as ADR 0140 and music-recommender's ADR 0010 record it.
+/// The golden file's SHA-256, as ADR 0148 and music-recommender's ADR 0010 record it.
 private let goldenSHA256 = "c9f9134c5460472361fbd2005fbee149d3630832caf1f4706c57ce5eaaddf2d2"
 
 private struct Golden: Decodable {

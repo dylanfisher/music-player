@@ -1,4 +1,4 @@
-# 0136. The music-recommender token, the app's first secret, and the staging folder setting
+# 0144. The music-recommender token, the app's first secret, and the staging folder setting
 
 - **Date:** 2026-11-08
 - **Status:** Proposed — awaiting owner approval
@@ -6,7 +6,7 @@
 - **See also:** [0028](0028-network-folders-by-share.md) (folders by share),
   [0038](0038-sync-logs.md) (the sync folder, kept outside the watched folders),
   [0039](0039-network-control.md) (addresses as IP literals),
-  [0138](0138-staged-tag-writes.md) and [0139](0139-moving-downloads-into-the-library.md)
+  [0146](0146-staged-tag-writes.md) and [0147](0147-moving-downloads-into-the-library.md)
   (what the staging folder is for)
 
 ## Context
@@ -76,7 +76,7 @@ the sync does.
 Anyone who can read the owner's files can read the token, as with the service's config. A
 backup or a dotfiles repository that copies `~/.config/music-player/config.json` copies the
 token. An editor that saves by writing a new file can widen the mode; the next read sets it back.
-The client (54.2, ADR 0137) adds the token's row to the threat model (ADR 0025).
+The client (54.2, ADR 0145) adds the token's row to the threat model (ADR 0025).
 
 ## Proposed AGENTS.md change
 
@@ -84,6 +84,6 @@ The last bullet of Boundaries, "The app has no secrets. If one appears, stop and
 adding any secret handling.", becomes one line, with the link's `docs/decisions/` prefix as the
 other links in that section have it:
 
-> - The app's one secret is music-recommender's token, kept only in `config.json` at mode 0600, never logged or copied ([ADR 0136](0136-the-service-token.md)). If another appears, stop and ask before adding any secret handling.
+> - The app's one secret is music-recommender's token, kept only in `config.json` at mode 0600, never logged or copied ([ADR 0144](0144-the-service-token.md)). If another appears, stop and ask before adding any secret handling.
 
 The line count stays the same, and the detail stays here.

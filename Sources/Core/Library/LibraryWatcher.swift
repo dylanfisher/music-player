@@ -43,7 +43,7 @@ public final class LibraryWatcher: @unchecked Sendable {
     private var locateDue = false
     /// The sync folder as Settings has it (ADR 0038); nil syncs nothing.
     private var syncFolder: SyncFolder?
-    /// The staging folder as Settings has it (ADR 0136), and where it was last found: the
+    /// The staging folder as Settings has it (ADR 0144), and where it was last found: the
     /// share's mount points it could be under when the share is ambiguous, none when it isn't
     /// mounted. No scan reads in them.
     private var stagingFolder: StagingFolder?
@@ -267,7 +267,7 @@ public final class LibraryWatcher: @unchecked Sendable {
 
     /// Applies `lines`, each an old absolute path and its new one, as `importMoves(from:)`
     /// applies a list's lines: for an upgrade, whose old files' stats go to the new ones
-    /// (ADR 0139).
+    /// (ADR 0147).
     public func importMoves(lines: [(from: String, to: String)]) async throws -> MoveListImport {
         try await withCheckedThrowingContinuation { continuation in
             scanQueue.async { [scanner] in

@@ -43,7 +43,7 @@ extension StagedJob {
     }
 }
 
-/// A staged job's files read for matching (ADR 0138): each with a synthetic negative id, so
+/// A staged job's files read for matching (ADR 0146): each with a synthetic negative id, so
 /// none can be taken for a file in the index, and the album the matcher compares, which
 /// nothing here writes.
 package struct StagedAlbum: Sendable {

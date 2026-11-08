@@ -1,5 +1,5 @@
 /// `recommender.token`: the bearer token music-recommender's API takes, the app's one secret
-/// (ADR 0136). It prints as `***`, so a log line or an error that names the value can't show
+/// (ADR 0144). It prints as `***`, so a log line or an error that names the value can't show
 /// it; only `rawValue` holds it. The config file holds it as a string.
 public struct ServiceToken: SettingValue, RawRepresentable, CustomStringConvertible,
     CustomDebugStringConvertible

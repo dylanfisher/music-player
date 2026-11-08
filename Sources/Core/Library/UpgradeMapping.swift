@@ -1,4 +1,4 @@
-/// One of an upgrade's old files, found in the index by its path on the share (ADR 0139).
+/// One of an upgrade's old files, found in the index by its path on the share (ADR 0147).
 package struct UpgradeOldFile: Equatable, Sendable {
     /// As the job lists it, relative to the share.
     package var sharePath: String

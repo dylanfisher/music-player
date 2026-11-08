@@ -2,7 +2,7 @@ import Analysis
 import AppKit
 import Library
 
-/// Approve… (54.13, ADR 0139): what moves where; for an upgrade, the old files deleted, which
+/// Approve… (54.13, ADR 0147): what moves where; for an upgrade, the old files deleted, which
 /// on a share with no Trash is for good, and the old files with no new one, each ticked to lose;
 /// and the lossy-origin check, acknowledged when it found anything. Approve stays off until
 /// nothing blocks it, then ends the sheet with `result` set.

@@ -1,4 +1,4 @@
-/// An import step this Mac took for one of music-recommender's jobs (ADR 0139): a hint for
+/// An import step this Mac took for one of music-recommender's jobs (ADR 0147): a hint for
 /// resuming, which the files themselves confirm.
 struct ImportStep: Equatable, Sendable {
     enum Kind: String, Sendable {

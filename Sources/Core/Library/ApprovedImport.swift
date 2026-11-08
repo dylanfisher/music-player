@@ -3,7 +3,7 @@ import Foundation
 import Metadata
 import Recommender
 
-/// A staged job the owner approved (ADR 0139): the files to move into the library and, for an
+/// A staged job the owner approved (ADR 0147): the files to move into the library and, for an
 /// upgrade, the files they replace.
 package struct ApprovedImport: Sendable {
     /// What an upgrade replaces, as the Approve sheet showed it.
@@ -75,7 +75,7 @@ package enum ImportOutcome: Equatable, Sendable {
     case failed(HandoffEvent.Stage, String)
 }
 
-/// Runs Approve's steps (ADR 0139) for one job, as an idempotent sequence over the index's
+/// Runs Approve's steps (ADR 0147) for one job, as an idempotent sequence over the index's
 /// ledger and outbox: report (and hear the service accept it), move the new files in, and for an upgrade check them, delete the
 /// old files and carry their stats; then rescan and report `imported`. Each step works out
 /// from the ledger and the file system what's left of it, so a run after a crash or a failure,

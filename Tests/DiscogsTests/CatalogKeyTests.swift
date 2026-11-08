@@ -56,7 +56,7 @@ import Testing
 }
 
 @Test func theMatchKeyFoldsMarksOutsideTheLatinTableAsTheLibraryTaggerAlwaysDid() {
-    // The service keeps these marks; the player re-checks at auto-tag (ADR 0140), so the golden
+    // The service keeps these marks; the player re-checks at auto-tag (ADR 0148), so the golden
     // cases leave them out and this is the player's side of that difference.
     #expect(CatalogKey.matchKey("Việt") == CatalogKey.matchKey("Viet"))
     #expect(CatalogKey.matchKey("Việt") == "viet")

@@ -515,7 +515,7 @@ final class TaggerModel {
     }
 
     /// What a staged write can't do, for the sheet and the status line: its journal is its
-    /// own, for a crash, and stays out of Edit > Undo (ADR 0138).
+    /// own, for a crash, and stays out of Edit > Undo (ADR 0146).
     static let stagedWrite = " These are staged files: Edit > Undo doesn't put them back."
 
     /// The question Apply's confirmation sheet asks.

@@ -50,7 +50,7 @@ enum SchemaPart: String, CaseIterable {
     /// others (ADR 0133), keyed by path ID, so a second session doesn't redo it. A part of its
     /// own for the same reason as `loved`.
     case discogsReviews
-    /// What this Mac did toward importing music-recommender's downloads (ADR 0139): the reports
+    /// What this Mac did toward importing music-recommender's downloads (ADR 0147): the reports
     /// it owes the service and the import steps it took. Keyed by the service's job id, the
     /// release id and paths relative to the staging folder or the library's share, never by a
     /// path or album ID of this index, so an index rebuild finds them again. An outbox and a

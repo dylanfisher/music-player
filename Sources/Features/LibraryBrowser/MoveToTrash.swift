@@ -8,7 +8,7 @@ public struct TrashOutcome: Sendable {
 }
 
 /// Moves the files at `urls` to the Trash: those the user confirmed in Remove… (ADR 0050), and
-/// those an approved upgrade replaces, which reach the import as a closure (ADR 0139). The one
+/// those an approved upgrade replaces, which reach the import as a closure (ADR 0147). The one
 /// call besides `TagWriter` and the import's rename that moves a music file.
 ///
 /// A file moved is one gone from its path afterwards. The reply's URLs needn't equal the ones

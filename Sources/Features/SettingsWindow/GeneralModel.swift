@@ -13,7 +13,7 @@ public final class GeneralModel {
         /// A number field; `whole` takes integers only, `optional` means empty is null.
         case number(whole: Bool, optional: Bool)
         case text(optional: Bool)
-        /// A field that hides what's typed, for a secret; empty is null (ADR 0136).
+        /// A field that hides what's typed, for a secret; empty is null (ADR 0144).
         case secret
         /// A text field for a template, beside a help button that lists its tokens.
         case template([SettingKind.Token])

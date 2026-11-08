@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the lossy-origin check found in one staged file (ADR 0139), for the Approve sheet. The
+/// What the lossy-origin check found in one staged file (ADR 0147), for the Approve sheet. The
 /// file is analyzed with `analyzeFile(at:)` and nothing else, so no staged path reaches the
 /// index or the measures cache.
 package struct StagedOrigin: Equatable, Sendable {

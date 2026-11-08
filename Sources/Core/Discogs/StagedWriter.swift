@@ -3,7 +3,7 @@ import Foundation
 import Settings
 import TagWriter
 
-/// Writes a clean staged album's tags once, unasked (ADR 0138), through `TagWriter` with a
+/// Writes a clean staged album's tags once, unasked (ADR 0146), through `TagWriter` with a
 /// journal of its own, so a crash mid-write is put back at the next write on this Mac and
 /// Edit > Undo never sees it. Nothing here tells the library watcher, so no staged file is
 /// read into the index. Calls block on file I/O; make them off the main thread.
@@ -81,7 +81,7 @@ package struct StagedWriter: Sendable {
     }
 }
 
-/// A path a staged write was asked to write outside the staging folder (ADR 0138).
+/// A path a staged write was asked to write outside the staging folder (ADR 0146).
 package struct StagedPathRefused: Error, Equatable, CustomStringConvertible {
     var path: String
     var stagingRoot: String

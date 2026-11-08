@@ -1,4 +1,4 @@
-# 0139. Approve moves a staged download into the library, and an upgrade deletes what it replaces
+# 0147. Approve moves a staged download into the library, and an upgrade deletes what it replaces
 
 - **Date:** 2026-11-08
 - **Status:** Proposed — awaiting owner approval
@@ -9,12 +9,12 @@
 - **See also:** [0026](0026-sync-identity-is-the-relative-path.md) (the move list that
   carries stats),
   [0028](0028-network-folders-by-share.md) (paths by share),
-  [0138](0138-staged-tag-writes.md) (the staged tag write before this)
+  [0146](0146-staged-tag-writes.md) (the staged tag write before this)
 
 ## Context
 
 Phase 54 stages Soulseek downloads in a folder on the NAS, `/Volumes/music/staging` on the
-player Macs, on the same share as the library, and tags them there (ADR 0138). The owner asked
+player Macs, on the same share as the library, and tags them there (ADR 0146). The owner asked
 that "nothing should be imported into the real full music tracklist until manually reviewed and
 approved", and chose that an approved album is moved from staging into the library, and that an
 upgrade, a better copy of an album already in the library, sends the old files to the Trash and
@@ -63,7 +63,7 @@ answer, nothing moves.
    counterpart, or one with plays, a rating, a love or a playlist entry that would be lost,
    blocks Approve until the owner ticks it.
 3. The new files move in as for a new album.
-4. Each moved file is read again: its tags read, its size equals the one recorded after the tag write (ADR 0138), and the
+4. Each moved file is read again: its tags read, its size equals the one recorded after the tag write (ADR 0146), and the
    file count is the job's. A failure stops here, with the old files untouched.
 5. The old files go to `moveToTrash`, the function Remove and Move to Trash calls, made public
    in `Features/LibraryBrowser` and handed to the import as a closure, so there is one copy. Only
@@ -124,9 +124,9 @@ move.
 One sentence after the ADR 0124 sentence of the music files bullet in Boundaries, with the
 link's `docs/decisions/` prefix as the bullet's other links have it:
 
-> Approve in the Downloads window renames the staged files into the library folder, never over a file, and for an upgrade then passes the files it replaces to the same Trash call, which on a share with no Trash deletes them ([ADR 0139](0139-moving-downloads-into-the-library.md)).
+> Approve in the Downloads window renames the staged files into the library folder, never over a file, and for an upgrade then passes the files it replaces to the same Trash call, which on a share with no Trash deletes them ([ADR 0147](0147-moving-downloads-into-the-library.md)).
 
-It is the second of the two changes in the whole bullet ADR 0138 proposes, so approving both
+It is the second of the two changes in the whole bullet ADR 0146 proposes, so approving both
 means taking that bullet as it stands. The line count stays the same, and the detail stays here.
 Until the owner approves, AGENTS.md stays as it is and no code from 54.6 on moves or deletes a
 music file.

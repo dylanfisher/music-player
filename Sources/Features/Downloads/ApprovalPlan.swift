@@ -25,7 +25,7 @@ package struct ImportPlaces: Equatable, Sendable {
     }
 }
 
-/// What Approve does to one job, as its sheet lists it (ADR 0139): each staged file and where
+/// What Approve does to one job, as its sheet lists it (ADR 0147): each staged file and where
 /// it goes; for an upgrade, the old files it deletes and those with no new file, which the
 /// owner ticks to lose; and the lossy-origin check of the staged files. Worked out before
 /// anything moves, and the sheet's Approve stays off while `blockers` lists anything.

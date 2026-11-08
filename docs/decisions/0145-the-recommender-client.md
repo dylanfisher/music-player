@@ -1,11 +1,11 @@
-# 0137. The music-recommender client: bearer POSTs over the local HTTP client, strict replies
+# 0145. The music-recommender client: bearer POSTs over the local HTTP client, strict replies
 
 - **Date:** 2026-11-08
 - **Status:** Proposed — awaiting owner approval
 - **See also:** [0025](0025-threat-model.md) (the threat model, which gains a row on approval),
   [0039](0039-network-control.md) (local subnets, IP literals, `LocalHTTPClient`),
-  [0136](0136-the-service-token.md) (the token and the settings),
-  [0138](0138-staged-tag-writes.md) and [0139](0139-moving-downloads-into-the-library.md) (what
+  [0144](0144-the-service-token.md) (the token and the settings),
+  [0146](0146-staged-tag-writes.md) and [0147](0147-moving-downloads-into-the-library.md) (what
   the jobs are for)
 
 ## Context
@@ -16,7 +16,7 @@ route is a POST of a JSON object with `Authorization: Bearer <token>`, and the a
 with `{"ok": true, ...}`, a 200 with `{"ok": false, "error": {...}}` for a request understood
 and refused, or a 400, 401, 404, 405, 408 or 503 for one that wasn't. The service is on the
 LAN, so its replies are a LAN device's input (ADR 0025), and the request carries the app's one
-secret (ADR 0136).
+secret (ADR 0144).
 
 ## Decision
 
@@ -32,7 +32,7 @@ no chunked request bodies. The one change to `LocalNetwork` is a public
 `LocalURL(host:port:path:on:)`, since this is the first URL built from an address the owner
 typed rather than one a device described.
 
-**The address.** `recommender.address` is an IP literal (ADR 0136). The client is made only
+**The address.** `recommender.address` is an IP literal (ADR 0144). The client is made only
 when it's another device's address on a local subnet, `LocalSubnets.interface(forHost:)`, as
 `receiver.address` is: not loopback, not this Mac's own address, not a network or broadcast
 address. So the player and the service don't run on one Mac.
@@ -88,7 +88,7 @@ rather than looped on.
 The token goes over the LAN in plaintext, as the UPnP output's file tokens do (ADR 0041): any
 device that can see the traffic can read it, and anything that answers at the service's address
 gets it. The service's API can only download, stage and delete inside its staging folder, and
-the player tags and imports staged albums only after the owner's review (ADR 0139), so a stolen
+the player tags and imports staged albums only after the owner's review (ADR 0147), so a stolen
 token can queue downloads or reject staged ones, not reach the library.
 
 A reply with a field the service added breaks the player until it learns the field, by design.
@@ -97,4 +97,4 @@ A reply with a field the service added breaks the player until it learns the fie
 
 On approval, ADR 0025's table gains this row:
 
-| 58 | the token; the app | LAN device | music-recommender's replies, and anything answering at its address | the address only a configured IP literal, another device's on a local subnet; POST to that address alone, no redirects, 1 MiB and 5 s; the token only in the `Authorization` header, never in a URL, an error, a log line or a problem; every reply decoded strictly at every level, unknown fields, codes and values refused, an unknown job state an error; the service's text escaped; `list` paging that must advance; the token in plaintext on the LAN ([0137](0137-the-recommender-client.md)) | RecommenderTests; `scripts/fuzz recommender-reply` |
+| 58 | the token; the app | LAN device | music-recommender's replies, and anything answering at its address | the address only a configured IP literal, another device's on a local subnet; POST to that address alone, no redirects, 1 MiB and 5 s; the token only in the `Authorization` header, never in a URL, an error, a log line or a problem; every reply decoded strictly at every level, unknown fields, codes and values refused, an unknown job state an error; the service's text escaped; `list` paging that must advance; the token in plaintext on the LAN ([0145](0145-the-recommender-client.md)) | RecommenderTests; `scripts/fuzz recommender-reply` |

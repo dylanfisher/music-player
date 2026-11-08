@@ -8,7 +8,7 @@ public struct ScanOptions: Equatable, Sendable {
     /// keeps its track and its stored size and time, so it's read once this is on again.
     public var rescansModifiedFiles: Bool
     /// Folders no scan reads in, where they're found now: the staging folder, where downloads
-    /// wait for review and the service deletes (ADR 0136). Not a setting of the watched folders;
+    /// wait for review and the service deletes (ADR 0144). Not a setting of the watched folders;
     /// the watcher sets it as it finds the staging folder.
     var skippedFolders: [String]
 

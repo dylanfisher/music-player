@@ -7,7 +7,7 @@ import TagWriter
 
 extension TaggerModel {
     /// What a tagger opened on a staged job does instead of reading the index and writing
-    /// through the library's writer (ADR 0138): it reads the job's files in the staging
+    /// through the library's writer (ADR 0146): it reads the job's files in the staging
     /// folder, matches them with the job's release only, and writes through `StagedWriter`,
     /// whose journal is its own and which no watcher hears.
     struct StagedEffects: Sendable {

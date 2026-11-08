@@ -1,12 +1,12 @@
-# 0138. Tags written to a staged download once, after a clean match, without asking
+# 0146. Tags written to a staged download once, after a clean match, without asking
 
 - **Date:** 2026-11-08
 - **Status:** Proposed — awaiting owner approval
 - **Amends:** [0020](0020-tag-writing.md) (who writes music files, and when),
   [0133](0133-one-confirmation-for-a-match-set.md) (what counts as the confirmation)
 - **See also:** [0131](0131-discogs-matching.md) (the tiers),
-  [0132](0132-discogs-field-mapping.md) (the mapping), [0136](0136-the-service-token.md) (the
-  staging folder setting), [0139](0139-moving-downloads-into-the-library.md) (Approve)
+  [0132](0132-discogs-field-mapping.md) (the mapping), [0144](0144-the-service-token.md) (the
+  staging folder setting), [0147](0147-moving-downloads-into-the-library.md) (Approve)
 
 ## Context
 
@@ -19,7 +19,7 @@ AGENTS.md lets `TagWriter` write music files only for a tag edit the user confir
 The owner asked for staged downloads to be tagged without that step: "if the album is new from
 soulseek we can automatically write the tags". The owner also asked that "nothing should be
 imported into the real full music tracklist until manually reviewed and approved", so the
-confirmation that matters for the library is Approve (ADR 0139), not the tag write. That request
+confirmation that matters for the library is Approve (ADR 0147), not the tag write. That request
 is the basis for this exception: it covers files that aren't in the library yet and can't reach
 it without Approve.
 
@@ -45,7 +45,7 @@ does, from `Core/Discogs/StagedWriter.swift`:
 - **The path guard.** Each path is resolved, symbolic links included, and refused unless it is
   inside the staging folder (`import.stagingFolder`). A refused path fails the whole run before
   anything is written. Nothing under a watched folder or the library folder can pass, since
-  Settings refuses a staging folder inside either (ADR 0136).
+  Settings refuses a staging folder inside either (ADR 0144).
 - **A journal of its own.** A second `TagUndoJournal`, in a folder of its own beside the main
   one, holds the in-place writes' recovery entries, so a crash mid-write is put back on that Mac
   before its first tag run after launch. Its write closure doesn't call the library watcher and doesn't push to the
@@ -93,10 +93,10 @@ rerun of the tag run on another.
 ## Proposed AGENTS.md change
 
 The music files bullet in Boundaries gains one clause in its first sentence, for this ADR, and
-one sentence after the ADR 0124 sentence, for ADR 0139. The line count stays the same, and the
+one sentence after the ADR 0124 sentence, for ADR 0147. The line count stays the same, and the
 detail stays in the two ADRs. The whole bullet, as proposed; its links are written here relative to this folder, and in
 AGENTS.md each takes the `docs/decisions/` prefix, as the bullet's links do now:
 
-> - **Music files are written only by `Sources/Core/TagWriter`, for a tag edit the user confirmed in the UI** (one confirmation covers a reviewed Discogs match set, [ADR 0133](0133-one-confirmation-for-a-match-set.md); a download staged for review is written once, unasked, after a clean match, and only inside the staging folder, [ADR 0138](0138-staged-tag-writes.md)). Besides it, only Remove and Move to Trash moves them: it passes the files the user confirmed to `NSWorkspace.recycle` ([ADR 0050](0050-remove-from-library.md)). A drop of files with Copy Added Files on creates new copies in the library folder, reading the originals only, and removes only a copy of its own that failed ([ADR 0124](0124-drop-files-and-the-library-folder.md)). Approve in the Downloads window renames the staged files into the library folder, never over a file, and for an upgrade then passes the files it replaces to the same Trash call, which on a share with no Trash deletes them ([ADR 0139](0139-moving-downloads-into-the-library.md)). Nothing else writes, renames, moves or deletes them, and no test or tool touches a real library or the NAS, except `scripts/smb-copy-probe.swift`, which only the owner runs, on a scratch folder, making and removing a subfolder of its own ([ADR 0108](0108-faster-tag-writes.md)), and the Discogs tagger's agent runs that read the watched folders and the dumps folder, read only, reporting under `.build/` ([ADR 0128](0128-discogs-survey.md)): tag tests write to generated fixtures or to clones of the reference corpus ([ADR 0020](0020-tag-writing.md)). App state lives in the SQLite index. The one exception: the app appends its own `<machine id>.log`, and writes nothing else, in the sync folder the user chose, which must be outside every watched folder; tests use a temporary folder ([ADR 0038](0038-sync-logs.md)).
+> - **Music files are written only by `Sources/Core/TagWriter`, for a tag edit the user confirmed in the UI** (one confirmation covers a reviewed Discogs match set, [ADR 0133](0133-one-confirmation-for-a-match-set.md); a download staged for review is written once, unasked, after a clean match, and only inside the staging folder, [ADR 0146](0146-staged-tag-writes.md)). Besides it, only Remove and Move to Trash moves them: it passes the files the user confirmed to `NSWorkspace.recycle` ([ADR 0050](0050-remove-from-library.md)). A drop of files with Copy Added Files on creates new copies in the library folder, reading the originals only, and removes only a copy of its own that failed ([ADR 0124](0124-drop-files-and-the-library-folder.md)). Approve in the Downloads window renames the staged files into the library folder, never over a file, and for an upgrade then passes the files it replaces to the same Trash call, which on a share with no Trash deletes them ([ADR 0147](0147-moving-downloads-into-the-library.md)). Nothing else writes, renames, moves or deletes them, and no test or tool touches a real library or the NAS, except `scripts/smb-copy-probe.swift`, which only the owner runs, on a scratch folder, making and removing a subfolder of its own ([ADR 0108](0108-faster-tag-writes.md)), and the Discogs tagger's agent runs that read the watched folders and the dumps folder, read only, reporting under `.build/` ([ADR 0128](0128-discogs-survey.md)): tag tests write to generated fixtures or to clones of the reference corpus ([ADR 0020](0020-tag-writing.md)). App state lives in the SQLite index. The one exception: the app appends its own `<machine id>.log`, and writes nothing else, in the sync folder the user chose, which must be outside every watched folder; tests use a temporary folder ([ADR 0038](0038-sync-logs.md)).
 
 Until the owner approves, AGENTS.md stays as it is and no code from 54.4 on writes a staged file.

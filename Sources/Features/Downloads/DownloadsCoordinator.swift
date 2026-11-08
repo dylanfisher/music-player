@@ -25,7 +25,7 @@ actor DownloadsCoordinator {
         /// Matches a staged job's files with its release, writing nothing; nil on a Mac with
         /// no Discogs catalog, which doesn't tag.
         var autoTag: (@Sendable (StagedJob) async throws -> AutoTagRun)?
-        /// Finishes the writes a crash left unconfirmed in the staged journal (ADR 0138),
+        /// Finishes the writes a crash left unconfirmed in the staged journal (ADR 0146),
         /// giving the failures; the first tag run after launch waits for it.
         var recover: @Sendable () async -> [String]
         /// Writes a clean run's edits through `StagedWriter` and reads them back, returning

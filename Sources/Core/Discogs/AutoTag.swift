@@ -4,7 +4,7 @@ import Recommender
 import Settings
 import TagWriter
 
-/// What AutoTag found for a staged job (ADR 0138): whether its tags can be written unasked,
+/// What AutoTag found for a staged job (ADR 0146): whether its tags can be written unasked,
 /// and the edits that would be.
 package struct AutoTagRun: Sendable {
     package enum Verdict: Equatable, Sendable {
@@ -29,7 +29,7 @@ package struct AutoTagRun: Sendable {
 }
 
 /// Matches `job`'s staged files under `stagingRoot` against its release in the catalog at
-/// `catalog`, and works out the edits `mapping` makes with every field replaced (ADR 0138).
+/// `catalog`, and works out the edits `mapping` makes with every field replaced (ADR 0146).
 /// Writes nothing. Blocks on the file reads, so call it off the main actor.
 package func autoTag(
     _ job: StagedJob, stagingRoot: String, catalogAt catalog: URL, mapping: DiscogsMapping

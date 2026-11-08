@@ -474,7 +474,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
 
 extension ConfigStore {
     /// Whether a setting that holds a secret has a value, so the file must be readable by its
-    /// owner alone (ADR 0136). An optional secret's default is null.
+    /// owner alone (ADR 0144). An optional secret's default is null.
     var holdsSecret: Bool {
         descriptors.contains { descriptor in
             switch descriptor.kind {

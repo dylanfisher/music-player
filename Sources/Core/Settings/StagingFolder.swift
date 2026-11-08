@@ -1,6 +1,6 @@
 import Foundation
 
-/// The folder music-recommender puts downloaded albums in for review (ADR 0136): a path, or on
+/// The folder music-recommender puts downloaded albums in for review (ADR 0144): a path, or on
 /// a network share the share's URL and the path inside it, found wherever the share is mounted,
 /// as a watched folder is (ADR 0028). The service names each album's folder relative to it.
 public struct StagingFolder: FolderSetting {

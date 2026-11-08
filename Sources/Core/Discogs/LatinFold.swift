@@ -1,4 +1,4 @@
-/// The letters the matcher folds to plain ASCII, as music-recommender folds them (ADR 0140):
+/// The letters the matcher folds to plain ASCII, as music-recommender folds them (ADR 0148):
 /// Latin-1 Supplement and Latin Extended-A, U+00C0 to U+017F less `×` and `÷`, each to its
 /// lowercase base. `CatalogKey.matchKey` folds a letter outside it with Foundation.
 enum LatinFold {

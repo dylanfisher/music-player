@@ -23,7 +23,7 @@ struct MoveCalls: Sendable {
     }
 }
 
-/// Renames a staged album's files into the library folder (ADR 0139), each at the path its
+/// Renames a staged album's files into the library folder (ADR 0147), each at the path its
 /// tags give it (ADR 0124), never over a file. Every step is in the index's ledger before it's
 /// taken and can be worked out again from the file system, so a crash, or another Mac, resumes
 /// it. Calls block on the volumes, so make them off the main thread.

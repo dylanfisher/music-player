@@ -20,7 +20,7 @@ enum CatalogKey {
         return String(folded)
     }
 
-    /// The key the matcher compares titles by, music-recommender's too (ADR 0140): `fold`'s
+    /// The key the matcher compares titles by, music-recommender's too (ADR 0148): `fold`'s
     /// steps, but with `LatinFold`'s letters mapped first, so `æ`, `ø` and `ł` fold as the
     /// service folds them. Foundation's case and accent folding then handles every other
     /// character, so this is at least as lenient as `fold` for all scripts. The service

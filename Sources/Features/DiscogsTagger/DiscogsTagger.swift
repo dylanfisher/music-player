@@ -81,7 +81,7 @@ public final class DiscogsTagger {
         self.model = model
     }
 
-    /// The tagger for one staged job with a discrepancy (ADR 0138), opened from Downloads: it
+    /// The tagger for one staged job with a discrepancy (ADR 0146), opened from Downloads: it
     /// reads the job's files under `stagingRoot`, matches them with the job's release in the
     /// catalog only, and writes through `StagedWriter`, whose journal is under
     /// `dataDirectory`. `resolved` hears the verdict once Apply has written.

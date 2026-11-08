@@ -1,9 +1,9 @@
-# 0140. The matching rules music-recommender shares, kept in step by a golden file
+# 0148. The matching rules music-recommender shares, kept in step by a golden file
 
 - **Date:** 2026-11-08
 - **Status:** Accepted
 - **See also:** [0130](0130-discogs-catalog.md) (the catalog's keys),
-  [0131](0131-discogs-matching.md) (the matcher), [0138](0138-staged-tag-writes.md) (what a
+  [0131](0131-discogs-matching.md) (the matcher), [0146](0146-staged-tag-writes.md) (what a
   clean match writes); music-recommender's ADR 0010 (its copy of these rules)
 
 ## Context
@@ -11,7 +11,7 @@
 Phase 54's service, music-recommender, ranks Soulseek folders against a release before it
 downloads one, and reports which file is which track by the release's positions. The player
 then matches the staged files against the same release, and a run is clean only when its
-mapping agrees with the service's (ADR 0138). So the two must fold, compare and score titles
+mapping agrees with the service's (ADR 0146). So the two must fold, compare and score titles
 the same way, or an album the service accepted turns into a discrepancy after a download.
 
 The service is Rust with no crate for Unicode folding. Its ADR 0010 copies the player's rules
@@ -64,7 +64,7 @@ which the service keeps.
   the service searches Soulseek with. The player never builds a query, so only `key`, the
   words run together, is checked.
 - **The ranking cases.** They rank peers' folders by format, size and slots, which only the
-  service does; the player checks a staged album's mapping instead (ADR 0138).
+  service does; the player checks a staged album's mapping instead (ADR 0146).
 - **A file with no length.** The service leaves a file it has no length for out of the
   duration counts; the player always reads one from the file. The golden score cases pair such
   a file only with a track of no length, or with none, so the test gives it 0 and checks that

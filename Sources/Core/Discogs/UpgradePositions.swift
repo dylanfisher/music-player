@@ -4,7 +4,7 @@ import Recommender
 
 /// The release position of each of `album`'s tracks, by file id, as the matcher places them on
 /// the release `release` in the catalog at `catalog`: what an upgrade's old files map to its new
-/// ones through (ADR 0139). A track the match leaves out has none. Reads the catalog off the
+/// ones through (ADR 0147). A track the match leaves out has none. Reads the catalog off the
 /// calling thread.
 package func upgradePositions(of album: DiscogsAlbum, release: Int, catalogAt catalog: URL)
     async throws -> [Int64: String]
