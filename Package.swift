@@ -118,7 +118,7 @@ let package = Package(
         ),
         .target(
             name: "Settings",
-            dependencies: ["KeyChord", "LocalNetwork", "Log", "Playback"],
+            dependencies: ["KeyChord", "LocalNetwork", "Log", "Metadata", "Playback", "TagWriter"],
             path: "Sources/Core/Settings",
             swiftSettings: strictSwift
         ),
@@ -138,7 +138,9 @@ let package = Package(
         ),
         .target(
             name: "Discogs",
-            dependencies: ["DisplayText", "Library", "Log", "SQLite", "Settings"],
+            dependencies: [
+                "DisplayText", "Library", "Log", "Metadata", "SQLite", "Settings", "TagWriter",
+            ],
             path: "Sources/Core/Discogs",
             swiftSettings: strictSwift,
             // The system library, which the SDK's zlib module declares.
@@ -314,7 +316,9 @@ let package = Package(
         ),
         .testTarget(
             name: "DiscogsTests",
-            dependencies: ["Discogs", "Fixtures", "Library", "SQLite", "Settings"],
+            dependencies: [
+                "Discogs", "Fixtures", "Library", "Metadata", "SQLite", "Settings", "TagWriter",
+            ],
             swiftSettings: strictSwift
         ),
         .testTarget(
@@ -451,7 +455,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SettingsTests",
-            dependencies: ["Settings"],
+            dependencies: ["Metadata", "Settings", "TagWriter"],
             exclude: ["Crashes"],
             swiftSettings: strictSwift
         ),

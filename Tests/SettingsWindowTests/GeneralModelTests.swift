@@ -81,7 +81,8 @@ private var appearanceChoices: [SettingKind.Choice] {
             == schema.settings.map(\.key).filter {
                 $0 != schema.networkScanReaders.key && $0 != schema.resume.key
                     && $0 != schema.browserGroupings.key && $0 != schema.discogsDumpsFolder.key
-                    && $0 != schema.discogsCatalogPath.key
+                    && $0 != schema.discogsCatalogPath.key && $0 != schema.discogsMapping.key
+                    && $0 != schema.discogsSavedMappings.key
             })
     #expect(!model.rows.contains { $0.control == .readOnly })
     let appearance = model.rows.first { $0.key == AppSettings().appearance.key }
@@ -263,6 +264,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(!keys.contains(schema.networkScanReaders.key))
     #expect(!keys.contains(schema.discogsDumpsFolder.key))
     #expect(!keys.contains(schema.discogsCatalogPath.key))
+    #expect(!keys.contains(schema.discogsMapping.key))
+    #expect(!keys.contains(schema.discogsSavedMappings.key))
     #expect(keys.contains(schema.groupByAlbumArtist.key))
 }
 
@@ -312,7 +315,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
     #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
     let listed = sections.flatMap(\.rows).map(\.key)
-    #expect(listed.count == AppSettings().settings.count - 7)
+    #expect(listed.count == AppSettings().settings.count - 9)
     #expect(!listed.contains(AppSettings().resume.key))
     #expect(!listed.contains(AppSettings().browserGroupings.key))
     #expect(!listed.contains(AppSettings().watchedFolders.key))

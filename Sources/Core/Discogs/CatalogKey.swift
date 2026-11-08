@@ -20,6 +20,9 @@ enum CatalogKey {
         return String(folded)
     }
 
+    /// `name` without the "(2)" Discogs adds to tell artists or labels of one name apart.
+    static func withoutNumberSuffix(_ name: String) -> String { replacing(suffix, in: name) }
+
     /// The artist keys a credit of several artists can match: each name alone, and all of
     /// them run together with and without "and", so the library's "A & B" finds Discogs's
     /// [A, B]. Empty names are left out.

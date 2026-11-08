@@ -78,7 +78,7 @@ func tuningAlbums(_ records: [SurveyRecord], titlesOnly: Bool) -> [TuningAlbum] 
 
 /// YATE's spellings of a track's place in the release's tracklist, uppercased (ADR 0128).
 private let ordinalKeys = [
-    "DISCOGS_RELEASE_ORDINAL_POSITION", "DISCOGS RELEASE ORDINAL POSITION",
+    DiscogsKey.ordinalPosition, DiscogsKey.ordinalPositionTitled.uppercased(),
 ]
 
 /// How the release chosen for an album stands to the one its files were tagged with.

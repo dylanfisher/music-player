@@ -11,7 +11,7 @@ public enum ID3CustomKey {
 
     /// What the involved people list's roles and names are joined with as one value: YATE's
     /// separator between values.
-    public static let involvedPeopleSeparator = ";;;"
+    public static let involvedPeopleSeparator = DiscogsKey.valueSeparator
 
     /// Whether `name` is one of these keys, compared uppercased, which only ID3 can hold.
     public static func isID3Only(_ name: String) -> Bool {

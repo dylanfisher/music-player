@@ -192,7 +192,7 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
         \.label)
     tally("CATALOGNUMBER set", files.filter { $0.catalogNumber != nil }, \.catalogNumber)
 
-    let catalogKey = "DISCOGS_CATALOG_NUMBER"
+    let catalogKey = DiscogsKey.catalogNumber
     tally(
         "\(catalogKey) as \"LABEL: CATALOGNUMBER\"",
         files.filter { file in
@@ -238,7 +238,7 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
         "ARTIST or ALBUMARTIST with a \"(2)\" suffix",
         files.filter { [$0.artist, $0.albumArtist].contains { $0.map(hasNumberSuffix) == true } },
         { [$0.artist, $0.albumArtist].compactMap { $0 }.joined(separator: " / ") })
-    let artistList = "DISCOGS_ARTIST_LIST"
+    let artistList = DiscogsKey.artistList
     tally(
         "\(artistList) equal to ARTIST",
         files.filter { $0.custom[artistList] != nil && $0.custom[artistList] == $0.artist },
@@ -248,9 +248,9 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
         files.filter { $0.custom[artistList] != nil && $0.custom[artistList] != $0.artist },
         { "\($0.custom[artistList]!) (ARTIST \($0.artist ?? "none"))" })
 
-    let anvKey = "DISCOGS_ANV_LIST"
+    let anvKey = DiscogsKey.nameVariationList
     let anvPairs = files.flatMap { file in
-        (file.custom[anvKey] ?? "").components(separatedBy: yateValueSeparator).compactMap {
+        (file.custom[anvKey] ?? "").components(separatedBy: DiscogsKey.valueSeparator).compactMap {
             pair -> (file: SurveyRecord, canonical: String, anv: String)? in
             let sides = pair.components(separatedBy: "=")
             return sides.count == 2 ? (file, sides[0], sides[1]) : nil
@@ -276,10 +276,10 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
         anvPairs.filter { hasNumberSuffix($0.canonical) }.map(\.file),
         { "\($0.custom[anvKey]!) (\(artists($0)))" })
     tally(
-        "Custom values holding \"\(yateValueSeparator)\" between values",
-        files.filter { $0.custom.values.contains { $0.contains(yateValueSeparator) } },
+        "Custom values holding \"\(DiscogsKey.valueSeparator)\" between values",
+        files.filter { $0.custom.values.contains { $0.contains(DiscogsKey.valueSeparator) } },
         { file in
-            file.custom.first { $0.value.contains(yateValueSeparator) }.map {
+            file.custom.first { $0.value.contains(DiscogsKey.valueSeparator) }.map {
                 "\($0.key)=\($0.value)"
             }
         })
@@ -295,9 +295,6 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
     }
     return lines
 }
-
-/// What YATE puts between the values of one key, as in `DISCOGS_ARTIST_LIST`.
-private let yateValueSeparator = ";;;"
 
 /// The first of the labels LABEL joins with " & ".
 private func firstLabel(_ file: SurveyRecord) -> String? {

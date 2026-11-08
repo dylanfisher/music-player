@@ -59,6 +59,12 @@ public struct AppSettings: SettingsSchema {
     public let discogsCatalogPath = Setting<String?>(
         "discogs.catalogPath", title: "Discogs Catalog", filePath: nil,
         "The catalog's file, outside your music; none keeps it with the library.")
+    public let discogsMapping = Setting(
+        "discogs.mapping", title: "Discogs Field Mapping", default: DiscogsPreset.oneToOne.mapping,
+        "Where the Discogs tagger writes each field, and how.")
+    public let discogsSavedMappings = Setting<[NamedDiscogsMapping]>(
+        "discogs.savedMappings", title: "Saved Discogs Mappings", default: [],
+        "Field mappings saved by name, beside the presets.")
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")

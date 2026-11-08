@@ -134,20 +134,24 @@ public struct TagValueError: Error, Equatable, CustomStringConvertible {
 
 /// Why no format can hold a custom key named `name`, or nil: Vorbis comment names are printable
 /// ASCII without "=", and a name the reader maps to a field would be read back as that field.
-private func customKeyProblem(_ name: String) -> String? {
+package func customKeyProblem(_ name: String) -> String? {
     guard !name.isEmpty,
         name.unicodeScalars.allSatisfy({ (0x20...0x7D).contains($0.value) && $0 != "=" })
     else { return "isn't a custom key's name: printable ASCII without \"=\"" }
     let upper = name.uppercased()
-    let fieldNames = TagField.allCases.flatMap { field in
-        vorbisKeys(for: field).union(id3UserTextDescriptions(for: field))
-            .union(mp4FreeformNames(for: field))
-    }
-    guard !fieldNames.contains(upper), upper != iTunesGaplessName.uppercased() else {
+    guard !fieldKeyNames.contains(upper), upper != iTunesGaplessName.uppercased() else {
         return "is a field's name, not a custom key's"
     }
     return nil
 }
+
+/// Every name, uppercased, that a format's reader maps to a field, worked out once: the
+/// settings check each mapping's keys against it whenever they're read.
+private let fieldKeyNames = Set(
+    TagField.allCases.flatMap { field in
+        vorbisKeys(for: field).union(id3UserTextDescriptions(for: field))
+            .union(mp4FreeformNames(for: field))
+    })
 
 /// Empty text clears; otherwise a whole number from 1 to `maximumNumber`.
 private func number(_ field: TagEditField, _ text: String) throws(TagValueError) -> Int? {
