@@ -692,3 +692,39 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     #expect(again.table.sortDescriptors == [NSSortDescriptor(key: "year", ascending: false)])
     #expect(again.table.tableColumns.allSatisfy { $0.identifier.rawValue != "gone" })
 }
+
+/// View Release… clicked twice shows one sheet, and one clicked as Other Releases closes shows
+/// none and leaves the next click working.
+@MainActor
+@Test func viewReleaseShowsOneSheetAndNoneOverAClosedList() async throws {
+    let tagger = await analyzed()
+    let controller = TaggerWindow(model: tagger)
+    let window = try #require(controller.window)
+    window.orderFront(nil)
+    defer { window.close() }
+    click(controller.otherReleasesButton)
+    try await eventually { window.attachedSheet?.windowController is ReleasesSheet }
+    let releases = try #require(window.attachedSheet?.windowController as? ReleasesSheet)
+    let list = try #require(releases.window)
+
+    releases.viewRelease(10)
+    releases.viewRelease(10)
+    try await eventually { list.attachedSheet?.windowController is ViewReleaseSheet }
+    (list.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
+    try await eventually { list.attachedSheet == nil }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    #expect(list.attachedSheet == nil, "the second click queued nothing")
+
+    releases.viewRelease(10)
+    releases.endSheet()
+    try await Task.sleep(nanoseconds: 100_000_000)
+    #expect(list.attachedSheet == nil && window.attachedSheet == nil)
+
+    click(controller.otherReleasesButton)
+    try await eventually { window.attachedSheet?.windowController is ReleasesSheet }
+    let again = try #require(window.attachedSheet?.windowController as? ReleasesSheet)
+    again.viewRelease(10)
+    try await eventually { again.window?.attachedSheet?.windowController is ViewReleaseSheet }
+    (again.window?.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
+    again.endSheet()
+}

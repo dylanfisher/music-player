@@ -79,6 +79,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     private var sheet: NSWindowController?
     /// View Release…'s sheet, over Other Releases…, held while it shows.
     private var releaseSheet: ViewReleaseSheet?
+    /// Set from View Release…'s click until its sheet shows or the read fails, so a second
+    /// click doesn't queue a second sheet.
+    private var readingRelease = false
 
     init(model: TaggerModel) {
         self.model = model
@@ -595,16 +598,22 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     /// Shows release `id` over Other Releases…, which stays open under it.
     private func viewRelease(_ id: Int, over sheetWindow: NSWindow) {
-        guard releaseSheet == nil else { return }
+        guard releaseSheet == nil, !readingRelease else { return }
+        readingRelease = true
         Task {
+            defer { readingRelease = false }
             let detail: ReleaseDetail?
             do {
                 detail = try await model.release(id)
             } catch {
-                return alert("The release couldn't be read", ["\(error)"])
+                return alert("The release couldn't be read", ["\(error)"], over: sheetWindow)
             }
+            // Other Releases was closed while the release was read.
+            guard sheetWindow.sheetParent != nil else { return }
             guard let detail else {
-                return alert("The release couldn't be read", ["The catalog has no release \(id)."])
+                return alert(
+                    "The release couldn't be read", ["The catalog has no release \(id)."],
+                    over: sheetWindow)
             }
             let shown = ViewReleaseSheet(release: detail)
             releaseSheet = shown
@@ -709,8 +718,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         }
     }
 
-    private func alert(_ message: String, _ details: [String]) {
-        guard let window else { return }
+    /// Shows the problems over `over`, the tagger's window unless a sheet of it is up and
+    /// would hide the alert.
+    private func alert(_ message: String, _ details: [String], over: NSWindow? = nil) {
+        guard let window = over ?? window else { return }
         let shown = 8
         let alert = NSAlert()
         alert.messageText = message
