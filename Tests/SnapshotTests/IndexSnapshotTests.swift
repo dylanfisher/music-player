@@ -217,3 +217,13 @@ private final class Failures: @unchecked Sendable {
     }
     try requireLocal(FileManager.default.temporaryDirectory, isLocal: true)
 }
+
+/// A leftover another copy deletes between the listing and the read of its date is gone, not
+/// a failed write.
+@Test func aLeftoverThatVanishesIsTakenAsGone() throws {
+    let gone = FileManager.default.temporaryDirectory
+        .appendingPathComponent(".library-2026-11-01-\(UUID().uuidString).sqlite.partial")
+    #expect(try modificationDate(gone) == nil)
+    try Data("x".utf8).write(to: gone)
+    #expect(try modificationDate(gone) != nil)
+}

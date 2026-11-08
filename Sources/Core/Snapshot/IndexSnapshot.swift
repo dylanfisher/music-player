@@ -118,10 +118,19 @@ func removePartials(in folder: URL, olderThan cutoff: Date) throws {
     for name in try FileManager.default.contentsOfDirectory(atPath: folder.path)
     where SnapshotName.isPartial(name) {
         let url = folder.appendingPathComponent(name, isDirectory: false)
-        let changed = try url.resourceValues(forKeys: [.contentModificationDateKey])
-            .contentModificationDate
-        guard let changed, changed < cutoff else { continue }
+        guard let changed = try modificationDate(url), changed < cutoff else { continue }
         try removeIfThere(url)
+    }
+}
+
+/// When the file at `url` last changed, or nil when it's gone, as another copy's write
+/// deletes its own between a listing and this read.
+func modificationDate(_ url: URL) throws -> Date? {
+    do {
+        return try url.resourceValues(forKeys: [.contentModificationDateKey])
+            .contentModificationDate
+    } catch CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile {
+        return nil
     }
 }
 
