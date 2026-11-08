@@ -30,6 +30,15 @@ public enum CoverProblem: Error, Equatable, Sendable, CustomStringConvertible {
     case tooLarge(width: Int, height: Int)
     case fetch(DiscogsAPIError)
 
+    /// Whether asking again would give the same answer: the release or its image is what it
+    /// is. A token added, the network back or the rate limit passed can change the others.
+    public var isLasting: Bool {
+        switch self {
+        case .noImage, .notAnImage, .damaged, .tooLarge: true
+        case .needsToken, .fetch: false
+        }
+    }
+
     public var description: String {
         switch self {
         case .needsToken: "covers need a Discogs token in config.json"

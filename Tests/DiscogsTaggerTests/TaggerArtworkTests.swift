@@ -118,7 +118,27 @@ private final class Asked: @unchecked Sendable {
         #expect(plan.files.allSatisfy { $0.edit.art == nil })
         #expect(asked.all.isEmpty, "\(mode) \(token)")
         #expect(!TaggerModel.confirmation(plan).message.contains("cover"))
+        // Artwork on without a token says why there's no cover; off says nothing.
+        let needs = "no cover: \(CoverProblem.needsToken)"
+        #expect(plan.problems.filter { $0.hasSuffix(needs) }.count == (token ? 0 : 2))
+        #expect(TaggerModel.confirmation(plan).detail.contains(needs) == !token)
     }
+}
+
+@MainActor
+@Test func aCoverThatFailedForTheNetworkIsAskedForAgainAndALastingFailureIsNot() async throws {
+    let asked = Asked()
+    let tries = Asked()
+    let tagger = await artworkModel(.replace, token: true, asked: asked) { id in
+        tries.add(id)
+        if id == 20 { return .failure(.noImage) }
+        return tries.all.count == 1 ? .failure(.fetch(.offline)) : .success(fakeCover)
+    }
+    let first = try #require(await tagger.plan([1, 2]))
+    #expect(first.coverCount == 0)
+    let second = try #require(await tagger.plan([1, 2]))
+    #expect(second.coverCount == 3, "album 1's cover, asked again")
+    #expect(asked.all.sorted() == [10, 10, 20], "album 2's lasting failure isn't asked again")
 }
 
 @MainActor

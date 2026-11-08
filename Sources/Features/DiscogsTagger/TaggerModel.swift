@@ -505,15 +505,22 @@ final class TaggerModel {
     private func covered(_ set: AlbumChangeSet, _ album: Album) async -> (
         AlbumChangeSet, problem: String?
     ) {
-        guard choices.artwork != .off, hasToken(), let releaseID = album.match.releaseID else {
+        guard choices.artwork != .off, let releaseID = album.match.releaseID else {
             return (set, nil)
+        }
+        guard hasToken() else {
+            return (set, "\(albumTitle(album.album)): no cover: \(CoverProblem.needsToken)")
         }
         let result: Result<Cover, CoverProblem>
         if let known = covers[releaseID] {
             result = known
         } else {
             result = await effects.cover(releaseID)
-            covers[releaseID] = result
+            // A failure the network, the rate limit or a stop caused is asked again next time.
+            switch result {
+            case .failure(let problem) where !problem.isLasting: break
+            default: covers[releaseID] = result
+            }
         }
         switch result {
         case .success(let cover): return (set.covering(cover, mode: choices.artwork), nil)
