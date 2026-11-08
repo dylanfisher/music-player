@@ -56,7 +56,7 @@ struct SyncAdded {
 /// it, so the event is stored exactly when the change is, by any connection.
 extension LibraryIndex {
     /// The ID this machine's log is named by in the sync folder.
-    func machineID() throws -> String {
+    package func machineID() throws -> String {
         try statement("SELECT machine FROM \(syncStateTable)").map { try $0.text(0) }[0]
     }
 

@@ -105,3 +105,14 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
     downloads.stop()
     #expect(stopped.isCancelled)
 }
+
+@Test func thisMacsNameIsTheIndexsMachineIDAndStaysTheSame() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "machine-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let database = folder.appendingPathComponent("library.sqlite", isDirectory: false)
+    let id = try LibraryIndex(at: database).machineID()
+    #expect(try await Downloads.machineName(databaseURL: database) == id)
+    #expect(try await Downloads.machineName(databaseURL: database) == id)
+    #expect(!id.isEmpty && id.count <= Downloads.machineNameCap)
+}

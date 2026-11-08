@@ -9,9 +9,6 @@ import Metadata
 import Recommender
 import Settings
 
-/// The service's own limit on a machine's name.
-private let machineNameCap = 64
-
 /// Soulseek downloads (phase 54): File > Downloads… opens the window, and the downloads run
 /// from launch to quit while the service's address and token are set. The import's trash, its
 /// stats carried by the watcher and its rescan are wired here, and Open in Tagger opens a
@@ -35,8 +32,29 @@ extension AppDelegate {
     /// Starts the downloads when the service's address and token are set, and stops them when
     /// either is cleared.
     func applyDownloadsSettings() {
-        guard let settings, let setup = downloadsSetup(settings) else { return downloads.stop() }
-        downloads.start(setup)
+        downloadsStarting?.cancel()
+        downloadsStarting = nil
+        guard let settings, downloadsAreSet(settings) else { return downloads.stop() }
+        let database = libraryFileURL(in: paths.dataDirectory)
+        // The name comes from the index, which is read off the main thread.
+        downloadsStarting = Task { [weak self] in
+            let machine: String
+            do {
+                machine = try await Downloads.machineName(databaseURL: database)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.fail("Downloads can't start", error)
+                return
+            }
+            guard !Task.isCancelled, let self, let settings = self.settings,
+                let setup = downloadsSetup(settings, machine: machine)
+            else { return }
+            downloads.start(setup)
+        }
+    }
+
+    private func downloadsAreSet(_ settings: ConfigStore<AppSettings>) -> Bool {
+        settings[\.recommenderAddress]?.address != nil && settings[\.recommenderToken] != nil
     }
 
     func makeDownloads() -> Downloads {
@@ -59,21 +77,18 @@ extension AppDelegate {
 
     /// What the downloads are made from, or nil while the service's address or token isn't
     /// set.
-    private func downloadsSetup(_ settings: ConfigStore<AppSettings>) -> Downloads.Setup? {
+    private func downloadsSetup(_ settings: ConfigStore<AppSettings>, machine: String)
+        -> Downloads.Setup?
+    {
         guard let address = settings[\.recommenderAddress]?.address,
             let token = settings[\.recommenderToken]
         else { return nil }
-        guard let machine = Host.current().localizedName, !machine.isEmpty else {
-            fail(
-                "Downloads can't start", DownloadsSetupProblem("this Mac has no computer name"))
-            return nil
-        }
         let port = UInt16(settings[\.recommenderPort])
         let staging = settings[\.stagingFolder]
         let libraryFolder = settings[\.libraryFolder]
         return Downloads.Setup(
-            machine: String(machine.prefix(machineNameCap)),
-            service: DownloadsService(machine: String(machine.prefix(machineNameCap))) {
+            machine: machine,
+            service: DownloadsService(machine: machine) {
                 () throws(RecommenderError) in
                 try RecommenderClient(address: address, port: port, token: token)
             },

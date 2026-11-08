@@ -124,6 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var discogsTagger: DiscogsTagger?
     /// The tagger open on a staged download's discrepancy, while it's open.
     var stagedTagger: DiscogsTagger?
+    /// The start of the downloads, waiting for this Mac's name; a settings change replaces it.
+    var downloadsStarting: Task<Void, Never>?
     /// Soulseek downloads, which run while the service is set (phase 54).
     private(set) lazy var downloads = makeDownloads()
     private(set) var dispatcher: CommandDispatcher?
@@ -502,6 +504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         volumeKeyTap?.stop()
         scriptServer?.stop()
         receiver?.stop()
+        downloadsStarting?.cancel()
         downloads.stop()
         window?.saveToolbarVisibility()
         saver?.flush()
