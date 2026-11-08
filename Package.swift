@@ -200,7 +200,8 @@ let package = Package(
         .target(
             name: "DiscogsTagger",
             dependencies: [
-                "Discogs", "DisplayText", "Library", "Log", "Metadata", "Settings", "TagWriter",
+                "Discogs", "DisplayText", "Library", "Log", "Metadata", "Recommender", "Settings",
+                "TagWriter",
             ],
             path: "Sources/Features/DiscogsTagger",
             swiftSettings: strictSwift
@@ -208,7 +209,8 @@ let package = Package(
         .target(
             name: "Downloads",
             dependencies: [
-                "Discogs", "DisplayText", "Library", "Log", "Recommender", "Settings", "TagWriter",
+                "Analysis", "Discogs", "DisplayText", "Library", "Log", "Metadata", "Recommender",
+                "Settings", "TagWriter",
             ],
             path: "Sources/Features/Downloads",
             swiftSettings: strictSwift
@@ -244,10 +246,10 @@ let package = Package(
             name: "MusicPlayer",
             dependencies: [
                 "Analysis", "Artwork", "Commands", "Discogs", "DiscogsTagger", "DisplayText",
-                "HALOutput", "KeyChord", "Library",
+                "Downloads", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
-                "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Scripting",
-                "SQLite", "Settings", "SettingsWindow", "Spectrum", "TagEditor", "TagWriter",
+                "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Recommender",
+                "Scripting", "SQLite", "Settings", "SettingsWindow", "Spectrum", "TagEditor", "TagWriter",
                 "UPnP", "UPnPOutput",
             ],
             path: "Sources/App/MusicPlayer",
@@ -360,7 +362,10 @@ let package = Package(
         ),
         .testTarget(
             name: "DownloadsTests",
-            dependencies: ["Discogs", "Downloads", "Library", "LocalNetwork", "Recommender"],
+            dependencies: [
+                "Analysis", "Discogs", "Downloads", "Fixtures", "Library", "LocalNetwork",
+                "Recommender",
+            ],
             swiftSettings: strictSwift
         ),
         .testTarget(

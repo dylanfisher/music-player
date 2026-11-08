@@ -40,6 +40,10 @@ struct DownloadRow: Equatable, Sendable {
     var releaseID: Int
     /// The policy, and once a folder is chosen what it holds.
     var format: String
+    /// The Soulseek folder chosen: its peer and size; empty before one is.
+    var candidate: String
+    /// For an upgrade, what it replaces, for the source's tooltip.
+    var replaces: String?
     /// The state in words.
     var state: String
     /// From 0 to 1 while downloading, for the progress bar.
@@ -62,6 +66,8 @@ struct DownloadRow: Equatable, Sendable {
         album = Self.album(job.release)
         releaseID = job.release.releaseID
         format = Self.format(job)
+        candidate = Self.candidate(job)
+        replaces = job.upgrade.map { "Replaces \($0.currentQuality)" }
         state = Self.state(job)
         progress = job.state == .downloading ? job.progress.map(Self.fraction) : nil
         tagging = Self.tagging(job.tagging, state: job.state)
@@ -178,6 +184,14 @@ struct DownloadRow: Equatable, Sendable {
         return words + ", \(found.fileCount) file\(found.fileCount == 1 ? "" : "s")"
     }
 
+    /// "made-up-peer, 53 MB": who the folder is from and how big it is.
+    static func candidate(_ job: DownloadJob) -> String {
+        guard let found = job.candidate else { return "" }
+        let size = ByteCountFormatter.string(
+            fromByteCount: Int64(found.bytes), countStyle: .file)
+        return "\(found.peer), \(size)"
+    }
+
     static func policyName(_ policy: FormatPolicy) -> String {
         switch policy {
         case .flac: "FLAC"
@@ -186,6 +200,9 @@ struct DownloadRow: Equatable, Sendable {
         case .any: "Any format"
         }
     }
+
+    /// "Discogs release 4242", as the window and its sheets name a release.
+    static func releaseName(_ id: Int) -> String { "Discogs release \(id)" }
 
     /// "Artist - Title (year)", without the year when the release has none.
     static func album(_ release: DownloadJob.Release) -> String {

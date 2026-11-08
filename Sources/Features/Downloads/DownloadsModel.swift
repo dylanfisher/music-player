@@ -141,6 +141,70 @@ final class DownloadsModel {
         changed()
     }
 
+    /// The job a row shows.
+    func job(_ id: Int) -> DownloadJob? { jobs.rows[id] }
+
+    /// Starts the job `id` again, with `policy` for a retry that searches again. Nil when the
+    /// service took it, else why not.
+    func retry(_ id: Int, policy: FormatPolicy?) async -> String? {
+        let retry = service.retry
+        return await answer { () throws(RecommenderError) in try await retry(id, policy) }
+    }
+
+    func cancel(_ id: Int) async -> String? {
+        let cancel = service.cancel
+        return await answer { () throws(RecommenderError) in try await cancel(id) }
+    }
+
+    /// Queues each of `orders`, in order, and returns why each one the service refused was.
+    func create(_ orders: [(snapshot: ReleaseSnapshot, order: JobOrder)]) async -> [String] {
+        let create = service.create
+        var problems: [String] = []
+        for (snapshot, order) in orders {
+            if let problem = await answer({ () throws(RecommenderError) in
+                try await create(snapshot, order)
+            }) {
+                problems.append("\(snapshot.artist) - \(snapshot.title): \(problem)")
+            }
+        }
+        return problems
+    }
+
+    /// Runs `call` and shows the job it answers with; nil then, else what it threw.
+    private func answer(_ call: () async throws(RecommenderError) -> DownloadJob) async
+        -> String?
+    {
+        do throws(RecommenderError) {
+            took(try await call())
+            return nil
+        } catch {
+            return error.description
+        }
+    }
+
+    /// The window's status line: what's wrong with the service, else what this Mac can't do,
+    /// then the coordinator's `problems`, newest last. Empty when there's nothing to say.
+    nonisolated static func status(
+        _ connection: Connection, canAdd: Bool, problems: [String],
+        formatted: (Date) -> String
+    ) -> String {
+        var lines: [String] = []
+        switch connection {
+        case .waiting: lines.append("Asking music-recommender for its downloads…")
+        case .answering: break
+        case .down(let why, let lastGood):
+            lines.append(
+                "Can't reach the service: \(why)."
+                    + (lastGood.map { " The rows are as they were at \(formatted($0))." } ?? ""))
+        }
+        if !canAdd {
+            lines.append(
+                "There's no Discogs catalog on this Mac, so it can't queue or tag downloads.")
+        }
+        lines += problems
+        return lines.joined(separator: " ")
+    }
+
     private func buildRows() {
         let answering = connection == .answering
         rows = jobs.rows.values.compactMap {

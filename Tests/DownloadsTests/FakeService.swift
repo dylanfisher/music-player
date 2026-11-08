@@ -133,7 +133,67 @@ final class FakeService: @unchecked Sendable {
     var service: DownloadsService {
         DownloadsService(
             refreshed: { jobs throws(RecommenderError) in try self.refreshed(jobs) },
-            handoff: { id, event throws(RecommenderError) in try self.handoff(id, event) })
+            handoff: { id, event throws(RecommenderError) in try self.handoff(id, event) },
+            create: { snapshot, order throws(RecommenderError) in try self.create(snapshot, order) },
+            retry: { id, policy throws(RecommenderError) in try self.retry(id, policy) },
+            cancel: { id throws(RecommenderError) in try self.cancel(id) })
+    }
+
+    /// Every job created, with its order.
+    var created: [(release: Int, order: JobOrder)] { lock.withLock { orders } }
+    private var orders: [(release: Int, order: JobOrder)] = []
+
+    private func create(_ snapshot: ReleaseSnapshot, _ order: JobOrder) throws(RecommenderError)
+        -> DownloadJob
+    {
+        try locked { () throws(RecommenderError) -> DownloadJob in
+            if isDown { throw unreachable("/v1/downloads/create") }
+            if store.values.contains(where: {
+                $0.release.releaseID == snapshot.releaseID
+                    && ![.imported, .rejected, .cancelled].contains($0.state)
+            }) {
+                throw RecommenderError(
+                    service: "fake",
+                    kind: .refused(ServiceRefusal(code: .alreadyActive, message: "already_active")))
+            }
+            orders.append((snapshot.releaseID, order))
+            revision += 1
+            var made = DownloadsTests.job((store.keys.max() ?? 0) + 1, .queued)
+            made.release.releaseID = snapshot.releaseID
+            made.revision = revision
+            store[made.id] = made
+            return made
+        }
+    }
+
+    private func retry(_ id: Int, _ policy: FormatPolicy?) throws(RecommenderError) -> DownloadJob {
+        try change(id, "/v1/downloads/retry") { job in
+            job.state = .queued
+            job.failedStage = nil
+            if let policy { job.formatPolicy = policy }
+        }
+    }
+
+    private func cancel(_ id: Int) throws(RecommenderError) -> DownloadJob {
+        try change(id, "/v1/downloads/cancel") { $0.state = .cancelled }
+    }
+
+    private func change(_ id: Int, _ path: String, _ body: (inout DownloadJob) -> Void)
+        throws(RecommenderError) -> DownloadJob
+    {
+        try locked { () throws(RecommenderError) -> DownloadJob in
+            if isDown { throw unreachable(path) }
+            guard var job = store[id] else {
+                throw RecommenderError(
+                    service: "fake",
+                    kind: .refused(ServiceRefusal(code: .noSuchJob, message: "no_such_job")))
+            }
+            body(&job)
+            revision += 1
+            job.revision = revision
+            store[id] = job
+            return job
+        }
     }
 
     /// Stores `job` at the next revision, as a change the service made.
