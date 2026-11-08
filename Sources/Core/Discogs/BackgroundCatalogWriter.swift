@@ -1,12 +1,11 @@
 import Foundation
 
 /// A `CatalogWriter` on a thread of its own, so a dump's records are parsed while the ones
-/// before them are encoded and inserted (ADR 0130). Records go over in batches, a transaction
-/// each, and at most `batchesInFlight` wait at once, so memory stays flat however fast the
-/// parser runs ahead.
+/// before them are encoded and inserted (ADR 0130). Records go over in batches, and at most
+/// `batchesInFlight` wait at once, so memory stays flat however fast the parser runs ahead; a
+/// checkpoint commits them (ADR 0134).
 final class BackgroundCatalogWriter: @unchecked Sendable {
-    /// Records a transaction holds: enough that a commit costs nothing next to its inserts,
-    /// few enough that the batches waiting hold a few tens of MB.
+    /// Records a batch holds: few enough that the batches waiting hold a few tens of MB.
     static let recordsPerBatch = 2000
     static let batchesInFlight = 2
 
@@ -19,8 +18,15 @@ final class BackgroundCatalogWriter: @unchecked Sendable {
     private var failure: (any Error)?
     private var pending: [DumpRecord] = []
 
-    init(creatingAt url: URL) throws {
-        writer = try CatalogWriter(creatingAt: url)
+    /// A new catalog at `url`, as `CatalogWriter(creatingAt:checkpoint:)` makes it.
+    init(creatingAt url: URL, checkpoint: ImportCheckpoint) throws {
+        writer = try CatalogWriter(creatingAt: url, checkpoint: checkpoint)
+        pending.reserveCapacity(Self.recordsPerBatch)
+    }
+
+    /// An unfinished catalog at `url`, as `CatalogWriter(resumingAt:)` opens it.
+    init(resumingAt url: URL) throws {
+        writer = try CatalogWriter(resumingAt: url)
         pending.reserveCapacity(Self.recordsPerBatch)
     }
 
@@ -32,12 +38,19 @@ final class BackgroundCatalogWriter: @unchecked Sendable {
         if pending.count == Self.recordsPerBatch { send() }
     }
 
-    /// Writes what's left, waits for every batch, then builds the indexes and notes the dump.
-    func finish(dumpDate: String) throws {
+    /// Writes the records added so far, and waits for them to be committed with `checkpoint`.
+    func checkpoint(_ checkpoint: ImportCheckpoint) throws {
+        send(checkpoint: checkpoint)
+        try queue.sync { try throwFailure() }
+    }
+
+    /// Writes what's left, waits for every batch, then builds the indexes and commits them
+    /// with `checkpoint`, the last.
+    func finish(_ checkpoint: ImportCheckpoint) throws {
         send()
         try queue.sync {
             try throwFailure()
-            try writer.finish(dumpDate: dumpDate)
+            try writer.finish(checkpoint)
         }
     }
 
@@ -48,8 +61,9 @@ final class BackgroundCatalogWriter: @unchecked Sendable {
         queue.sync {}
     }
 
-    private func send() {
-        guard !pending.isEmpty else { return }
+    /// Sends the records added, then `checkpoint` if any, to be written in order.
+    private func send(checkpoint: ImportCheckpoint? = nil) {
+        guard !pending.isEmpty || checkpoint != nil else { return }
         let batch = pending
         pending.removeAll(keepingCapacity: true)
         slots.wait()
@@ -58,6 +72,7 @@ final class BackgroundCatalogWriter: @unchecked Sendable {
             guard currentFailure == nil else { return }
             do {
                 try writer.write(batch)
+                if let checkpoint { try writer.commit(checkpoint) }
             } catch {
                 lock.lock()
                 failure = error

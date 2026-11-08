@@ -1,6 +1,7 @@
 /// The catalog's tables (ADR 0130). A release's, a master's and an artist's lists are one JSON
 /// value in their row, since the catalog is only ever read a record at a time; the folded keys
-/// are tables of their own, indexed once every row is in.
+/// are tables of their own, indexed once every row is in. `import_checkpoint` holds where an
+/// unfinished import carries on from (ADR 0134), and the finished import's counts after.
 enum CatalogSchema {
     static let tables = """
         CREATE TABLE catalog (dump_date TEXT NOT NULL, schema TEXT NOT NULL);
@@ -18,6 +19,7 @@ enum CatalogSchema {
         CREATE TABLE barcode_keys (barcode_key TEXT NOT NULL, release_id INTEGER NOT NULL);
         CREATE TABLE catno_keys (
             label_key TEXT NOT NULL, catno_key TEXT NOT NULL, release_id INTEGER NOT NULL);
+        CREATE TABLE import_checkpoint (checkpoint TEXT NOT NULL, sha256 TEXT NOT NULL);
         """
 
     /// Built after the last row, which sorts each once instead of inserting into it in key

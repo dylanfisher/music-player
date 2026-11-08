@@ -2,14 +2,14 @@ import DisplayText
 
 /// Where an import is, as the window shows it.
 public struct CatalogImportProgress: Equatable, Sendable {
-    enum Stage: Equatable, Sendable {
+    public enum Stage: Equatable, Sendable {
         case reading(DumpKind)
         /// Every file is read and checked; the lookups' indexes are being built.
         case indexing
         case finished
     }
 
-    var stage: Stage
+    public internal(set) var stage: Stage
     /// The dump set's date, as its file names have it.
     var dumpDate: String
     /// The compressed bytes read so far, of `totalBytes`.
@@ -17,6 +17,9 @@ public struct CatalogImportProgress: Equatable, Sendable {
     var totalBytes: Int
     /// The records imported so far, by dump.
     var records: [DumpKind: Int]
+    /// Whether a checkpoint was committed just before this report: an import stopped or
+    /// killed from here on resumes here at the least (ADR 0134).
+    public internal(set) var checkpointed = false
 
     /// How far the import is, from 0 to 1, by the bytes read: the index build at the end
     /// counts as the last bytes.

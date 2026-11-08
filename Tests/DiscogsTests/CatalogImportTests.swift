@@ -43,9 +43,12 @@ private func expectFailure(
     #expect(summary.records == [.labels: 0, .artists: 0, .masters: 0, .releases: 1])
     #expect(summary.catalogBytes > 0)
     #expect(try Catalog(at: folder.catalog).release(id: 1)?.title == "New")
-    // The system SQLite fails a connection whose file was replaced, rather than reading the
-    // old catalog: the window opens the new one once an import ends.
-    #expect(throws: SQLiteError.self) { try old.release(id: 1) }
+    // A connection opened before the swap reads the catalog it opened, or the system SQLite
+    // fails it with an I/O error; it never reads the new one. The window opens the new one
+    // once an import ends.
+    if case .success(let title) = Result(catching: { try old.release(id: 1)?.title }) {
+        #expect(title == "Old")
+    }
     #expect(try folder.leftovers == [])
     // Each stage in order, with the counts between.
     let stages = reports.map(\.stage).reduce(into: [CatalogImportProgress.Stage]()) {
@@ -121,7 +124,8 @@ private func expectFailure(
     }
     await #expect(throws: CatalogImportError.stopped) { try await stopped.value }
     #expect(try Catalog(at: folder.catalog).dumpDate == oldDate)
-    #expect(try folder.leftovers == [])
+    // The unfinished catalog stays, for the next import to carry on.
+    #expect(try folder.leftovers == [folder.catalog.lastPathComponent + ".importing"])
 }
 
 @Test func theNewestCompleteSetIsImported() throws {

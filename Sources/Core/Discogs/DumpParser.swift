@@ -14,8 +14,6 @@ enum DumpRecord: Sendable {
 /// record's id is optional, as the dumps leave out what a record doesn't have. Belongs to the
 /// thread that parses.
 final class DumpParser: NSObject, XMLParserDelegate {
-    /// Records parsed between two checks for a stop.
-    static let recordsPerStopCheck = 256
     /// The identifier type the barcodes are, the only identifiers kept.
     static let barcodeType = "Barcode"
 
@@ -24,7 +22,8 @@ final class DumpParser: NSObject, XMLParserDelegate {
     private let skipped: Set<DumpElement>
     private let file: String
     private let emit: (DumpRecord) throws -> Void
-    /// Why parsing stopped early: a malformed record, a stop, or an error from `emit`.
+    /// Why parsing stopped early: a malformed record, or an error from `emit`. A stop waits
+    /// for the batch's end, where the import takes a checkpoint (ADR 0134).
     private(set) var failure: (any Error)?
     private(set) var records = 0
     private weak var parser: XMLParser?
@@ -204,7 +203,6 @@ final class DumpParser: NSObject, XMLParserDelegate {
             return
         }
         records += 1
-        if records % Self.recordsPerStopCheck == 0, Task.isCancelled { stop(.stopped) }
     }
 
     private func stop(_ error: CatalogImportError) {
