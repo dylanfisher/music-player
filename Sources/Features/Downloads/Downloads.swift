@@ -90,6 +90,8 @@ package final class Downloads {
     private(set) var controller: DownloadsWindow?
     /// An open sheet's controller, held while it shows.
     private var sheet: NSWindowController?
+    /// The Approve… in progress, until its sheet shows or it stops.
+    var reviewing: Task<Void, Never>?
 
     /// The selected library tracks' ids, for From Library Selection.
     package var selectedTracks: () throws -> [Int64] = { [] }
@@ -148,6 +150,7 @@ package final class Downloads {
 
     /// Stops polling, at quit or when the service's settings are cleared.
     package func stop() {
+        cancelReview()
         session?.model.stop()
         session = nil
         refresh()
@@ -226,7 +229,10 @@ package final class Downloads {
         made.applies = { [weak self] action, row in self?.applies(action, row) ?? false }
         made.act = { [weak self] action, row in self?.act(action, row) }
         made.add = { [weak self] addition in self?.add(addition) }
-        made.visibilityChanged = { [weak self] open in self?.session?.model.setWindowOpen(open) }
+        made.visibilityChanged = { [weak self] open in
+            if !open { self?.cancelReview() }
+            self?.session?.model.setWindowOpen(open)
+        }
         controller = made
         return made
     }
@@ -259,8 +265,8 @@ package final class Downloads {
     private func act(_ action: DownloadAction, _ row: DownloadRow) {
         guard let session, let job = session.model.job(row.id) else { return }
         switch action {
-        case .approve: Task { await review(job, session, resuming: false) }
-        case .resumeHere: Task { await review(job, session, resuming: true) }
+        case .approve: reviewing = Task { await review(job, session, resuming: false) }
+        case .resumeHere: reviewing = Task { await review(job, session, resuming: true) }
         case .reject:
             confirm(
                 "Reject \(row.album)?",
@@ -311,6 +317,12 @@ package final class Downloads {
         }
     }
 
+    /// Stops the Approve… still checking the staged files, which gives its claim back.
+    func cancelReview() {
+        reviewing?.cancel()
+        reviewing = nil
+    }
+
     /// Approve… and Resume Here: takes the review claim (Resume Here takes it over when it
     /// runs), works out the plan, and runs the import once the sheet approves it. Every way out
     /// before the import gives a claim Approve took back. Returns when the sheet is up.
@@ -351,6 +363,11 @@ package final class Downloads {
         let plan = await ApprovalPlan.build(
             job, places: places, databaseURL: setup.databaseURL,
             catalog: session.canTag ? setup.catalog : nil)
+        guard !Task.isCancelled else {
+            // The claim goes back from a task of its own: this one's requests are cancelled too.
+            Task { await giveUp() }
+            return
+        }
         let approve = ApproveSheet(plan: plan, album: DownloadRow.album(job.release))
         let shown = present(approve) {
             guard let approved = approve.result else {
@@ -373,6 +390,7 @@ package final class Downloads {
                 await session.model.poll()
             }
         }
+        reviewing = nil
         if !shown { await giveUp() }
     }
 

@@ -21,12 +21,17 @@ private let originKinds: Set<Verdict.Kind> = [.lossyOrigin, .upsampled]
 /// takes seconds, and one album's files come from one rip.
 let stagedOriginFileCount = 2
 
-/// Analyzes the first and last of `paths`, a staged album's files in order. Blocks on the
-/// reads, so call it off the main thread. Cancelling the task stops the file being analyzed.
-package func stagedOrigins(_ paths: [String]) throws -> [StagedOrigin] {
+/// Analyzes the first and last of `paths`, a staged album's files in order, on a task of its
+/// own at utility priority: the reads block. Cancelling the caller stops the file being
+/// analyzed.
+package func stagedOrigins(_ paths: [String]) async throws -> [StagedOrigin] {
     let chosen =
         paths.count <= stagedOriginFileCount ? paths : [paths[0], paths[paths.count - 1]]
-    return try chosen.map { path in
+    return try await offMain { try origins(of: chosen) }
+}
+
+private func origins(of chosen: [String]) throws -> [StagedOrigin] {
+    try chosen.map { path in
         do {
             let result = try analyzeFile(at: URL(fileURLWithPath: path, isDirectory: false))
             return StagedOrigin(

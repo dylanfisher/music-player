@@ -118,10 +118,10 @@ struct ApprovalPlan: Sendable {
                 plan.movesProblem = "\(error)"
             }
             let paths = job.files.map { places.stagingRoot + "/" + folder + "/" + $0.name }
-            switch await Task.detached(operation: { Result { try stagedOrigins(paths) } }).value
-            {
-            case .success(let origins): plan.origins = origins
-            case .failure(let error): plan.originsProblem = "\(error)"
+            do {
+                plan.origins = try await stagedOrigins(paths)
+            } catch {
+                plan.originsProblem = "\(error)"
             }
         }
         if let upgrade = job.upgrade {
