@@ -352,3 +352,22 @@ private func residentFraction(_ url: URL) throws -> Double {
     try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
     #expect(throws: POSIXError.self) { try Database.readAhead(at: link) }
 }
+
+@Test func aRollbackJournalFileRollsBackATransactionLeftOpen() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sqlite-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("bulk.sqlite")
+    #expect(throws: SQLiteError.self) { try Database(rollbackJournalAt: url, creating: false) }
+    let writer = try Database(rollbackJournalAt: url, creating: true)
+    #expect(try writer.prepare("PRAGMA journal_mode").map { try $0.text(0) } == ["delete"])
+    try writer.execute("CREATE TABLE t (i INTEGER); INSERT INTO t VALUES (1)")
+    try writer.execute("BEGIN; INSERT INTO t VALUES (2)")
+    // A killed process leaves the file and its journal as they are now.
+    let copy = directory.appendingPathComponent("copy.sqlite")
+    for suffix in ["", "-journal"] {
+        try FileManager.default.copyItem(atPath: url.path + suffix, toPath: copy.path + suffix)
+    }
+    let reopened = try Database(rollbackJournalAt: copy, creating: false)
+    #expect(try reopened.prepare("SELECT i FROM t").map { try $0.int(0) } == [1])
+}

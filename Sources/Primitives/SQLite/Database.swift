@@ -70,6 +70,17 @@ public final class Database {
         try execute("PRAGMA trusted_schema = OFF; PRAGMA query_only = ON")
     }
 
+    /// Opens the file at `url` with a rollback journal rather than WAL, for a file written in
+    /// bulk in a few large transactions: WAL would write every page twice. A process killed
+    /// mid-transaction leaves its journal, and the next connection to open the file rolls the
+    /// transaction back. `creating` makes the file when there's none; otherwise a missing file
+    /// fails. Foreign keys aren't enforced.
+    public init(rollbackJournalAt url: URL, creating: Bool) throws(SQLiteError) {
+        connection = try Self.open(
+            url, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | (creating ? SQLITE_OPEN_CREATE : 0))
+        try execute("PRAGMA journal_mode = DELETE")
+    }
+
     private static func open(_ url: URL, _ flags: Int32) throws(SQLiteError) -> OpaquePointer {
         var connection: OpaquePointer?
         guard sqlite3_open_v2(url.path, &connection, flags, nil) == SQLITE_OK, let connection
