@@ -23,6 +23,7 @@ private let masters = """
     #expect(try catalog.releaseIDs(barcode: "7-18755-61492-1") == [10, 11])
     #expect(try catalog.releaseIDs(barcode: "123") == [])
     #expect(try catalog.releaseIDs(barcode: " ") == [])
+    #expect(try catalog.releaseIDs(barcode: "none") == [])
 }
 
 @Test func aReleaseIsFoundByItsLabelAndCatalogNumber() throws {

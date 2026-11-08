@@ -41,6 +41,7 @@ import Testing
     #expect(CatalogKey.barcode("0 7464-63628-2 2") == CatalogKey.barcode("074646362822"))
     #expect(CatalogKey.catalogNumber("SK 026") == "sk026")
     #expect(CatalogKey.catalogNumber("none") == nil)
+    #expect(CatalogKey.barcode("None") == "")
     #expect(CatalogKey.catalogNumber(" - ") == nil)
 }
 

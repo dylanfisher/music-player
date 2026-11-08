@@ -34,8 +34,12 @@ enum CatalogKey {
     }
 
     /// The key a barcode is looked up by: its letters and digits, so "0 7464-63628-2 2" and
-    /// "074646362822" are one.
-    static func barcode(_ text: String) -> String { fold(text) }
+    /// "074646362822" are one. Empty for "none", which tags and Discogs both write for a
+    /// release without one.
+    static func barcode(_ text: String) -> String {
+        let folded = fold(text)
+        return folded == "none" ? "" : folded
+    }
 
     /// The key a catalog number is looked up by, with its label's folded name. Nil for no
     /// number: Discogs writes "none" for a release without one.
