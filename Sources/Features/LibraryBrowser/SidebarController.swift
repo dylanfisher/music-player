@@ -263,8 +263,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
-        if !playlistFileURLs(info.draggingPasteboard).isEmpty
-            || !addableFileURLs(info.draggingPasteboard).isEmpty
+        // Files from another app; the app's own rows carry their files too, for other apps,
+        // but drop here as tracks.
+        if info.draggingSource == nil,
+            !playlistFileURLs(info.draggingPasteboard).isEmpty
+                || !addableFileURLs(info.draggingPasteboard).isEmpty
         {
             // A file goes to the playlists or the library, not to the row it's over.
             outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex)
@@ -281,15 +284,17 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         _ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?,
         childIndex index: Int
     ) -> Bool {
-        let files = playlistFileURLs(info.draggingPasteboard)
-        if !files.isEmpty {
-            dropPlaylistFiles(files)
-            return true
-        }
-        let audio = addableFileURLs(info.draggingPasteboard)
-        if !audio.isEmpty {
-            dropFiles(audio)
-            return true
+        if info.draggingSource == nil {
+            let files = playlistFileURLs(info.draggingPasteboard)
+            if !files.isEmpty {
+                dropPlaylistFiles(files)
+                return true
+            }
+            let audio = addableFileURLs(info.draggingPasteboard)
+            if !audio.isEmpty {
+                dropFiles(audio)
+                return true
+            }
         }
         guard case .playlist(let playlist) = (item as? SidebarNode)?.kind, playlist.isManual
         else { return false }

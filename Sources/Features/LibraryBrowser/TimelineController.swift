@@ -64,9 +64,8 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
         table.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
         table.allowsColumnReordering = true
         table.allowsColumnResizing = true
-        // Rows go only to the sidebar's playlists, never to another app.
-        table.setDraggingSourceOperationMask(.copy, forLocal: true)
-        table.setDraggingSourceOperationMask([], forLocal: false)
+        // Within the app rows go only to the sidebar's playlists.
+        table.dragWithinApp = .copy
         let played = NSTableColumn(identifier: Self.playedColumn)
         played.title = "Played"
         played.resizingMask = .userResizingMask
@@ -272,10 +271,10 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
         -> (any NSPasteboardWriting)?
     {
-        guard model.entries.indices.contains(row), playedTrack(row)?.track != nil else {
-            return nil
-        }
-        return trackDragItem(model.entries[row].trackID)
+        guard model.entries.indices.contains(row), let played = playedTrack(row),
+            played.track != nil
+        else { return nil }
+        return trackDragItem(model.entries[row].trackID, path: played.path)
     }
 
     // MARK: Keys and selection

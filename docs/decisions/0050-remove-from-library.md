@@ -9,6 +9,8 @@
   folder.
   [0125](0125-trash-always-removes.md): the files the Trash refused are removed from the
   library, and a file moved is one gone from its path.
+  [0141](0141-copy-only-drag-out-of-the-app.md): a drag of rows out of the app offers a copy
+  only.
 
 ## Context
 

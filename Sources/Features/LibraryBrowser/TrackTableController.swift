@@ -154,9 +154,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         table.action = #selector(clicked)
         table.edgeToEdgeColumn = columnIdentifier(.art)
         table.registerForDraggedTypes([trackIDsType, .fileURL])
-        // Rows go only to the sidebar and to other rows, never to another app.
-        table.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
-        table.setDraggingSourceOperationMask([], forLocal: false)
+        // Within the app rows go only to the sidebar and to other rows.
+        table.dragWithinApp = [.copy, .move]
         let shown = layout.columns.map(\.column)
         let order = shown + TrackColumn.allCases.filter { !shown.contains($0) }
         for column in order {
@@ -763,7 +762,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
         -> (any NSPasteboardWriting)?
     {
-        model.trackIDs.indices.contains(row) ? trackDragItem(model.trackIDs[row]) : nil
+        guard model.trackIDs.indices.contains(row) else { return nil }
+        return trackDragItem(model.trackIDs[row], path: trackRow(row)?.path)
     }
 
     /// Rows move only within a manual playlist shown in its own order, between rows. Files from
