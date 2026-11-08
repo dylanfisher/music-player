@@ -243,3 +243,54 @@ private func changed(
     let wrong = changeSet(for: files, match: match(twoDiscs), mapping: mapping)
     #expect(throws: TagValueError.self) { try wrong.edits() }
 }
+
+@Test func theSortArtistIsFilledFromTheAlbumArtistOnlyWhereEmpty() throws {
+    let files = [
+        albumFile(1, .flac, TrackTags()),
+        albumFile(2, .flac, tags { $0.artistSort = "Band, The" }),
+        albumFile(3, .flac, tags { $0.albumArtist = "Mine" }),
+    ]
+    var mapping = oneToOne
+    let set = changeSet(
+        for: files, match: match(twoDiscs), mapping: mapping, fillingSortArtist: true)
+    func sorted(_ set: AlbumChangeSet, _ index: Int) -> TagChange? {
+        set.files[index].changes.first { $0.tag == .field(.artistSort) }
+    }
+    // The album artist the changes write.
+    #expect(sorted(set, 0)?.new == "Band (3)")
+    #expect(sorted(set, 0)?.field == .albumArtist)
+    #expect(sorted(set, 1) == nil, "a sort artist is left as it is")
+    #expect(try set.edits()[0].edit.values[.artistSort] == "Band (3)")
+    // The file's own album artist where the mapping keeps it.
+    mapping[.albumArtist].mode = .fillEmpty
+    let kept = changeSet(
+        for: files, match: match(twoDiscs), mapping: mapping, fillingSortArtist: true)
+    #expect(sorted(kept, 2)?.new == "Mine")
+    #expect(sorted(changeSet(for: files, match: match(twoDiscs), mapping: mapping), 0) == nil)
+    // Nothing to fill from.
+    mapping[.albumArtist].mode = .off
+    let none = changeSet(
+        for: [files[0]], match: match(twoDiscs), mapping: mapping, fillingSortArtist: true)
+    #expect(sorted(none, 0) == nil)
+}
+
+@Test func keepingExistingValuesLeavesTheFilesOwnTitlesAndNumbers() {
+    let file = albumFile(
+        1, .flac,
+        tags {
+            $0.title = "My Opener"
+            $0.artist = "My Band"
+            $0.trackNumber = 9
+            $0.date = "2001"
+        })
+    let kept = changed(twoDiscs, oneToOne.keepingExistingValues(), files: [file])[1]!
+    #expect(kept["title"] == nil)
+    #expect(kept["artist"] == nil)
+    #expect(kept["trackNumber"] == nil)
+    #expect(kept["date"] == nil)
+    #expect(kept["album"] == "Live", "fields that aren't kept are replaced")
+    #expect(kept["trackTotal"] == "2", "an empty tag of a kept field is filled")
+    let replaced = changed(twoDiscs, oneToOne, files: [file])[1]!
+    #expect(replaced["title"] == "Opener")
+    #expect(replaced["date"] == "1999")
+}

@@ -33,6 +33,8 @@ public final class DiscogsTagger {
         }
     /// Saves the mapping chosen in the Field Mapping sheet, and the user's saved ones.
     public var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
+    /// Saves the choices the window's checkboxes set.
+    public var choicesChosen: (TaggerChoices) -> Void = { _ in }
     /// Where the import's folder panel starts: the dumps folder where it is now, if set.
     public var dumpsFolder: () -> URL? = { nil }
     /// Saves the folder the user chose to import from.
@@ -41,7 +43,8 @@ public final class DiscogsTagger {
     /// `reader` gives the albums and keeps the reviews; `catalog` is the catalog's file.
     public init(
         reader: LibraryReader, catalog: URL, mapping: DiscogsMapping,
-        savedMappings: [NamedDiscogsMapping], importing: @escaping Import
+        savedMappings: [NamedDiscogsMapping], choices: TaggerChoices,
+        importing: @escaping Import
     ) {
         model = TaggerModel(
             effects: .init(
@@ -49,7 +52,8 @@ public final class DiscogsTagger {
                 reviews: { try await reader.discogsReviews() },
                 review: { try await reader.setDiscogsReview($0, files: $1) },
                 match: {
-                    try await matchAlbums($0, catalogAt: catalog, choosing: $1, progress: $2)
+                    try await matchAlbums(
+                        $0, catalogAt: catalog, choosing: $1, skippingVideo: $2, progress: $3)
                 },
                 summaries: { try await releaseSummaries($0, catalogAt: catalog) },
                 read: { ids, progress in
@@ -69,7 +73,7 @@ public final class DiscogsTagger {
                 checkCatalog: { await catalogState(at: catalog) },
                 unfinishedImport: { await blockingFileWork { unfinishedImport(of: catalog) } },
                 importCatalog: importing),
-            mapping: mapping, savedMappings: savedMappings)
+            mapping: mapping, savedMappings: savedMappings, choices: choices)
     }
 
     init(model: TaggerModel) {
@@ -99,10 +103,17 @@ public final class DiscogsTagger {
         }
         // The model takes the mapping from `mappingChanged`, once the settings have saved it.
         made.mappingChosen = { [weak self] mapping, saved in self?.mappingChosen(mapping, saved) }
+        // Saved through the settings, which hand them back to `choicesChanged`.
+        made.choicesChosen = { [weak self] in self?.choicesChosen($0) }
         made.dumpsFolder = { [weak self] in self?.dumpsFolder() }
         made.dumpsFolderChosen = { [weak self] in self?.dumpsFolderChosen($0) }
         controller = made
         return made
+    }
+
+    /// The config file's choices changed, as the window's checkboxes or an edit there do.
+    public func choicesChanged(_ choices: TaggerChoices) {
+        model.setChoices(choices)
     }
 
     /// The config file's mapping changed, as an edit there or the sheet's save does.

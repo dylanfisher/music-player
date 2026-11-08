@@ -198,3 +198,29 @@ private final class Imports: @unchecked Sendable {
     #expect(imports.folders == [dumps, dumps])
     controller.window?.close()
 }
+
+@MainActor
+@Test func theChoicesBesideFieldMappingShowAndSaveTheModels() async throws {
+    let tagger = await analyzed()
+    let window = TaggerWindow(model: tagger)
+    var saved: [TaggerChoices] = []
+    window.choicesChosen = { saved.append($0) }
+    #expect(window.keepBox.state == .off)
+    #expect(window.skipVideoBox.state == .on)
+    #expect(window.sortArtistBox.state == .off)
+    #expect(window.mappingButton.superview === window.keepBox.superview, "beside Field Mapping…")
+
+    window.keepBox.performClick(nil)
+    #expect(tagger.choices.keepExistingValues)
+    #expect(
+        saved == [TaggerChoices(keepExistingValues: true, skipVideo: true, fillSortArtist: false)])
+    window.sortArtistBox.performClick(nil)
+    #expect(saved.last?.fillSortArtist == true)
+    window.skipVideoBox.performClick(nil)
+    #expect(saved.last?.skipVideo == false)
+    #expect(!window.skipVideoBox.isEnabled, "off while the rescore runs")
+    await tagger.finished()
+    #expect(window.skipVideoBox.isEnabled)
+    #expect(window.skipVideoBox.state == .off)
+    try snapshot(try #require(window.window), "discogs-tagger-choices")
+}

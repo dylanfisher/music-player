@@ -73,10 +73,12 @@ public struct AlbumChangeSet: Equatable, Sendable {
 /// What the mapping would write to `files` for `match` (ADR 0132). A file the match maps to a
 /// track gets every field; one it maps to none, such as a bonus track the release lacks, gets
 /// the release's fields only. A field Discogs has no value for leaves its tags as they are, and
-/// a field set to fill empty tags leaves a tag that has a value.
-public func changeSet(for files: [AlbumFile], match: AlbumMatch, mapping: DiscogsMapping)
-    -> AlbumChangeSet
-{
+/// a field set to fill empty tags leaves a tag that has a value. `fillingSortArtist` gives a
+/// file with no sort artist the album artist the changes write, else its own (ADR 0132).
+public func changeSet(
+    for files: [AlbumFile], match: AlbumMatch, mapping: DiscogsMapping,
+    fillingSortArtist: Bool = false
+) -> AlbumChangeSet {
     guard let release = match.release else {
         return AlbumChangeSet(
             files: files.map {
@@ -95,11 +97,14 @@ public func changeSet(for files: [AlbumFile], match: AlbumMatch, mapping: Discog
                     tags: file.metadata.tags)
             }
             let place = match.mapping[file.id].map { fields.places[$0] }
+            var changes = changes(
+                file, format: format, place: place, fields: fields, mapping: mapping)
+            if fillingSortArtist, let sorted = sortArtist(file, changes) {
+                changes.append(sorted)
+            }
             return FileChanges(
-                fileID: file.id, path: file.path,
-                changes: changes(
-                    file, format: format, place: place, fields: fields, mapping: mapping),
-                unwritable: nil, tags: file.metadata.tags)
+                fileID: file.id, path: file.path, changes: changes, unwritable: nil,
+                tags: file.metadata.tags)
         })
 }
 
@@ -128,6 +133,19 @@ private func changes(
         }
     }
     return result
+}
+
+/// `ARTISTSORT` as the owner's YATE fills it after an import: the album artist the changes
+/// write, else the file's, where the file has no sort artist and the mapping writes none.
+private func sortArtist(_ file: AlbumFile, _ changes: [TagChange]) -> TagChange? {
+    let tag = MappedTag.field(.artistSort)
+    guard text(tag, in: file.metadata.tags) == nil, !changes.contains(where: { $0.tag == tag })
+    else { return nil }
+    let written = changes.first { $0.tag == .field(.albumArtist) }
+    guard let albumArtist = written?.new ?? file.metadata.tags.albumArtist else { return nil }
+    return TagChange(
+        id: TagChange.ID(fileID: file.id, tag: tag), field: .albumArtist, current: nil,
+        new: albumArtist)
 }
 
 /// The tags `target` gets for `value`, each with its text; nil text removes a numbered key the

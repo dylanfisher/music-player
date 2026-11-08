@@ -113,8 +113,9 @@ func discogsTuning(survey lines: URL, catalog: URL, output: URL) async throws ->
     for titlesOnly in [false, true] {
         let albums = tuningAlbums(records, titlesOnly: titlesOnly)
         let started = Date()
-        let matches = try await matchAlbums(albums.map(\.album), catalogAt: catalog, choosing: [:])
-        {
+        let matches = try await matchAlbums(
+            albums.map(\.album), catalogAt: catalog, choosing: [:], skippingVideo: false
+        ) {
             if $0.albumsDone % 100 == 0 || $0.albumsDone == $0.albumCount {
                 FileHandle.standardError.write(
                     Data("matched \($0.albumsDone) of \($0.albumCount)\n".utf8))

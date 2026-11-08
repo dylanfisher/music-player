@@ -1,8 +1,8 @@
 # 0132. The Discogs field mapping, its presets, and the changes it works out
 
 - **Date:** 2026-11-07
-- **Status:** accepted; amended 2026-11-07 (51f): the shipped presets and styles to `MOOD`
-  only
+- **Status:** accepted; amended 2026-11-07 (51f): the shipped presets, styles to `MOOD` only,
+  and the tagger window's three choices
 - **See also:** [0003](0003-settings-schema.md) (the settings schema), [0128](0128-discogs-survey.md)
   (the owner's layout and YATE's keys), [0129](0129-custom-tag-fields.md) (custom keys, `WXXX`
   and `TIPL`), [0131](0131-discogs-matching.md) (the match a mapping is applied to)
@@ -113,6 +113,31 @@ numbers and totals, composer, conductor, lyricist, remixer and the date fill onl
 It lives in his `config.json` under `discogs.savedMappings`, as any saved mapping does; the app
 ships no copy of it.
 
+### The tagger window's choices
+
+Three settings beside Field Mapping…, each kept in `config.json` so a choice made in the
+window lasts (ADR 0003). They're hidden from the Settings window, as the mappings are, and are
+in the File menu under Discogs Tagger…, as every switch setting is a command:
+
+- **Keep existing values** (`discogs.keepExistingValues`, off by default): on, the fields of
+  `DiscogsMapping.keptFields` that the mapping replaces fill only empty tags, whatever the
+  mapping says; off, the mapping's own modes. It applies to the change set, not to the mapping
+  saved, so turning it off gives the mapping back as it was.
+- **Skip Blu-ray, DVD and video** (`discogs.skipVideo`, on by default): a release whose every
+  format is Blu-ray, DVD or a video format is never a candidate, as YATE's
+  `DiscogsIgnoredMedia` leaves them out. A CD with a DVD stays: its CD may be the files. The
+  catalog keeps each release's formats already, so the check reads them with the release and
+  the catalog's file is unchanged. A release the tracks' ids name, or one the user chose,
+  stays a candidate, so a refresh or a choice isn't lost.
+- **Fill sort artist from album artist** (`discogs.fillSortArtist`, off by default):
+  `ARTISTSORT` gets the album artist the change set writes, else the file's own, only where the
+  file has no sort artist, as the owner's YATE runs after an import. The change shows under the
+  Album Artist field in View Changes.
+
+Changing the skip rescores the albums shown with an Analyze of the same scope; the other two
+apply to the next View Changes or Apply, which work out the changes then. The tuning
+(`TagCorpus --discogs-tuning`) matches without the skip, so its numbers compare with ADR 0131's.
+
 ### The change set
 
 `changeSet(for:match:mapping:)` is a pure function of the album's files with the tags read from
@@ -139,6 +164,12 @@ Nothing in it reads or writes a file: the window reads the album's files and han
   mapping's own.
 - **Deciding the disc from vinyl sides.** Rejected: a side isn't a disc, and a two-LP set's
   positions (A to D) don't say which sides share one.
+
+- **Skipping a release with any video format.** Rejected: a CD with a bonus DVD would leave
+  the candidates when its CD is what the files hold; such a release rarely fits the files'
+  count anyway.
+- **"Keep existing values" as a change to the saved mapping.** Rejected: turning it off would
+  have to know which fields were the mapping's own fill-empty ones.
 
 ## Consequences
 

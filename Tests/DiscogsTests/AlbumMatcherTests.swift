@@ -9,7 +9,8 @@ private func release(
     _ id: Int, artist: String = "Persuader", anv: String? = nil, title: String = "Stockholm",
     master: Int? = nil, main: Bool = false, label: String = "Svek", catno: String = "SK 032",
     secondCatno: String? = nil,
-    format: String = "CD", descriptions: [String] = [], released: String? = nil,
+    format: String = "CD", descriptions: [String] = [], secondFormat: String? = nil,
+    released: String? = nil,
     country: String? = nil,
     barcode: String? = nil, tracks: [String]
 ) -> String {
@@ -24,13 +25,14 @@ private func release(
         + (country.map { "<country>\($0)</country>" } ?? "")
     let secondXML = secondCatno.map { #"<label name="Other" catno="\#($0)" id="6"/>"# } ?? ""
     let anvXML = anv.map { "<anv>\($0)</anv>" } ?? ""
+    let secondFormatXML = secondFormat.map { #"<format name="\#($0)" qty="1"/>"# } ?? ""
     let masterXML =
         master.map { #"<master_id is_main_release="\#(main)">\#($0)</master_id>"# } ?? ""
     let barcodeXML =
         barcode.map { #"<identifiers><identifier type="Barcode" value="\#($0)"/></identifiers>"# }
         ?? ""
     return
-        #"<release id="\#(id)"><artists><artist><id>1</id><name>\#(artist)</name>\#(anvXML)</artist></artists><title>\#(title)</title><labels><label name="\#(label)" catno="\#(catno)" id="5"/>\#(secondXML)</labels><formats><format name="\#(format)" qty="1">\#(descriptionsXML)</format></formats>\#(releasedXML)\#(masterXML)<tracklist>\#(tracks.joined())</tracklist>\#(barcodeXML)</release>"#
+        #"<release id="\#(id)"><artists><artist><id>1</id><name>\#(artist)</name>\#(anvXML)</artist></artists><title>\#(title)</title><labels><label name="\#(label)" catno="\#(catno)" id="5"/>\#(secondXML)</labels><formats><format name="\#(format)" qty="1">\#(descriptionsXML)</format>\#(secondFormatXML)</formats>\#(releasedXML)\#(masterXML)<tracklist>\#(tracks.joined())</tracklist>\#(barcodeXML)</release>"#
         + "\n"
 }
 
@@ -85,7 +87,7 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
 {
     let folder = try DumpFolder()
     try folder.write("20261101", masters: masters, releases: releases)
-    return try AlbumMatcher(try folder.importedCatalog()).match(album)
+    return try AlbumMatcher(try folder.importedCatalog(), skippingVideo: false).match(album)
 }
 
 @Test func anAlbumThatFitsOneReleaseIsExactWithEachFileOnItsTrack() throws {
@@ -487,7 +489,9 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     try folder.importCatalog()
     let albums = (0..<3).map { _ in album(stockholmTitles) }
     let heard = Heard()
-    let matches = try await matchAlbums(albums, catalogAt: folder.catalog, choosing: [:]) {
+    let matches = try await matchAlbums(
+        albums, catalogAt: folder.catalog, choosing: [:], skippingVideo: false
+    ) {
         heard.add($0)
     }
     #expect(matches.map(\.tier) == [.exact, .exact, .exact])
@@ -496,7 +500,9 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
 
     let task = Task {
         withUnsafeCurrentTask { $0?.cancel() }
-        return try await matchAlbums(albums, catalogAt: folder.catalog, choosing: [:]) { _ in }
+        return try await matchAlbums(
+            albums, catalogAt: folder.catalog, choosing: [:], skippingVideo: false
+        ) { _ in }
     }
     await #expect(throws: CancellationError.self) { try await task.value }
 }
@@ -504,7 +510,9 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
 @Test func matchingWithoutACatalogSaysSo() async throws {
     let folder = try DumpFolder()
     await #expect(throws: CatalogError.missing(folder.catalog.path)) {
-        try await matchAlbums([album(stockholmTitles)], catalogAt: folder.catalog, choosing: [:]) {
+        try await matchAlbums(
+            [album(stockholmTitles)], catalogAt: folder.catalog, choosing: [:], skippingVideo: false
+        ) {
             _ in
         }
     }
@@ -519,7 +527,7 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
                 11, title: "Elsewhere", catno: "X 1",
                 tracks: [track("1", "Östermalm"), track("2", "Gamla Stan"), track("3", "Other")])
             + release(12, title: "Unrelated", catno: "Y 1", tracks: [track("1", "Nothing")]))
-    let matcher = AlbumMatcher(try folder.importedCatalog())
+    let matcher = AlbumMatcher(try folder.importedCatalog(), skippingVideo: false)
     #expect(try matcher.match(album(stockholmTitles)).releaseID == 10)
     let likely = try matcher.match(album(stockholmTitles), choosing: 11)
     #expect(likely.releaseID == 11)
@@ -531,6 +539,30 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(unrelated.tier == .incomplete)
     // A choice the catalog doesn't have leaves the matcher's own.
     #expect(try matcher.match(album(stockholmTitles), choosing: 99).releaseID == 10)
+}
+
+@Test func skippingVideoLeavesOutReleasesThatAreOnlyVideo() throws {
+    let folder = try DumpFolder()
+    try folder.write(
+        "20261101",
+        releases: release(10, catno: "SK 1", format: "DVD", tracks: stockholm)
+            + release(11, catno: "SK 2", format: "Blu-ray", tracks: stockholm)
+            + release(12, catno: "SK 3", format: "CD", secondFormat: "DVD", tracks: stockholm)
+            + release(13, catno: "SK 4", format: "VHS", tracks: stockholm))
+    let catalog = try folder.importedCatalog()
+    let skipping = AlbumMatcher(catalog, skippingVideo: true)
+    let found = try skipping.match(album(stockholmTitles))
+    // A CD with a DVD beside it is still a candidate, the only one, so it's Exact.
+    #expect(found.releaseID == 12)
+    #expect(found.tier == .exact)
+    #expect(found.candidates.isEmpty)
+    let all = try AlbumMatcher(catalog, skippingVideo: false).match(album(stockholmTitles))
+    #expect(Set([all.releaseID] + all.candidates.map(\.releaseID)) == [10, 11, 12, 13])
+    // A release the tracks are tagged with, or one the user chose, is kept.
+    let tagged = try skipping.match(album(stockholmTitles, releaseIDs: ["10", "10", "10"]))
+    #expect(tagged.tier == .matched)
+    #expect(tagged.releaseID == 10)
+    #expect(try skipping.match(album(stockholmTitles), choosing: 11).releaseID == 11)
 }
 
 @Test func theTracklistsSideBySideMarkEachRowAndADraggedRowSwaps() throws {

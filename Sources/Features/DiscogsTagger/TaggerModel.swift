@@ -86,9 +86,12 @@ final class TaggerModel {
         var albums: @Sendable () async throws -> [DiscogsAlbum]
         var reviews: @Sendable () async throws -> [Int64: DiscogsReview]
         var review: @Sendable (DiscogsReview?, [Int64]) async throws -> Void
+        /// Matches the albums, taking the chosen releases and leaving out video releases when
+        /// the flag is set.
         var match:
             @Sendable (
-                [DiscogsAlbum], [Int64: Int], @escaping @Sendable (AlbumMatchProgress) -> Void
+                [DiscogsAlbum], [Int64: Int], Bool,
+                @escaping @Sendable (AlbumMatchProgress) -> Void
             ) async throws -> [AlbumMatch]
         var summaries: @Sendable ([Int]) async throws -> [ReleaseSummary]
         /// Reads the files by id, telling its last argument how many are done.
@@ -119,6 +122,7 @@ final class TaggerModel {
     var selectedID: Int64?
     var mapping: DiscogsMapping
     var savedMappings: [NamedDiscogsMapping]
+    private(set) var choices: TaggerChoices
 
     /// Called after anything shown changes.
     var changed: () -> Void = {}
@@ -138,10 +142,32 @@ final class TaggerModel {
     /// Counts the runs started, so a late progress report of an older one is dropped.
     private var run = 0
 
-    init(effects: Effects, mapping: DiscogsMapping, savedMappings: [NamedDiscogsMapping]) {
+    init(
+        effects: Effects, mapping: DiscogsMapping, savedMappings: [NamedDiscogsMapping],
+        choices: TaggerChoices
+    ) {
         self.effects = effects
         self.mapping = mapping
         self.savedMappings = savedMappings
+        self.choices = choices
+    }
+
+    /// Takes the window's choices. A change to the skip rescores the albums shown, with an
+    /// Analyze of the scope; the others apply to the changes worked out next.
+    func setChoices(_ new: TaggerChoices) {
+        guard new != choices else { return }
+        let rescore = new.skipVideo != choices.skipVideo && !albums.isEmpty
+        choices = new
+        changed()
+        if rescore { analyze() }
+    }
+
+    /// The changes `album`'s files would get from the mapping, with the choices applied.
+    private func changeSet(_ files: [AlbumFile], _ album: Album) -> AlbumChangeSet {
+        Discogs.changeSet(
+            for: files, match: album.match,
+            mapping: choices.keepExistingValues ? mapping.keepingExistingValues() : mapping,
+            fillingSortArtist: choices.fillSortArtist)
     }
 
     var isBusy: Bool { activity != .idle }
@@ -239,6 +265,7 @@ final class TaggerModel {
         changed()
         let scope = scope
         let effects = effects
+        let skipsVideo = choices.skipVideo
         let started = Date()
         work = Task {
             do {
@@ -254,7 +281,7 @@ final class TaggerModel {
                 let chosen = reviews.compactMapValues { review -> Int? in
                     if case .chosen(let id) = review { id } else { nil }
                 }
-                let matches = try await effects.match(albums, chosen) { progress in
+                let matches = try await effects.match(albums, chosen, skipsVideo) { progress in
                     Task { @MainActor [self] in
                         guard self.run == current, case .analyzing = activity else { return }
                         activity = .analyzing(done: progress.albumsDone, total: progress.albumCount)
@@ -306,7 +333,9 @@ final class TaggerModel {
         guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
         let album = albums[index].album
         do {
-            let match = try await effects.match([album], [albumID: releaseID]) { _ in }
+            let match = try await effects.match(
+                [album], [albumID: releaseID], choices.skipVideo
+            ) { _ in }
             try await effects.review(.chosen(releaseID: releaseID), album.tracks.map(\.fileID))
             guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
             albums[index].match = match[0]
@@ -369,7 +398,7 @@ final class TaggerModel {
         if missing > 0 {
             problems.append("\(missing) file\(missing == 1 ? "" : "s") no longer in the library")
         }
-        return (Discogs.changeSet(for: files, match: album.match, mapping: mapping), problems)
+        return (changeSet(files, album), problems)
     }
 
     /// Keeps the changes the user unticked in View Changes out of Apply.
@@ -434,7 +463,7 @@ final class TaggerModel {
                 plan.problems.append("\(albumTitle(album.album)): not every file could be read")
                 continue
             }
-            let set = Discogs.changeSet(for: albumFiles, match: album.match, mapping: mapping)
+            let set = changeSet(albumFiles, album)
             do {
                 let edits = try set.edits { !album.excluded.contains($0) }
                 guard !edits.isEmpty else { continue }

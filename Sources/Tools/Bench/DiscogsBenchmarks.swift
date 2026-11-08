@@ -115,7 +115,9 @@ private let analyzeRun = Result { () throws -> (seconds: Double, tiers: [MatchTi
     var matches: [AlbumMatch] = []
     let elapsed = try seconds {
         matches = try waited {
-            try await matchAlbums(albums, catalogAt: catalog, choosing: [:]) { _ in }
+            try await matchAlbums(albums, catalogAt: catalog, choosing: [:], skippingVideo: true) {
+                _ in
+            }
         }
     }
     return (elapsed, Dictionary(grouping: matches, by: \.tier).mapValues(\.count))
@@ -188,7 +190,9 @@ let discogsBenchmarks = [
             let album = fixtureAlbum(index * 997 + 3)
             let start = DispatchTime.now().uptimeNanoseconds
             listed = try waited {
-                let match = try await matchAlbums([album], catalogAt: catalog, choosing: [:]) {
+                let match = try await matchAlbums(
+                    [album], catalogAt: catalog, choosing: [:], skippingVideo: true
+                ) {
                     _ in
                 }[0]
                 let ids = [match.releaseID].compactMap { $0 } + match.candidates.map(\.releaseID)
@@ -218,6 +222,8 @@ let discogsBenchmarks = [
                 let tagger = DiscogsTagger(
                     reader: try LibraryReader(databaseURL: databaseURL), catalog: catalog,
                     mapping: DiscogsPreset.oneToOne.mapping, savedMappings: [],
+                    choices: TaggerChoices(
+                        keepExistingValues: false, skipVideo: true, fillSortArtist: false),
                     importing: { _, _, _ in throw CatalogImportError.stopped })
                 let start = DispatchTime.now().uptimeNanoseconds
                 tagger.show()

@@ -226,7 +226,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     let tagger = TaggerModel(
         effects: .init(
             albums: { [one] }, reviews: { [:] }, review: { _, _ in },
-            match: { albums, _, _ in albums.map { matches($0, nil) } },
+            match: { albums, _, _, _ in albums.map { matches($0, nil) } },
             summaries: { _ in [] },
             read: { ids, _ in
                 seen.read(ids)
@@ -236,7 +236,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
             },
             checkCatalog: { .ready }, unfinishedImport: { nil },
             importCatalog: { _, _, _ in throw CatalogImportError.stopped }),
-        mapping: DiscogsPreset.minimal.mapping, savedMappings: [])
+        mapping: DiscogsPreset.minimal.mapping, savedMappings: [], choices: defaultChoices)
     await tagger.checkCatalog()
     tagger.analyze()
     await tagger.finished()
@@ -256,7 +256,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     let tagger = TaggerModel(
         effects: .init(
             albums: { [] }, reviews: { [:] }, review: { _, _ in },
-            match: { _, _, _ in [] }, summaries: { _ in [] }, read: { _, _ in ([], []) },
+            match: { _, _, _, _ in [] }, summaries: { _ in [] }, read: { _, _ in ([], []) },
             checkCatalog: {
                 checks.read([])
                 return .ready
@@ -266,7 +266,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
                 gate.wait()
                 throw CatalogImportError.stopped
             }),
-        mapping: DiscogsPreset.minimal.mapping, savedMappings: [])
+        mapping: DiscogsPreset.minimal.mapping, savedMappings: [], choices: defaultChoices)
     tagger.importDump(from: URL(fileURLWithPath: "/dumps", isDirectory: true))
     #expect(tagger.activity == .importing(nil))
     #expect(!tagger.canAnalyze)
@@ -278,4 +278,49 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(tagger.status == "Import stopped; Resume Import carries on from here")
     #expect(tagger.unfinished == UnfinishedImport(dumpDate: "20261101", fraction: 0.42))
     #expect(tagger.activity == .idle)
+}
+
+@MainActor
+@Test func theChoicesRescoreOrChangeTheChangesWorkedOut() async throws {
+    let seen = Seen()
+    var own = TrackTags()
+    own.title = "My Title"
+    own.albumArtist = "Persuader"
+    let ownTags = own
+    let tagger = await model(
+        seen, albums: [one], matches: matches,
+        files: { ids in
+            one.tracks.indices.map { file(one, $0, ownTags) }.filter { ids.contains($0.id) }
+        },
+        mapping: DiscogsPreset.oneToOne.mapping)
+    tagger.analyze()
+    await tagger.finished()
+    #expect(seen.skips == [true])
+    var refreshes = 0
+    tagger.changed = { refreshes += 1 }
+
+    func changes() async throws -> [TagChange] {
+        try #require(try await tagger.changeSet(for: 1)).0.files[0].changes
+    }
+    #expect(try await changes().contains { $0.tag == .field(.title) })
+    #expect(try await !changes().contains { $0.tag == .field(.artistSort) })
+
+    var choices = defaultChoices
+    choices.keepExistingValues = true
+    choices.fillSortArtist = true
+    tagger.setChoices(choices)
+    #expect(refreshes == 1)
+    #expect(seen.skips == [true], "only the skip rescores")
+    #expect(try await !changes().contains { $0.tag == .field(.title) }, "the file's own title")
+    #expect(try await changes().first { $0.tag == .field(.artistSort) }?.new == "Persuader")
+    #expect(tagger.mapping == DiscogsPreset.oneToOne.mapping, "the mapping is as it was")
+
+    choices.skipVideo = false
+    tagger.setChoices(choices)
+    await tagger.finished()
+    #expect(seen.skips == [true, false])
+    tagger.setChoices(choices)
+    #expect(seen.skips == [true, false], "the same choices change nothing")
+    await tagger.choose(11, for: 1)
+    #expect(seen.skips == [true, false, false], "a choice is rescored with the skip too")
 }

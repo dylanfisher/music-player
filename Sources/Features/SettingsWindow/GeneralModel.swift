@@ -187,13 +187,15 @@ public final class GeneralModel {
     /// few would understand, and File Viewer has nothing to pick without Searcher, so both stay
     /// in the config file (ADR 0067). The Discogs window picks the dumps folder, and the
     /// catalog's path is for a Mac short of space, so both are edited there or in the file
-    /// (ADR 0130); the field mappings are edited in its Field Mapping sheet (ADR 0132).
+    /// (ADR 0130); the field mappings are edited in its Field Mapping sheet, and its choices
+    /// beside it (ADR 0132).
     private static func isShown(_ key: String, searcherInstalled: Bool) -> Bool {
         let schema = AppSettings()
         return switch key {
         case schema.networkScanReaders.key, schema.discogsDumpsFolder.key,
             schema.discogsCatalogPath.key, schema.discogsMapping.key,
-            schema.discogsSavedMappings.key:
+            schema.discogsSavedMappings.key, schema.discogsKeepExistingValues.key,
+            schema.discogsSkipVideo.key, schema.discogsFillSortArtist.key:
             false
         case schema.fileViewer.key: searcherInstalled
         default: true

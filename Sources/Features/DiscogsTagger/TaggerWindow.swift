@@ -6,7 +6,8 @@ import Log
 import Settings
 import TagWriter
 
-/// The tagger's window (51.11): the toolbar's source, scope, Analyze and Field Mapping…; a tab
+/// The tagger's window (51.11): the toolbar's source, scope and Analyze; Field Mapping… and the
+/// choices beside it (51.23); a tab
 /// per tier with its count, each an album list; the selected album's release beside its
 /// tracklist, file against track; and the buttons that review it and apply a tier. Without a
 /// catalog it says so and offers the import, and Analyze stays off. After an import stopped
@@ -22,6 +23,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let scopePopUp = NSPopUpButton()
     let analyzeButton = NSButton(title: "Analyze", target: nil, action: nil)
     let mappingButton = NSButton(title: "Field Mapping…", target: nil, action: nil)
+    let keepBox = NSButton(checkboxWithTitle: "Keep existing values", target: nil, action: nil)
+    let skipVideoBox = NSButton(
+        checkboxWithTitle: "Skip Blu-ray, DVD and video", target: nil, action: nil)
+    let sortArtistBox = NSButton(
+        checkboxWithTitle: "Fill sort artist from album artist", target: nil, action: nil)
     let importButton = NSButton(title: "Import Discogs Dump…", target: nil, action: nil)
     let progress = NSProgressIndicator()
     let statusLabel = NSTextField(labelWithString: "")
@@ -46,6 +52,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         _, _ in
     }
     var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
+    var choicesChosen: (TaggerChoices) -> Void = { _ in }
     var dumpsFolder: () -> URL? = { nil }
     var dumpsFolderChosen: (URL) -> Void = { _ in }
 
@@ -101,6 +108,15 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             button.target = self
             button.action = action
         }
+        for box in [keepBox, skipVideoBox, sortArtistBox] {
+            box.target = self
+            box.action = #selector(choiceToggled)
+        }
+        keepBox.toolTip =
+            "Titles, artists, numbers, credits and the date fill only empty tags,"
+            + " whatever the mapping says."
+        skipVideoBox.toolTip = "Releases that are only Blu-ray, DVD or video are never candidates."
+        sortArtistBox.toolTip = "Files with no sort artist get the album artist as one."
         analyzeButton.keyEquivalent = "\r"
         progress.style = .bar
         progress.isIndeterminate = false
@@ -114,9 +130,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
         let bar = NSStackView(views: [
             label("Source:"), sourcePopUp, label("Scope:"), scopePopUp, analyzeButton, progress,
-            statusLabel, NSView(), importButton, mappingButton,
+            statusLabel, NSView(), importButton,
         ])
         bar.spacing = 8
+        let choices = NSStackView(views: [
+            mappingButton, keepBox, skipVideoBox, sortArtistBox, NSView(),
+        ])
+        choices.spacing = 12
 
         let catalogImport = NSButton(
             title: "Import Discogs Dump…", target: self, action: #selector(chooseDumps))
@@ -177,12 +197,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         detail.widthAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
 
         let bottom = NSStackView(views: [NSView(), applyButton])
-        let page = NSStackView(views: [bar, catalogBox, resumeBox, tabs, split, bottom])
+        let page = NSStackView(views: [bar, choices, catalogBox, resumeBox, tabs, split, bottom])
         page.orientation = .vertical
         page.alignment = .leading
         page.spacing = 10
         page.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
-        for view in [bar, catalogBox, resumeBox, split, bottom] {
+        for view in [bar, choices, catalogBox, resumeBox, split, bottom] {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -28).isActive = true
         }
         split.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -222,6 +242,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         scopePopUp.isEnabled = !model.isBusy
         importButton.isEnabled = !model.isBusy
         mappingButton.isEnabled = sheet == nil
+        keepBox.state = model.choices.keepExistingValues ? .on : .off
+        skipVideoBox.state = model.choices.skipVideo ? .on : .off
+        sortArtistBox.state = model.choices.fillSortArtist ? .on : .off
+        // The skip rescores with an Analyze, which can't start while one runs.
+        skipVideoBox.isEnabled = !model.isBusy
         let stoppable: Bool
         switch model.activity {
         case .idle:
@@ -451,6 +476,14 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             dumpsFolderChosen(url)
             model.importDump(from: url, startingOver: startingOver)
         }
+    }
+
+    @objc private func choiceToggled() {
+        let choices = TaggerChoices(
+            keepExistingValues: keepBox.state == .on, skipVideo: skipVideoBox.state == .on,
+            fillSortArtist: sortArtistBox.state == .on)
+        model.setChoices(choices)
+        choicesChosen(choices)
     }
 
     @objc private func showMapping() {

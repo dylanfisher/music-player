@@ -96,6 +96,13 @@ extension AppDelegate {
             discogsTagger?.mappingChanged(
                 settings[\.discogsMapping], saved: settings[\.discogsSavedMappings])
         }
+        let choices = [
+            schema.discogsKeepExistingValues.key, schema.discogsSkipVideo.key,
+            schema.discogsFillSortArtist.key,
+        ]
+        if !keys.isDisjoint(with: choices) {
+            discogsTagger?.choicesChanged(taggerChoices(settings))
+        }
         // The tagger reads its catalog from one path; the next one shown reads the new one.
         if keys.contains(schema.discogsCatalogPath.key), let tagger = discogsTagger {
             tagger.window?.close()

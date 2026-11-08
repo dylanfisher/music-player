@@ -33,7 +33,7 @@ extension AppDelegate {
         let catalog = paths.discogsCatalogFile(settings[\.discogsCatalogPath])
         let tagger = DiscogsTagger(
             reader: reader, catalog: catalog, mapping: settings[\.discogsMapping],
-            savedMappings: settings[\.discogsSavedMappings],
+            savedMappings: settings[\.discogsSavedMappings], choices: taggerChoices(settings),
             importing: { [weak self] folder, startingOver, progress in
                 let configured = await MainActor.run { self?.settings?[\.watchedFolders] ?? [] }
                 return try await importCatalog(
@@ -50,6 +50,15 @@ extension AppDelegate {
                 try settings.set(\.discogsMapping, to: mapping)
             } catch {
                 self?.fail("Couldn't save the Discogs field mapping", error)
+            }
+        }
+        tagger.choicesChosen = { [weak self] choices in
+            do {
+                try settings.set(\.discogsKeepExistingValues, to: choices.keepExistingValues)
+                try settings.set(\.discogsSkipVideo, to: choices.skipVideo)
+                try settings.set(\.discogsFillSortArtist, to: choices.fillSortArtist)
+            } catch {
+                self?.fail("Couldn't save the Discogs tagger's choices", error)
             }
         }
         tagger.dumpsFolder = {
@@ -79,6 +88,13 @@ extension AppDelegate {
         discogsTagger = tagger
         return tagger
     }
+}
+
+/// The tagger window's choices as the settings hold them.
+@MainActor func taggerChoices(_ settings: ConfigStore<AppSettings>) -> TaggerChoices {
+    TaggerChoices(
+        keepExistingValues: settings[\.discogsKeepExistingValues],
+        skipVideo: settings[\.discogsSkipVideo], fillSortArtist: settings[\.discogsFillSortArtist])
 }
 
 /// The watched folders' paths where they are now; one on a share that isn't mounted holds

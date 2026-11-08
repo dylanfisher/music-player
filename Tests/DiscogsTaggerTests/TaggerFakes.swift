@@ -65,16 +65,24 @@ final class Seen: @unchecked Sendable {
     private var _reviews: [(DiscogsReview?, [Int64])] = []
     private var _matched: [[Int64: Int]] = []
     private var _reads: [[Int64]] = []
+    private var _skips: [Bool] = []
 
     var reviews: [(DiscogsReview?, [Int64])] { lock.withLock { _reviews } }
     /// The releases chosen each match was asked with.
     var matched: [[Int64: Int]] { lock.withLock { _matched } }
     var reads: [[Int64]] { lock.withLock { _reads } }
+    /// Whether each match was asked to skip video releases.
+    var skips: [Bool] { lock.withLock { _skips } }
 
     func review(_ review: DiscogsReview?, _ files: [Int64]) {
         lock.withLock { _reviews.append((review, files)) }
     }
-    func match(_ chosen: [Int64: Int]) { lock.withLock { _matched.append(chosen) } }
+    func match(_ chosen: [Int64: Int], skipping: Bool) {
+        lock.withLock {
+            _matched.append(chosen)
+            _skips.append(skipping)
+        }
+    }
     func read(_ ids: [Int64]) { lock.withLock { _reads.append(ids) } }
 }
 
@@ -98,6 +106,10 @@ func file(_ album: DiscogsAlbum, _ index: Int, _ tags: TrackTags = TrackTags()) 
             art: nil))
 }
 
+/// The choices as the settings' defaults make them.
+let defaultChoices = TaggerChoices(
+    keepExistingValues: false, skipVideo: true, fillSortArtist: false)
+
 /// A model over `albums`, its catalog checked, matched by `matches` (by album id, a release the user chose giving
 /// that release), whose files are `files`.
 @MainActor
@@ -108,7 +120,7 @@ func model(
     files: @escaping @Sendable ([Int64]) -> [AlbumFile] = { _ in [] },
     catalog: TaggerModel.CatalogState = .ready, gate: Gate? = nil,
     mapping: DiscogsMapping = DiscogsPreset.minimal.mapping,
-    unfinished: UnfinishedImport? = nil,
+    choices: TaggerChoices = defaultChoices, unfinished: UnfinishedImport? = nil,
     importing: @escaping DiscogsTagger.Import = { _, _, _ in throw CatalogImportError.stopped }
 ) async -> TaggerModel {
     let made = TaggerModel(
@@ -116,8 +128,8 @@ func model(
             albums: { albums },
             reviews: { reviews },
             review: { seen.review($0, $1) },
-            match: { albums, chosen, progress in
-                seen.match(chosen)
+            match: { albums, chosen, skipping, progress in
+                seen.match(chosen, skipping: skipping)
                 var done: [AlbumMatch] = []
                 for album in albums {
                     gate?.wait()
@@ -141,7 +153,7 @@ func model(
             },
             checkCatalog: { catalog }, unfinishedImport: { unfinished },
             importCatalog: importing),
-        mapping: mapping, savedMappings: [])
+        mapping: mapping, savedMappings: [], choices: choices)
     await made.checkCatalog()
     return made
 }

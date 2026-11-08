@@ -65,6 +65,15 @@ public struct AppSettings: SettingsSchema {
     public let discogsSavedMappings = Setting<[NamedDiscogsMapping]>(
         "discogs.savedMappings", title: "Saved Discogs Mappings", default: [],
         "Field mappings saved by name, beside the presets.")
+    public let discogsKeepExistingValues = Setting(
+        "discogs.keepExistingValues", title: "Keep Existing Values", default: false,
+        "The Discogs tagger fills titles, numbers, credits and dates only where empty.")
+    public let discogsSkipVideo = Setting(
+        "discogs.skipVideo", title: "Skip Blu-ray, DVD and Video", default: true,
+        "The Discogs tagger never matches a release that is only video.")
+    public let discogsFillSortArtist = Setting(
+        "discogs.fillSortArtist", title: "Fill Sort Artist from Album Artist", default: false,
+        "The Discogs tagger gives files without a sort artist the album artist.")
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")

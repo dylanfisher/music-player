@@ -6,13 +6,14 @@ import Library
 /// file. Cancelling the task stops it before the next album and throws `CancellationError`.
 /// `progress` hears each album done, off the main thread. `chosen` holds the release the user
 /// chose for an album, by album ID, which is its match whatever the others score (ADR 0133).
+/// `skippingVideo` leaves out the releases that are only Blu-ray, DVD or video (ADR 0132).
 public func matchAlbums(
     _ albums: [DiscogsAlbum], catalogAt catalog: URL, choosing chosen: [Int64: Int],
-    progress: @escaping @Sendable (AlbumMatchProgress) -> Void
+    skippingVideo: Bool, progress: @escaping @Sendable (AlbumMatchProgress) -> Void
 ) async throws -> [AlbumMatch] {
     try Task.checkCancellation()
     let task = Task.detached(priority: .utility) {
-        let matcher = AlbumMatcher(try Catalog(at: catalog))
+        let matcher = AlbumMatcher(try Catalog(at: catalog), skippingVideo: skippingVideo)
         var matches: [AlbumMatch] = []
         matches.reserveCapacity(albums.count)
         for album in albums {
@@ -40,8 +41,14 @@ func isReported(_ done: Int, of count: Int) -> Bool {
 /// Matches albums with one catalog, on one thread, as its connection is.
 final class AlbumMatcher {
     let catalog: Catalog
+    /// Whether a release that is only video is left out, unless the tracks' ids name it or the
+    /// user chose it.
+    let skipsVideo: Bool
 
-    init(_ catalog: Catalog) { self.catalog = catalog }
+    init(_ catalog: Catalog, skippingVideo: Bool) {
+        self.catalog = catalog
+        skipsVideo = skippingVideo
+    }
 
     /// `album`'s match; `choice`, a release the user chose, is the match when the catalog has
     /// it, tiered by its own score alone, and is a candidate even when no key finds it.
@@ -57,6 +64,9 @@ final class AlbumMatcher {
         if let choice, !candidates.contains(choice) { candidates.append(choice) }
         for id in candidates {
             guard let release = try catalog.release(id: id) else { continue }
+            if skipsVideo, release.isVideo, id != choice, !tagged.contains(String(id)) {
+                continue
+            }
             releases[id] = release
             scores.append(ReleaseScore.best(release, seconds: seconds, titles: titles))
         }

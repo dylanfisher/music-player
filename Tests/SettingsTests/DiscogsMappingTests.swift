@@ -47,6 +47,10 @@ private func mappingProblem(_ json: String) -> String? {
     #expect(changed.problem() == "album is on with no target")
     #expect(schema.discogsMapping.defaultValue == DiscogsPreset.oneToOne.mapping)
     #expect(schema.discogsSavedMappings.defaultValue == [])
+    // The tagger window's choices: only the skip is on until the user says otherwise.
+    #expect(schema.discogsKeepExistingValues.defaultValue == false)
+    #expect(schema.discogsSkipVideo.defaultValue == true)
+    #expect(schema.discogsFillSortArtist.defaultValue == false)
 }
 
 @Test func oneToOneSendsEachFieldToATagOfItsOwnAndMinimalWritesFour() {
