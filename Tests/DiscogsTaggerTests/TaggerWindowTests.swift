@@ -145,6 +145,7 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(MappingSheet.fields.first == .releaseID)
     #expect(MappingSheet.fields.last == .involvedPeople)
     #expect(sheet.presets.titleOfSelectedItem == DiscogsPreset.oneToOne.name)
+    try snapshot(try #require(sheet.window), "discogs-mapping-sheet")
     let row = try #require(MappingSheet.fields.firstIndex(of: .styles))
     sheet.set("mood, STYLE", in: .targets, row: row)
     #expect(sheet.draft.mapping[.styles].targets == [.field(.mood), .key("STYLE")])

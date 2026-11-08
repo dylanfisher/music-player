@@ -19,6 +19,8 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     let nameField = NSTextField()
     let problemLabel = NSTextField(labelWithString: "")
     let okButton = NSButton(title: "OK", target: nil, action: nil)
+    /// The template help while it shows.
+    private var help: NSPopover?
     /// The mapping and saved ones on OK; nil for Cancel.
     private(set) var result: MappingDraft?
 
@@ -129,7 +131,14 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
             cell.tag = row
             cell.delegate = self
             cell.toolTip = editable ? nil : "Edited in the config file"
-            return cell
+            guard column == .template else { return cell }
+            let help = NSButton(title: "", target: self, action: #selector(showTemplateHelp))
+            help.bezelStyle = .helpButton
+            help.controlSize = .small
+            help.toolTip = "What a template can hold"
+            let row = NSStackView(views: [cell, help])
+            row.spacing = 4
+            return row
         case nil:
             return nil
         }
@@ -172,6 +181,13 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
             return NSSound.beep()
         }
         refresh()
+    }
+
+    /// The template help, beside the template field of the button's row.
+    @objc private func showTemplateHelp(_ sender: NSButton) {
+        let popover = TemplateHelp.popover()
+        help = popover
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxX)
     }
 
     @objc private func cancel() { endSheet() }

@@ -47,3 +47,18 @@ import Testing
     #expect(draft.saved[0].mapping[.label].mode == .off)
     #expect(draft.chosenName == "Mine")
 }
+
+@Test func theTemplateHelpListsEveryTokenTheCheckAccepts() {
+    #expect(TemplateHelp.tokens.map(\.token) == DiscogsMapping.templateNames)
+    #expect(Set(DiscogsMapping.templateNames).count == DiscogsField.allCases.count + 1)
+    for token in DiscogsMapping.templateNames {
+        #expect(TemplateHelp.text.contains(token), "\(token)")
+    }
+    for example in TemplateHelp.examples {
+        #expect(TemplateHelp.text.contains(example.template))
+        var mapping = DiscogsPreset.oneToOne.mapping
+        mapping[.genres].format.template = example.template
+        #expect(mapping.problem() == nil, "\(example.template) is a template the check accepts")
+    }
+    #expect(TemplateHelp.text.contains("outside braces is kept as written"))
+}

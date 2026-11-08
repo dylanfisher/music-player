@@ -98,7 +98,7 @@ public struct DiscogsMapping: SettingValue {
                 return "\(field.rawValue) is a list, so it needs a join"
             }
             if let template = rule.format.template,
-                let token = templateTokens(template).first(where: { !templateNames.contains($0) })
+                let token = templateTokens(template).first(where: { !templateNameSet.contains($0) })
             {
                 return "\(field.rawValue)'s template names \(token), which isn't a field"
             }
@@ -140,9 +140,14 @@ private func keyProblem(_ target: DiscogsTarget) -> String? {
     return nil
 }
 
-/// The tokens a template can name.
-private let templateNames = Set(
-    DiscogsField.allCases.map(\.token) + [DiscogsField.firstGenreToken])
+extension DiscogsMapping {
+    /// The tokens a template can name, in field order, then the first genre's: what the check
+    /// accepts, and what Field Mapping's help lists.
+    public static let templateNames =
+        DiscogsField.allCases.map(\.token) + [DiscogsField.firstGenreToken]
+}
+
+private let templateNameSet = Set(DiscogsMapping.templateNames)
 
 /// The names a target in JSON reads as a field by.
 private let fieldNames = Set(TagEditField.allCases.map(\.rawValue))
