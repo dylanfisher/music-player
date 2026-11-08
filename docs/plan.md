@@ -730,6 +730,267 @@ From the owner's testing on 2026-11-08, after 51g ran on the real library.
       Likely albums, a sheet resized and reopened, and Undo Tag Edit after a tagger write on
       the NAS.
 
+Implementation plan, part 51h (ADR 0136):
+
+One ADR, 0136, covers the part (52 and 53 number after it): the rescan dialog (51.32), the
+attribute copy (51.39) and the undo question (51.39). If the owner wants the attribute copy
+recorded apart, it takes 0137 and 52 and 53 shift by one.
+
+1. **The rescan dialog (51.32), Library.** Searched `rg -i 'rescan|stale|rebuildStaleParts'`:
+   the only place that drops an index part is `LibraryIndex.rebuildStaleParts()`
+   (`Sources/Core/Library/LibraryIndex.swift`), run from `prepareSchema()` inside the init, and
+   the parts are `SchemaPart` in `LibrarySchema.swift`.
+   - `SchemaPart.rescanWhy: String?`, the words kept once with the part. Set for the parts a
+     rescan refills (`.index`, today), nil for every other part (`.scans` rebuilds with the
+     index and adds no line; stats-like parts, `.measures` and `.analysisRun` are not refilled
+     by a rescan). The text is per part, not per build: the stored SQL is the only identity, so
+     the build can't say more than "this part's tables changed". 53.13 adds its albums part
+     with its own `rescanWhy` and nothing else in the dialog changes.
+   - `RescanNotice` (new file `RescanNotice.swift` in `Library`): `parts: [SchemaPart]` and
+     `text`, built only from the parts' `rescanWhy`, plus the fixed sentences "Every file is
+     read again. Plays, ratings and playlists stay." Takes any list of parts, so 53.13 reuses
+     it as is.
+   - `rebuildStaleParts()` is split: `partsToRebuild(stored:)` (read only, the `stale` and
+     `rebuilt` computation it already does) and the drop and create. `prepareSchema()` calls
+     the first, and when the result has a part with a `rescanWhy` that is already stored
+     (`stored[part] != nil`, so a new library never asks) and no stats part (a stats rebuild
+     keeps its existing discard notice, ADR 0022, since "plays stay" would be false), it asks
+     before the transaction opens. Nothing is dropped before the answer.
+   - `LibraryIndex.init(at:movingAsideIfUnreadable:confirmRescan:)`, with
+     `confirmRescan: ((RescanNotice) -> Bool)? = nil`. Nil means no question, as today: the
+     `music-player scan` command, `LibraryReader`'s connections and every existing test keep
+     their behavior. A false answer throws `LibraryError.rescanDeclined`
+     (`LibraryError.swift`) before the first statement that changes the file, so the index is
+     as it was and the next launch asks again.
+   - The index records that it rebuilt (`rebuiltParts`, like `movedAside`), for the status bar.
+   - Decision: the rebuild flag is in memory. A quit mid-rescan reads "Scanning" at the next
+     launch; a persisted flag would be a part of its own for one status word.
+2. **The dialog and the quit, LibraryBrowser and App.** `RescanAlert.swift` in
+   `Features/LibraryBrowser` (neighbor: the other small alerts there; the text is the
+   notice's, so the file holds no wording): an `NSAlert` with `Rescan Now` and `Quit`, run
+   modally because it comes before the window exists. `AppDelegate.openWindow` passes it as
+   `confirmRescan` on the one open that already passes `movingAsideIfUnreadable: true`;
+   it catches `LibraryError.rescanDeclined` and terminates without the error alert
+   (`NSApp.terminate`), where the other errors from that open are reported.
+3. **The status bar (51.32).** `LibraryStatus.scanText` (`Features/LibraryBrowser`) says
+   "Rebuilding the index: Music: 300 of 1,200 read" in place of "Scanning" while the index
+   rebuilt this launch and that folder's first whole scan hasn't ended. `LibraryBrowser` gets
+   the flag from the index it is given.
+4. **A plainer header (51.33), DiscogsTagger.** `TaggerWindow.build` and `refresh()` (the
+   `catalogBox`, `catalogLabel`, `revealButton`, `status.shown`). The label becomes
+   "Catalog from the 2026-11-01 dump · 3.1 GB" from `CatalogStatus.dumpDate` and `sizeBytes`
+   (size through the formatter the app already uses for sizes: `rg ByteCountFormatter`); the
+   path and `importedAt` go in the tooltip, Reveal in Finder stays beside the label, and the
+   remaining controls (Import, Mapping, Source, Scope, Analyze, the three choices) go in one
+   `NSStackView` row. Compression resistance low on the label (tail truncation), so the row
+   fits the window's `minSize` (760 pt) with nothing wrapping. Wording stays in
+   `TaggerTitles.swift`.
+5. **Opening on the selection (51.34).** `DiscogsTagger.show()` takes the library selection
+   (`selectedTracks` is already wired): if it is non-empty, sets `model.scope = .selection`
+   and, when the catalog is `.ready`, calls `model.analyze()` after `checkCatalog()` returns.
+   The first `show()` runs the check in a `Task` today, so the analyze goes after it in that
+   same task. An already open window reopened with a selection does the same; with no
+   selection nothing changes. `analyze()` already reports an empty selection.
+6. **Why not Exact (51.35), Discogs and DiscogsTagger.** The matcher keeps, for the chosen
+   release, `ReleaseScore.mapping`, `durationsCompared`, `durationsAgreeing`, `sameCount`,
+   `titlesInOrder`, and `tied` in `choose(...)`. It does not keep how the release was found.
+   - `AlbumCandidates.swift`: `candidateIDs(for:in:)` returns each id with the way it was
+     first found (`.taggedID`, `.barcode`, `.labelAndCatalogNumber`, `.title`). No second
+     search.
+   - `NotExactReason` (new, `Discogs`, next to `AlbumMatch.swift`): an enum with counts
+     (`filesWithoutTrack(Int)`, `tracksWithoutFile(Int)`, `durationsDiffer(Int)`,
+     `titlesDiffer(Int)`, `countDiffers(files:tracks:)`, `tiedAfterTieBreak`,
+     `foundByTitleOnly`). `AlbumMatcher.match` fills `AlbumMatch.reasons` from the chosen
+     score and the `tied` flag it already has, for tiers Likely and Incomplete only. It scores
+     nothing again.
+   - The words are in `TaggerTitles.swift`: "2 files have no track on the release",
+     "3 durations differ by more than 8 s or 5%" (from `MatchThreshold.durationSeconds` and
+     `durationFraction`, so the number isn't written twice; the owner's example said 5 s, the
+     threshold is 8 s), "found by title only". Shown under the release title in the
+     selected-album area and as the row's tooltip (`TaggerWindow.tableView(_:viewFor:row:)`).
+7. **The window's height (51.36), DiscogsTagger.** Read `TaggerWindow.build` (the `split`
+   and `detail` stacks, the `for view in detail.arrangedSubviews where view is NSScrollView`
+   constraints). The tables must be the one view that takes the spare height: vertical
+   content-hugging low and compression resistance low on the tables' scroll views, high on
+   the header rows, and no fixed-height constraints on the scroll views. Because the owner saw
+   it too short once and right the next time, the likely cause is the window laid out before
+   the catalog row (`catalogBox`, hidden while `.checking`) and the resume row showed, with no
+   layout pass after: call `window.contentView?.layoutSubtreeIfNeeded()` at the end of
+   `refresh()` when a hidden row changes, and test it. If the test finds another cause, fix
+   that one and record it in the commit.
+8. **Viewing a release (51.37), DiscogsTagger and Discogs.**
+   - Sorting: `ReleasesSheet` gets `NSSortDescriptor`s on its columns
+     (`taggerTable(...)` builds them, in `TaggerChoices`' neighbor `TaggerTitles`/the table
+     helper), `tableView(_:sortDescriptorsDidChange:)`, `shown` re-sorted after a filter.
+     Numeric columns (score, tracks, year) compare as numbers.
+   - A Tracks column: `ReleaseSummary.trackCount` (`ReleaseSummary.swift`), the playable
+     count from `ReleaseTracklist` as the matcher counts it (not Discogs rows with headings),
+     in `CatalogRelease.summary`; `TaggerColumn.tracks` and its title.
+   - `ViewReleaseSheet.swift` (new, `DiscogsTagger`, a `TaggerSheet` like `ChangesSheet`;
+     neighbor `ChangesSheet.swift`): opened by `View Release…` beside `Use Release`. It shows
+     the release from the catalog: a header (label, catalog number, format, country, year) and
+     a tracklist table (position, title, duration), with Open on Discogs. The data is a
+     `ReleaseDetail` read through a new `Effects.release(id)` on the model, which wraps
+     `Catalog.release(id:)` off the main thread the way `summaries` does.
+   - Open on Discogs: `ReleaseFields.swift` has `private func discogsURL(_ kind:, _ id:)`.
+     Make `releaseURL(_ id: Int) -> String` the one `package` builder there
+     (`.releaseURL` case uses it), and the sheets and the View Changes sheet call it through
+     `NSWorkspace.shared.open`. 53.10 and 53.11 use the same function.
+9. **Sheets keep their size (51.38), Settings, App and DiscogsTagger.** `AppState`
+   (`Sources/Core/Settings/AppState.swift`; neighbor `infoPlace`/`InfoWindowPlace`) gets
+   `taggerSheets = Setting(... default: TaggerSheetLayouts())`, key `discogsTagger.sheets`,
+   `kind: .windowState`. `TaggerSheetLayouts` (new in `Core/Settings`, as `InfoWindowPlace`
+   is) is a `SettingValue` holding, by sheet kind (`otherReleases`, `viewRelease`,
+   `viewChanges`, `fieldMapping`), the size, the column widths by `TaggerColumn` raw value,
+   and the sort key and direction, with `rejectUnknownKeys`. `DiscogsTagger` takes it and a
+   `layoutChosen` closure, as it takes `choicesChosen`; `AppDelegate` fills it from `state`
+   and saves through `saver.set(\.taggerSheets, ...)`, as `infoPlace` is. The sheets apply it
+   in `build` and report it in `endSheet()`. A size smaller than the sheet's minimum or
+   larger than the screen is clamped, and a column name no longer in the sheet is ignored by
+   the decoder's own rule: unknown values are discarded (pre-release, no versions). This
+   Mac's state, not the config: `state.json`.
+10. **Undoing a tagger write (51.39), TagWriter.**
+
+    What the code says. Undo does not copy attributes from the saved undo copy: the
+    journal in `tag-undo` keeps only the old bytes and a JSON record, no attributes.
+    `TagWriter.restore` calls `writeTemp(segments, from: path, ...)` with `path` the live,
+    edited file, and `copyAttributes(from: source, ...)` copies from a descriptor opened on
+    that file. So the quarantine, provenance and local ACL on the undo copy are not the
+    difference. The difference is that the forward write took a different path.
+    `WriteFaults.writesInPlace` defaults to true, and a tag that fits the padding (22 MP3s
+    from the same ripper commonly do) is written in place (ADR 0107): no temp file, no
+    `fcopyfile`, the file's attributes never touched. Undo always goes through a temp file
+    (`restore` -> `writeTemp` -> `copyAttributes`), so it is the first time `fcopyfile`
+    runs on those files. The forward write "went through" because it never made the call.
+
+    The most likely cause is then one attribute or ACL on those NAS files that macOS reads
+    but the SMB server refuses to set on a new file: `fcopyfile(COPYFILE_ACL|COPYFILE_XATTR)`
+    sets every xattr with `fsetxattr` and the ACL with `acl_set_fd`, and a single `EACCES` or
+    `EPERM` fails the whole call with no name. Candidates, in the order I would check:
+    (a) `com.apple.provenance`, which macOS 13+ refuses to set outside the kernel's own
+    paths; (b) an ACL the server synthesizes from its own permission model, which macOS
+    reads as an ACL and the server won't take back on a file it has just created;
+    (c) `com.apple.quarantine`, `com.apple.metadata:_kMDItem*`. This can't be proved without
+    the NAS, and no agent or test touches it (AGENTS.md), so the first step is an owner
+    check, read only, on one of the 22 files:
+    `xattr -l <file>` and `ls -le@ <file>`, then the same for a file the app never wrote.
+    Whatever it shows picks the list in the fix below. Needs the owner (see Open).
+
+    The fix, in three parts:
+    - `copyAttributes` copies the ACL and each extended attribute separately instead of one
+      `fcopyfile` call: `COPYFILE_ACL` through `fcopyfile`, then `flistxattr`, `fgetxattr`
+      and `fsetxattr` per name (`XATTR_NOFOLLOW` is not needed on descriptors). A failure
+      names what failed: "can't copy the extended attribute com.apple.provenance: Permission
+      denied" or "can't copy its ACL". That alone fixes the message for every future
+      refusal.
+    - An attribute the destination refuses (`EACCES`, `EPERM`, `ENOTSUP`) and that is in
+      `FileReplace`'s one list `unsettableAttributes` (names macOS itself manages, starting
+      with `com.apple.provenance`, plus whatever the owner's output adds) is skipped and
+      logged at notice level with the file and name. Any other refusal still fails the write,
+      with the name. This keeps principle 5: only named attributes, only the ones the system
+      says user code can't carry, and a Finder tag or a user's xattr is never dropped
+      quietly. An ACL refusal on SMB is skipped only if the owner's output shows the ACL is
+      the server's synthesized one; decided after the check.
+    - The forward temp path uses the same function, so a rewrite past the padding on the NAS
+      can't fail the same way.
+    - Rejected: undoing an in-place write in place. It would avoid the temp file and the
+      attributes, but it needs the in-place journal (marker, torn-write recovery, ADR 0107)
+      run backwards; a larger change than this one.
+
+    The fault: `WriteFaults.refusingAttribute: (@Sendable (_ name: String) -> Int32?)?`
+    (`FileReplace.swift`, beside `beforeReplacing`), asked for each attribute name
+    `copyAttributes` is about to set; a returned errno makes that `fsetxattr` fail as the
+    server's would. Same for `"acl"`. No real SMB needed.
+
+    Undo question. The journal doesn't record who wrote an edit. `TagUndoJournal` gets an
+    `origin` file in the entry's folder (`TagEditOrigin`: `tagEditor` or `discogsTagger`),
+    written with the entry; an entry without one is unknown and asks nothing (pre-release:
+    no migration). `TagWriter.write(_:to:origin:)` takes it (default `tagEditor`), and
+    `TagWriter.newestEdit() -> (origin, fileCount)?` reads the newest entry without
+    changing anything. `TagEditing.write(_:over:)` (the Discogs path) passes
+    `.discogsTagger`; `save` passes `.tagEditor`. `TagEditing.undo(over:)` takes the
+    asking window's kind (`.tagEditor` for the main window and the Get Info windows,
+    `.discogsTagger` for the tagger window; `TagCommands.swift` picks it from the key
+    window, which today is always the main window's), asks `newestEdit()` on the writes
+    queue, and when the origin differs shows `Confirmation.undoing(origin, count)`:
+    "Undo the Discogs tagger's edit of 22 files?" with Undo Tag Edit and Cancel (the same
+    `Confirmation` and `ask` as the write question). Cancel leaves the journal alone.
+    Rule: ask when the origin is known and isn't the window's.
+11. **Tests (51.40).** Swift Testing, in the neighbor of each.
+    - `Tests/LibraryTests/RescanNoticeTests.swift`: a library built at an older shape
+      (`DiscogsMatchTests` lines 96-116 do this with a changed SQL) opened with
+      `confirmRescan` returning false throws `rescanDeclined` and the file is byte-identical
+      (files table, plays and the identity table unchanged, `discards()` empty); true
+      rebuilds as before and `rebuiltParts == [.index]`; a new library never asks; a nil
+      closure never asks. The notice's text for a custom `[SchemaPart]` list (the 53.13 use)
+      holds each part's `rescanWhy` once.
+    - `Tests/LibraryBrowserTests`: `scanText` says "Rebuilding the index" in a rebuild and
+      "Scanning" otherwise.
+    - `Tests/DiscogsTests`: each `NotExactReason` over crafted matches (a file with no track,
+      a different count, durations over the tolerance, a tie, found by title only), the
+      `.taggedID` and `.barcode` ways of finding, `trackCount` in the summary, and that
+      Exact and Matched albums carry no reasons.
+    - `Tests/DiscogsTaggerTests/TaggerWindowTests.swift` (neighbor): the header at 760 pt
+      (every control's frame inside the window, none below another); the opening scope with
+      a selection, with none, and with no catalog (analyze doesn't start); the tables'
+      frames in four cases (first open, after an import, after reopening, after a resize):
+      each table's frame bottom is within a few points of the buttons' top and its height
+      grows with the window; the reasons in the row's tooltip; sorting each column of Other
+      Releases and the Tracks column; View Release's rows against a fixture release; a
+      sheet's size, widths and sort back after closing and reopening, through a fake
+      `layoutChosen`; the URL from `releaseURL` in both sheets.
+    - `Tests/SettingsTests`: `TaggerSheetLayouts` round trips, rejects unknown keys, and a
+      bad value is discarded.
+    - `Tests/TagWriterTests/UndoJournalTests.swift` (neighbor): write a fixture MP3 in place
+      (default `writesInPlace`), set a local xattr, then undo with `faults.refusingAttribute`
+      refusing that name with `EACCES`: fails without the change (the old single
+      `fcopyfile` can't skip), and after it (a) a name in `unsettableAttributes` is skipped,
+      the undo succeeds, the bytes match the original and the other attributes are kept;
+      (b) a name not in the list fails the undo with that name in the detail, the file
+      untouched, and the journal still holds the edit; (c) the same refusals on a forward
+      write past the padding. The existing `theFileKeepsItsAttributes` stays as it is.
+    - `Tests/TagWriterTests`: `newestEdit()` returns the origin and count, an entry without
+      an origin file reads as unknown.
+    - `Tests/TagEditorTests`: the question for another window's edit (asked, with "22
+      files"; Cancel leaves the edit undoable; Undo runs it), none for the same origin, none
+      for an unknown one.
+12. **Commit order**, each green on `./scripts/test --changed`:
+    1. `feat(library)`: `SchemaPart.rescanWhy`, `RescanNotice`, `confirmRescan`, tests.
+    2. `feat(librarybrowser)`: the alert, the quit, the status bar's "Rebuilding", the
+       `AppDelegate` wiring.
+    3. `fix(tagwriter)`: per-attribute copy, `unsettableAttributes`, `refusingAttribute`,
+       tests (after the owner's output fixes the list).
+    4. `feat(tageditor)`: the origin in the journal and the undo question.
+    5. `feat(discogs)`: the not-Exact reasons and the ways of finding, tests.
+    6. `refactor(discogs)`: `releaseURL` as the one builder (its own commit, per the
+       promotion rule).
+    7. `feat(discogstagger)`: the header (51.33), opening on the selection (51.34), the
+       reasons' words (51.35), the height (51.36), with their tests.
+    8. `feat(discogstagger)`: sorting, Tracks, View Release, Open on Discogs (51.37).
+    9. `feat(settings)` and `feat(discogstagger)`: the sheets' saved layouts (51.38).
+    10. `docs`: ADR 0136 (the dialog and when it is used, why the why is per part, the flag in
+        memory, the attribute copy and its cause and list, undoing through a temp file, the
+        origin in the journal; rejected: an in-place undo, a persisted rebuild flag, asking
+        for stats rebuilds), `docs/map.md` untouched, plan boxes ticked, 53.13 pointing at
+        `RescanNotice`.
+13. **Gate.** `./scripts/check` once at the end: it reads all of this (`scripts/dupes.swift`
+    for the wording and the URL, `scripts/surface.swift` for `package` on `releaseURL` and
+    `RescanNotice`, `scripts/arch.swift` for `LibraryBrowser` importing only core).
+    The owner check in the part's last item stays: the next index change, the tagger on a
+    selection of Likely albums, a sheet resized and reopened, and Undo Tag Edit after a
+    tagger write on the NAS.
+
+Open for the owner:
+- Output of `xattr -l` and `ls -le@` on one of the 22 files and on a file the app never wrote
+  (read only), to settle which attribute the NAS refuses and so `unsettableAttributes`.
+  Until then the fix names the attribute and skips only `com.apple.provenance`.
+- One ADR (0136) for all of 51h, or a separate 0137 for the attribute copy.
+
+Decided here, no input needed: the why is per part, not per build; the rebuild flag lives in
+memory; stats rebuilds keep their discard notice and don't use the dialog; the not-Exact tolerance
+text reads the threshold constants (8 s or 5%, not 5 s); the undo question compares origins and
+asks only when the origin is known; an undo of an in-place write still goes through a temp file.
+
 ### 52. Discogs API
 
 - [ ] **52.1 The token.** An optional Discogs personal access token, the player's first secret:
