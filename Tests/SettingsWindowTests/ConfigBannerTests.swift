@@ -94,3 +94,28 @@ import Testing
     #expect(!banner.view.isHidden, "a problem that blocks the file can't be closed")
     #expect(banner.text.hasSuffix(ConfigBanner.blockedText))
 }
+
+@MainActor @Test func aClosedWarningStaysHiddenWhenTheAppsOwnWriteMovesItsLine() {
+    let banner = ConfigBanner()
+    func token(line: Int) -> ConfigProblem {
+        ConfigProblem(
+            line: line, message: #"unknown setting "discogs.token""#,
+            obsoleteKey: ["discogs.token"])
+    }
+    let old = ConfigProblem(line: 9, message: #"unknown setting "a.old""#, obsoleteKey: ["a.old"])
+    func show(_ problems: [ConfigProblem]) {
+        banner.show(
+            problems: problems, writeFailure: nil, path: "/x/config.json", stateFailure: nil,
+            stateDiscarded: nil, configEdits: 1)
+    }
+    show([token(line: 2), old])
+    banner.dismissWarnings()
+    // A key the app added above it, which isn't an edit from outside.
+    show([
+        token(line: 5), ConfigProblem(line: 12, message: old.message, obsoleteKey: old.obsoleteKey),
+    ])
+    #expect(banner.view.isHidden)
+    // Remove Obsolete Setting took one out, moving the other.
+    show([token(line: 4)])
+    #expect(banner.view.isHidden)
+}

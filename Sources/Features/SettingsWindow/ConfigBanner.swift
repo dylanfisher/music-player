@@ -96,7 +96,12 @@ public final class ConfigBanner: NSViewController {
     private func render() {
         _ = view
         guard let shown else { return }
-        let problems = shown.problems.filter { dismissed?.problems.contains($0) != true }
+        // By what it says, not its line, which a patch above it or a removal moves.
+        let problems = shown.problems.filter { problem in
+            dismissed?.problems.contains {
+                $0.message == problem.message && $0.obsoleteKey == problem.obsoleteKey
+            } != true
+        }
         let (writeFailure, unwatched) = (shown.writeFailure, shown.unwatched)
         let (stateFailure, stateDiscarded) = (shown.stateFailure, shown.stateDiscarded)
         let name = (shown.path as NSString).lastPathComponent
