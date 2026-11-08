@@ -13,6 +13,9 @@ public enum HTTPSError: Error, Equatable, Sendable, CustomStringConvertible {
     case tooLarge(cap: Int)
     /// The task waiting on it was cancelled.
     case cancelled
+    /// TLS failed: the handshake, or a certificate the system doesn't trust, by its `URLError`
+    /// code.
+    case insecure(code: Int)
     /// Any other failure, by its `URLError` code.
     case failed(code: Int)
 
@@ -23,6 +26,7 @@ public enum HTTPSError: Error, Equatable, Sendable, CustomStringConvertible {
         case .timedOut: "the server didn't answer in time"
         case .tooLarge(let cap): "the body is over the \(cap)-byte cap"
         case .cancelled: "the request was cancelled"
+        case .insecure(let code): "the secure connection failed (URL error \(code))"
         case .failed(let code): "the connection failed (URL error \(code))"
         }
     }

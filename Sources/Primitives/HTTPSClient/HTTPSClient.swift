@@ -114,6 +114,11 @@ public final class HTTPSClient: Sendable {
             .cannotConnectToHost, .dnsLookupFailed, .internationalRoamingOff,
             .dataNotAllowed, .callIsActive:
             .offline
+        case .secureConnectionFailed, .serverCertificateHasBadDate, .serverCertificateUntrusted,
+            .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
+            .clientCertificateRejected, .clientCertificateRequired,
+            .appTransportSecurityRequiresSecureConnection:
+            .insecure(code: error.code.rawValue)
         default: .failed(code: error.code.rawValue)
         }
     }

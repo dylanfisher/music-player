@@ -196,6 +196,7 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
         (.success(.init(status: 302, headers: ["Location": "https://x"], body: [])), .status(302)),
         (.failure(.offline), .offline), (.failure(.timedOut), .timedOut),
         (.failure(.tooLarge(cap: 4)), .tooLarge), (.failure(.refusedAddress), .refusedAddress),
+        (.failure(.insecure(code: -1202)), .insecure(-1202)),
     ] {
         fake.queue("/releases/1001", reply)
         await #expect(throws: error) { try await api.release(id: 1001) }
@@ -204,6 +205,9 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     #expect(DiscogsAPIError.offline.stopsRun)
     #expect(DiscogsAPIError.timedOut.stopsRun)
     #expect(!DiscogsAPIError.notFound.stopsRun)
+    // A certificate the system refuses isn't "no connection".
+    #expect(DiscogsAPIError.insecure(-1202).description.contains("secure connection"))
+    #expect(DiscogsAPIError.insecure(-1202).stopsRun)
 }
 
 @Test func aReleaseThatPassesALimitOrIsAnotherIsRefused() async throws {
@@ -247,7 +251,7 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
 @Test func noErrorTextHoldsTheTokenOrTheQuery() async throws {
     let errors: [DiscogsAPIError] = [
         .tokenRequired, .unauthorized, .notFound, .rateLimited, .status(500), .offline,
-        .timedOut, .tooLarge, .malformed("x"), .refusedAddress, .cancelled,
+        .timedOut, .tooLarge, .malformed("x"), .refusedAddress, .cancelled, .insecure(-1202),
     ]
     for error in errors {
         #expect(!error.description.contains(fakeToken.secret))

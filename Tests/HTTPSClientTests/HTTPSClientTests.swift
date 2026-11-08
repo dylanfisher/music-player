@@ -167,7 +167,8 @@ private func get(
 @Test func networkFailuresMapToTheirErrors() async throws {
     for (code, error) in [
         (URLError.Code.notConnectedToInternet, HTTPSError.offline), (.cannotFindHost, .offline),
-        (.timedOut, .timedOut), (.secureConnectionFailed, .failed(code: -1200)),
+        (.timedOut, .timedOut), (.secureConnectionFailed, .insecure(code: -1200)),
+        (.serverCertificateUntrusted, .insecure(code: -1202)), (.badURL, .failed(code: -1000)),
     ] {
         let url = Stub.register(.failure(code))
         await #expect(throws: error) { try await get(url) }
@@ -177,7 +178,7 @@ private func get(
 @Test func noErrorTextHoldsAnAddressOrAHeader() {
     for error in [
         HTTPSError.refusedAddress, .offline, .timedOut, .tooLarge(cap: 4), .cancelled,
-        .failed(code: -1200),
+        .insecure(code: -1202), .failed(code: -1200),
     ] {
         #expect(!error.description.contains("http"))
         #expect(!error.description.contains("example"))

@@ -15,6 +15,9 @@ public enum DiscogsAPIError: Error, Equatable, Sendable, CustomStringConvertible
     /// Any other status but 200.
     case status(Int)
     case offline
+    /// TLS failed, by its `URLError` code: a certificate the system doesn't trust, as a proxy
+    /// that inspects traffic gives.
+    case insecure(Int)
     case timedOut
     case tooLarge
     /// A reply that isn't what the API documents, or that passes a limit.
@@ -31,6 +34,8 @@ public enum DiscogsAPIError: Error, Equatable, Sendable, CustomStringConvertible
         case .rateLimited: "Discogs kept refusing requests for its rate limit"
         case .status(let code): "Discogs answered with status \(code)"
         case .offline: "there is no connection to Discogs"
+        case .insecure(let code):
+            "the secure connection to Discogs failed (URL error \(code))"
         case .timedOut: "Discogs didn't answer in time"
         case .tooLarge: "Discogs's reply was larger than the app accepts"
         case .malformed(let why): "Discogs's reply wasn't usable: \(why)"
@@ -57,6 +62,7 @@ public enum DiscogsAPIError: Error, Equatable, Sendable, CustomStringConvertible
             case .timedOut: .timedOut
             case .tooLarge: .tooLarge
             case .cancelled: .cancelled
+            case .insecure(let code): .insecure(code)
             case .failed: .offline
             }
     }
