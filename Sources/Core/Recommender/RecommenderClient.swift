@@ -40,16 +40,6 @@ package struct RecommenderClient: Sendable {
         try self.init(address: address, port: port, token: token, interfaces: interfaces)
     }
 
-    /// The service's version: checks the address and the token.
-    func ping() async throws(RecommenderError) -> String {
-        try await call("/v1/ping", body: EmptyRequest(), as: PingReply.self).version
-    }
-
-    /// Whether the downloads are on, and the format policies the service takes.
-    func downloadsConfig() async throws(RecommenderError) -> DownloadsConfig {
-        try await call("/v1/downloads/config", body: EmptyRequest(), as: DownloadsConfig.self)
-    }
-
     /// Posts `body` to `path` and decodes the reply as `Reply`, or as the refusal the service
     /// gave. Any status but 200 is an error, read with its body for the code.
     func call<Request: Encodable, Reply: Decodable>(
@@ -104,17 +94,3 @@ let requestEncoder: JSONEncoder = {
 
 /// `{}`, the body of a route that takes nothing.
 struct EmptyRequest: Encodable {}
-
-/// `ping`'s reply.
-package struct PingReply: Decodable {
-    var version: String
-
-    private enum CodingKeys: String, CodingKey, CaseIterable {
-        case ok, version
-    }
-
-    package init(from decoder: any Decoder) throws {
-        let container = try strictContainer(decoder, CodingKeys.self)
-        version = try container.decode(String.self, forKey: .version)
-    }
-}

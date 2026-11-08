@@ -804,7 +804,8 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       oversize, unknown state) naming the address tried. A fuzz target. ADR 0137. Tests on the
       loopback stub with recorded replies.
       Result: `RecommenderClient` posts with the bearer and JSON fields, `keepingRefusals`, to
-      another device's address on a local subnet; `ping` and `downloadsConfig`; errors name the
+      another device's address on a local subnet (`ping` and `downloadsConfig` were removed
+      once nothing but tests called them); errors name the
       URL, never the token. `LocalURL(host:port:path:on:)` is the one `LocalNetwork` change.
       Replies decode with every field present and none unknown. ADR 0137 proposed, its threat
       model row waiting on approval. The `recommender-reply` fuzz target came with 54.2, to run

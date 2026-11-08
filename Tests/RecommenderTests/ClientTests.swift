@@ -6,28 +6,18 @@ import Testing
 @testable import Recommender
 @testable import Settings
 
-@Test func pingPostsTheBearerTokenAndReadsTheVersion() async throws {
-    let stub = try await StubService([(200, try fixture("ping.json"))])
+/// The reply to a route that answers with a job.
+private func jobReply() throws -> String { #"{"ok": true, "job": \#(try fixture("job.json"))}"# }
+
+@Test func aCallPostsTheBearerTokenAndItsJSONBody() async throws {
+    let stub = try await StubService([(200, try jobReply())])
     defer { stub.stop() }
-    #expect(try await stub.client.ping() == "0.1.0")
+    #expect(try await stub.client.cancel(42).id == 42)
     let request = try #require(stub.requests.first)
-    #expect(request.head.hasPrefix("POST /v1/ping HTTP/1.1\r\n"))
+    #expect(request.head.hasPrefix("POST /v1/downloads/cancel HTTP/1.1\r\n"))
     #expect(request.head.contains("\r\nAuthorization: Bearer s3cret-token\r\n"))
     #expect(request.head.contains("\r\nContent-Type: application/json\r\n"))
-    #expect(request.bodyText == "{}")
-}
-
-@Test func theConfigRouteDecodesAsTheContractShowsIt() async throws {
-    let stub = try await StubService([(200, try fixture("config.json"))])
-    defer { stub.stop() }
-    let config = try await stub.client.downloadsConfig()
-    #expect(
-        config
-            == DownloadsConfig(
-                enabled: true, offReason: nil,
-                formatPolicies: [.flac, .lossless, .mp3320, .any], defaultFormatPolicy: .flac,
-                stagingDirName: "staging"))
-    #expect(stub.requests.first?.head.hasPrefix("POST /v1/downloads/config ") == true)
+    #expect(request.bodyText == #"{"id":42}"#)
 }
 
 @Test func a401IsUnauthorizedAndNamesTheAddressButNeverTheToken() async throws {
@@ -35,7 +25,7 @@ import Testing
     defer { stub.stop() }
     let client = try stub.client
     let error = try #require(
-        await caught { () async throws(RecommenderError) in try await client.ping() })
+        await caught { () async throws(RecommenderError) in try await client.cancel(42) })
     #expect(error.kind == .unauthorized)
     #expect(error.description.contains("127.0.0.1:\(stub.server.port)"))
     #expect(!error.description.contains(testToken.rawValue))
@@ -48,10 +38,10 @@ import Testing
     defer { stub.stop() }
     let client = try stub.client
     #expect(
-        await caught { () async throws(RecommenderError) in try await client.ping() }?.kind
+        await caught { () async throws(RecommenderError) in try await client.cancel(42) }?.kind
             == .badRequest(code: "bad_request", message: "unknown field"))
     #expect(
-        await caught { () async throws(RecommenderError) in try await client.ping() }?.kind
+        await caught { () async throws(RecommenderError) in try await client.cancel(42) }?.kind
             == .badRequest(code: "too_large", message: "no"))
 }
 
@@ -60,10 +50,10 @@ import Testing
     defer { stub.stop() }
     let client = try stub.client
     #expect(
-        await caught { () async throws(RecommenderError) in try await client.ping() }?.kind
+        await caught { () async throws(RecommenderError) in try await client.cancel(42) }?.kind
             == .status(503, code: "busy"))
     #expect(
-        await caught { () async throws(RecommenderError) in try await client.ping() }?.kind
+        await caught { () async throws(RecommenderError) in try await client.cancel(42) }?.kind
             == .status(404, code: nil))
 }
 
@@ -72,16 +62,16 @@ import Testing
     defer { stub.stop() }
     let client = try stub.client
     #expect(
-        await caught { () async throws(RecommenderError) in try await client.ping() }?.kind
+        await caught { () async throws(RecommenderError) in try await client.cancel(42) }?.kind
             == .refused(ServiceRefusal(code: .downloadsOff, message: "no [slskd] table")))
 }
 
 @Test func repliesOfAnyOtherShapeAreUnreadable() async throws {
     let replies = [
-        #"{"ok": true, "version": "0.1.0", "extra": 1}"#,
+        #"{"ok": true, "job": 1, "extra": 1}"#,
         #"{"ok": true}"#,
-        #"{"ok": true, "version": 1}"#,
-        #"{"version": "0.1.0"}"#,
+        #"{"ok": true, "job": 1}"#,
+        #"{"job": 1}"#,
         #"{"ok": false, "error": {"code": "made_up", "message": "x"}}"#,
         #"{"ok": false, "error": {"code": "claimed", "message": "x", "other": 1}}"#,
         "[]",
@@ -90,8 +80,9 @@ import Testing
     defer { stub.stop() }
     let client = try stub.client
     for reply in replies {
-        let kind = await caught { () async throws(RecommenderError) in try await client.ping() }?
-            .kind
+        let kind = await caught { () async throws(RecommenderError) in try await client.cancel(42)
+        }?
+        .kind
         guard case .unreadable = kind else {
             Issue.record("\(reply) gave \(String(describing: kind))")
             continue
@@ -101,12 +92,12 @@ import Testing
 
 @Test func aReplyOverTheCapIsRefused() async throws {
     let big =
-        "{\"ok\": true, \"version\": \"\(String(repeating: "a", count: LocalHTTPClient.bodyCap))\"}"
+        "{\"ok\": true, \"job\": \"\(String(repeating: "a", count: LocalHTTPClient.bodyCap))\"}"
     let stub = try await StubService([(200, big)])
     defer { stub.stop() }
     let client = try stub.client
     #expect(
-        await caught { () async throws(RecommenderError) in try await client.ping() }?.kind
+        await caught { () async throws(RecommenderError) in try await client.cancel(42) }?.kind
             == .tooLarge(cap: LocalHTTPClient.bodyCap))
 }
 
@@ -115,7 +106,7 @@ import Testing
         address: IPAddress("127.0.0.1")!, port: LoopbackServer.refusingPort, token: testToken,
         interfaces: [loopback])
     let error = try #require(
-        await caught { () async throws(RecommenderError) in try await client.ping() })
+        await caught { () async throws(RecommenderError) in try await client.cancel(42) })
     guard case .unreachable = error.kind else {
         Issue.record("\(error)")
         return

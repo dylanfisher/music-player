@@ -16,17 +16,15 @@ private let job = """
     "cleanup_pending": false, "created_at": 1, "updated_at": 2}
     """
 
-/// music-recommender's replies: ping, the downloads config, a job, and a page of the job list,
+/// music-recommender's replies: a job and a page of the job list,
 /// which is taken into a fresh copy of the jobs as the client takes it.
 let recommenderReply = FuzzTarget(
     name: "recommender-reply",
-    summary: "music-recommender's replies: ping, config, a job and a page of the job list",
+    summary: "music-recommender's replies: a job and a page of the job list",
     seedFormats: [],
     tokens: jsonTokens + ["9223372036854775808", "\"ok\": false", "\"error\""],
     madeSeeds: { _, _ in
         [
-            #"{"ok": true, "version": "0.1.0"}"#,
-            #"{"ok": true, "enabled": false, "off_reason": "off", "format_policies": [], "default_format_policy": "flac", "staging_dir_name": null}"#,
             #"{"ok": false, "error": {"code": "claimed", "message": "m", "machine": "M", "expires_at": 5}}"#,
             #"{"ok": true, "job": \#(job)}"#,
             #"{"ok": true, "epoch": "e", "revision": 1093, "reset": true, "more": false, "jobs": [\#(job)]}"#,
@@ -35,8 +33,6 @@ let recommenderReply = FuzzTarget(
     prepare: { _ in
         { input in
             var read = false
-            if (try? decodeReply(input, as: PingReply.self)) != nil { read = true }
-            if (try? decodeReply(input, as: DownloadsConfig.self)) != nil { read = true }
             if (try? decodeReply(input, as: JobReply.self)) != nil { read = true }
             if let page = try? decodeReply(input, as: JobPage.self) {
                 read = true
