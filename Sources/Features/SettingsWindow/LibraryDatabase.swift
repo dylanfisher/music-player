@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 
 /// The library index and its snapshots as the Library section shows them (ADR 0142), which the
@@ -46,7 +47,7 @@ public struct LibraryDatabase: Sendable, Equatable {
     /// The index's path with the home folder as `~`.
     var pathText: String { (indexPath as NSString).abbreviatingWithTildeInPath }
 
-    var sizeText: String { Self.bytesText(indexBytes) }
+    var sizeText: String { fileSizeText(indexBytes) }
 
     /// The Last Snapshot row: what went wrong with the last one, else when the newest was
     /// written.
@@ -54,10 +55,6 @@ public struct LibraryDatabase: Sendable, Equatable {
         if let lastProblem { return lastProblem }
         guard let newest = snapshots.first else { return "None yet" }
         return Self.writtenText(newest.written)
-    }
-
-    static func bytesText(_ bytes: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     static func writtenText(_ date: Date) -> String {

@@ -10,9 +10,9 @@ private let logger = moduleLogger()
 let noValueText = "None"
 
 /// Settings ▸ General: the config file's place and buttons in a box titled Config, then the
-/// settings from the schema, a titled box for each section. A checkbox carries its setting's title on its right; a pop-up
-/// or a field has the title on its left, in one column for the whole pane. Each setting's
-/// summary is under it. Settings ▸ Playback, Appearance and Toolbar are one too, with their
+/// settings from the schema, a titled box for each section. A checkbox carries its setting's
+/// title on its right; a pop-up or a field has the title on its left, in one column for the
+/// whole pane. Each setting's summary is under it. Settings ▸ Playback, Appearance and Toolbar are one too, with their
 /// sections and no config file, and the Watched Folders pane holds one for its sections.
 @MainActor
 final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
@@ -110,6 +110,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         let grids = shown.map { grid($0.rows) }
         if let library = shown.firstIndex(where: { $0.section == .library }) {
             addHealthRow(to: grids[library])
+            addIndexRow(to: grids[library])
+            addSnapshotRows(to: grids[library])
         }
         // One label column width for every box, so the controls of all of them line up.
         let labelWidth =
@@ -210,9 +212,6 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     private func addRow(_ row: GeneralModel.Row, to grid: NSGridView) {
-        let snapshots = row.key == AppSettings().snapshotFolder.key
-        if snapshots { addIndexRow(to: grid) }
-        defer { if snapshots { addSnapshotRows(to: grid) } }
         if let group = row.group, let buttons = groupButtons[group.title] {
             let control = makeControl(row)
             controls[row.key] = control
@@ -281,7 +280,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
 
     @objc private func showHealth() { actions.showHealth() }
 
-    /// The index's path and size, and a button to show it in Finder, above the snapshot folder.
+    /// The index's path and size, and a button to show it in Finder, after Show Library Health.
     private func addIndexRow(to grid: NSGridView) {
         let path = NSTextField(labelWithString: "")
         path.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
@@ -297,7 +296,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     /// The last snapshot's time with Back Up Now, then the snapshots with Restore…, under the
-    /// snapshot folder.
+    /// index's row.
     private func addSnapshotRows(to grid: NSGridView) {
         let last = NSTextField(wrappingLabelWithString: "")
         last.preferredMaxLayoutWidth = Self.summaryWidth

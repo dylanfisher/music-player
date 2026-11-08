@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 
 /// The Library section's list of snapshots: when each was written and its size, newest first.
 @MainActor
@@ -55,7 +56,7 @@ final class SnapshotList: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let text =
             tableColumn?.identifier == Self.writtenColumn
             ? snapshot.takenText
-            : LibraryDatabase.bytesText(snapshot.bytes)
+            : fileSizeText(snapshot.bytes)
         let label = NSTextField(labelWithString: text)
         label.lineBreakMode = .byTruncatingTail
         return label
