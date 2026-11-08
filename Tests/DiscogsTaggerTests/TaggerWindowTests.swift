@@ -95,29 +95,47 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
 }
 
 @MainActor
-@Test func viewChangesTicksEachChangeAndCountsThem() throws {
-    let change = { (file: Int64, field: DiscogsField, tag: String) in
+@Test func viewChangesMergesAChangeTheSameInSeveralFilesAndTicksItInEach() throws {
+    let change = { (file: Int64, field: DiscogsField, tag: String, new: String) in
         TagChange(
             id: TagChange.ID(fileID: file, tag: .custom(tag)), field: field, current: nil,
-            new: "1")
+            new: new)
+    }
+    let files = { (file: Int64, position: String) in
+        FileChanges(
+            fileID: file, path: "/m/\(file).flac",
+            changes: [
+                change(file, .releaseID, "DISCOGS_RELEASE_ID", "10"),
+                change(file, .position, "TRACK_NUMBER_TEXT", position),
+            ],
+            unwritable: nil, tags: TrackTags())
     }
     let set = AlbumChangeSet(files: [
-        FileChanges(
-            fileID: 1, path: "/m/1.flac",
-            changes: [change(1, .releaseID, "DISCOGS_RELEASE_ID"), change(1, .label, "LABEL")],
-            unwritable: nil, tags: TrackTags()),
+        files(1, "1-1"),
         FileChanges(
             fileID: 2, path: "/m/2.dsf", changes: [], unwritable: "Tags in DSD files can't be",
             tags: TrackTags()),
+        files(3, "1-2"),
     ])
     let sheet = ChangesSheet(set: set, excluded: [], title: "Persuader – Stockholm")
-    #expect(sheet.rows.count == 3)
-    #expect(sheet.summary.stringValue == "2 of 2 changes in 1 file")
-    sheet.toggle(1)
-    #expect(sheet.excluded == [TagChange.ID(fileID: 1, tag: .custom("LABEL"))])
-    #expect(sheet.summary.stringValue == "1 of 2 changes in 1 file")
-    sheet.toggle(2)
-    #expect(sheet.excluded.count == 1, "a file nothing is written to has no box")
+    #expect(sheet.rows.count == 4, "the release id once, a position per file, the DSD file")
+    #expect(sheet.text(.fileName, 0) == "All 2 files")
+    #expect(sheet.text(.written, 0) == "10")
+    #expect(sheet.text(.fileName, 1) == "1.flac")
+    #expect(sheet.text(.written, 2) == "1-2")
+    #expect(sheet.text(.fileName, 3) == "2.dsf")
+    #expect(sheet.summary.stringValue == "4 of 4 changes in 2 files")
+    sheet.toggle(0)
+    #expect(
+        sheet.excluded == [
+            TagChange.ID(fileID: 1, tag: .custom("DISCOGS_RELEASE_ID")),
+            TagChange.ID(fileID: 3, tag: .custom("DISCOGS_RELEASE_ID")),
+        ])
+    #expect(sheet.summary.stringValue == "2 of 4 changes in 2 files")
+    sheet.toggle(0)
+    #expect(sheet.excluded.isEmpty)
+    sheet.toggle(3)
+    #expect(sheet.excluded.isEmpty, "a file nothing is written to has no box")
 }
 
 @MainActor
