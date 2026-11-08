@@ -21,25 +21,26 @@ enum CatalogKey {
     }
 
     /// The key the matcher compares titles by, music-recommender's too (ADR 0140): `fold`'s
-    /// steps, but with `LatinFold`'s letters in place of Foundation's accent and case folding,
-    /// so a letter outside the table, Cyrillic or Vietnamese, keeps its case and its marks.
+    /// steps, but with `LatinFold`'s letters mapped first, so `æ`, `ø` and `ł` fold as the
+    /// service folds them. Foundation's case and accent folding then handles every other
+    /// character, so this is at least as lenient as `fold` for all scripts. The service
+    /// lowercases the rest but keeps its marks, so it is the stricter side outside the table
+    /// ("Việt" and "Viet" match here only).
     static func matchKey(_ text: String, title: Bool = false) -> String {
         var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         text = replacing(suffix, in: text)
         if title { text = replacing(editionWords, in: text) }
         var mapped = ""
         for scalar in text.unicodeScalars {
-            if scalar == "&" {
-                mapped += " and "
-            } else if scalar.isASCII {
-                mapped.unicodeScalars.append(contentsOf: String(scalar).lowercased().unicodeScalars)
-            } else if let base = LatinFold.bases[scalar] {
+            if let base = LatinFold.bases[scalar] {
                 mapped += base
             } else {
                 mapped.unicodeScalars.append(scalar)
             }
         }
-        mapped = mapped.trimmingCharacters(in: .whitespacesAndNewlines)
+        mapped = mapped.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            .replacingOccurrences(of: "&", with: " and ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if mapped.hasPrefix("the ") { mapped.removeFirst(4) }
         var folded = String.UnicodeScalarView()
         folded.append(contentsOf: mapped.unicodeScalars.filter(isKept))

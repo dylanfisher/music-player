@@ -1,6 +1,6 @@
 /// The letters the matcher folds to plain ASCII, as music-recommender folds them (ADR 0140):
 /// Latin-1 Supplement and Latin Extended-A, U+00C0 to U+017F less `×` and `÷`, each to its
-/// lowercase base. A letter outside it is kept as it is, case included.
+/// lowercase base. `CatalogKey.matchKey` folds a letter outside it with Foundation.
 enum LatinFold {
     /// Each base and the letters folded to it, in the order of the shared golden file.
     static let table: [(base: String, letters: String)] = [

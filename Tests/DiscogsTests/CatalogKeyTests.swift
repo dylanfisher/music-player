@@ -54,3 +54,17 @@ import Testing
     #expect(CatalogKey.titleVariants("Side A - Side B") == [])
     #expect(CatalogKey.titleVariants("[SK 032]") == [])
 }
+
+@Test func theMatchKeyFoldsMarksOutsideTheLatinTableAsTheLibraryTaggerAlwaysDid() {
+    // The service keeps these marks; the player re-checks at auto-tag (ADR 0140), so the golden
+    // cases leave them out and this is the player's side of that difference.
+    #expect(CatalogKey.matchKey("Việt") == CatalogKey.matchKey("Viet"))
+    #expect(CatalogKey.matchKey("Việt") == "viet")
+    #expect(CatalogKey.matchKey("Ænima") == CatalogKey.matchKey("Aenima"))
+}
+
+@Test func titlesDifferingOnlyInCaseScoreOneInAnyScript() {
+    #expect(TitleSimilarity(["Кино"]).similarities(to: "кино") == [1])
+    #expect(TitleSimilarity(["ΔΕΛΤΑ"]).similarities(to: "δελτα") == [1])
+    #expect(TitleSimilarity(["Việt"]).similarities(to: "Viet") == [1])
+}

@@ -18,24 +18,32 @@ The service is Rust with no crate for Unicode folding. Its ADR 0010 copies the p
 (`CatalogKey.fold`, `TitleSimilarity`, `ReleaseScore`, `MatchThreshold`) with one change: in
 place of Foundation's `diacriticInsensitive` and `caseInsensitive` folding, a hand-written
 table maps the 190 letters of U+00C0 to U+017F (less `×` and `÷`) to their ASCII base, ASCII
-is lowercased, and any other character is kept as it is, case included. Its golden file,
+is lowercased, and any other character is lowercased with `char::to_lowercase`, keeping its
+marks. Its golden file,
 `rank-golden.json`, holds the thresholds, the table, the edition words and cases of folding,
 title similarity, tracklist scores and ranking.
 
 Foundation and the table disagree. Run against the golden cases, the player's fold missed 7
 of 56 and its similarity 2 of 16: Foundation keeps `æ`, `ø`, `ł`, `đ`, `þ`, `ð` and `ĳ` as they
 are, where the table makes them `ae`, `o`, `l`, `d`, `th`, `d` and `ij`, so "Ænima" and "Aenima"
-were 0.67 alike, not 1; and Foundation lowercases Cyrillic and drops Vietnamese marks, which
-the table keeps, so "Кино" and "кино" were 1, not 0.75.
+were 0.67 alike, not 1. Foundation also drops marks outside the table, such as Vietnamese,
+which the service keeps.
 
 ## Decision
 
-- **The matcher folds with the table.** `CatalogKey.matchKey` takes `fold`'s steps in its
-  order (trim, a trailing `(digits)`, bracketed edition words for a title, `&` as "and", a
-  leading "the ", only letters and digits kept) and maps characters through `LatinFold.table`
-  in place of Foundation. `TitleSimilarity`, and so `ReleaseScore`, the tiers and the tagger's
-  side-by-side rows, compare titles by it. The player agrees with the service on every fold,
-  similarity and score case.
+- **The matcher folds with the table, then Foundation.** `CatalogKey.matchKey` takes
+  `fold`'s steps in its order (trim, a trailing `(digits)`, bracketed edition words for a
+  title, `&` as "and", a leading "the ", only letters and digits kept), maps characters
+  through `LatinFold.table`, and then applies Foundation's case and accent folding to
+  everything else. `TitleSimilarity`, and so `ReleaseScore`, the tiers and the tagger's
+  side-by-side rows, compare titles by it. The library tagger is at least as lenient as it was
+  before the table, for all scripts: "Кино" and "кино" are equal.
+- **The one difference from the service: marks outside the table.** Foundation drops
+  diacritics the table doesn't cover, such as Vietnamese, where the service keeps them. So
+  "Việt" and "Viet" match in the player and not in the service. The service is the stricter
+  side and the player re-checks at auto-tag, so the difference shows as a discrepancy, never
+  as a wrong write. The golden cases hold no such marks, so no case needs an exception, and
+  `CatalogKeyTests` covers the player's side.
 - **The catalog's keys stay on Foundation.** `CatalogKey.fold` still makes the keys the
   catalog stores at import and looks releases up by (ADR 0130). Moving them to the table would
   leave every stored key for a name with `ø` or `ł` unfindable until the dumps were imported
@@ -48,7 +56,7 @@ the table keeps, so "Кино" and "кино" were 1, not 0.75.
   `ReleaseScore.score`.
 
 **SHA-256 of `rank-golden.json`:**
-`01af1a94f196bc82a7a62aa8457770cfce5d8be09a58677e77c8ac120728d97e`
+`c9f9134c5460472361fbd2005fbee149d3630832caf1f4706c57ce5eaaddf2d2`
 
 ### Deliberate differences
 
@@ -67,17 +75,16 @@ the table keeps, so "Кино" and "кино" were 1, not 0.75.
 - **Keeping Foundation and listing the 9 cases as differences.** Rejected: each would show as
   a discrepancy on a real download with an `ø` or `æ` in a title, which the shared file exists
   to prevent.
-- **Applying the table, then Foundation to what's left.** Rejected: the player would still
-  disagree on Cyrillic case and Vietnamese marks, and the golden file would no longer say what
-  either side does.
+- **Folding only with the table, as the service first did.** Rejected: it kept Cyrillic case
+  and every mark outside the table, so the library tagger got stricter ("Кино" against "кино"
+  scored 0.75). The service now lowercases such characters too (its ADR 0010).
 - **Moving the catalog's keys to the table too.** Rejected for now, for the reimport above. It
   can come with the next change that rebuilds the catalog anyway.
 
 ## Consequences
 
-Titles outside Latin-1 and Latin Extended-A now compare by case and marks in the tagger: a
-Cyrillic title tagged in capitals against Discogs's mixed case scores lower than it did, and
-may drop from Exact to Likely. Within the table, letters Foundation kept now fold, so "Røyksopp"
-and "Royksopp" are the same title. A change to the table, the edition words, a threshold or the
+Within the table, letters Foundation kept now fold, so "Røyksopp" and "Royksopp" are the same
+title. Outside it nothing gets stricter. Rust's and Swift's Unicode case tables can differ by
+version for rare characters, which the golden cases avoid. A change to the table, the edition words, a threshold or the
 score is a change to the golden file, its SHA-256 here and in music-recommender's ADR 0010, and
 both repos' tests, in step.

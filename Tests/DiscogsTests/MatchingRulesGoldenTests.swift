@@ -9,7 +9,7 @@ import Testing
 // fails the SHA-256 check here until the ADR and the file change on both.
 
 /// The golden file's SHA-256, as ADR 0140 and music-recommender's ADR 0010 record it.
-private let goldenSHA256 = "01af1a94f196bc82a7a62aa8457770cfce5d8be09a58677e77c8ac120728d97e"
+private let goldenSHA256 = "c9f9134c5460472361fbd2005fbee149d3630832caf1f4706c57ce5eaaddf2d2"
 
 private struct Golden: Decodable {
     struct Thresholds: Decodable {
