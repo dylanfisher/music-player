@@ -134,6 +134,31 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     #expect(RateLimiter(hasToken: false).limit == 25)
 }
 
+@Test func settingTheWallClockBackDoesntStallThePacing() async throws {
+    let fake = FakeDiscogs()
+    // The wall clock steps back an hour once the first request is sent; the uptime doesn't.
+    let api = DiscogsAPI(
+        token: fakeToken, userAgent: "MusicPlayer/1.0", transport: fake.transport,
+        cache: fake.cache, now: { fake.now - (fake.requests.isEmpty ? 0 : 3_600) },
+        uptime: { fake.now },
+        sleep: { fake.advance($0) })
+    _ = try await api.release(id: 1001)
+    _ = try await api.release(id: 1002)
+    #expect(fake.requests.count == 2)
+    #expect(fake.now - 1_000_000 <= 1.0 + 1e-9, "one gap at most, not an hour")
+}
+
+@Test func aCacheEntryFromTheFutureIsFetchedAgain() async throws {
+    let fake = FakeDiscogs()
+    let api = fake.api()
+    _ = try await api.release(id: 1001)
+    let stored = try #require(fake.cacheEntry(.release, 1001))
+    fake.setCacheEntry(.release, 1001, (fake.now + 86_400, stored.json))
+    _ = try await api.release(id: 1001)
+    #expect(fake.requests.count == 2)
+    #expect(fake.cacheEntry(.release, 1001)?.fetchedAt == fake.now)
+}
+
 @Test func noneRemainingWaitsTheWholeWindow() async throws {
     let fake = FakeDiscogs()
     let api = fake.api()

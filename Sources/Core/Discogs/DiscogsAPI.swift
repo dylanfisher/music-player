@@ -49,6 +49,7 @@ public actor DiscogsAPI {
     private let transport: HTTPSTransport
     private let cache: DiscogsCache
     private let now: @Sendable () -> Double
+    private let uptime: @Sendable () -> Double
     private let sleep: @Sendable (Double) async throws -> Void
     private var limiter: RateLimiter
     /// Hears the seconds a long wait will take, then nil when it's over.
@@ -56,11 +57,14 @@ public actor DiscogsAPI {
     private var busy = false
     private var queued: [CheckedContinuation<Void, Never>] = []
 
-    /// `now` and `sleep` are the clock, which tests replace so they don't wait.
+    /// `now` is the wall clock, which dates cache entries; `uptime` a clock that only goes
+    /// forward, which paces requests, so setting the Mac's clock back can't stall a run;
+    /// `sleep` waits. Tests replace all three so they don't wait.
     public init(
         token: DiscogsToken?, userAgent: String, transport: @escaping HTTPSTransport,
         cache: DiscogsCache,
         now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 },
+        uptime: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
         sleep: @escaping @Sendable (Double) async throws -> Void = {
             try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000))
         }
@@ -70,6 +74,7 @@ public actor DiscogsAPI {
         self.transport = transport
         self.cache = cache
         self.now = now
+        self.uptime = uptime
         self.sleep = sleep
         limiter = RateLimiter(hasToken: token != nil)
     }
@@ -192,12 +197,12 @@ public actor DiscogsAPI {
         defer { endTurn() }
         var refusals = 0
         while true {
-            try await pause(limiter.wait(at: now()))
+            try await pause(limiter.wait(at: uptime()))
             var headers = ["User-Agent": userAgent]
             if let authorization = authorization(for: url) {
                 headers["Authorization"] = authorization
             }
-            limiter.started(at: now())
+            limiter.started(at: uptime())
             let response: HTTPSResponse
             do {
                 response = try await transport(url, headers, cap, Self.timeoutSeconds)
@@ -263,13 +268,14 @@ public actor DiscogsAPI {
 
     // MARK: Cache
 
-    /// An entry under `maximumAgeDays` old.
+    /// An entry under `maximumAgeDays` old. One dated in the future, after the clock was set
+    /// back, counts as expired.
     private func cached(
         _ kind: DiscogsCache.Kind, _ id: Int, maximumAgeDays: Double = cacheDays
     ) async -> String? {
         do {
             guard let entry = try await cache.read(kind, id),
-                now() - entry.fetchedAt < maximumAgeDays * 86_400
+                (0..<maximumAgeDays * 86_400).contains(now() - entry.fetchedAt)
             else { return nil }
             return entry.json
         } catch {

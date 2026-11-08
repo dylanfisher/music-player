@@ -140,7 +140,7 @@ final class FakeDiscogs: @unchecked Sendable {
     func api(token: DiscogsToken? = fakeToken) -> DiscogsAPI {
         DiscogsAPI(
             token: token, userAgent: DiscogsAPI.userAgent(version: "1.0"), transport: transport,
-            cache: cache, now: { [self] in now },
+            cache: cache, now: { [self] in now }, uptime: { [self] in now },
             sleep: { [self] seconds in
                 try Task.checkCancellation()
                 lock.withLock {
