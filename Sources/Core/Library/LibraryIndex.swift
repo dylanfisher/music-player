@@ -34,7 +34,8 @@ public final class LibraryIndex {
     /// then fill. In memory only: a quit in the middle of the rescan reads as a plain scan at
     /// the next launch (ADR 0136).
     public private(set) var rebuiltIndex = false
-    /// Unreadable files kept beside the library; older ones are deleted when another is moved.
+    /// Files moved aside for one reason that are kept beside the library: unreadable ones, or
+    /// those a restore replaced; older ones are deleted when another is moved.
     static let keptUnreadableFiles = 3
     /// The wall clock sync events are stamped by, in milliseconds since 1970; tests set their
     /// own to skew one machine's.
@@ -109,14 +110,15 @@ public final class LibraryIndex {
     }
 
     /// Renames the file at `url`, with its log and shared memory, which would otherwise be read
-    /// into the new file, to a name no other move uses, and deletes all but the newest
-    /// `keptUnreadableFiles` moved before.
-    private static func moveAside(_ url: URL) throws -> URL {
+    /// into the new file, to a name no other move uses, `<name>.<reason>-<stamp>`, and deletes
+    /// all but the newest `keptUnreadableFiles` moved before for the same reason. A restore of
+    /// a snapshot moves the index it replaces with the reason `replaced` (ADR 0142).
+    package static func moveAside(_ url: URL, reason: String = "unreadable") throws -> URL {
         let stamp = ISO8601DateFormatter.string(
             from: Date(), timeZone: .current,
             formatOptions: [.withInternetDateTime, .withFractionalSeconds]
         ).replacingOccurrences(of: ":", with: "-")
-        let prefix = url.lastPathComponent + ".unreadable-"
+        let prefix = url.lastPathComponent + ".\(reason)-"
         let aside = url.deletingLastPathComponent().appendingPathComponent(
             prefix + stamp + "-" + UUID().uuidString.prefix(8))
         let suffixes = ["", Database.walSuffix, Database.shmSuffix]

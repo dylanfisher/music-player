@@ -244,6 +244,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let layout = WindowSettings(settings, state: state)
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
         do {
+            // Before any connection opens the index, which the restore replaces (ADR 0142).
+            _ = try applyPendingRestore(databaseURL: databaseURL)
+        } catch {
+            // Once the window is up: `fail` quits a launch that has none.
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.fail("The snapshot couldn't be restored", error)
+                }
+            }
+        }
+        do {
             try Database.readAhead(at: databaseURL)
         } catch {
             // Only a hint: the queries read what they need either way.
