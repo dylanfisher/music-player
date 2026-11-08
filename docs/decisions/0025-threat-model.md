@@ -6,7 +6,8 @@
 - **Amended by:** [0118](0118-hog-mode-fix-plays-the-chosen-track-and-log-values.md): row
   35, the playback modules log their values public and a track's path hashed;
   [0137](0137-the-discogs-token.md): rows 58 and 59, the Discogs token, the app's one secret;
-  [0138](0138-the-discogs-api-client.md): rows 60 to 63, the Discogs API.
+  [0138](0138-the-discogs-api-client.md): rows 60 to 63, the Discogs API;
+  [0140](0140-discogs-cover-art.md): row 64, a cover downloaded from Discogs.
 
 ## Context
 
@@ -98,6 +99,7 @@ and `scripts/bundle`. It found no secret anywhere in the tree.
 | 61 | the tagger's matches; the cache | the network; a compromised response | release, master and search JSON | decoded by the documented types, extra keys ignored; the id must be the one asked for; 2,000 tracklist rows, sub-tracks 3 deep, 2,000 characters a text; turned into a `CatalogRelease` and nothing else; an image off `i.discogs.com` or not https is dropped; a cache entry that doesn't decode or names another id is fetched again | `aReleaseThatPassesALimitOrIsAnotherIsRefused`, `eachReleaseFromTheAPIIsWhatTheCatalogHoldsForIt`, `anImageThatIsntHTTPSOnTheImageHostIsDropped`, `theCacheAnswersUntilItsEntryIsOldOrDamaged` |
 | 62 | Discogs's account for the token | the app itself | the request rate | requests spaced by `X-Discogs-Ratelimit`, a minute's wait when none remain, `Retry-After` on a 429 and a third 429 stops the run | `requestsAreSpacedByTheRateLimit`, `noneRemainingWaitsTheWholeWindow`, `a429WaitsAsToldAndTheThirdStopsTheRun` |
 | 63 | the UI; the owner's terminal | the network | text from a response: titles, names, roles | the same `CatalogRelease` text the catalog gives, shown and escaped as tag text is (rows 7, 9, 39); an error's text never quotes a response | `eachReleaseFromTheAPIIsWhatTheCatalogHoldsForIt`, `noErrorTextHoldsTheTokenOrTheQuery` |
+| 64 | the app's memory; the music files | the network; a compromised response | a cover downloaded from `i.discogs.com` ([0140](0140-discogs-cover-art.md)) | https on the image host only, no token, 10 MiB, 20 s; JPEG or PNG by signature and end marker, never by `Content-Type`; at most 8,000 pixels a side and decoded only by `thumbnail(of:maxPixelSize:)` (rows 3 and 4); written only by `TagWriter`, after the one confirmation, in the batch and undo of the tags | `anImageThatIsntAWholeSmallJPEGOrPNGIsNoCover`, `theTypeIsReadFromTheBytesNotTheServersContentType`, `anImageOffTheImageHostIsNeverFetchedAndWithoutATokenNothingIs`, `aCoverIsWrittenWithTheTagsAndUndoneWithThem`, `applyCountsTheCoversAndWritesThemWithTheTagsInOneBatch` |
 
 **What the SQL audit found.** `rg -n '\\\(' Sources/Core/Library Sources/Primitives/SQLite
 Sources/App/MusicPlayer/ScanCommand.swift`, read for every string that reaches `prepare`,
