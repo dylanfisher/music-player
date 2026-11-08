@@ -1,8 +1,8 @@
 # 0145. The music-recommender client: bearer POSTs over the local HTTP client, strict replies
 
 - **Date:** 2026-11-08
-- **Status:** Proposed — awaiting owner approval
-- **See also:** [0025](0025-threat-model.md) (the threat model, which gains a row on approval),
+- **Status:** accepted
+- **See also:** [0025](0025-threat-model.md) (the threat model, row 65),
   [0039](0039-network-control.md) (local subnets, IP literals, `LocalHTTPClient`),
   [0144](0144-the-service-token.md) (the token and the settings),
   [0146](0146-staged-tag-writes.md) and [0147](0147-moving-downloads-into-the-library.md) (what
@@ -15,7 +15,7 @@ downloads albums and stages them on the NAS. The contract is the service's `docs
 route is a POST of a JSON object with `Authorization: Bearer <token>`, and the answer is a 200
 with `{"ok": true, ...}`, a 200 with `{"ok": false, "error": {...}}` for a request understood
 and refused, or a 400, 401, 404, 405, 408 or 503 for one that wasn't. The service is on the
-LAN, so its replies are a LAN device's input (ADR 0025), and the request carries the app's one
+LAN, so its replies are a LAN device's input (ADR 0025), and the request carries the app's second
 secret (ADR 0144).
 
 ## Decision
@@ -93,8 +93,8 @@ token can queue downloads or reject staged ones, not reach the library.
 
 A reply with a field the service added breaks the player until it learns the field, by design.
 
-## Proposed threat model row
+## Threat model row
 
-On approval, ADR 0025's table gains this row:
+ADR 0025's table has this as row 65, after the Discogs rows:
 
-| 58 | the token; the app | LAN device | music-recommender's replies, and anything answering at its address | the address only a configured IP literal, another device's on a local subnet; POST to that address alone, no redirects, 1 MiB and 5 s; the token only in the `Authorization` header, never in a URL, an error, a log line or a problem; every reply decoded strictly at every level, unknown fields, codes and values refused, an unknown job state an error; the service's text escaped; `list` paging that must advance; the token in plaintext on the LAN ([0145](0145-the-recommender-client.md)) | RecommenderTests; `scripts/fuzz recommender-reply` |
+| 65 | the service token; the app | LAN device | music-recommender's replies, and anything answering at its address | the address only a configured IP literal, another device's on a local subnet; POST to that address alone, no redirects, 1 MiB and 5 s; the token only in the `Authorization` header, never in a URL, an error, a log line or a problem, and kept in `config.json` as the Discogs token is ([0137](0137-the-discogs-token.md), [0144](0144-the-service-token.md)): every write mode 0600, a token in a file others can read not used, `ServiceToken` printing as `<service token>`; every reply decoded strictly at every level, unknown fields, codes and values refused, an unknown job state an error; the service's text escaped; `list` paging that must advance; the token in plaintext on the LAN ([0145](0145-the-recommender-client.md)) | `aCallPostsTheBearerTokenAndItsJSONBody`, `a401IsUnauthorizedAndNamesTheAddressButNeverTheToken`, `anAddressOffEverySubnetOrThisMacsOwnIsRefused`, `aReplyOverTheCapIsRefused`, `repliesOfAnyOtherShapeAreUnreadable`, `aJobWithAFieldMissingUnknownOrOutOfTheContractIsUnreadable`, `anUnknownStateIsAnErrorOfItsOwnNeverASkippedJob`, `aPageThatDoesntAdvanceIsUnreadable`, `theServiceTokenNeverPrintsItsValue`, `aRefusedServiceTokenIsNotInTheProblem`, `aServiceTokenInAFileOthersCanReadIsntUsed`; `scripts/fuzz recommender-reply` |

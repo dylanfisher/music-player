@@ -1,7 +1,7 @@
 # 0147. Approve moves a staged download into the library, and an upgrade deletes what it replaces
 
 - **Date:** 2026-11-08
-- **Status:** Proposed — awaiting owner approval
+- **Status:** accepted
 - **Amends:** [0124](0124-drop-files-and-the-library-folder.md) (nothing moves a file into the
   library folder), [0050](0050-remove-from-library.md) and
   [0125](0125-trash-always-removes.md) (what passes files to the Trash, and what a share with
@@ -119,14 +119,9 @@ library are on one volume. A crash at any step resumes from the ledger and the f
 staging folder never holds library files, and the library never holds a file Approve didn't
 move.
 
-## Proposed AGENTS.md change
+## AGENTS.md
 
-One sentence after the ADR 0124 sentence of the music files bullet in Boundaries, with the
-link's `docs/decisions/` prefix as the bullet's other links have it:
-
-> Approve in the Downloads window renames the staged files into the library folder, never over a file, and for an upgrade then passes the files it replaces to the same Trash call, which on a share with no Trash deletes them ([ADR 0147](0147-moving-downloads-into-the-library.md)).
-
-It is the second of the two changes in the whole bullet ADR 0146 proposes, so approving both
-means taking that bullet as it stands. The line count stays the same, and the detail stays here.
-Until the owner approves, AGENTS.md stays as it is and no code from 54.6 on moves or deletes a
-music file.
+The music files bullet in Boundaries has one sentence for this ADR, after the ADR 0124 sentence:
+Approve in the Downloads window renames the staged files into the library folder, never over a
+file, and for an upgrade then passes the files it replaces to the same Trash call, which on a
+share with no Trash deletes them. ADR 0146 adds the bullet's other clause. The detail stays here.
