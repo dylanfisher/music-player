@@ -37,19 +37,28 @@ public struct SyncFolder: SettingValue {
     /// stored by share and one by path can't be compared until they're found, so the sync
     /// checks the found paths too.
     func isInside(_ folder: WatchedFolder) -> Bool {
-        switch (share.flatMap(ShareURL.init), folder.share.flatMap(ShareURL.init)) {
-        case (nil, nil):
-            return isPath(standardized(path), inOrAt: standardized(folder.path))
-        case (let mine?, let theirs?):
-            // Hosts differ between Macs, so a share with the same name is taken to be the same.
-            return mine.hasSameName(as: theirs)
-                && (folder.path.isEmpty
-                    || isPath(
-                        path.precomposedStringWithCanonicalMapping,
-                        inOrAt: folder.path.precomposedStringWithCanonicalMapping))
-        default:
-            return false
-        }
+        isFolder(path, share: share, inOrAt: folder.path, share: folder.share)
+    }
+}
+
+/// Whether the folder at `path`, in `share` when it has one, is the folder at `folderPath` or
+/// inside it, when both are stored the same way; false when one is stored by share and the
+/// other by path.
+func isFolder(_ path: String, share: String?, inOrAt folderPath: String, share folderShare: String?)
+    -> Bool
+{
+    switch (share.flatMap(ShareURL.init), folderShare.flatMap(ShareURL.init)) {
+    case (nil, nil):
+        return isPath(standardized(path), inOrAt: standardized(folderPath))
+    case (let mine?, let theirs?):
+        // Hosts differ between Macs, so a share with the same name is taken to be the same.
+        return mine.hasSameName(as: theirs)
+            && (folderPath.isEmpty
+                || isPath(
+                    path.precomposedStringWithCanonicalMapping,
+                    inOrAt: folderPath.precomposedStringWithCanonicalMapping))
+    default:
+        return false
     }
 }
 
