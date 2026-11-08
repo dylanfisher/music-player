@@ -9,7 +9,7 @@ enum DownloadColumn: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .source: ""
+        case .source: "Source"
         case .album: TrackColumn.album.title
         case .format: TrackColumn.codec.title
         case .state: "State"
@@ -21,7 +21,7 @@ enum DownloadColumn: String, CaseIterable {
 
     var width: CGFloat {
         switch self {
-        case .source: 22
+        case .source: 56
         case .album: 260
         case .format: 150
         case .state: 220

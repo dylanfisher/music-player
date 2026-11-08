@@ -144,3 +144,16 @@ private func rows() -> [DownloadRow] {
     #expect(window.reloads == 2)
     window.window?.close()
 }
+
+@MainActor
+@Test func everyColumnHasAHeaderWideEnoughToShowIt() throws {
+    let window = DownloadsWindow()
+    for column in window.table.tableColumns {
+        #expect(!column.title.isEmpty, "\(column.identifier.rawValue) has no title")
+        // The Album column stretches with the window.
+        guard column.resizingMask == .userResizingMask else { continue }
+        let header = column.headerCell.attributedStringValue.size().width
+        #expect(column.width >= header + 8, "\(column.title) is cut off")
+    }
+    window.window?.close()
+}
