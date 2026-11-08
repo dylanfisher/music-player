@@ -42,6 +42,8 @@ func writeSnapshot(
     try writing.withLock {
         let name = SnapshotName(of: date, beforeRestore: beforeRestore, calendar: calendar)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try requireLocal(
+            folder, isLocal: try folder.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal)
         try removePartials(in: folder, olderThan: Date().addingTimeInterval(-leftoverSeconds))
         let token = UUID().uuidString
         let copy = folder.appendingPathComponent(name.copyFileName(token), isDirectory: false)
@@ -101,6 +103,13 @@ private func rotateSnapshots(in folder: URL, calendar: Calendar) throws {
     for snapshot in found where expired.contains(snapshot.name) {
         try FileManager.default.removeItem(at: snapshot.url)
     }
+}
+
+/// Throws unless `folder` is on a local volume, as `isLocal` says (ADR 0142): a folder on a
+/// network volume, a watched share's among them, is refused when the snapshot is written,
+/// since Settings can't tell where a share is mounted.
+func requireLocal(_ folder: URL, isLocal: Bool?) throws(SnapshotError) {
+    guard isLocal == true else { throw .networkFolder(folder.path) }
 }
 
 /// Deletes the files in `folder` that writes stopped partway left, last changed before

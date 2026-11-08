@@ -12,6 +12,8 @@ public enum SnapshotError: Error, Equatable, CustomStringConvertible {
     /// A restore at launch moved the index aside to this path and could neither put the
     /// snapshot in its place nor move it back: why.
     case indexNotPutBack(String, String)
+    /// The snapshot folder, at this path, is on a network volume, which isn't written.
+    case networkFolder(String)
     /// The snapshot was written, but older ones rotation deletes couldn't be: why.
     case notRotated(String)
 
@@ -23,6 +25,8 @@ public enum SnapshotError: Error, Equatable, CustomStringConvertible {
             "\(name) holds a damaged library, so it can't be restored: \(detail)"
         case .restoreMissing(let path):
             "the snapshot to restore was to be at \(path), but it's gone; the library is as it was"
+        case .networkFolder(let path):
+            "the snapshot folder \(path) is on a network volume; choose a folder on this Mac"
         case .notRotated(let detail):
             "the snapshot was written, but older ones couldn't be deleted: \(detail)"
         case .indexNotPutBack(let path, let detail):

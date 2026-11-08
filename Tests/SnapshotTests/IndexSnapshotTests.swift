@@ -205,3 +205,15 @@ private final class Failures: @unchecked Sendable {
     func add(_ failure: String) { lock.withLock { found.append(failure) } }
     var all: [String] { lock.withLock { found } }
 }
+
+/// A folder on a network volume, such as a watched share where it's mounted, is refused.
+@Test func aSnapshotFolderOnANetworkVolumeIsRefused() throws {
+    let folder = URL(fileURLWithPath: "/Volumes/music/Backups", isDirectory: true)
+    #expect(throws: SnapshotError.networkFolder(folder.path)) {
+        try requireLocal(folder, isLocal: false)
+    }
+    #expect(throws: SnapshotError.networkFolder(folder.path)) {
+        try requireLocal(folder, isLocal: nil)
+    }
+    try requireLocal(FileManager.default.temporaryDirectory, isLocal: true)
+}
