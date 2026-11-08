@@ -296,10 +296,10 @@ matched albums already carry.
 
 51a (`Core/Metadata`, `Core/TagWriter`, `Core/Library`, `Tools/TagCorpus`) and 51b (a new
 `Core` module for the catalog) touch different modules, so they run in parallel worktrees and
-merge a, then b. 51c needs both, and 51d needs 51c; 51e needs 51d's import button. ADR
+merge a, then b. 51c needs both, and 51d needs 51c; 51e needs 51d's import button; 51f runs after the gate. ADR
 numbers: 0128 and 0129 to 51a (the survey's findings, custom fields), 0130 to 51b, 0131 to 51c,
 0132 and 0133 to 51d (the mapping, one confirmation for a match set), 0134 to 51e (resuming an
-import).
+import), 0135 to 51f (list fields in smart playlists).
 
 Decided by the owner on 2026-11-07:
 
@@ -316,6 +316,7 @@ Decided by the owner on 2026-11-07:
 | The real import | An agent imports the 2026-11-01 dump on this Mac for 51.8 and 51.13 |
 | The dumps folder in `config.json` | A share and a path, the shape of `library.watchedFolders`, so a remount elsewhere still finds it |
 | MP3's Discogs links and credits | Read and written: YATE stores the `DISCOGS_*_URL` fields as `WXXX` frames and credits as `TIPL` (ADR 0128), so 51.2's custom fields gain both in 51d, and "Like my library" matches YATE in every format |
+| Presets that ship (2026-11-07) | None from the owner's library, since the app will be shared: "One to one", "Minimal" and a generic "YATE" (YATE's keys and spellings per format). The owner's layout is their own saved mapping, "Like my library", in their `config.json`, and a fixture in the tests |
 | The API token (52.1) | The owner adds one, as `"discogs.token"` in `config.json`, before phase 52 runs |
 
 What the owner's matched albums carry, from a sample on 2026-11-07 (400 random FLAC albums, 90
@@ -602,6 +603,30 @@ releases (a duration too long for an `Int`, fixed in `72960469`) and had to star
 - [ ] **51.17 Tests.** A stop and a crash (a killed child process) at each stage, resumed to a
       catalog identical to an import run straight through; a checkpoint from another dump date;
       a damaged checkpoint; the bench's fixture import stopped halfway and resumed.
+
+#### 51f. Mood and styles in the library
+
+Asked for by the owner on 2026-11-07: YATE puts a release's Discogs styles in `MOOD`
+("Dub Techno, House, Techno"), which the tag reader and Get Info already handle, but the index
+doesn't store it, so it has no column and no smart playlist field. And "Genre contains Techno"
+also matches "Dub Techno", so no rule can pick out one style. Changing the tracks part rescans
+the library once on first launch (pre-release: one shape, no migrations), so 51f ships in the build
+that also needs the new catalog.
+
+- [ ] **51.19 Mood in the index.** `MOOD` stored with the other tags, a Mood column in the
+      track table (sortable, in the header's menu) and a Mood smart playlist field, its title
+      defined once with the tag editor's.
+- [ ] **51.20 Whole values in a list.** Text rules on Genre, Mood, Grouping and Publisher gain
+      "has" and "doesn't have": the value split on ", " and on " - " (Genre's
+      `{genre} - {styles}`), each part folded as the column's sort is, and compared whole, so
+      "Mood has Techno" matches "Dub Techno, Techno" and not "Dub Techno". Done in SQL, on
+      the indexed column, within the smart playlist budgets. ADR 0135 records the split.
+- [ ] **51.21 Tests.** Mood read from FLAC, MP4 and ID3 fixtures into the index; the column
+      sorts; "has" against values at the start, middle and end, a genre with a comma of its
+      own (`Folk, World, & Country`), and a value that only contains the word; the smart
+      playlist bench row with a "has" rule.
+- [ ] **Owner check:** a smart playlist of one style on the real library, and the Mood column
+      on albums tagged by YATE.
 
 ### 52. Discogs API
 
