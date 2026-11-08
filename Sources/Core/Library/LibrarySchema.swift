@@ -54,12 +54,9 @@ enum SchemaPart: String, CaseIterable {
     /// cache: rebuilding it discards nothing a fetch can't get again.
     case discogsCache
 
-    /// The part's SQL; the index's as built with Separate Releases off.
-    var sql: String { sql(separateReleases: false) }
-
     /// The part's SQL, the index's built with Separate Releases as given (ADR 0143); the other
     /// parts don't depend on it.
-    func sql(separateReleases: Bool) -> String {
+    func sql(separateReleases: Bool = false) -> String {
         switch self {
         case .index: indexSchema(separateReleases: separateReleases)
         case .stats: statsSchema

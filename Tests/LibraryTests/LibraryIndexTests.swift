@@ -126,7 +126,7 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
         .appendingPathComponent("stats-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let database = try Database(at: directory.appendingPathComponent("stats.sqlite"))
-    try database.execute(SchemaPart.stats.sql)
+    try database.execute(SchemaPart.stats.sql())
     let tables = try database.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
     ).map {
