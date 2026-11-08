@@ -699,6 +699,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         artViewer = viewer
         viewer.show()
         viewer.load(embedded, path: track.path, failed: actions.failed)
+        viewer.readPictures(path: track.path, current: embedded, failed: actions.failed)
     }
 
     /// A refresh, as a scan's every 2 s, keeps the viewer open while its track is still listed

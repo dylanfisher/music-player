@@ -5,19 +5,26 @@ import Metadata
 
 /// An album's art opened over the whole screen, centered and as large as the screen allows,
 /// over a dimmed backdrop. It shows the art it opened with at once and replaces it with the art
-/// decoded off the main thread at the screen's pixels. A click anywhere or Esc closes it, and so
-/// does the window it opened from closing or the app going to the background, since it floats
-/// above every window.
+/// decoded off the main thread at the screen's pixels. When the file holds more than one
+/// picture, ← and → and the buttons at the sides step through them, stopping at either end,
+/// under a line saying which, "2 of 3 · Back Cover". A click anywhere else or Esc closes it, and
+/// so does the window it opened from closing or the app going to the background, since it
+/// floats above every window.
 @MainActor
 final class ArtViewer {
     let window: NSWindow
     private let view: ArtViewerView
     /// Called once the viewer has closed.
     var closed: () -> Void = {}
-    /// Counts each showing and closing, so a decode finishing after the opening it was for
-    /// ended is dropped.
+    /// Counts each showing, closing and step, so a decode finishing after the picture it was
+    /// for was left is dropped.
     private var session = 0
     private var observers: [NSObjectProtocol] = []
+    /// The file's pictures, once read, and the one shown.
+    private(set) var pictures: [EmbeddedPicture] = []
+    private(set) var shown = 0
+    /// The file the pictures are in, and where a decode reports its failure.
+    private var file: (path: String, failed: (String) -> Void)?
 
     /// `owner` is the window the art was opened from.
     init(image: NSImage, screen: NSScreen, owner: NSWindow?) {
@@ -32,6 +39,7 @@ final class ArtViewer {
         window.contentView = view
         window.setFrame(screen.frame, display: false)
         view.close = { [weak self] in self?.close() }
+        view.step = { [weak self] in self?.step(by: $0) }
         let center = NotificationCenter.default
         let closeOnMain: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
@@ -74,6 +82,63 @@ final class ArtViewer {
         }
     }
 
+    /// Reads every picture in the file at `path` off the main thread, for stepping, `current`
+    /// being the one shown. A file of one picture shows no buttons or count.
+    @discardableResult
+    func readPictures(path: String, current: EmbeddedArt, failed: @escaping (String) -> Void)
+        -> Task<Void, Never>
+    {
+        let opening = session
+        return Task {
+            let read = await blockingFileWork {
+                Result { () throws(MetadataError) in
+                    try readMetadata(at: URL(fileURLWithPath: path, isDirectory: false))
+                        .metadata.pictures
+                }
+            }
+            guard opening == session, window.isVisible else { return }
+            switch read {
+            case .success(let pictures): show(pictures, current: current, path: path, failed)
+            case .failure(let error): failed("couldn't read the pictures of \(path): \(error)")
+            }
+        }
+    }
+
+    /// Steps through `pictures` from `current`, which shows already.
+    func show(
+        _ pictures: [EmbeddedPicture], current: EmbeddedArt, path: String,
+        _ failed: @escaping (String) -> Void
+    ) {
+        self.pictures = pictures
+        shown = pictures.firstIndex { $0.art == current } ?? 0
+        file = (path, failed)
+        view.showsSteps = pictures.count > 1
+        showPlace()
+    }
+
+    /// "2 of 3 · Back Cover", or "2 of 3" for a picture of no type; empty for one picture.
+    var placeText: String {
+        guard pictures.count > 1 else { return "" }
+        let place = "\(shown + 1) of \(pictures.count)"
+        return pictures[shown].typeName.map { "\(place) · \($0)" } ?? place
+    }
+
+    /// Shows the picture `step` places on, stopping at either end.
+    func step(by step: Int) {
+        let next = min(max(shown + step, 0), pictures.count - 1)
+        guard next != shown, pictures.indices.contains(next), let file else { return }
+        shown = next
+        session += 1
+        showPlace()
+        load(pictures[next].art, path: file.path, failed: file.failed)
+    }
+
+    private func showPlace() {
+        view.place = placeText
+        view.canStepBack = shown > 0
+        view.canStepForward = shown < pictures.count - 1
+    }
+
     func close() {
         guard window.isVisible else { return }
         session += 1
@@ -100,12 +165,73 @@ private final class ArtViewerWindow: NSWindow {
 }
 
 /// Draws the art over a dimmed backdrop, inside the screen's visible area, and closes on a
-/// click or Esc.
+/// click or Esc. With several pictures, ← and → and the side buttons step, and a line under the
+/// art says which is shown.
 private final class ArtViewerView: NSView {
     var image: NSImage? {
         didSet { needsDisplay = true }
     }
     var close: () -> Void = {}
+    var step: (Int) -> Void = { _ in }
+    var place: String {
+        get { placeLabel.stringValue }
+        set { placeLabel.stringValue = newValue }
+    }
+    var showsSteps = false {
+        didSet {
+            for view in [placeLabel, backButton, forwardButton] { view.isHidden = !showsSteps }
+        }
+    }
+    var canStepBack: Bool {
+        get { backButton.isEnabled }
+        set { backButton.isEnabled = newValue }
+    }
+    var canStepForward: Bool {
+        get { forwardButton.isEnabled }
+        set { forwardButton.isEnabled = newValue }
+    }
+    private let placeLabel = NSTextField(labelWithString: "")
+    private lazy var backButton = stepButton("chevron.left", "Previous Picture", -1)
+    private lazy var forwardButton = stepButton("chevron.right", "Next Picture", 1)
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        placeLabel.textColor = .white
+        placeLabel.font = .systemFont(ofSize: NSFont.systemFontSize + 2, weight: .medium)
+        for view in [placeLabel, backButton, forwardButton] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            view.isHidden = true
+            addSubview(view)
+        }
+        let inset = 24.0
+        NSLayoutConstraint.activate([
+            placeLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            placeLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
+            backButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+            backButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            forwardButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
+            forwardButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+
+    /// A borderless button that steps by `by`; its own click doesn't reach the view's, which
+    /// closes the viewer.
+    private func stepButton(_ symbol: String, _ title: String, _ by: Int) -> NSButton {
+        let button = NSButton(title: title, target: self, action: #selector(stepClicked))
+        button.tag = by
+        button.isBordered = false
+        button.contentTintColor = .white
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: title) {
+            button.image = image.withSymbolConfiguration(.init(pointSize: 36, weight: .medium))
+            button.imagePosition = .imageOnly
+        }
+        return button
+    }
+
+    @objc private func stepClicked(_ sender: NSButton) { step(sender.tag) }
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -125,10 +251,11 @@ private final class ArtViewerView: NSView {
     override func mouseDown(with event: NSEvent) { close() }
 
     override func keyDown(with event: NSEvent) {
-        if KeyChord.candidates(for: event).first == KeyChord(.escape) {
-            close()
-        } else {
-            super.keyDown(with: event)
+        switch KeyChord.candidates(for: event).first {
+        case KeyChord(.escape): close()
+        case KeyChord(.left) where showsSteps: step(-1)
+        case KeyChord(.right) where showsSteps: step(1)
+        default: super.keyDown(with: event)
         }
     }
 }
