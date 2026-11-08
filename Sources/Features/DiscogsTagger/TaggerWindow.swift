@@ -262,28 +262,28 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Shows the model as it is now: the catalog, the work running, the tabs, the albums and
     /// the selected album.
     func refresh() {
+        // The line, its tooltip, and whether there's a catalog to reveal; nil while checking,
+        // when what the last check showed stays until this one answers.
+        let catalogShown: (text: String, tip: String?, isReady: Bool)?
         switch model.catalog {
-        case .checking:
-            // What the last check showed stays until this one answers.
-            if catalogLabel.stringValue.isEmpty {
-                catalogLabel.stringValue = "Checking the Discogs catalog…"
-            }
-        case .ready(let status):
-            catalogLabel.stringValue = status.shown
-            catalogLabel.toolTip = status.detail
-            revealButton.isHidden = false
-            importButton.title = Self.reimportTitle
+        case .checking: catalogShown = nil
+        case .ready(let status): catalogShown = (status.shown, status.detail, true)
         case .missing:
-            catalogLabel.stringValue =
-                "There's no Discogs catalog on this Mac; Import Discogs Dump… builds one."
-            catalogLabel.toolTip = nil
-            revealButton.isHidden = true
-            importButton.title = Self.importTitle
+            catalogShown = (
+                "There's no Discogs catalog on this Mac; Import Discogs Dump… builds one.", nil,
+                false
+            )
         case .unusable(let why):
-            catalogLabel.stringValue = "The Discogs catalog can't be used: \(why)."
-            catalogLabel.toolTip = catalogLabel.stringValue
-            revealButton.isHidden = true
-            importButton.title = Self.importTitle
+            let text = "The Discogs catalog can't be used: \(why)."
+            catalogShown = (text, text, false)
+        }
+        if let catalogShown {
+            catalogLabel.stringValue = catalogShown.text
+            catalogLabel.toolTip = catalogShown.tip
+            revealButton.isHidden = !catalogShown.isReady
+            importButton.title = catalogShown.isReady ? Self.reimportTitle : Self.importTitle
+        } else if catalogLabel.stringValue.isEmpty {
+            catalogLabel.stringValue = "Checking the Discogs catalog…"
         }
         let resumeHidden = model.unfinished == nil || model.isBusy
         if let unfinished = model.unfinished {
