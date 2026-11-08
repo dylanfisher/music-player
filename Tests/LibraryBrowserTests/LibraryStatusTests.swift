@@ -101,6 +101,12 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     status.apply(.scanning(folder: "/Volumes/music/Music", progress))
     #expect(
         status.scanText == "Scanning Music: 300 of 1,200 read · Other: 300 of 1,200 read")
+
+    // A scan that failed has ended too: the next is a plain one.
+    status.apply(.scanning(folder: "/Volumes/music/Failing", progress))
+    status.apply(.scanFailed(folder: "/Volumes/music/Failing", reason: "gone"))
+    status.apply(.scanning(folder: "/Volumes/music/Failing", progress))
+    #expect(status.scanText?.contains("Rebuilding") == false, "\(status.scanText ?? "")")
 }
 
 /// A scan the watcher's stop cancelled, as when a folder is removed, leaves the status bar, and

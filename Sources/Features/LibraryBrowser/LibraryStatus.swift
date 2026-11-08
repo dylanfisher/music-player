@@ -13,7 +13,8 @@ struct LibraryStatus: Equatable, Sendable {
     /// Whether this launch rebuilt the index, so each folder's scan is the rebuild's until one
     /// of its scans ends (ADR 0136).
     var rebuildingIndex = false
-    /// The folders a scan has ended for since launch.
+    /// The folders a scan has finished for since launch, read through or failed; a stopped one
+    /// starts again as the rebuild's.
     private var scannedFolders: Set<String> = []
     /// Problems the last scan of each folder had with the folder itself, by folder path.
     private(set) var folderIssues: [String: [ScanIssue]] = [:]
@@ -70,6 +71,7 @@ struct LibraryStatus: Equatable, Sendable {
             folderIssues[folder] = summary.issues.isEmpty ? nil : summary.issues
         case .scanFailed(let folder, let reason):
             scanEnded(folder)
+            scannedFolders.insert(folder)
             failures[folder] = reason
         case .scanStopped(let folder):
             scanEnded(folder)
