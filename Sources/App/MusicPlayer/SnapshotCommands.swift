@@ -153,37 +153,14 @@ extension AppDelegate {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     switch prepared {
-                    case .success: self?.relaunch()
+                    case .success:
+                        self?.relaunch(
+                            failing: "The app couldn't open again; open it to finish the restore")
                     case .failure(let error):
                         self?.fail(Self.restoreFailedTitle, error)
                     }
                 }
             }
         }
-    }
-
-    /// Quits, and opens the app again with the same arguments once this process has ended, so
-    /// the next launch's swap finds no connection open on the index. Outside an app bundle, as
-    /// from `swift run`, it only quits; the next launch restores.
-    private func relaunch() {
-        let app = Bundle.main.bundleURL
-        if app.pathExtension == "app" {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh", isDirectory: false)
-            process.arguments =
-                [
-                    "-c",
-                    "while /bin/kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null;"
-                        + " do /bin/sleep 0.2; done; app=$1; shift; exec /usr/bin/open -n \"$app\""
-                        + " --args \"$@\"",
-                    "relaunch", app.path,
-                ] + CommandLine.arguments.dropFirst()
-            do {
-                try process.run()
-            } catch {
-                fail("The app couldn't open again; open it to finish the restore", error)
-            }
-        }
-        NSApp.terminate(nil)
     }
 }
