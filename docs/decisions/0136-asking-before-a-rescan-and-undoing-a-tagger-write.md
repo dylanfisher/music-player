@@ -1,4 +1,4 @@
-# 0136. Asking before a rescan, and undoing a tagger write
+# 0136. Asking before a rescan, undoing a tagger write, and the tagger's second pass
 
 - **Date:** 2026-11-08
 - **Status:** accepted
@@ -8,7 +8,9 @@
 
 ## Context
 
-The owner's testing after 51g, on 2026-11-08 (51h):
+The owner's testing after 51g, on 2026-11-08 (51h), found three problems, below, and asked for
+the tagger to say why an album isn't Exact, to show a release before it's used, and to keep its
+sheets' sizes:
 
 - The first launch after 51f rescanned the whole library with no word: a new build's index
   schema rebuilt the index part, and every file was read again. It looked like a corrupted
@@ -70,13 +72,47 @@ The owner's testing after 51g, on 2026-11-08 (51h):
 
 - **The origin:** the journal keeps the window an edit was made in, as an `origin` file in the
   edit's folder (`TagEditOrigin`: `tagEditor` or `discogsTagger`), written with the folder.
-  `TagWriter.newestEdit()` reads the newest edit's origin and file count without changing
-  anything. An edit with no origin file is unknown and asks nothing: stored data has one shape,
-  and there is no migration.
+  `TagWriter.newestEdit()` reads the newest edit, its entry's sequence with its origin and file
+  count, without changing anything. An edit with no origin file is unknown and asks nothing:
+  stored data has one shape, and there is no migration.
 - **The rule:** Undo Tag Edit, after the writes queued before it, asks "Undo the Discogs
   tagger's edit of 22 files?" when the newest edit's origin is known and isn't the kind of
-  window it's pressed in: the tagger's window when that's the key window, the tag editor's for
-  any other. Cancel leaves the edit undoable.
+  window it's pressed in: the tagger's when its window or a sheet over it is the key window,
+  the tag editor's for any other. Cancel leaves the edit undoable.
+- **The edit asked about is the one undone:** the undo runs through
+  `TagWriter.undoLast(ifNewestIs:)` with the edit it looked at. A write queued while the
+  question was up makes it fail with nothing undone, rather than undo that write.
+
+### Why an album isn't Exact
+
+- **From what the matcher kept:** `AlbumMatch.reasons` is built from the chosen release's score
+  (the count, unpaired files and tracks, titles that differ, lengths past the tolerance), the
+  tie the tie-break left, and how the release was first found. Nothing is scored again. The
+  length reason carries the tolerance the matcher used, so its words read the thresholds.
+- **`releaseIDsDiffer`,** beyond the plan's list: an album Incomplete only because its files
+  carry different release ids, or only some do, would otherwise say nothing.
+
+### Viewing a release
+
+- **`ReleaseDetail` is public:** View Release lists a release's rows as Discogs has them, and
+  the catalog's own track type is internal to Discogs, where the matcher and the mapping walk
+  it. A small public copy of what the sheet shows keeps that type internal.
+- **The Tracks column** counts the tracks a file can be, as the matcher counts them (headings
+  left out, an index track's parts each one), not Discogs's rows, so it compares with the
+  album's file count.
+
+### The sheets' layouts
+
+- **Four kinds:** Other Releases, View Release, View Changes and Field Mapping each keep their
+  last size, column widths and sort, by kind, not per album.
+- **In `state.json`,** under `discogsTagger.sheets` (`TaggerSheetLayouts`): this Mac's window
+  state, not a preference for the config file.
+- **Applied and recorded in one place:** the tagger window applies a sheet's layout as it
+  begins the sheet and records it as the sheet ends, rather than each sheet doing both. A size
+  under the sheet's minimum or past the screen is brought within them, and a column or sort the
+  sheet no longer has is ignored.
+- **A bad value is discarded** with the file, as any stored value that doesn't match:
+  pre-release, no versions.
 
 ## Alternatives considered
 
