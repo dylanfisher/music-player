@@ -29,8 +29,14 @@ folder on the same volume or on the NAS share, and never moves it or puts it in 
 receiving app's, from the original, which stays where it is.
 
 **The app's own drops** take a drag from its own lists as tracks, by the IDs. The table and
-the sidebar read the URLs only from a drag another app started (`draggingSource` is nil), so
-rows dropped on a playlist are added to it rather than added to the library as files.
+the sidebar read the URLs only from a drag another app started (`draggingSource` is nil,
+`SidebarController.fromAnotherApp`), so rows dropped on a playlist are added to it rather
+than added to the library as files, and rows dropped anywhere else on the sidebar are
+refused, as before. Before this, the sidebar took any drag holding audio file URLs as files
+to add; once the app's own rows carried them, a drop on a playlist would have added the
+tracks to the library again instead of to the playlist. The rule keys on where the drag
+started rather than on the track-IDs type, since another app never writes that type and
+the source is what AppKit reports for every drag.
 
 **The boundary.** AGENTS.md's music-file line says a drag out offers a copy only and the app
 writes nothing for it.
