@@ -219,6 +219,36 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     #expect(pairs.map { [$0.0.id, $0.1.id] } == [[1, 5], [4, 7]])
 }
 
+@Test func aLosslessFileConvertedToAnotherLosslessCodecKeepsItsStats() throws {
+    let index = try craftedIndex([])
+    let old = try gone(Crafted(path: "/M/a.m4a", seconds: 61, codec: .alac), in: index)
+    try index.store([Crafted(path: "/M/a.flac", seconds: 61).scanned])
+    #expect(try index.matchMoves() == [TrackMove(from: "/M/a.m4a", to: "/M/a.flac")])
+    #expect(try index.track(path: "/M/a.flac")?.id == old)
+}
+
+@Test func aLossyFileIsNeverTheSameAudioAsALosslessOne() throws {
+    let index = try craftedIndex([])
+    _ = try gone(Crafted(path: "/M/a.m4a", seconds: 61, codec: .aac), in: index)
+    try index.store([Crafted(path: "/M/a.flac", seconds: 61).scanned])
+    #expect(try index.matchMoves().isEmpty)
+}
+
+@Test func aPathChangedOnlyInItsExtensionBreaksATie() throws {
+    let index = try craftedIndex([])
+    let one = try gone(
+        Crafted(path: "/M/1.m4a", title: "Song", seconds: 60, codec: .alac), in: index)
+    let two = try gone(
+        Crafted(path: "/M/2.m4a", title: "Song", seconds: 60, codec: .alac), in: index)
+    try index.store([
+        Crafted(path: "/M/2.flac", title: "Song", seconds: 60).scanned,
+        Crafted(path: "/M/1.flac", title: "Song", seconds: 60).scanned,
+    ])
+    #expect(try index.matchMoves().count == 2)
+    #expect(try index.track(path: "/M/1.flac")?.id == one)
+    #expect(try index.track(path: "/M/2.flac")?.id == two)
+}
+
 @Test func aLostFileOffersAtMostSoManyTracks() throws {
     let count = lostCandidatesListed + 2
     let index = try craftedIndex(

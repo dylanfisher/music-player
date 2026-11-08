@@ -16,6 +16,7 @@ struct Crafted {
     var number: Int? = nil
     var seconds = 200.0
     var rateHz = 44100
+    var codec = TrackAudio.Codec.flac
     var art = true
     var warning = false
     var custom: [String: String] = [:]
@@ -40,7 +41,7 @@ struct Crafted {
         tags.date = date
         tags.media = media
         let audio = TrackAudio(
-            codec: .flac, sampleRateHz: rateHz, bitsPerSample: 16, channels: 2,
+            codec: codec, sampleRateHz: rateHz, bitsPerSample: 16, channels: 2,
             lengthFrames: Int(seconds * Double(rateHz)))
         let metadata = TrackMetadata(
             tags: tags, audio: audio,

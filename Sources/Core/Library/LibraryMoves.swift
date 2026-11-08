@@ -1,12 +1,14 @@
 import DisplayText
+import Metadata
 import SQLite
 
 extension LibraryIndex {
     /// Gives each gone path with stats to the stat-less track it matches, in one transaction,
     /// and returns the moves. Every such track is a candidate, not only those this scan added,
     /// since one folder's scan can find a file arrive before another's finds it leave. A pair
-    /// matches when it's alone in sharing its codec, sample rate and length in frames, or,
-    /// where several share those, alone in sharing its title too; the rest wait in Lost Stats.
+    /// matches when it's alone in sharing its codec (any lossless codec counting as one), sample
+    /// rate and length in frames, or, where several share those, alone in sharing its path but
+    /// for the extension, or its title; the rest wait in Lost Stats.
     func matchMoves() throws -> [TrackMove] {
         try database.transaction {
             let gone = try statement(movableSelect + " WHERE \(lostCondition)").map(row: movable)
@@ -182,10 +184,21 @@ private func movable(_ row: Row) throws -> MovablePath {
 
 /// What a gone file and a new one must share to match.
 struct AudioFacts: Hashable {
+    /// The codec, or `lossless` for FLAC, ALAC and PCM, so a lossless file converted to another
+    /// lossless codec, which keeps every frame, is the same audio.
     var codec: String
     var sampleRateHz: Int
     var frames: Int
+
+    init(codec: String, sampleRateHz: Int, frames: Int) {
+        self.codec = losslessCodecs.contains(codec) ? "lossless" : codec
+        self.sampleRateHz = sampleRateHz
+        self.frames = frames
+    }
 }
+
+private let losslessCodecs = Set(
+    [TrackAudio.Codec.flac, .alac, .pcm].map(\.rawValue))
 
 /// A gone path or a stat-less track as move matching sees it.
 struct MovablePath {
@@ -196,7 +209,9 @@ struct MovablePath {
 }
 
 /// The gone and free paths that match one to one: alone in sharing their audio facts, or,
-/// where several share them, alone in sharing their title too. In the gone paths' ID order.
+/// where several share them, alone in sharing their path but for the extension (a file
+/// converted in place), and of those left, alone in sharing their title. In the gone paths' ID
+/// order.
 func movePairs(gone: [MovablePath], free: [MovablePath]) -> [(MovablePath, MovablePath)] {
     let goneByAudio = Dictionary(grouping: gone, by: \.audio)
     var pairs: [(MovablePath, MovablePath)] = []
@@ -206,12 +221,30 @@ func movePairs(gone: [MovablePath], free: [MovablePath]) -> [(MovablePath, Movab
             pairs.append((olds[0], news[0]))
             continue
         }
-        let oldsByTitle = Dictionary(grouping: olds, by: \.title)
-        for (title, titled) in Dictionary(grouping: news, by: \.title) {
-            if titled.count == 1, let same = oldsByTitle[title], same.count == 1 {
-                pairs.append((same[0], titled[0]))
-            }
-        }
+        let byStem = uniquePairs(olds, news, by: { withoutExtension($0.path) })
+        pairs += byStem
+        let paired = Set(byStem.flatMap { [$0.0.id, $0.1.id] })
+        pairs += uniquePairs(
+            olds.filter { !paired.contains($0.id) }, news.filter { !paired.contains($0.id) },
+            by: \.title)
     }
     return pairs.sorted { $0.0.id < $1.0.id }
+}
+
+/// The gone and new paths alone on each side in sharing `key`.
+private func uniquePairs<Key: Hashable>(
+    _ olds: [MovablePath], _ news: [MovablePath], by key: (MovablePath) -> Key
+) -> [(MovablePath, MovablePath)] {
+    let oldsByKey = Dictionary(grouping: olds, by: key)
+    return Dictionary(grouping: news, by: key).compactMap { key, keyed in
+        guard keyed.count == 1, let same = oldsByKey[key], same.count == 1 else { return nil }
+        return (same[0], keyed[0])
+    }
+}
+
+/// The path without its file's extension: `/M/a.m4a` and `/M/a.flac` are both `/M/a`.
+private func withoutExtension(_ path: String) -> Substring {
+    let name = path.lastIndex(of: "/").map { path.index(after: $0) } ?? path.startIndex
+    guard let dot = path[name...].lastIndex(of: "."), dot > name else { return path[...] }
+    return path[..<dot]
 }
