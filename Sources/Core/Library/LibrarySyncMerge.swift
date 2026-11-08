@@ -247,14 +247,23 @@ extension LibraryIndex {
         }
         try recordMove(from: from, to: to)
         guard let old else { return nil }
-        if let new = try existingPathID(newNFC) {
-            try absorb(new, into: old)
-            try move(old, to: new)
-        } else {
-            try statement("UPDATE paths SET path = ? WHERE id = ?").run(newNFC, old)
-        }
+        try takeMove(old, to: newNFC)
         merge.changed = true
         return nil
+    }
+
+    /// Gives the path `old`, which has no file, the path `newNFC` (in NFC), so it keeps its ID,
+    /// Date Added and stats. When `newNFC` has a row, its stats join `old`'s first by the merge
+    /// rules, and its file, if it has one, takes `old`'s ID. Without one, the stats wait at
+    /// `newNFC` for a scan to find its file, as a play of a path never scanned does. Call
+    /// inside a transaction.
+    func takeMove(_ old: Int64, to newNFC: String) throws {
+        guard let new = try existingPathID(newNFC) else {
+            try statement("UPDATE paths SET path = ? WHERE id = ?").run(newNFC, old)
+            return
+        }
+        try absorb(new, into: old)
+        try move(old, to: new)
     }
 
     /// Moves the stats of the path `gone` onto `kept`, by the merge rules: counts added, the
