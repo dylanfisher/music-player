@@ -65,7 +65,7 @@ func parseMP3(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         audio: TrackAudio(
             codec: .mp3, sampleRateHz: header.sampleRateHz, bitsPerSample: nil,
             channels: header.channels, lengthFrames: frames * header.samplesPerFrame),
-        art: first.tag?.art)
+        art: first.tag?.art, pictures: first.tag?.pictures ?? [])
 }
 
 /// The length in samples per channel that the MP3 at `url` states in a Xing/Info or VBRI

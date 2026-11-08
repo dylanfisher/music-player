@@ -37,7 +37,8 @@ func parseAIFF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         audio.lengthFrames = min(
             audio.lengthFrames, presentBytes / (audio.channels * ((bits + 7) / 8)))
     }
-    return TrackMetadata(tags: id3?.tags ?? TrackTags(), audio: audio, art: id3?.art)
+    return TrackMetadata(tags: id3?.tags ?? TrackTags(), audio: audio, art: id3?.art,
+        pictures: id3?.pictures ?? [])
 }
 
 /// Channels, frames, bits per sample, then the rate as an 80-bit extended float. AIFC adds the

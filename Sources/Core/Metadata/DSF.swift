@@ -23,7 +23,8 @@ func parseDSF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
             )
         }
     }
-    return TrackMetadata(tags: id3?.tags ?? TrackTags(), audio: stream.audio, art: id3?.art)
+    return TrackMetadata(tags: id3?.tags ?? TrackTags(), audio: stream.audio, art: id3?.art,
+        pictures: id3?.pictures ?? [])
 }
 
 /// The audio's layout, and where the ID3v2 tag starts if the file has one.

@@ -5,6 +5,7 @@ package let id3v2Identifier = "ID3"
 struct ID3v2Tag {
     var tags: TrackTags
     var art: EmbeddedArt?
+    var pictures: [EmbeddedPicture]
     /// Header, extended header, frames, padding and footer.
     var byteCount: Int
 }
@@ -262,7 +263,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
     }
 
     var tags = TrackTags()
-    var pictures: [(type: UInt32, art: EmbeddedArt)] = []
+    var pictures: [EmbeddedPicture] = []
     var day: (text: String, offset: Int)?
     var time: (text: String, offset: Int)?
     var iTunes = TrackTags()
@@ -329,7 +330,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
                     area, contents, version: version, unsynchronised: frameUnsynchronised,
                     stored: tagUnsynchronised || frameUnsynchronised, &reader.warnings)
                 {
-                    pictures.append(picture)
+                    pictures.append(EmbeddedPicture(art: picture.art, type: picture.type))
                 }
                 return
             }
@@ -394,7 +395,8 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
     if let day, let year = tags.date {
         tags.date = fullDate(year: year, day: day, time: time, &reader.warnings)
     }
-    return ID3v2Tag(tags: tags, art: preferredPicture(pictures), byteCount: byteCount)
+    return ID3v2Tag(
+        tags: tags, art: preferredPicture(pictures), pictures: pictures, byteCount: byteCount)
 }
 
 /// Four characters from A–Z and 0–9.

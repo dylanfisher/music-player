@@ -7,7 +7,7 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     var offset = 4
     var audio: TrackAudio?
     var tags: TrackTags?
-    var pictures: [(type: UInt32, art: EmbeddedArt)] = []
+    var pictures: [EmbeddedPicture] = []
     var isLast = false
     while !isLast {
         try reader.step(at: offset)
@@ -35,7 +35,9 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         case 6:
             // The block is inside the file, so a bad picture spoils only the picture.
             reader.skippingUnreadableField(at: offset) { () throws(ParseFailure) in
-                if let picture = try flacPicture(reader, body) { pictures.append(picture) }
+                if let picture = try flacPicture(reader, body) {
+                    pictures.append(EmbeddedPicture(art: picture.art, type: picture.type))
+                }
             }
         case 127: throw .malformed(at: offset, "FLAC metadata block type 127 is invalid")
         default: break
@@ -46,17 +48,13 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         throw .malformed(at: 4, "FLAC without a STREAMINFO block")
     }
     return TrackMetadata(
-        tags: tags ?? TrackTags(), audio: audio, art: preferredPicture(pictures))
+        tags: tags ?? TrackTags(), audio: audio, art: preferredPicture(pictures),
+        pictures: pictures)
 }
 
 /// The MIME type FLAC PICTURE and ID3 APIC give a picture that's a URL, not embedded.
 let linkedPictureMIMEType = "-->"
 
-/// The front cover (picture type 3) if there is one, otherwise the first picture. FLAC PICTURE and
-/// ID3 APIC share the type numbers.
-func preferredPicture(_ pictures: [(type: UInt32, art: EmbeddedArt)]) -> EmbeddedArt? {
-    (pictures.first { $0.type == 3 } ?? pictures.first)?.art
-}
 
 /// Sample rate (20 bits), channels − 1 (3), bits per sample − 1 (5) and total samples (36),
 /// packed after the block and frame size limits.
