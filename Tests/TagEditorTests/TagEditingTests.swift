@@ -465,16 +465,10 @@ private final class Titles: @unchecked Sendable {
         read: { paths, _ in
             (paths.map { EditableTrack(path: $0, tags: TrackTags(), art: Data([1, 2, 3])) }, [])
         })
-    // The rules TagCommands gives the registry, with the main window open or closed.
+    // The registry's rule for Undo Tag Edit, with the main window open or closed; the art
+    // commands' rules are the editor's own.
     var mainWindowOpen = true
-    editing.isEnabled = { id in
-        switch id {
-        case .undoTagEdit: mainWindowOpen
-        case .replaceArtwork: editing.canReplaceArt
-        case .removeArtwork: editing.canRemoveArt
-        default: false
-        }
-    }
+    editing.isEnabled = { $0 == .undoTagEdit && mainWindowOpen }
     var ran: [CommandID] = []
     editing.run = { ran.append($0) }
     editing.open(["/a.flac"], over: window)
@@ -501,4 +495,41 @@ private final class Titles: @unchecked Sendable {
     editing.refreshCommands()
     #expect(enabled(.undoTagEdit) == [false])
     opened.close()
+}
+
+/// Each info window's art buttons follow its own files, not the key or last window's, and run
+/// on their own window.
+@MainActor
+@Test func eachEditorsArtButtonsFollowItsOwnFiles() async throws {
+    let seen = Seen()
+    let editing = makeEditing(
+        seen,
+        read: { paths, _ in
+            (
+                paths.map {
+                    EditableTrack(
+                        path: $0, tags: TrackTags(), art: $0 == "/art.flac" ? Data([1]) : nil)
+                }, []
+            )
+        })
+    var targets: [[String]] = []
+    editing.run = { _ in targets.append(editing.active?.paths ?? []) }
+    editing.open(["/bare.flac"], over: window)
+    editing.open(["/art.flac"], over: window)
+    let bare = try #require(editor(editing, ["/bare.flac"]))
+    let art = try #require(editor(editing, ["/art.flac"]))
+    try await eventually { bare.isLoaded && art.isLoaded }
+    #expect(editing.active === art, "the art commands' window, for the menus")
+    func enabled(_ editor: TagEditorWindow, _ id: CommandID) -> [Bool] {
+        editor.commandButtons.filter { $0.id == id }.map(\.button.isEnabled)
+    }
+    #expect(!enabled(art, .removeArtwork).isEmpty && !enabled(art, .removeArtwork).contains(false))
+    #expect(!enabled(bare, .removeArtwork).isEmpty && !enabled(bare, .removeArtwork).contains(true))
+    #expect(!enabled(bare, .replaceArtwork).contains(false))
+    let replace = try #require(bare.commandButtons.first { $0.id == .replaceArtwork }?.button)
+    click(replace)
+    #expect(targets == [["/bare.flac"]], "run on the window whose button it is")
+    #expect(editing.active === art)
+    bare.close()
+    art.close()
 }

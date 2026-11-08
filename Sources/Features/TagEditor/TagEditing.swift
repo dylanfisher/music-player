@@ -24,8 +24,8 @@ public final class TagEditing {
     /// Runs one of the registry's tag commands as its menu item does: an info window's Undo
     /// Tag Edit, Replace Artwork… and Remove Artwork buttons.
     public var run: (CommandID) -> Void = { _ in }
-    /// Whether the registry enables a tag command now. The buttons follow it, as the menu items
-    /// do, so the two can't disagree.
+    /// Whether the registry enables a tag command now, for one that isn't about an info window:
+    /// Undo Tag Edit. Its button follows it, as the menu item does.
     public var isEnabled: (CommandID) -> Bool = { _ in false }
     /// The top left corner the user last moved an info window to, where the next one opens;
     /// nil opens it near the main window's top left.
@@ -110,13 +110,27 @@ public final class TagEditing {
     var isOpen: Bool { !editors.isEmpty }
     var isWriting: Bool { pendingWrites > 0 }
 
-    /// The info window the art commands act on: the key one, else the last opened.
+    /// The info window the art commands act on: the one whose button runs one, else the key
+    /// one, else the last opened.
     var active: TagEditorWindow? {
-        editors.last { $0.window.isKeyWindow } ?? editors.last
+        commandTarget ?? editors.last { $0.window.isKeyWindow } ?? editors.last
     }
+    /// The info window whose button is running a command, while it runs.
+    private var commandTarget: TagEditorWindow?
 
-    public var canReplaceArt: Bool { active?.model?.canSave == true }
-    public var canRemoveArt: Bool { active?.model?.canRemoveArt == true }
+    public var canReplaceArt: Bool { canRun(.replaceArtwork, on: active) }
+    public var canRemoveArt: Bool { canRun(.removeArtwork, on: active) }
+
+    /// Whether `id` can run on `editor`: the one rule for the art commands, which the registry
+    /// asks of the active window and each info window's buttons of their own. Any other command
+    /// isn't about a window, so it's the registry's rule.
+    func canRun(_ id: CommandID, on editor: TagEditorWindow?) -> Bool {
+        switch id {
+        case .replaceArtwork: editor?.model?.canSave == true
+        case .removeArtwork: editor?.model?.canRemoveArt == true
+        default: isEnabled(id)
+        }
+    }
 
     /// Get Info: opens an info window on `paths` at once and reads them into it. A window
     /// already open on the same tracks comes to the front instead.
@@ -127,8 +141,14 @@ public final class TagEditing {
             return
         }
         let editor = TagEditorWindow(paths: paths)
-        editor.run = { [weak self] in self?.run($0) }
-        editor.isEnabled = { [weak self] in self?.isEnabled($0) == true }
+        // A button runs its command on its own window, whichever is key.
+        editor.run = { [weak self, weak editor] id in
+            guard let self else { return }
+            self.commandTarget = editor
+            self.run(id)
+            self.commandTarget = nil
+        }
+        editor.isEnabled = { [weak self, weak editor] in self?.canRun($0, on: editor) == true }
         editor.commandsChanged = { [weak self] in self?.refreshCommands() }
         editor.saved = { [weak self, weak editor] edit in
             guard let self, let editor else { return }
@@ -150,8 +170,8 @@ public final class TagEditing {
         read(into: editor, over: window)
     }
 
-    /// Enables every info window's command buttons as the registry's rules say now: the art
-    /// commands act on the active window, so one window's change moves the others' buttons.
+    /// Enables every info window's command buttons as the rules say now, each window's art
+    /// buttons by its own state.
     func refreshCommands() {
         for editor in editors { editor.refreshCommands() }
     }
@@ -201,7 +221,7 @@ public final class TagEditing {
 
     /// Replace Artwork…: an image chosen in an open panel over the info window.
     public func chooseArt() {
-        guard let editor = active, editor.model?.canSave == true else { return }
+        guard let editor = active, canRun(.replaceArtwork, on: editor) else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.jpeg, .png]
         panel.message = "Choose a JPEG or PNG image for the artwork."
