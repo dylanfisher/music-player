@@ -316,7 +316,8 @@ Decided by the owner on 2026-11-07:
 | The real import | An agent imports the 2026-11-01 dump on this Mac for 51.8 and 51.13 |
 | The dumps folder in `config.json` | A share and a path, the shape of `library.watchedFolders`, so a remount elsewhere still finds it |
 | MP3's Discogs links and credits | Read and written: YATE stores the `DISCOGS_*_URL` fields as `WXXX` frames and credits as `TIPL` (ADR 0128), so 51.2's custom fields gain both in 51d, and "Like my library" matches YATE in every format |
-| Presets that ship (2026-11-07) | None from the owner's library, since the app will be shared: "One to one", "Minimal" and a generic "YATE" (YATE's keys and spellings per format). The owner's layout is their own saved mapping, "Like my library", in their `config.json`, and a fixture in the tests |
+| Presets that ship (2026-11-07) | None from the owner's library, since the app will be shared: "One to one", "Minimal" and a generic "YATE" (YATE's keys and spellings per format). The owner's YATE layout stays only as a test fixture; their saved mapping is One to one with their own values kept (51.22) |
+| Styles (2026-11-07) | One tag, `MOOD`, in every mapping and in the index; no `STYLE` key. `MOOD` is a standard field in all three tag formats, so other apps read it |
 | The API token (52.1) | The owner adds one, as `"discogs.token"` in `config.json`, before phase 52 runs |
 
 What the owner's matched albums carry, from a sample on 2026-11-07 (400 random FLAC albums, 90
@@ -611,7 +612,8 @@ Asked for by the owner on 2026-11-07: YATE puts a release's Discogs styles in `M
 doesn't store it, so it has no column and no smart playlist field. And "Genre contains Techno"
 also matches "Dub Techno", so no rule can pick out one style. Changing the tracks part rescans
 the library once on first launch (pre-release: one shape, no migrations), so 51f ships in the build
-that also needs the new catalog.
+that also needs the new catalog; the owner asked for 51f before the real catalog is rebuilt. The
+mapping choices (51.22–51.24) were decided by the owner the same day.
 
 - [ ] **51.19 Mood in the index.** `MOOD` stored with the other tags, a Mood column in the
       track table (sortable, in the header's menu) and a Mood smart playlist field, its title
@@ -625,6 +627,21 @@ that also needs the new catalog.
       sorts; "has" against values at the start, middle and end, a genre with a comma of its
       own (`Folk, World, & Country`), and a value that only contains the word; the smart
       playlist bench row with a "has" rule.
+- [ ] **51.22 Presets and the owner's mapping.** "Like my library" leaves the shipped presets;
+      a generic "YATE" preset (YATE's keys and per-format spellings, plain genres) joins "One
+      to one" and "Minimal". Every preset sends the styles to `MOOD` only. The owner's
+      `config.json` gets a saved mapping, "Mine": One to one with titles, artists, track and
+      disc numbers and totals, composer, conductor, lyricist, remixer and the date set to fill
+      only empty tags. The YATE layout moves to a test fixture, which keeps the write-back
+      tests. ADRs 0128 and 0132 updated.
+- [ ] **51.23 Choices in the tagger window.** Next to Field Mapping…, without opening the sheet:
+      "Keep existing values" (on: the fields 51.22 lists fill only empty tags, whatever the
+      mapping says; off: the mapping's own modes), "Skip Blu-ray, DVD and video" (on by
+      default: those releases are never candidates, as YATE's `DiscogsIgnoredMedia`), and
+      "Fill sort artist from album artist" (`ARTISTSORT` from the album artist, only when
+      empty, as the owner's YATE after-import action). Each a setting (ADR 0003), so it
+      persists; changing one rescores or recomputes the open album's changes.
+- [ ] **51.24 Undo Tag Edit in the Edit menu**, with ⌥⌘Z, out of File.
 - [ ] **Owner check:** a smart playlist of one style on the real library, and the Mood column
       on albums tagged by YATE.
 
