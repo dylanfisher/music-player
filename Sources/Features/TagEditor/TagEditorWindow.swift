@@ -259,9 +259,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         saveButton.target = self
         saveButton.action = #selector(saveClicked)
         saveButton.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [
-            commandButton(.undoTagEdit, size: .regular), spinner, problemLabel, cancel, saveButton,
-        ])
+        let undo = commandButton(.undoTagEdit, size: .regular)
+        // The journal keeps one list of edits for every window (ADR 0020).
+        undo.toolTip = "Undoes the last tag edit, wherever it was made"
+        let buttons = NSStackView(views: [undo, spinner, problemLabel, cancel, saveButton])
 
         collapseLabel.textColor = .systemOrange
         collapseLabel.isHidden = true

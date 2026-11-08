@@ -533,3 +533,60 @@ private final class Titles: @unchecked Sendable {
     bare.close()
     art.close()
 }
+
+/// The titles the fake files hold, which an undo changes, from any thread.
+private final class FileTitles: @unchecked Sendable {
+    // `title` is guarded by `lock`.
+    private let lock = NSLock()
+    private var title = "Edited"
+
+    var current: String {
+        get { lock.withLock { title } }
+        set { lock.withLock { title = newValue } }
+    }
+}
+
+/// Undo Tag Edit undoes the newest edit wherever it was made, says so, and reads again every
+/// open window on the files it put back, keeping what was typed in them.
+@MainActor
+@Test func anUndoReadsAgainTheWindowsOnTheFilesItPutBack() async throws {
+    let seen = Seen()
+    let titles = FileTitles()
+    let editing = makeEditing(
+        seen,
+        read: { paths, _ in
+            (
+                paths.map {
+                    var tags = TrackTags()
+                    tags.title = titles.current
+                    tags.artist = "Artist"
+                    return EditableTrack(path: $0, tags: tags, art: nil)
+                }, []
+            )
+        },
+        undo: {
+            titles.current = "Before"
+            var report = TagWriteReport()
+            report.changed = ["/a.flac"]
+            return report
+        })
+    editing.open(["/a.flac"], over: window)
+    editing.open(["/b.flac"], over: window)
+    let touched = try #require(editor(editing, ["/a.flac"]))
+    let other = try #require(editor(editing, ["/b.flac"]))
+    try await eventually { touched.isLoaded && other.isLoaded }
+    let undo = try #require(touched.commandButtons.first { $0.id == .undoTagEdit }?.button)
+    #expect(undo.toolTip == "Undoes the last tag edit, wherever it was made")
+    let artist = try #require(touched.fields[.artist]?.first)
+    artist.stringValue = "Typed"
+    touched.controlTextDidChange(
+        Notification(name: NSControl.textDidChangeNotification, object: artist))
+    let reads = seen.reads.count
+    editing.undo(over: window)
+    try await eventually { touched.model?.text(.title) == "Before" }
+    #expect(touched.model?.text(.artist) == "Typed", "what was typed stays")
+    #expect(other.model?.text(.title) == "Edited", "a window on other files isn't read")
+    #expect(seen.reads.count == reads + 1)
+    touched.close()
+    other.close()
+}
