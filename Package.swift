@@ -43,6 +43,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "HTTPSClient",
+            path: "Sources/Primitives/HTTPSClient",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SQLite",
             path: "Sources/Primitives/SQLite",
             swiftSettings: strictSwift,
@@ -392,6 +397,11 @@ let package = Package(
                 "LibraryBrowser",
                 "Metadata", "Playback", "SQLite", "Settings",
             ],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "HTTPSClientTests",
+            dependencies: ["HTTPSClient"],
             swiftSettings: strictSwift
         ),
         .testTarget(
