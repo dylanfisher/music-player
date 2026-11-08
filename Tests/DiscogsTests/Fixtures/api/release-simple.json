@@ -1,0 +1,57 @@
+{
+  "id": 1001,
+  "status": "Accepted",
+  "year": 1999,
+  "resource_url": "https://api.discogs.com/releases/1001",
+  "uri": "https://www.discogs.com/release/1001-Persuader-Stockholm",
+  "artists": [
+    {"name": "Persuader", "anv": "", "join": "", "role": "", "tracks": "", "id": 1, "resource_url": "https://api.discogs.com/artists/1"}
+  ],
+  "artists_sort": "Persuader",
+  "labels": [
+    {"name": "Svek", "catno": "SK 032", "entity_type": "1", "entity_type_name": "Label", "id": 5, "resource_url": "https://api.discogs.com/labels/5"}
+  ],
+  "series": [],
+  "companies": [
+    {"name": "Svek Studios", "catno": "", "entity_type": "23", "entity_type_name": "Recorded At", "id": 77, "resource_url": "https://api.discogs.com/labels/77"}
+  ],
+  "formats": [
+    {"name": "CD", "qty": "1", "descriptions": ["Album"]}
+  ],
+  "data_quality": "Correct",
+  "community": {"have": 120, "want": 80, "rating": {"count": 10, "average": 4.5}, "status": "Accepted"},
+  "format_quantity": 1,
+  "date_added": "2004-01-01T00:00:00-08:00",
+  "date_changed": "2020-01-01T00:00:00-08:00",
+  "num_for_sale": 3,
+  "lowest_price": 9.5,
+  "master_id": 500,
+  "master_url": "https://api.discogs.com/masters/500",
+  "title": "Stockholm",
+  "country": "Sweden",
+  "released": "1999-03-00",
+  "notes": "Recorded in Stockholm.",
+  "released_formatted": "Mar 1999",
+  "identifiers": [
+    {"type": "Barcode", "value": "7 350001 000123", "description": "Text"},
+    {"type": "Matrix / Runout", "value": "SK032 01"}
+  ],
+  "videos": [],
+  "genres": ["Electronic"],
+  "styles": ["Techno", "Minimal"],
+  "tracklist": [
+    {"position": "1", "type_": "track", "title": "Östermalm", "duration": "4:45"},
+    {"position": "2", "type_": "track", "title": "Gamla Stan", "duration": "6:10"},
+    {"position": "3", "type_": "track", "title": "Kungsholmen", "duration": "5:00"}
+  ],
+  "extraartists": [
+    {"name": "Jesper Dahlbäck", "anv": "", "join": "", "role": "Producer", "tracks": "", "id": 7, "resource_url": "https://api.discogs.com/artists/7"}
+  ],
+  "images": [
+    {"type": "secondary", "uri": "https://i.discogs.com/back-1001.jpg", "resource_url": "https://i.discogs.com/back-1001.jpg", "uri150": "https://i.discogs.com/back-1001-150.jpg", "width": 600, "height": 600},
+    {"type": "primary", "uri": "https://i.discogs.com/front-1001.jpg", "resource_url": "https://i.discogs.com/front-1001.jpg", "uri150": "https://i.discogs.com/front-1001-150.jpg", "width": 600, "height": 600}
+  ],
+  "thumb": "https://i.discogs.com/front-1001-150.jpg",
+  "estimated_weight": 85,
+  "blocked_from_sale": false
+}

@@ -144,7 +144,8 @@ let package = Package(
         .target(
             name: "Discogs",
             dependencies: [
-                "DisplayText", "Library", "Log", "Metadata", "SQLite", "Settings", "TagWriter",
+                "DisplayText", "HTTPSClient", "Library", "Log", "Metadata", "SQLite", "Settings",
+                "TagWriter",
             ],
             path: "Sources/Core/Discogs",
             swiftSettings: strictSwift,
@@ -331,9 +332,10 @@ let package = Package(
             name: "DiscogsTests",
             dependencies: [
                 // DiscogsImport, built for the tests that kill it partway through an import.
-                "Discogs", "DiscogsImport", "Fixtures", "Library", "Metadata", "SQLite",
-                "Settings", "TagWriter",
+                "Discogs", "DiscogsImport", "Fixtures", "HTTPSClient", "Library", "Metadata",
+                "SQLite", "Settings", "TagWriter",
             ],
+            resources: [.copy("Fixtures")],
             swiftSettings: strictSwift
         ),
         .testTarget(

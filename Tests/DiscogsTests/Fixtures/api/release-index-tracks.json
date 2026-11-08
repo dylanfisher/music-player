@@ -1,0 +1,30 @@
+{
+  "id": 1004,
+  "status": "Accepted",
+  "artists": [
+    {"name": "Persuader", "anv": "", "join": "", "role": "", "tracks": "", "id": 1}
+  ],
+  "labels": [
+    {"name": "Svek", "catno": "SK 040", "entity_type": "1", "id": 5}
+  ],
+  "formats": [
+    {"name": "File", "qty": "1", "descriptions": ["FLAC", "Album"]}
+  ],
+  "title": "Suites",
+  "country": "Sweden",
+  "released": "2001-05-14",
+  "genres": ["Electronic"],
+  "tracklist": [
+    {"position": "1", "type_": "track", "title": "Östermalm", "duration": "4:45"},
+    {
+      "position": "", "type_": "index", "title": "Suite", "duration": "",
+      "sub_tracks": [
+        {"position": "2a", "type_": "track", "title": "Gamla Stan", "duration": "6:10"},
+        {"position": "2b", "type_": "track", "title": "Kungsholmen", "duration": "5:00"}
+      ]
+    }
+  ],
+  "images": [
+    {"type": "secondary", "uri": "https://i.discogs.com/only-1004.png", "width": 500, "height": 500}
+  ]
+}

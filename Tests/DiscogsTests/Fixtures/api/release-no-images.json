@@ -1,0 +1,22 @@
+{
+  "id": 1006,
+  "status": "Accepted",
+  "artists": [
+    {"name": "Persuader", "anv": "", "join": "", "role": "", "tracks": "", "id": 1}
+  ],
+  "labels": [
+    {"name": "Svek", "catno": "SK 032", "entity_type": "1", "id": 5}
+  ],
+  "formats": [
+    {"name": "CD", "qty": "1"}
+  ],
+  "master_id": 500,
+  "title": "Stockholm",
+  "released": "1999",
+  "genres": ["Electronic"],
+  "tracklist": [
+    {"position": "1", "type_": "track", "title": "Östermalm", "duration": "4:45"},
+    {"position": "2", "type_": "track", "title": "Gamla Stan", "duration": "6:10"},
+    {"position": "3", "type_": "track", "title": "Kungsholmen", "duration": "5:00"}
+  ]
+}

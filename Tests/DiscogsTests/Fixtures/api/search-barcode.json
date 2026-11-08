@@ -1,0 +1,8 @@
+{
+  "pagination": {"page": 1, "pages": 1, "per_page": 25, "items": 3, "urls": {}},
+  "results": [
+    {"id": 1001, "type": "release", "master_id": 500, "title": "Persuader - Stockholm", "country": "Sweden", "year": "1999", "format": ["CD", "Album"], "label": ["Svek"], "catno": "SK 032", "barcode": ["7 350001 000123"], "uri": "/release/1001", "resource_url": "https://api.discogs.com/releases/1001", "thumb": "", "cover_image": ""},
+    {"id": 1003, "type": "release", "master_id": 500, "title": "Persuader - Stockholm", "country": "Sweden", "year": "1999", "format": ["Vinyl"], "label": ["Svek"], "catno": "SK 032", "uri": "/release/1003", "resource_url": "https://api.discogs.com/releases/1003"},
+    {"id": 1001, "type": "release", "title": "Persuader - Stockholm"}
+  ]
+}

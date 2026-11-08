@@ -21,8 +21,8 @@ public enum HTTPSError: Error, Equatable, Sendable, CustomStringConvertible {
         case .refusedAddress: "the address isn't one the app may connect to"
         case .offline: "there is no connection to the server"
         case .timedOut: "the server didn't answer in time"
-        case .tooLarge(let cap): "the reply is over the \(cap)-byte cap"
-        case .cancelled: "it was cancelled"
+        case .tooLarge(let cap): "the body is over the \(cap)-byte cap"
+        case .cancelled: "the request was cancelled"
         case .failed(let code): "the connection failed (URL error \(code))"
         }
     }

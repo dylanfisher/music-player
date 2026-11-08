@@ -10,7 +10,7 @@ public struct DiscogsToken: SettingValue, CustomStringConvertible, CustomDebugSt
     /// The token's text, for the one header built from it.
     public let secret: String
 
-    public init(_ secret: String) { self.secret = secret }
+    init(_ secret: String) { self.secret = secret }
 
     public init(from decoder: any Decoder) throws {
         secret = try decoder.singleValueContainer().decode(String.self)

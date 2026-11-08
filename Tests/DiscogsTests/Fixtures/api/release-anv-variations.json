@@ -1,0 +1,40 @@
+{
+  "id": 1005,
+  "status": "Accepted",
+  "artists": [
+    {"name": "Soleil (2)", "anv": "Soleil", "join": "&", "role": "", "tracks": "", "id": 21},
+    {"name": "Lune", "anv": "", "join": "", "role": "", "tracks": "", "id": 22}
+  ],
+  "labels": [
+    {"name": "Svek", "catno": "SK 050", "entity_type": "1", "id": 5}
+  ],
+  "formats": [
+    {"name": "CD", "qty": "1", "descriptions": ["Album"]}
+  ],
+  "master_id": 0,
+  "title": "  Duos  ",
+  "country": "Sweden",
+  "released": "2003",
+  "genres": ["Electronic"],
+  "styles": ["House"],
+  "tracklist": [
+    {
+      "position": "1", "type_": "track", "title": "Matin", "duration": "3:30",
+      "artists": [
+        {"name": "Soleil (2)", "anv": "Sol", "join": "Feat.", "role": "", "tracks": "", "id": 21},
+        {"name": "Nuage", "anv": "", "join": "", "role": "", "tracks": "", "id": 23}
+      ],
+      "extraartists": [
+        {"name": "Lune", "anv": "L.", "join": "", "role": "Remix", "tracks": "", "id": 22}
+      ]
+    },
+    {"position": "2", "type_": "track", "title": "Soir", "duration": "1:02:03"}
+  ],
+  "extraartists": [
+    {"name": "Jesper Dahlbäck", "anv": "J. Dahlbäck", "join": "", "role": "Written-By [All Tracks By]", "tracks": "1, 2", "id": 7},
+    {"name": "Unlinked Engineer", "anv": "", "join": "", "role": "Mastered By", "tracks": ""}
+  ],
+  "images": [
+    {"type": "primary", "uri": "https://i.discogs.com/front-1005.jpg", "width": 600, "height": 600}
+  ]
+}

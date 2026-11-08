@@ -32,11 +32,15 @@ public final class HTTPSClient: Sendable {
 
     /// Whether `url` is one `get` would send: https, port 443 or none, no user or password, a
     /// host in `allowedHosts`.
-    public func allows(_ url: URL) -> Bool {
+    public func allows(_ url: URL) -> Bool { Self.allows(url, hosts: allowedHosts) }
+
+    /// Whether `url` is https, on port 443 or none, with no user or password, to one of
+    /// `hosts`, which are lowercase.
+    public static func allows(_ url: URL, hosts: Set<String>) -> Bool {
         guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
             parts.scheme?.lowercased() == "https", parts.user == nil, parts.password == nil,
             parts.port == nil || parts.port == 443,
-            let host = parts.host?.lowercased(), allowedHosts.contains(host)
+            let host = parts.host?.lowercased(), hosts.contains(host)
         else { return false }
         return true
     }
