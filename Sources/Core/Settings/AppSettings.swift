@@ -222,8 +222,8 @@ public struct AppSettings: SettingsSchema {
         }
         if let staging = values[stagingFolder.key] as? StagingFolder {
             var others = folders.map { (path: $0.path, share: $0.share) }
-            if let library = values[libraryFolder.key] as? String {
-                others.append((path: library, share: nil))
+            for key in [libraryFolder.key, snapshotFolder.key] {
+                if let path = values[key] as? String { others.append((path: path, share: nil)) }
             }
             if let sync = values[syncFolder.key] as? SyncFolder {
                 others.append((path: sync.path, share: sync.share))
@@ -233,8 +233,8 @@ public struct AppSettings: SettingsSchema {
                     SettingConflict(
                         key: stagingFolder.key,
                         reason: "it overlaps \"\(other)\"; the staging folder must be apart from"
-                            + " the watched, library and sync folders, since the service deletes"
-                            + " in it and the app moves files out of it"))
+                            + " the watched, library, sync and snapshot folders, since the service"
+                            + " deletes in it and the app moves files out of it"))
             }
         }
         return conflicts

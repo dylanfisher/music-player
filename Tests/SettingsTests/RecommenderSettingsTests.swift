@@ -98,9 +98,10 @@ private func mode(_ url: URL) throws -> Int {
 }
 
 /// A config file with `staging` as the staging folder, `folders` as the watched folders, and
-/// optionally a library folder and a sync folder.
+/// optionally a library folder, a sync folder and a snapshot folder.
 private func config(
-    staging: String, folders: [String] = [], library: String? = nil, sync: String? = nil
+    staging: String, folders: [String] = [], library: String? = nil, sync: String? = nil,
+    snapshots: String? = nil
 ) -> String {
     let watched = folders.map {
         #"{\#($0), "kind": "network", "include": [], "exclude": [], "pollIntervalMinutes": 15}"#
@@ -111,6 +112,7 @@ private func config(
     ]
     if let library { keys.append(#""library.folder": "\#(library)""#) }
     if let sync { keys.append(#""sync.folder": {\#(sync)}"#) }
+    if let snapshots { keys.append(#""library.snapshotFolder": "\#(snapshots)""#) }
     return "{" + keys.joined(separator: ", ") + "}"
 }
 
@@ -138,6 +140,9 @@ private func config(
         config(
             staging: #""path": "/Volumes/music/staging""#,
             sync: #""path": "/Volumes/music/staging/sync""#),
+        // The service would delete the snapshots.
+        config(staging: #""path": "/Users/me/Backups""#, snapshots: "/Users/me/Backups/library"),
+        config(staging: #""path": "/Users/me/Backups/staging""#, snapshots: "/Users/me/Backups"),
     ]
     for text in refused {
         do {
