@@ -412,7 +412,9 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
         album(stockholmTitles, seconds: [200, 200, 300], barcode: "123"),
         releases: release(10, barcode: "123", tracks: stockholm))
     #expect(lengths.tier == .likely)
-    #expect(lengths.reasons == [.durationsDiffer(2)], "found by its barcode")
+    #expect(
+        lengths.reasons == [.durationsDiffer(2, overSeconds: 8, orFraction: 0.05)],
+        "found by its barcode, worded from the thresholds the matcher used")
 
     let titles = try match(
         album(["Östermalm", "Gamla Stan", "Something Else Entirely"]), releases: releases)

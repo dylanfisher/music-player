@@ -546,7 +546,8 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     let likely = album(2, "Second", titles: ["Östermalm", "Other"])
     var matched = match(likely, release(20, "Second", titles: stockholm), tier: .likely)
     matched.reasons = [
-        .countDiffers(files: 2, tracks: 3), .tracksWithoutFile(1), .durationsDiffer(3),
+        .countDiffers(files: 2, tracks: 3), .tracksWithoutFile(1),
+        .durationsDiffer(3, overSeconds: 8, orFraction: 0.05),
     ]
     let reasoned = matched
     let tagger = await model(Seen(), albums: [likely], matches: { _, _ in reasoned })

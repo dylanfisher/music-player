@@ -64,10 +64,9 @@ extension NotExactReason {
         case .titlesDiffer(let titles):
             "\(count(titles, "file title")) "
                 + (titles == 1 ? "differs from its track's" : "differ from their tracks'")
-        case .durationsDiffer(let lengths):
+        case .durationsDiffer(let lengths, let seconds, let fraction):
             "\(count(lengths, "file length")) \(lengths == 1 ? "is" : "are") off by more than"
-                + " \(number(Int(Self.durationSeconds))) s"
-                + " or \(number(Int((Self.durationFraction * 100).rounded())))%"
+                + " \(number(Int(seconds))) s or \(number(Int((fraction * 100).rounded())))%"
         case .releaseIDsDiffer: "its files carry different release IDs, or only some carry one"
         case .tiedAfterTieBreak: "other releases fit as well"
         case .foundByTitleOnly: "found by title only"

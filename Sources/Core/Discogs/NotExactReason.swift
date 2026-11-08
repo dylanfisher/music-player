@@ -9,19 +9,15 @@ public enum NotExactReason: Equatable, Sendable {
     case countDiffers(files: Int, tracks: Int)
     /// With the same count, the files whose title isn't their track's.
     case titlesDiffer(Int)
-    /// Files whose length isn't their track's within `MatchThreshold`'s tolerance.
-    case durationsDiffer(Int)
+    /// Files whose length isn't their track's within the tolerance the matcher used: this many
+    /// seconds or this fraction of Discogs's length, whichever is more.
+    case durationsDiffer(Int, overSeconds: Double, orFraction: Double)
     /// Its tracks carry different release ids, or only some carry one.
     case releaseIDsDiffer
     /// Other releases fit as well, even after the tie-break.
     case tiedAfterTieBreak
     /// Found by artist and title only: no release id, barcode or catalog number led to it.
     case foundByTitleOnly
-
-    /// The tolerance `durationsDiffer` counts past: a file's length agrees within this many
-    /// seconds or this fraction of Discogs's, whichever is more.
-    public static var durationSeconds: Double { MatchThreshold.durationSeconds }
-    public static var durationFraction: Double { MatchThreshold.durationFraction }
 
     /// The reasons for `score`, the chosen release's, at `tier`; none for a tier other than
     /// Likely or Incomplete.
@@ -46,7 +42,12 @@ public enum NotExactReason: Equatable, Sendable {
             }
             if score.titlesDiffering > 0 { reasons.append(.titlesDiffer(score.titlesDiffering)) }
             let differing = score.durationsCompared - score.durationsAgreeing
-            if differing > 0 { reasons.append(.durationsDiffer(differing)) }
+            if differing > 0 {
+                reasons.append(
+                    .durationsDiffer(
+                        differing, overSeconds: MatchThreshold.durationSeconds,
+                        orFraction: MatchThreshold.durationFraction))
+            }
         }
         if tied { reasons.append(.tiedAfterTieBreak) }
         if foundBy == .title { reasons.append(.foundByTitleOnly) }
