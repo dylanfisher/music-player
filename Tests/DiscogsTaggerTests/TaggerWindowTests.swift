@@ -729,6 +729,30 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     again.endSheet()
 }
 
+/// The tagger's own windows are its window and any sheet over it, so Undo Tag Edit pressed in a
+/// sheet counts as the tagger's.
+@MainActor
+@Test func aSheetOverTheTaggerCountsAsItsWindow() async throws {
+    let tagger = DiscogsTagger(model: await analyzed())
+    #expect(!tagger.isOwnWindow(nil))
+    tagger.show()
+    let window = try #require(tagger.window)
+    defer { window.close() }
+    let controller = try #require(window.windowController as? TaggerWindow)
+    #expect(tagger.isOwnWindow(window))
+    #expect(!tagger.isOwnWindow(NSWindow()))
+    click(controller.otherReleasesButton)
+    try await eventually { window.attachedSheet?.windowController is ReleasesSheet }
+    let releases = try #require(window.attachedSheet?.windowController as? ReleasesSheet)
+    let list = try #require(releases.window)
+    #expect(tagger.isOwnWindow(list))
+    releases.viewRelease(10)
+    try await eventually { list.attachedSheet != nil }
+    #expect(tagger.isOwnWindow(list.attachedSheet), "a sheet over the sheet")
+    (list.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
+    releases.endSheet()
+}
+
 /// Shown with a selection while an analysis runs, the window keeps the scope of the albums it
 /// is matching.
 @MainActor

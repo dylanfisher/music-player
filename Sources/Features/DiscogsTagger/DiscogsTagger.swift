@@ -88,6 +88,18 @@ public final class DiscogsTagger {
     /// The window, once shown.
     public var window: NSWindow? { controller?.window }
 
+    /// Whether `window` is the tagger's window or a sheet over it, at any depth, as View
+    /// Release over Other Releases is.
+    public func isOwnWindow(_ window: NSWindow?) -> Bool {
+        guard let own = self.window else { return false }
+        var shown = window
+        while let current = shown {
+            if current === own { return true }
+            shown = current.sheetParent
+        }
+        return false
+    }
+
     /// Shows the window, checking the catalog the first time. With tracks selected in the
     /// library, it's scoped to their albums and, with a catalog in place, analyzes them at once.
     public func show() {

@@ -19,9 +19,10 @@ extension AppDelegate {
             .undoTagEdit, enabled: { [weak self] in self?.window != nil },
             run: { [weak self] in
                 guard let self, let window = self.window?.window else { return }
-                // The tagger's window when it's the key one; any other is the tag editor's.
-                if let tagger = self.discogsTagger?.window, tagger.isKeyWindow {
-                    self.tagEditing.undo(over: tagger, from: .discogsTagger)
+                // The tagger's when its window or a sheet over it is the key one, asking over
+                // that, the top one; any other is the tag editor's.
+                if let key = NSApp.keyWindow, self.discogsTagger?.isOwnWindow(key) == true {
+                    self.tagEditing.undo(over: key, from: .discogsTagger)
                 } else {
                     self.tagEditing.undo(over: window, from: .tagEditor)
                 }
