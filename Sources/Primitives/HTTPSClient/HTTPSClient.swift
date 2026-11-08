@@ -7,7 +7,7 @@ import Foundation
 /// never followed: a 3xx comes back as its status. A body is read as it arrives and dropped
 /// past its cap, and a request that takes longer than its timeout fails.
 public final class HTTPSClient: Sendable {
-    public let allowedHosts: Set<String>
+    private let allowedHosts: Set<String>
     private let session: URLSession
     private let refuser = RedirectRefuser()
 
@@ -32,7 +32,7 @@ public final class HTTPSClient: Sendable {
 
     /// Whether `url` is one `get` would send: https, port 443 or none, no user or password, a
     /// host in `allowedHosts`.
-    public func allows(_ url: URL) -> Bool { Self.allows(url, hosts: allowedHosts) }
+    func allows(_ url: URL) -> Bool { Self.allows(url, hosts: allowedHosts) }
 
     /// Whether `url` is https, on port 443 or none, with no user or password, to one of
     /// `hosts`, which are lowercase.
