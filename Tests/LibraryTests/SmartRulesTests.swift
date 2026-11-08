@@ -37,7 +37,7 @@ private func decode(_ json: String) throws -> SmartRules {
 @Test func storedRulesRejectWhatCantBeCompiled() {
     for json in [
         #"{"match": "some", "rules": []}"#,
-        #"{"match": "all", "rules": [{"field": "mood", "comparison": "is", "value": "x"}]}"#,
+        #"{"match": "all", "rules": [{"field": "tempo", "comparison": "is", "value": "x"}]}"#,
         #"{"match": "all", "rules": [{"field": "title", "comparison": "greaterThan", "value": "a"}]}"#,
         #"{"match": "all", "rules": [{"field": "title", "comparison": "is", "value": 3}]}"#,
         #"{"match": "all", "rules": [{"field": "year", "comparison": "is", "value": "1990"}]}"#,

@@ -72,7 +72,7 @@ private func hostileLibrary() throws -> LibraryIndex {
                 "TITLE", "ARTIST", "ALBUM", "ALBUMARTIST", "GENRE", "COMPOSER", "COMMENT",
                 "GROUPING", "CATALOGNUMBER", "BARCODE", "KEY", "CONDUCTOR", "LYRICIST", "LABEL",
                 "COPYRIGHT", "ENCODEDBY", "DESCRIPTION", "DISCSUBTITLE", "WORK", "MOVEMENTNAME",
-                "ORIGINALDATE",
+                "ORIGINALDATE", "MOOD",
             ].map { ($0, text) })
         let name = text.count > 200 ? word : text
         try taggedFLAC(tags: tags).write(to: root.appendingPathComponent("\(name).flac"))

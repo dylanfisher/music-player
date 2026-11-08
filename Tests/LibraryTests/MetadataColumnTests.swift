@@ -1,6 +1,8 @@
+import Fixtures
 import Foundation
 import Metadata
 import Settings
+import TagWriter
 import Testing
 
 @testable import Library
@@ -91,6 +93,7 @@ private let addedColumns: [(TrackColumn, String, [String])] = [
     (.bpm, "BPM", ["90", "120", "174"]),
     (.key, "KEY", ["A", "Cm", "F#"]),
     (.publisher, "LABEL", ["Blue Note", "ECM", "Impulse"]),
+    (.mood, "MOOD", ["Ambient", "dub Techno", "House, Techno"]),
     (.barcode, "BARCODE", ["1", "2", "3"]),
     (.copyright, "COPYRIGHT", ["A", "B", "C"]),
     (.encoder, "ENCODEDBY", ["A", "B", "C"]),
@@ -386,4 +389,52 @@ private func measured(
     #expect(try smart(SmartRule(.truePeak, .lessThan, .number(0))) == ["a"])
     #expect(try smart(SmartRule(.truePeak, .greaterThan, .number(-1))) == ["a", "b"])
     #expect(SmartRule(.dynamicRange, .greaterThan, .number(-1)).problem != nil)
+}
+
+/// A fixture library of its own, big enough to hold clean MP4 and MP3 files, which the shared
+/// one of 40 doesn't.
+private let everyFormatLibrary = Result { () throws -> (URL, FixtureManifest) in
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent(".build/library-every-format-tests")
+    _ = try generateFixtures(count: 100, in: root)
+    return (root, try loadManifest(in: root))
+}
+
+@Test func moodIsReadIntoTheIndexFromEveryTagFormat() throws {
+    let (source, manifest) = try everyFormatLibrary.get()
+    // A clean file of each kind of tag block, copied and given a mood by the tag writer.
+    let kinds: [(FixtureFile.Container, FixtureFile.TagFormat)] = [
+        (.flac, .vorbisComment), (.mp4, .mp4), (.mp3, .id3v24),
+    ]
+    let files = try kinds.map { container, format in
+        try #require(
+            manifest.files.first {
+                $0.container == container && $0.malformation == nil && $0.tagFormats == [format]
+            }, Comment(rawValue: format.rawValue))
+    }
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mood-\(UUID().uuidString)")
+    let root = directory.appendingPathComponent("Music")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    var edits: [(path: String, edit: TagEdit)] = []
+    for (number, file) in files.enumerated() {
+        let copy = root.appendingPathComponent(
+            "\(number).\((file.path as NSString).pathExtension)")
+        try FileManager.default.copyItem(at: source.appendingPathComponent(file.path), to: copy)
+        var edit = TagEdit()
+        edit.values[.mood] = "Dub Techno, House \(number)"
+        edits.append((copy.path, edit))
+    }
+    let journal = TagUndoJournal(dataDirectory: directory.appendingPathComponent("journal"))
+    let report = TagWriter(journal: journal).write(edits)
+    #expect(report.failures.isEmpty && report.changed.count == files.count)
+    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    _ = try LibraryScanner(databaseURL: databaseURL).scan(
+        WatchedFolder(path: root.path, kind: .local))
+    let index = try LibraryIndex(at: databaseURL)
+    for (number, edit) in edits.enumerated() {
+        let row = try #require(try index.track(path: edit.path))
+        #expect(row.mood == "Dub Techno, House \(number)", Comment(rawValue: files[number].path))
+    }
 }

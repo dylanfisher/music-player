@@ -473,10 +473,10 @@ public final class LibraryIndex {
                 catalog_number, barcode, bpm, musical_key, conductor, lyricist, publisher,
                 copyright, encoder, description, disc_subtitle, work, movement_number,
                 movement_name, original_date, discogs_release_id, discogs_master_id, media,
-                country, codec, sample_rate_hz, bits_per_sample, channels, length_frames, art_offset,
+                country, mood, codec, sample_rate_hz, bits_per_sample, channels, length_frames, art_offset,
                 art_byte_count, art_mime_type, art_unsynchronised)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
         ).run(
             binding: [
@@ -488,7 +488,7 @@ public final class LibraryIndex {
                 tags.description, tags.discSubtitle, tags.work, tags.movementNumber,
                 tags.movementName, tags.originalDate, tags.custom[DiscogsKey.releaseID],
                 tags.custom[DiscogsKey.masterID], tags.media,
-                DiscogsKey.releaseCountry.lazy.compactMap { tags.custom[$0] }.first,
+                DiscogsKey.releaseCountry.lazy.compactMap { tags.custom[$0] }.first, tags.mood,
                 audio.codec.rawValue,
                 audio.sampleRateHz,
                 audio.bitsPerSample, audio.channels, audio.lengthFrames, metadata.art?.offset,

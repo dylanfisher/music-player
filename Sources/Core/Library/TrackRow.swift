@@ -50,6 +50,7 @@ public struct TrackRow: Equatable, Sendable {
     public var createdSeconds: Double? = nil
     public var modifiedSeconds = 0.0
     public var grouping: String? = nil
+    public var mood: String? = nil
     public var catalogNumber: String? = nil
     public var barcode: String? = nil
     public var bpm: Int? = nil

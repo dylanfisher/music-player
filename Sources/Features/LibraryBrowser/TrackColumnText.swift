@@ -64,6 +64,7 @@ extension TrackColumn {
         case .movementNumber: number(row.movementNumber)
         case .movementName: row.movementName ?? ""
         case .genre: row.genre ?? ""
+        case .mood: row.mood ?? ""
         case .year: number(row.year)
         case .originalDate: row.originalDate ?? ""
         case .trackNumber: number(row.trackNumber)

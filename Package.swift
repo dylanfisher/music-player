@@ -380,7 +380,7 @@ let package = Package(
         ),
         .testTarget(
             name: "LibraryTests",
-            dependencies: ["Fixtures", "Library", "Metadata", "Settings", "SQLite"],
+            dependencies: ["Fixtures", "Library", "Metadata", "Settings", "SQLite", "TagWriter"],
             exclude: ["Crashes"],
             swiftSettings: strictSwift
         ),

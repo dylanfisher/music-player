@@ -4,7 +4,8 @@
 public enum TrackColumn: String, Codable, CaseIterable, Sendable {
     case rowNumber, nowPlaying, art, title, artist, album, albumArtist, composer, conductor,
         lyricist, grouping,
-        work, movementNumber, movementName, genre, year, originalDate, trackNumber, trackTotal,
+        work, movementNumber, movementName, genre, mood, year, originalDate, trackNumber,
+        trackTotal,
         trackOfTotal, discNumber, discTotal, discOfTotal, discSubtitle, compilation, duration, bpm,
         key, codec, fileType, bitRate, sampleRate, bitDepth, channels, cutoff, effectiveBits,
         dynamicRange, truePeak, size, fileName, path,

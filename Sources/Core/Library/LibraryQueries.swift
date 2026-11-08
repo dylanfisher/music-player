@@ -432,7 +432,7 @@ private let rowSelect = """
         f.modified_seconds, t.grouping, t.catalog_number, t.barcode, t.bpm, t.musical_key,
         t.conductor, t.lyricist, t.publisher, t.copyright, t.encoder, t.description,
         t.disc_subtitle, t.work, t.movement_number, t.movement_name, t.original_date,
-        \(lovedSQL), m.cutoff_hz, m.effective_bits, m.dynamic_range, m.true_peak_dbtp
+        \(lovedSQL), m.cutoff_hz, m.effective_bits, m.dynamic_range, m.true_peak_dbtp, t.mood
     FROM tracks t
     \(trackJoins)
     LEFT JOIN artists al_ar ON al_ar.id = al.artist_id
@@ -491,6 +491,7 @@ private func trackRow(_ row: Row) throws -> TrackRow {
     track.effectiveBits = row.optionalInt(55)
     track.dynamicRange = row.optionalInt(56)
     track.truePeakDBTP = row.optionalDouble(57)
+    track.mood = row.optionalText(58)
     return track
 }
 

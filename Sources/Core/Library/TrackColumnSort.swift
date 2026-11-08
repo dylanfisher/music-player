@@ -24,6 +24,7 @@ extension TrackColumn {
         case .movementNumber: "t.movement_number"
         case .movementName: "t.movement_name COLLATE NOCASE"
         case .genre: "g.sort_name"
+        case .mood: "t.mood COLLATE NOCASE"
         // Null unless the date starts with four digits, so an untagged track has no year.
         case .year:
             "CASE WHEN substr(t.date, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'"

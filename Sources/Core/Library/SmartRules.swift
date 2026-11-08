@@ -136,8 +136,8 @@ public enum SmartValue: Codable, Equatable, Sendable {
 
 public enum SmartField: String, Codable, CaseIterable, Sendable {
     case title, artist, album, albumArtist, genre, composer, comment, codec, path
-    case grouping, work, conductor, lyricist, movementName, originalDate, discSubtitle, key,
-        publisher, catalogNumber, barcode, copyright, encoder, description, fileName, fileType
+    case grouping, mood, work, conductor, lyricist, movementName, originalDate, discSubtitle,
+        key, publisher, catalogNumber, barcode, copyright, encoder, description, fileName, fileType
     case year, trackNumber, discNumber, duration, sampleRate, bitDepth, playCount, skipCount,
         rating
     case trackTotal, discTotal, movementNumber, bpm, bitRate, channels, size, loved, compilation
@@ -158,7 +158,8 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
     public var kind: Kind {
         switch self {
         case .title, .artist, .album, .albumArtist, .genre, .composer, .comment, .codec, .path,
-            .grouping, .work, .conductor, .lyricist, .movementName, .originalDate, .discSubtitle,
+            .grouping, .mood, .work, .conductor, .lyricist, .movementName, .originalDate,
+            .discSubtitle,
             .key, .publisher, .catalogNumber, .barcode, .copyright, .encoder, .description,
             .fileName, .fileType:
             .text

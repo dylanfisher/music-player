@@ -213,6 +213,8 @@ private let indexSchema = """
         media TEXT,
         -- The release's country, from YATE's custom keys, for the same tie-break.
         country TEXT,
+        -- MOOD, where YATE writes the release's styles.
+        mood TEXT,
         codec TEXT NOT NULL,
         sample_rate_hz INTEGER NOT NULL,
         bits_per_sample INTEGER,

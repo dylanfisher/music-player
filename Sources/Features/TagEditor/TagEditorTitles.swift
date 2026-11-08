@@ -40,7 +40,7 @@ extension TagEditField {
         case .originalDate: TrackColumn.originalDate.title
         case .originalAlbum: "Original Album"
         case .language: "Language"
-        case .mood: "Mood"
+        case .mood: TrackColumn.mood.title
         case .media: "Media"
         case .lyrics: "Lyrics"
         case .titleSort: "Sort Title"

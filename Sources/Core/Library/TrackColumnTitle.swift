@@ -19,6 +19,7 @@ extension TrackColumn {
         case .movementNumber: "Movement Number"
         case .movementName: "Movement"
         case .genre: "Genre"
+        case .mood: "Mood"
         case .year: "Year"
         case .originalDate: "Original Date"
         case .trackNumber: "Track"
