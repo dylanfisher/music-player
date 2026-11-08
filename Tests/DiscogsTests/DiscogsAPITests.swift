@@ -159,6 +159,15 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     #expect(fake.cacheEntry(.release, 1001)?.fetchedAt == fake.now)
 }
 
+@Test func aReadAtAnyAgeTakesAnEntryFromTheFuture() async throws {
+    let fake = FakeDiscogs()
+    let api = fake.api()
+    _ = try await api.release(id: 1001)
+    let stored = try #require(fake.cacheEntry(.release, 1001))
+    fake.setCacheEntry(.release, 1001, (fake.now + 86_400, stored.json))
+    #expect(await api.cachedRelease(id: 1001)?.release.id == 1001)
+}
+
 @Test func noneRemainingWaitsTheWholeWindow() async throws {
     let fake = FakeDiscogs()
     let api = fake.api()

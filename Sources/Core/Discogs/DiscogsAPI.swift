@@ -303,13 +303,14 @@ public actor DiscogsAPI {
     // MARK: Cache
 
     /// An entry under `maximumAgeDays` old. One dated in the future, after the clock was set
-    /// back, counts as expired.
+    /// back, counts as expired, except when any age will do.
     private func cached(
         _ kind: DiscogsCache.Kind, _ id: Int, maximumAgeDays: Double = cacheDays
     ) async -> String? {
         do {
             guard let entry = try await cache.read(kind, id),
-                (0..<maximumAgeDays * 86_400).contains(now() - entry.fetchedAt)
+                maximumAgeDays == .infinity
+                    || (0..<maximumAgeDays * 86_400).contains(now() - entry.fetchedAt)
             else { return nil }
             return entry.json
         } catch {
