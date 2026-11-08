@@ -1,7 +1,7 @@
 # 0129. Custom tag keys: read by name, written as spelled, two of them in the index
 
 - **Date:** 2026-11-07
-- **Status:** accepted
+- **Status:** accepted; amended 2026-11-07 (51d): `WXXX` and `TIPL` are custom keys
 - **See also:** [0006](0006-tag-reader.md) maps the standard fields' keys,
   [0128](0128-discogs-survey.md) lists the keys YATE writes.
 
@@ -21,8 +21,18 @@ item, `iTunSMPB`, isn't one, and neither is a freeform item holding binary data.
 
 **Read.** `TrackTags.custom` holds them by name uppercased, as taggers compare names; the
 first value of a name wins, empty values are skipped and a value is read up to a NUL, as for
-the fields. A WAV's ID3 tag fills it before its RIFF INFO list. `WXXX` and `TIPL` frames, where
-YATE puts URLs and credits in ID3, aren't custom keys and stay unread.
+the fields. A WAV's ID3 tag fills it before its RIFF INFO list.
+
+**ID3's links and credits.** YATE writes the Discogs URLs to MP3 and AIFF as `WXXX` frames and
+the credits as `TIPL` (ADR 0128), and the owner decided on 2026-11-07 that both are read and
+written, so "Like my library" matches YATE in every format. A `WXXX` frame is the custom key
+`WXXX:<description>` (2.2's `WXX` too), and the involved people list, `TIPL` or 2.3's `IPLS`
+(2.2's `IPL`), is the key `TIPL`, its roles and names joined with `;;;`, YATE's separator
+between values: `Producer;;;A, B;;;Mastered By;;;C`. They are named apart from a `TXXX` of the
+same description because a tag can hold both, and `ID3CustomKey` names them once. A link is
+Latin-1, as ID3 has it; a list whose values don't come in pairs is refused. Neither name can
+be written to FLAC or MP4, which have no such frames: the write fails rather than leave a
+Vorbis comment called `WXXX:…`.
 
 **Written.** `TagEdit.custom` maps a name to its text; empty text removes the key. The name is
 written as the edit spells it, and replaces every key of that name in any case, wherever the
@@ -60,6 +70,6 @@ The index's SQL changed, so it is rebuilt on open, as any change to it is.
 
 Any tool or feature can read a custom key by its uppercased name, and the tag editor could show
 them later. A custom key edit replaces a key spelled in another case, so a write unifies a
-file's spelling to the edit's. ID3's URL and credit frames need their own support before the
-mapping can write YATE's ID3 URLs (ADR 0128). The match state counts tracks in the index, so a
+file's spelling to the edit's. A mapping that sends a field to YATE's ID3 links or credits
+names their ID3 spelling apart from the other formats' (ADR 0132). The match state counts tracks in the index, so a
 file that doesn't scan doesn't count against its album.

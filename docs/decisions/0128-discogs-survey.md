@@ -65,8 +65,8 @@ artists differ. Per track: the ordinal position and the track number text.
 | Position as Discogs writes it (`A1`, `2`) | `TRACK_NUMBER_TEXT` | `Track Number Text` | `TXXX:Track Number Text` |
 | Release country | `DISCOGS_ALBUM_RELEASECOUNTRY` and `COUNTRY` | `Discogs Album Release Country` and `Country` | as MP4 |
 | Release notes | `DISCOGS_RELEASE_NOTES` | `Discogs Release Notes` | as MP4 |
-| Release, master, artist, album artist, label and artwork URLs (`-2`… for each further one) | `DISCOGS_RELEASE_URL` and so on | `DISCOGS_RELEASE_URL` and so on | `WXXX` frames, which the reader doesn't read |
-| Credits | `INVOLVEDPEOPLE` (`Name (Role)`), `PRODUCER`, `PERFORMER` | `INVOLVEDPEOPLE` (`Role;;;Name,Name`), `PRODUCER`, `MUSICIANCREDITS` (`Role;;;Name`) | `TIPL` frames, which the reader doesn't read |
+| Release, master, artist, album artist, label and artwork URLs (`-2`… for each further one) | `DISCOGS_RELEASE_URL` and so on | `DISCOGS_RELEASE_URL` and so on | `WXXX` frames, read as `WXXX:<name>` (ADR 0129) |
+| Credits | `INVOLVEDPEOPLE` (`Name (Role)`), `PRODUCER`, `PERFORMER` | `INVOLVEDPEOPLE` (`Role;;;Name,Name`), `PRODUCER`, `MUSICIANCREDITS` (`Role;;;Name`) | `TIPL` frames, read as `TIPL` (ADR 0129) |
 
 Key names are compared uppercased when read (ADR 0129); the table spells them as the files do.
 
@@ -123,8 +123,8 @@ which the tagger leaves alone.
 ## Consequences
 
 51.10's preset can be built from the tables above, and 51.8's tuning can run over the 1,741
-matched albums. Writing a URL field to an MP3 needs `WXXX` support in the reader and the
-writer, which 51.2 doesn't add; 51.10 decides whether the preset writes URLs to ID3 at all. A
+matched albums. Writing a URL field or the credits to an MP3 needed `WXXX` and `TIPL` support
+in the reader and the writer, which 51d added (ADR 0129). A
 later run of the survey reads only the paths `files.jsonl` doesn't hold yet; to read changed
 files again, delete it. The exception covers only the three parts named; any other read of the real library needs the
 owner again.

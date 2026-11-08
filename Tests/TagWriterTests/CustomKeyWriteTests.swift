@@ -123,3 +123,92 @@ extension TrackTags {
         return copy
     }
 }
+
+private let id3Samples: [Sample] = [.mp3v23, .mp3v24, .mp3Untagged, .aiffV23, .wavID3]
+
+/// Where an ID3 frame of `id` sits in a file's layout.
+private func id3FramePath(_ id: String, _ sample: Sample) -> String {
+    switch sample {
+    case .aiffV23: "ID3 /" + id
+    case .wavID3, .wavInfoOnly: "id3 /" + id
+    default: "ID3/" + id
+    }
+}
+
+@Test(arguments: id3Samples)
+func aLinkAndTheInvolvedPeopleListAreSetReplacedRemovedAndUndoneInID3(_ sample: Sample) throws {
+    let url = try sample.copy()
+    let original = try Data(contentsOf: url)
+    let originalTags = try tags(url)
+    let writer = scratchWriter()
+    let link = ID3CustomKey.url("DISCOGS_RELEASE_URL")
+    let people = ID3CustomKey.involvedPeople
+
+    let set = TagEdit(
+        custom: [
+            link: "https://www.discogs.com/release/1234567", people: "Producer;;;Perälä, B",
+            "DISCOGS_RELEASE_URL": "a TXXX of the same description",
+        ])
+    expectChanged(writer.write(set, to: [url.path]), [url])
+    let written = try tags(url)
+    #expect(written == (try set.applied(to: originalTags)))
+    #expect(written.custom["WXXX:DISCOGS_RELEASE_URL"] == "https://www.discogs.com/release/1234567")
+    #expect(written.custom["TIPL"] == "Producer;;;Perälä, B")
+    #expect(written.custom["DISCOGS_RELEASE_URL"] == "a TXXX of the same description")
+    let version3 = [Sample.mp3v23, .aiffV23, .wavID3].contains(sample)
+    let layout = try readTagLayout(at: url)
+    #expect(
+        layout.blocks.contains {
+            $0.path == id3FramePath("WXXX", sample) && $0.customKey == "WXXX:DISCOGS_RELEASE_URL"
+        }, "\(layout.blocks.map(\.path))")
+    #expect(
+        layout.blocks.contains {
+            $0.path == id3FramePath(version3 ? "IPLS" : "TIPL", sample) && $0.customKey == "TIPL"
+        }, "\(layout.blocks.map(\.path))")
+
+    let replaced = TagEdit(custom: [
+        "wxxx:discogs_release_url": "https://www.discogs.com/release/7", people: "Mixed By;;;C",
+    ])
+    expectChanged(writer.write(replaced, to: [url.path]), [url])
+    #expect(try tags(url).custom["WXXX:DISCOGS_RELEASE_URL"] == "https://www.discogs.com/release/7")
+    #expect(try tags(url).custom["TIPL"] == "Mixed By;;;C")
+    #expect(try tags(url).custom["DISCOGS_RELEASE_URL"] == "a TXXX of the same description")
+    #expect(
+        try readTagLayout(at: url).blocks.filter { $0.customKey == "WXXX:DISCOGS_RELEASE_URL" }
+            .count == 1)
+
+    let removed = TagEdit(custom: [link: "", people: "", "DISCOGS_RELEASE_URL": ""])
+    expectChanged(writer.write(removed, to: [url.path]), [url])
+    #expect(try tags(url).custom == originalTags.custom)
+
+    for _ in 0..<3 { expectChanged(writer.undoLast(), [url]) }
+    #expect(try Data(contentsOf: url) == original)
+}
+
+@Test func anInvolvedPeopleListOutOfPairsOrALinkOutsideLatin1IsRefused() throws {
+    let url = try Sample.mp3v24.copy()
+    let original = try Data(contentsOf: url)
+    let writer = scratchWriter()
+    for edit in [
+        TagEdit(custom: [ID3CustomKey.involvedPeople: "Producer;;;A;;;Mixed By"]),
+        TagEdit(custom: [ID3CustomKey.url("LINK"): "https://example.com/Perälä→"]),
+    ] {
+        let report = writer.write(edit, to: [url.path])
+        #expect(report.changed.isEmpty)
+        #expect(report.failures.count == 1)
+    }
+    #expect(try Data(contentsOf: url) == original)
+}
+
+@Test(arguments: [Sample.flac, .mp4])
+func id3OnlyKeysAreRefusedInFormatsWithoutThem(_ sample: Sample) throws {
+    let url = try sample.copy()
+    let original = try Data(contentsOf: url)
+    let writer = scratchWriter()
+    for name in [ID3CustomKey.url("DISCOGS_RELEASE_URL"), ID3CustomKey.involvedPeople] {
+        let report = writer.write(TagEdit(custom: [name: "x;;;y"]), to: [url.path])
+        #expect(report.changed.isEmpty)
+        #expect(report.failures.map(\.detail).first?.contains("is an ID3 frame") == true)
+    }
+    #expect(try Data(contentsOf: url) == original)
+}

@@ -23,6 +23,10 @@ private enum FrameKind {
     case day, time
     /// `TXXX`: a description naming the field, then its value.
     case userText
+    /// `WXXX`: a description naming the link, then a Latin-1 URL. Read as a custom key.
+    case userURL
+    /// `TIPL`, or 2.3's `IPLS`: roles and names in turn. Read as a custom key.
+    case involvedPeople
     /// iTunes's `GRP1`, which wins over `TIT1`: iTunes and Picard's iTunes option put the work in
     /// `TIT1` once `GRP1` holds the grouping.
     case iTunesGrouping
@@ -125,6 +129,9 @@ private let frameKinds: [String: FrameKind] = Dictionary(
         "TPB": .text(.publisher), "TCR": .text(.copyright), "TEN": .text(.encoder),
         "TOR": .text(.originalDate), "TXX": .userText, ID3FrameID.iTunesGrouping: .iTunesGrouping,
         id3v23OriginalYearFrameID: .text(.originalDate), id3UserTextFrameID: .userText,
+        "WXX": .userURL, id3UserURLFrameID: .userURL, "IPL": .involvedPeople,
+        id3InvolvedPeopleFrameID(version: 3): .involvedPeople,
+        id3InvolvedPeopleFrameID(version: 4): .involvedPeople,
     ],
     // The genre's frame is read as a genre, which may refer to the ID3v1 list.
     uniquingKeysWith: { _, other in other })
@@ -148,6 +155,14 @@ package let id3v23OriginalYearFrameID = "TORY"
 /// User-defined text: a description naming the field, then its value.
 package let id3UserTextFrameID = "TXXX"
 
+/// A user-defined link: a description, then a Latin-1 URL.
+package let id3UserURLFrameID = "WXXX"
+
+/// The involved people list in a tag of `version`: 2.4's `TIPL`, which replaced 2.3's `IPLS`.
+package func id3InvolvedPeopleFrameID(version: UInt8) -> String {
+    version == 3 ? "IPLS" : "TIPL"
+}
+
 /// ID3v2.3 holds a date as `TYER`, `TDAT` and `TIME`.
 package let id3v23YearFrameID = "TYER"
 package let id3v23DayFrameID = "TDAT"
@@ -163,7 +178,7 @@ package func id3FrameIDs(for field: TagField) -> Set<String> {
             case .described(let each), .url(let each): each == field ? id : nil
             case .day, .time: field == .date ? id : nil
             case .iTunesGrouping: field == .grouping ? id : nil
-            case .picture, .userText: nil
+            case .picture, .userText, .userURL, .involvedPeople: nil
             }
         })
 }
@@ -358,6 +373,18 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
                 }
                 field = userField
                 text = value
+            case .userURL:
+                let (description, url) = try userURLFrame(bytes, &reader.warnings)
+                tags.setCustom(
+                    ID3CustomKey.url(description), url, at: offset, warnings: &reader.warnings)
+                return
+            case .involvedPeople:
+                let values = try textFrameValues(bytes, &reader.warnings)
+                tags.setCustom(
+                    ID3CustomKey.involvedPeople,
+                    values.joined(separator: ID3CustomKey.involvedPeopleSeparator), at: offset,
+                    warnings: &reader.warnings)
+                return
             case .picture: return
             }
             if let text { tags.set(field, text, at: offset, warnings: &reader.warnings) }
@@ -490,6 +517,35 @@ private func commentFrame(_ bytes: Bytes, _ warnings: inout [MetadataWarning])
     }
     guard description.text.isEmpty else { return nil }
     return try string(bytes, from: description.next, encoding, &warnings)!.text
+}
+
+/// An encoding byte, then every value, as an involved people list holds its roles and names.
+/// A terminator after the last value doesn't make an empty one.
+private func textFrameValues(_ bytes: Bytes, _ warnings: inout [MetadataWarning])
+    throws(ParseFailure) -> [String]
+{
+    let encoding = try encoding(try bytes.uint8(0), at: bytes.fileOffset(0))
+    var values: [String] = []
+    var cursor = 1
+    while cursor < bytes.count {
+        let (text, next) = try string(bytes, from: cursor, encoding, &warnings)!
+        values.append(text)
+        cursor = next
+    }
+    return values
+}
+
+/// An encoding byte, a description, then a Latin-1 URL up to a NUL or the end.
+private func userURLFrame(_ bytes: Bytes, _ warnings: inout [MetadataWarning])
+    throws(ParseFailure) -> (description: String, url: String)
+{
+    let encoding = try encoding(try bytes.uint8(0), at: bytes.fileOffset(0))
+    guard let description = try string(bytes, from: 1, encoding, &warnings, requireTerminator: true)
+    else {
+        throw .malformed(at: bytes.fileOffset(0), "ID3v2 WXXX without a description terminator")
+    }
+    let url = latin1(try bytes.slice(description.next..<bytes.count).array.prefix { $0 != 0 })
+    return (description.text, url)
 }
 
 /// An encoding byte, a description, then the value. 2.4's further values are left out, as in

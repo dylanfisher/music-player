@@ -44,6 +44,9 @@ extension ID3Tag {
         let text = group.isPair ? numberPairText(group.numbers(in: tags)) : group.text(in: tags)
         guard let text else { return [] }
         if group == .text(.date), version == 3 { return try v23DateFrames(text) }
+        if let name = group.customName, ID3CustomKey.isID3Only(name) {
+            return [try id3OnlyFrame(name, text)]
+        }
         var key: ID3Key
         if let name = group.customName {
             key = .userText(name)
@@ -87,6 +90,37 @@ extension ID3Tag {
             let body = text.unicodeScalars.map { UInt8($0.value) }
             return [try ID3Frame(id: id, body: body, version: version)]
         }
+    }
+
+    /// A `WXXX` frame, or the involved people list with its roles and names split at
+    /// `ID3CustomKey.involvedPeopleSeparator`, which must leave them in pairs.
+    private func id3OnlyFrame(_ name: String, _ text: String) throws(ParseFailure) -> ID3Frame {
+        if let description = ID3CustomKey.urlDescription(name) {
+            guard text.unicodeScalars.allSatisfy({ $0.value < 0x100 }) else {
+                throw .unsupported(
+                    at: nil, "an ID3 URL frame holds Latin-1 text only; \"\(text)\" doesn't fit")
+            }
+            let encoding = textEncoding(description)
+            let body =
+                [encoding] + encode(description, encoding) + terminator(encoding)
+                + text.unicodeScalars.map { UInt8($0.value) }
+            return try ID3Frame(id: id3UserURLFrameID, body: body, version: version)
+        }
+        let values = text.components(separatedBy: ID3CustomKey.involvedPeopleSeparator)
+        guard values.count.isMultiple(of: 2) else {
+            throw .unsupported(
+                at: nil,
+                "an ID3 involved people list holds roles and names in pairs; \"\(text)\" has"
+                    + " \(values.count) values")
+        }
+        let encoding = textEncoding(text)
+        var body = [encoding]
+        for (index, value) in values.enumerated() {
+            if index > 0 { body += terminator(encoding) }
+            body += encode(value, encoding)
+        }
+        return try ID3Frame(
+            id: id3InvolvedPeopleFrameID(version: version), body: body, version: version)
     }
 
     /// "1997", "1997-05-12" or "1997-05-12T14:30" as 2.3's year, DDMM day and HHMM time.

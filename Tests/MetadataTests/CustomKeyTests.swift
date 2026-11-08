@@ -79,3 +79,40 @@ private let mp3Rest = mpegFrames(4)
     info.custom = ["A": "info", "B": "info"]
     #expect(tags.filling(from: info).custom == ["A": "id3", "B": "info"])
 }
+
+@Test func id3ReadsUserLinksAndTheInvolvedPeopleListAsCustomKeysInEachVersion() throws {
+    for version: UInt8 in [2, 3, 4] {
+        let (url, people) =
+            version == 2 ? ("WXX", "IPL") : (version == 3 ? ("WXXX", "IPLS") : ("WXXX", "TIPL"))
+        let encoding: UInt8 = version == 4 ? 3 : 0
+        let frames = [
+            id3Frame(
+                url, Data([encoding]) + ascii("DISCOGS_RELEASE_URL\u{0}https://example.com/r/1"),
+                version: version),
+            id3Frame(
+                url, Data([0]) + ascii("Discogs_Label_URL\u{0}https://example.com/l/2\u{0}"),
+                version: version),
+            id3Frame(
+                people, Data([encoding]) + ascii("Producer\u{0}A, B\u{0}Mastered By\u{0}C\u{0}"),
+                version: version),
+        ]
+        let tags = try parse(id3Tag(version: version, frames) + mp3Rest).metadata.tags
+        #expect(
+            tags.custom == [
+                "WXXX:DISCOGS_RELEASE_URL": "https://example.com/r/1",
+                "WXXX:DISCOGS_LABEL_URL": "https://example.com/l/2",
+                "TIPL": "Producer;;;A, B;;;Mastered By;;;C",
+            ], "ID3v2.\(version)")
+    }
+}
+
+@Test func id3ReadsAnInvolvedPeopleListInUTF16() throws {
+    var utf16 = Data([1])
+    for (index, value) in ["Producer", "Perälä"].enumerated() {
+        if index > 0 { utf16 += Data([0, 0]) }
+        utf16 += Data([0xFF, 0xFE] + value.utf16.flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] })
+    }
+    let tags = try parse(id3Tag(version: 3, [id3Frame("IPLS", utf16, version: 3)]) + mp3Rest)
+        .metadata.tags
+    #expect(tags.custom == ["TIPL": "Producer;;;Perälä"])
+}

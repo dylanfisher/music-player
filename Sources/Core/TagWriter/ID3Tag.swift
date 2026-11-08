@@ -179,7 +179,8 @@ struct ID3Frame: Equatable {
     }
 
     /// The group whose edit replaces this frame, as the reader reads it: a frame of the group's
-    /// fields, a `TXXX` by its description, a custom key's when no field has it, and of `COMM`
+    /// fields, a `TXXX` by its description, a custom key's when no field has it, a `WXXX` and
+    /// the involved people list as their custom keys (ADR 0129), and of `COMM`
     /// and `USLT` only the one without a description, since players keep their own data in
     /// described ones.
     func group(version: UInt8) -> TagGroup? {
@@ -189,6 +190,14 @@ struct ID3Frame: Equatable {
             }
             return TagGroup.of(matching: { id3UserTextDescriptions(for: $0).contains(description) })
                 ?? TagGroup.custom(named: description)
+        }
+        if id == id3UserURLFrameID {
+            return userTextDescription(version: version).flatMap {
+                TagGroup.custom(named: ID3CustomKey.url($0))
+            }
+        }
+        if id == id3InvolvedPeopleFrameID(version: version) {
+            return TagGroup.custom(named: ID3CustomKey.involvedPeople)
         }
         guard let group = TagGroup.of(matching: { id3FrameIDs(for: $0).contains(id) }) else {
             return nil
@@ -230,7 +239,8 @@ struct ID3Frame: Equatable {
             || description.elementsEqual([0xFE, 0xFF])
     }
 
-    /// A `TXXX` frame's description, read as the reader reads it; nil when it can't be.
+    /// A `TXXX` or `WXXX` frame's description, read as the reader reads it; nil when it can't
+    /// be.
     private func userTextDescription(version: UInt8) -> String? {
         guard let body = plainBody(version: version),
             let (end, _) = terminatorIndex(in: body, from: 1)

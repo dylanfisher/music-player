@@ -44,12 +44,16 @@ enum TagFile {
     func rewrite(_ groups: [TagGroup], from tags: TrackTags, art: ArtChange?, artOffset: Int?)
         throws(ParseFailure) -> [Segment]
     {
+        if case .id3 = self {
+        } else if let name = groups.compactMap(\.customName).first(where: ID3CustomKey.isID3Only) {
+            throw .unsupported(at: nil, "\(name) is an ID3 frame, which this format doesn't hold")
+        }
         switch self {
-        case .mp4(let file): try file.rewrite(groups, from: tags, art: art)
+        case .mp4(let file): return try file.rewrite(groups, from: tags, art: art)
         case .id3(let file):
-            try file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
+            return try file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
         case .flac(let file):
-            try file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
+            return try file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
         }
     }
 }
