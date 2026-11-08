@@ -10,14 +10,30 @@ package struct StagedJob: Sendable {
     /// As the snapshot spelled it, for a file name that starts with it.
     var artist: String
     /// The job's folder in the staging folder, one component: its `stagedPath`.
-    var folder: String
+    package var folder: String
     /// The format of the folder the service downloaded.
     var format: DownloadJob.Candidate.Format
     /// In the service's order, each `name` relative to `folder`.
     var files: [DownloadJob.File]
+    /// Each file's size since the player's own tag write, by name: the write can grow a file
+    /// when its padding runs out, so after it the service's sizes no longer hold.
+    package var tagged: [String: Int] = [:]
 }
 
 extension StagedJob {
+    /// What the job's files measure under `stagingRoot` now, by name, to record after a tag
+    /// write.
+    package func sizesOnDisk(stagingRoot: String) throws -> [String: Int] {
+        var sizes: [String: Int] = [:]
+        for file in files {
+            let path = stagingRoot + "/" + folder + "/" + file.name
+            guard let size = try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
+            else { throw CocoaError(.fileReadUnknown) }
+            sizes[file.name] = size
+        }
+        return sizes
+    }
+
     /// `job` as AutoTag takes it; nil until the service has staged it in a folder.
     package init?(_ job: DownloadJob) {
         guard let folder = job.stagedPath, let format = job.candidate?.format else { return nil }
@@ -38,12 +54,15 @@ package struct StagedAlbum: Sendable {
 
     /// In the album's order.
     package var album: DiscogsAlbum
+    /// The staging folder as found.
+    package var stagingRoot: String
     /// The files read, in the job's order.
     package var files: [AlbumFile]
     /// The service's file for each read one, by id.
     var staged: [Int64: DownloadJob.File]
-    /// Why a file can't be matched: it's missing, unreadable, too large, or not the size the
-    /// service staged. Empty when every file was read.
+    /// Why a file can't be matched: it's missing, unreadable, too large, or neither the size
+    /// the service staged nor the one recorded after the player's tag write. Empty when every
+    /// file was read.
     package var problems: [String]
 
     /// Reads `job`'s files under `stagingRoot`. Blocks on the reads, so call it off the main
@@ -78,7 +97,7 @@ package struct StagedAlbum: Sendable {
             }
             if size > Self.maxFileBytes {
                 problems.append("\(file.name) is over \(Self.maxFileBytes >> 20) MB")
-            } else if size != file.sizeBytes {
+            } else if size != file.sizeBytes && size != job.tagged[file.name] {
                 problems.append(
                     "\(file.name) is \(size) bytes; the service staged \(file.sizeBytes)")
             }
@@ -92,6 +111,7 @@ package struct StagedAlbum: Sendable {
             files = read.files
             problems += read.problems
         }
+        self.stagingRoot = stagingRoot
         self.files = files
         self.staged = staged
         self.problems = problems
@@ -231,4 +251,27 @@ private func isRelativeInside(_ path: String) -> Bool {
         && path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy {
             !$0.isEmpty && $0 != "." && $0 != ".."
         }
+}
+
+/// A staged job whose files the staged tagger writes more than once: after each write the
+/// files are measured again, and `job` holds them to those sizes, since a tag write can grow a
+/// file and the service's sizes were taken before it.
+package final class StagedSizes: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: StagedJob
+    private let stagingRoot: String
+
+    package init(_ job: StagedJob, stagingRoot: String) {
+        current = job
+        self.stagingRoot = stagingRoot
+    }
+
+    /// The job with the sizes its files had after the last write.
+    package var job: StagedJob { lock.withLock { current } }
+
+    /// Measures the files again, after a write.
+    package func wrote() throws {
+        let sizes = try job.sizesOnDisk(stagingRoot: stagingRoot)
+        lock.withLock { current.tagged = sizes }
+    }
 }

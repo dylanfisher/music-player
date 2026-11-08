@@ -127,7 +127,8 @@ final class StagedSetup {
                 dataDirectory: dumps.directory.appendingPathComponent("setup", isDirectory: true)))
         let report = writer.write(edits)
         try #require(report.failures == [])
-        // The writes above change sizes, which the service's list has to match.
+        // The writes above make the files as downloaded, so the service's list has their sizes
+        // now. The staged writer's own write, which comes later, is not in them.
         for index in jobFiles.indices {
             let path = folder.appendingPathComponent(jobFiles[index].name).path
             jobFiles[index].sizeBytes = try #require(

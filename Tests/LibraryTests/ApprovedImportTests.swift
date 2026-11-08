@@ -5,6 +5,7 @@ import Testing
 @testable import Library
 @testable import Metadata
 @testable import Recommender
+@testable import TagWriter
 
 private let share = "smb://HAL9000/music"
 
@@ -314,4 +315,74 @@ private func oldFilesThere(_ setup: ImportFolders) -> Bool {
     }).run(try setup.job(upgrade: true))
     #expect(outcome == .failed(.carry, "line 2: the new file isn't there"))
     #expect(try setup.reports() == ["approved", "importing", "failed"])
+}
+
+/// Writes a long comment into each staged file, as a tag write does when the padding runs out,
+/// and records what the files measure now, as the coordinator does after its write. Returns the
+/// sizes before and after.
+private func growStagedFiles(_ setup: ImportFolders) throws -> (before: [Int], after: [Int]) {
+    let before = try setup.folders.files().map(\.sizeBytes)
+    var edit = TagEdit()
+    edit.values[.comment] = String(repeating: "x", count: 100_000)
+    let writer = TagWriter(
+        journal: TagUndoJournal(
+            dataDirectory: URL(fileURLWithPath: setup.folders.share + "-journal", isDirectory: true)
+        ))
+    let report = writer.write(
+        try setup.folders.files().map { (setup.folders.staging + "/job-7/" + $0.name, edit) })
+    #expect(report.failures.isEmpty)
+    let files = try setup.folders.files()
+    try setup.index.recordStagedSizes(
+        job: 7, release: 77, folder: "job-7",
+        sizes: Dictionary(uniqueKeysWithValues: files.map { ($0.name, $0.sizeBytes) }))
+    return (before, files.map(\.sizeBytes))
+}
+
+@Test func aNewAlbumWhoseTagWriteGrewItsFilesIsApprovedAgainstTheServicesSizes() async throws {
+    let setup = try ImportFolders()
+    // The service listed the files before the player wrote their tags.
+    let job = try setup.job(upgrade: false)
+    let sizes = try growStagedFiles(setup)
+    #expect(zip(sizes.before, sizes.after).allSatisfy { $1 > $0 })
+    #expect(await setup.run().run(job) == .imported(setup.folders.destinations))
+    #expect(try setup.reports() == newAlbumReports)
+}
+
+@Test func anUpgradeWhoseTagWriteGrewItsFilesIsApprovedAgainstTheServicesSizes() async throws {
+    let setup = try ImportFolders()
+    let job = try setup.job(upgrade: true)
+    _ = try growStagedFiles(setup)
+    #expect(await setup.run().run(job) == .imported(setup.folders.destinations))
+    try setup.expectUpgraded()
+    #expect(try setup.reports() == newAlbumReports)
+}
+
+@Test func aFileThatChangedAfterTheTagWriteIsStillRefused() async throws {
+    let setup = try ImportFolders()
+    let job = try setup.job(upgrade: false)
+    _ = try growStagedFiles(setup)
+    let path = setup.folders.staging + "/job-7/02.flac"
+    let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path, isDirectory: false))
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data("more".utf8))
+    try handle.close()
+    guard case .failed(.move, let reason) = await setup.run().run(job) else {
+        Issue.record("the move didn't fail")
+        return
+    }
+    #expect(reason.contains("02.flac"))
+    #expect(try setup.folders.staged() == ["01.flac", "02.flac"])
+}
+
+@Test func stagedSizesAreKeptByNameAndForgottenWithTheJob() throws {
+    let index = try LibraryIndex(
+        at: FileManager.default.temporaryDirectory.appendingPathComponent(
+            "sizes-\(UUID().uuidString).sqlite", isDirectory: false))
+    try index.recordStagedSizes(job: 7, release: 77, folder: "job-7", sizes: ["a.flac": 5])
+    try index.recordStagedSizes(job: 7, release: 77, folder: "job-7", sizes: ["a.flac": 9])
+    try index.recordStagedSizes(job: 8, release: 78, folder: "job-8", sizes: ["a.flac": 1])
+    #expect(try index.stagedSizes(job: 7, folder: "job-7") == ["a.flac": 9])
+    #expect(try index.stagedSizes(job: 8, folder: "job-8") == ["a.flac": 1])
+    try index.forgetImportJob(7)
+    #expect(try index.stagedSizes(job: 7, folder: "job-7") == [:])
 }

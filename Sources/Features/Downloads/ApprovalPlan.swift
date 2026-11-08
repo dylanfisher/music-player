@@ -101,10 +101,15 @@ struct ApprovalPlan: Sendable {
             plan.movesProblem = "the service listed the job with no staged folder"
             return plan
         }
-        let files = job.files.map { ($0.name, $0.sizeBytes) }
         if !resuming {
             let found = await blockingFileWork {
-                Result { try places.move.destinations(folder: folder, files: files) }
+                Result { () throws -> [String] in
+                    // The files are held to their sizes since the player's tag write.
+                    let sized = try LibraryIndex(at: databaseURL).sizedAfterTagging(
+                        job.files, job: job.id, folder: folder)
+                    return try places.move.destinations(
+                        folder: folder, files: sized.map { ($0.name, $0.sizeBytes) })
+                }
             }
             switch found {
             case .success(let destinations):

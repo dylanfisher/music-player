@@ -134,3 +134,63 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     #expect(run.edits.isEmpty)
     #expect(run.match == nil)
 }
+
+/// Grows each of `run`'s files by writing a long comment, as a tag write does when the padding
+/// runs out.
+private func grow(_ run: AutoTagRun, _ setup: StagedSetup) {
+    var edit = TagEdit()
+    edit.values[.comment] = String(repeating: "x", count: 100_000)
+    let writer = TagWriter(
+        journal: TagUndoJournal(
+            dataDirectory: setup.dumps.directory.appendingPathComponent("grow", isDirectory: true))
+    )
+    #expect(writer.write(run.edits.map { ($0.path, edit) }).failures.isEmpty)
+}
+
+@Test func filesThatGrewInTheTagWriteReadWithTheirRecordedSizes() async throws {
+    let setup = try StagedSetup()
+    let first = try await setup.run(exactStaging)
+    grow(first, setup)
+    var job = try #require(setup.job)
+    // The service's sizes are the ones before the write, so the files no longer match them.
+    let refused = try await setup.autoTag()
+    guard case .error(let reasons) = refused.verdict else {
+        Issue.record("\(refused.verdict)")
+        return
+    }
+    #expect(reasons.allSatisfy { $0.contains("the service staged") })
+    #expect(reasons.count == 1)
+
+    job.tagged = try job.sizesOnDisk(stagingRoot: setup.root.path)
+    let again = try await Discogs.autoTag(
+        job, stagingRoot: setup.root.path, catalogAt: setup.dumps.catalog, mapping: setup.mapping)
+    #expect(again.staged.problems.isEmpty)
+    #expect(again.verdict == .clean)
+}
+
+@Test func aFileOfNeitherSizeIsStillRefused() async throws {
+    let setup = try StagedSetup()
+    _ = try await setup.run(exactStaging)
+    var job = try #require(setup.job)
+    job.tagged = try job.sizesOnDisk(stagingRoot: setup.root.path)
+    let path = setup.root.appendingPathComponent("job-7/02 Second Song.flac").path
+    let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path, isDirectory: false))
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data("more".utf8))
+    try handle.close()
+    let staged = StagedAlbum(job, stagingRoot: setup.root.path)
+    #expect(staged.problems.count == 1)
+    #expect(staged.problems.first?.contains("02 Second Song.flac") == true)
+}
+
+@Test func theTaggersJobHoldsFilesToTheirSizesAfterEachOfItsWrites() async throws {
+    let setup = try StagedSetup()
+    let first = try await setup.run(exactStaging)
+    let sizes = StagedSizes(try #require(setup.job), stagingRoot: setup.root.path)
+    #expect(StagedAlbum(sizes.job, stagingRoot: setup.root.path).problems.isEmpty)
+
+    grow(first, setup)
+    #expect(StagedAlbum(sizes.job, stagingRoot: setup.root.path).problems.count == 1)
+    try sizes.wrote()
+    #expect(StagedAlbum(sizes.job, stagingRoot: setup.root.path).problems.isEmpty)
+}

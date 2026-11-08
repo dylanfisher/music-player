@@ -61,7 +61,7 @@ moves before the owner confirms it.
    counterpart, or one with plays, a rating, a love or a playlist entry that would be lost,
    blocks Approve until the owner ticks it.
 3. The new files move in as for a new album.
-4. Each moved file is read again: its tags read, its size equals the staged ledger's, and the
+4. Each moved file is read again: its tags read, its size equals the one recorded after the tag write (ADR 0138), and the
    file count is the job's. A failure stops here, with the old files untouched.
 5. The old files go to `moveToTrash`, the function Remove and Move to Trash calls, made public
    in `Features/LibraryBrowser` and handed to the import as a closure, so there is one copy. Only

@@ -105,11 +105,18 @@ actor DownloadsCoordinator {
         defer { renewal.cancel() }
 
         let verdict: AutoTagRun.Verdict
-        if let staged = StagedJob(job) {
+        if let staged = stagedJob(job) {
             do {
                 let run = try await autoTag(staged)
                 guard !lostLeases.contains(job.id) else { return }
-                verdict = run.verdict == .clean ? await effects.write(run) : run.verdict
+                if run.verdict == .clean {
+                    verdict = await effects.write(run)
+                    // The write can grow a file, so what the files measure now is recorded
+                    // whatever it reported: the checks after it hold the files to these sizes.
+                    recordSizes(of: staged, under: run.staged.stagingRoot, job)
+                } else {
+                    verdict = run.verdict
+                }
             } catch {
                 verdict = .error(["\(error)"])
             }
@@ -121,6 +128,18 @@ actor DownloadsCoordinator {
         queue(.tagging(Self.tagging(verdict)), job)
         await flush()
         await releaseLease(job.id)
+    }
+
+    /// `job` as AutoTag and the tagger take it, with the sizes its files have had since a tag
+    /// write here; nil until the service has staged it.
+    func stagedJob(_ job: DownloadJob) -> StagedJob? {
+        guard var staged = StagedJob(job) else { return nil }
+        do {
+            staged.tagged = try index().stagedSizes(job: job.id, folder: staged.folder)
+        } catch {
+            note("job \(job.id)'s recorded file sizes couldn't be read: \(error)")
+        }
+        return staged
     }
 
     /// Renews the lease every 3 minutes until cancelled, or until the service says another
@@ -284,8 +303,12 @@ actor DownloadsCoordinator {
     }
 
     /// Reports the tagger's verdict for a discrepancy the owner resolved and applied, under a
-    /// lease of its own. Nil when reported, else why not.
-    func resolved(_ job: DownloadJob, _ verdict: AutoTagRun.Verdict) async -> String? {
+    /// lease of its own, after recording the sizes its writes left the files at under
+    /// `stagingRoot`. Nil when reported, else why not.
+    func resolved(_ job: DownloadJob, _ verdict: AutoTagRun.Verdict, stagingRoot: String) async
+        -> String?
+    {
+        if let staged = StagedJob(job) { recordSizes(of: staged, under: stagingRoot, job) }
         do {
             _ = try await effects.service.handoff(job.id, .lease)
         } catch {
@@ -295,6 +318,17 @@ actor DownloadsCoordinator {
         let sent = await flush()
         await releaseLease(job.id)
         return sent ? nil : "the report waits in the outbox until the service answers"
+    }
+
+    /// Records what `staged`'s files measure under `stagingRoot` now, after a tag write.
+    private func recordSizes(of staged: StagedJob, under stagingRoot: String, _ job: DownloadJob) {
+        do {
+            try index().recordStagedSizes(
+                job: job.id, release: job.release.releaseID, folder: staged.folder,
+                sizes: try staged.sizesOnDisk(stagingRoot: stagingRoot))
+        } catch {
+            note("job \(job.id)'s file sizes after the tag write couldn't be recorded: \(error)")
+        }
     }
 
     private func index() throws -> LibraryIndex {

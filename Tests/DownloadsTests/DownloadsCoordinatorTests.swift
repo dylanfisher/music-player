@@ -50,10 +50,24 @@ private final class Calls: @unchecked Sendable {
 }
 
 /// An AutoTag run with `verdict` and no files, as AutoTag reports one.
-private func run(_ verdict: AutoTagRun.Verdict, for job: StagedJob) -> AutoTagRun {
+private func run(_ verdict: AutoTagRun.Verdict, for job: StagedJob, root: String = "/nonexistent")
+    -> AutoTagRun
+{
     AutoTagRun(
-        verdict: verdict, staged: StagedAlbum(job, stagingRoot: "/nonexistent"), match: nil,
-        changes: nil, edits: [])
+        verdict: verdict, staged: StagedAlbum(job, stagingRoot: root), match: nil, changes: nil,
+        edits: [])
+}
+
+/// Appends bytes to each of `job`'s files under `root`, as a tag write does when its padding
+/// runs out.
+private func grow(_ job: StagedJob, under root: String) {
+    for file in job.files {
+        let path = root + "/" + job.folder + "/" + file.name
+        guard let handle = FileHandle(forWritingAtPath: path) else { continue }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: Data("grown".utf8))
+        try? handle.close()
+    }
 }
 
 /// A coordinator on a fresh index, for `service`.
@@ -62,6 +76,8 @@ private final class Setup {
     let calls = Calls()
     let databaseURL: URL
     var verdict = AutoTagRun.Verdict.clean
+    /// The staging folder the stand-ins read and write, where `stage` puts files.
+    let stagingRoot: String
     /// What the stand-in import run does to the outbox, as ImportRun queues its reports.
     var importReports: [HandoffEvent] = [.approved, .importing, .imported]
 
@@ -71,7 +87,17 @@ private final class Setup {
             "downloads-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         databaseURL = folder.appendingPathComponent("library.sqlite", isDirectory: false)
+        stagingRoot = folder.path + "/staging"
         _ = try LibraryIndex(at: databaseURL)
+    }
+
+    /// Puts the files of job `id`'s folder in the staging folder, each with `bytes` bytes.
+    func stage(_ id: Int, bytes: Int = 100) throws {
+        let folder = stagingRoot + "/job-\(id)"
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        for name in ["01 First Song.flac", "02 Second Song.flac"] {
+            try Data(count: bytes).write(to: URL(fileURLWithPath: folder + "/" + name))
+        }
     }
 
     var index: LibraryIndex { get throws { try LibraryIndex(at: databaseURL) } }
@@ -83,6 +109,7 @@ private final class Setup {
         let reports = importReports
         let url = databaseURL
         let service = service
+        let root = stagingRoot
         return DownloadsCoordinator(
             machine: FakeService.machine, databaseURL: url,
             effects: DownloadsCoordinator.Effects(
@@ -91,10 +118,11 @@ private final class Setup {
                     ? { @Sendable job in
                         calls.tag(job)
                         await calls.waitIfHeld()
-                        return run(verdict, for: job)
+                        return run(verdict, for: job, root: root)
                     } : nil,
                 write: { run in
                     calls.write()
+                    if let job = calls.tags.last { grow(job, under: root) }
                     return run.verdict
                 },
                 importRun: { job in
@@ -346,8 +374,51 @@ func aStagedJobIsTaggedWhenNoRunHoldsIt(
             $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
         }
     ])
-    let problem = await setup.coordinator().resolved(try #require(setup.service.job(1)), .clean)
+    let problem = await setup.coordinator().resolved(
+        try #require(setup.service.job(1)), .clean, stagingRoot: setup.stagingRoot)
     #expect(problem == nil)
     #expect(setup.service.eventTypes == ["lease", "tagging clean", "release_lease"])
     #expect(setup.service.job(1)?.tagging == clean)
+}
+
+private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
+
+@Test func aCleanWriteRecordsWhatTheFilesMeasureAfterIt() async throws {
+    let setup = try Setup([job(1)])
+    try setup.stage(1)
+    await setup.coordinator().take([job(1)])
+    #expect(setup.calls.writes == 1)
+    #expect(try setup.index.stagedSizes(job: 1, folder: "job-1") == firstSizes)
+}
+
+@Test func theRecordedSizesGoToTheNextTagRun() async throws {
+    let setup = try Setup([job(1)])
+    try setup.stage(1)
+    try setup.index.recordStagedSizes(job: 1, release: 4242, folder: "job-1", sizes: firstSizes)
+    await setup.coordinator().take([job(1)])
+    #expect(setup.calls.tags.first?.tagged == firstSizes)
+    #expect(await setup.coordinator().stagedJob(job(1))?.tagged == firstSizes)
+}
+
+@Test func aDiscrepancyRecordsNothing() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .discrepancy(["a bonus track"])
+    try setup.stage(1)
+    await setup.coordinator().take([job(1)])
+    #expect(try setup.index.stagedSizes(job: 1, folder: "job-1") == [:])
+}
+
+@Test func aResolvedDiscrepancyRecordsWhatTheTaggerLeftTheFilesAt() async throws {
+    let setup = try Setup([
+        job(1) {
+            $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
+        }
+    ])
+    try setup.stage(1, bytes: 250)
+    let problem = await setup.coordinator().resolved(
+        try #require(setup.service.job(1)), .clean, stagingRoot: setup.stagingRoot)
+    #expect(problem == nil)
+    #expect(
+        try setup.index.stagedSizes(job: 1, folder: "job-1")
+            == ["01 First Song.flac": 250, "02 Second Song.flac": 250])
 }

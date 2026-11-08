@@ -91,10 +91,11 @@ public final class DiscogsTagger {
         resolved: @escaping (AutoTagRun.Verdict) -> Void
     ) {
         let writer = StagedWriter(stagingRoot: stagingRoot, dataDirectory: dataDirectory)
+        let sizes = StagedSizes(job, stagingRoot: stagingRoot)
         let effects = TaggerModel.StagedEffects(
             read: {
                 await blockingFileWork {
-                    let staged = StagedAlbum(job, stagingRoot: stagingRoot)
+                    let staged = StagedAlbum(sizes.job, stagingRoot: stagingRoot)
                     return (staged.album, staged.files, staged.problems)
                 }
             },
@@ -111,7 +112,13 @@ public final class DiscogsTagger {
             summaries: { try await releaseSummaries($0, catalogAt: catalog) },
             checkCatalog: { await catalogState(at: catalog) },
             write: { edits in
-                try await blockingFileWork { Result { try writer.write(edits) } }.get()
+                try await blockingFileWork {
+                    Result {
+                        let report = try writer.write(edits)
+                        try sizes.wrote()
+                        return report
+                    }
+                }.get()
             })
         self.init(
             model: TaggerModel(

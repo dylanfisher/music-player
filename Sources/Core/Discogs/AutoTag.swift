@@ -18,7 +18,7 @@ package struct AutoTagRun: Sendable {
     }
 
     package var verdict: Verdict
-    var staged: StagedAlbum
+    package var staged: StagedAlbum
     /// Nil when a file couldn't be read.
     var match: AlbumMatch?
     /// The fixed overwrite mapping's changes for the match, whatever the verdict, for the

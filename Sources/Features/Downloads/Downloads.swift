@@ -276,8 +276,9 @@ package final class Downloads {
             }
         case .retry: retry(job, row, session)
         case .openInTagger:
-            guard let coordinator = session.coordinator, let staged = StagedJob(job) else { return }
+            guard let coordinator = session.coordinator else { return }
             Task {
+                guard let staged = await coordinator.stagedJob(job) else { return }
                 let root: String
                 do {
                     root = try await session.setup.places().stagingRoot
@@ -286,7 +287,8 @@ package final class Downloads {
                 }
                 openInTagger(staged, root) { verdict in
                     Task {
-                        let problem = await coordinator.resolved(job, verdict)
+                        let problem = await coordinator.resolved(
+                            job, verdict, stagingRoot: root)
                         await MainActor.run {
                             if let problem { self.alert("The tagging wasn't reported", [problem]) }
                         }

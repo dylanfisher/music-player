@@ -101,3 +101,59 @@ private let lossy = StagedOrigin(
             "01 First Song.flac: suspect lossy origin: cutoff at 16.0 kHz"
         ])
 }
+
+/// A temporary share with a staging folder of two tagged FLACs of the job 5, a library folder
+/// beside it, and an index.
+private func stagedShare() throws -> (places: ImportPlaces, index: LibraryIndex, sizes: [Int]) {
+    let share = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "plan-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(
+        at: share.appendingPathComponent("staging/job-5"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+        at: share.appendingPathComponent("library"), withIntermediateDirectories: true)
+    var info = Data()
+    info.appendBigEndian(UInt16(4096))
+    info.appendBigEndian(UInt16(4096))
+    info.append(Data(count: 6))
+    info.appendBigEndian(UInt64(44_100) << 44 | UInt64(1) << 41 | UInt64(15) << 36 | 4410)
+    info.append(Data(count: 16))
+    var sizes: [Int] = []
+    for (offset, name) in ["01 First Song.flac", "02 Second Song.flac"].enumerated() {
+        let tags = FixtureTags(
+            title: "Song \(offset)", artist: "Artist", album: "Album", albumArtist: nil,
+            genre: nil, date: nil, trackNumber: offset + 1, trackTotal: nil, discNumber: nil,
+            discTotal: nil, compilation: false, comment: nil)
+        let file = flacFile(
+            streamInfo: info, frames: Data([0xFF, 0xF8, 0, 0]), tags: tags, art: nil,
+            style: VorbisStyle(
+                lowercaseKeys: false, combinedTrackNumber: false, paddingBytes: 100))
+        try file.write(to: share.appendingPathComponent("staging/job-5/" + name))
+        sizes.append(file.count)
+    }
+    let index = try LibraryIndex(at: share.appendingPathExtension("sqlite"))
+    let places = ImportPlaces(
+        stagingRoot: share.path + "/staging", libraryFolder: share.path + "/library",
+        shareRoot: share.path)
+    return (places, index, sizes)
+}
+
+@Test func theMovesAreCheckedAgainstTheSizesRecordedAfterTheTagWrite() async throws {
+    let (places, index, sizes) = try stagedShare()
+    // The service listed the files at other sizes than they have: the player's write changed them.
+    var staged = job(5)
+    staged.stagedPath = "job-5"
+    staged.files = zip(staged.files, [sizes[0] - 30, sizes[1] - 30]).map { file, size in
+        DownloadJob.File(name: file.name, sizeBytes: size, position: file.position)
+    }
+    let before = await ApprovalPlan.build(
+        staged, places: places, databaseURL: index.fileURL, catalog: nil)
+    #expect(before.movesProblem?.contains("bytes") == true)
+
+    try index.recordStagedSizes(
+        job: 5, release: 4242, folder: "job-5",
+        sizes: ["01 First Song.flac": sizes[0], "02 Second Song.flac": sizes[1]])
+    let after = await ApprovalPlan.build(
+        staged, places: places, databaseURL: index.fileURL, catalog: nil)
+    #expect(after.movesProblem == nil)
+    #expect(after.moves.count == 2)
+}

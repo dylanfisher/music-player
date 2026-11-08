@@ -9,18 +9,23 @@ struct ImportStep: Equatable, Sendable {
         case trashed
         /// An upgrade's old file's stats carried to its new one.
         case carried
+        /// A staged file's size after the player's own tag write, which can grow the file when
+        /// its padding runs out. Every check after the write holds the file to it, not to the
+        /// size the service staged.
+        case tagged
     }
 
     /// The service's job id, which every Mac shares.
     var jobID: Int
     var releaseID: Int
     var kind: Kind
-    /// For `moved`, the file's path relative to the staging folder; otherwise the old file's,
+    /// For `moved` and `tagged`, the file's path relative to the staging folder; otherwise the old file's,
     /// relative to the library's share.
     var path: String
     /// For `moved` and `carried`, the new file's path relative to the library's share.
     var destination: String? = nil
-    /// For `moved`, the size the file must have where it went.
+    /// For `moved`, the size the file must have where it went; for `tagged`, the size it has
+    /// since the tag write.
     var sizeBytes: Int? = nil
 }
 
@@ -94,6 +99,33 @@ extension LibraryIndex {
                 jobID: job, releaseID: try row.int(0), kind: known, path: try row.text(2),
                 destination: row.optionalText(3), sizeBytes: row.optionalInt(4))
         }
+    }
+
+    /// Records what the staged files of `folder` measure, by name, after the player wrote their
+    /// tags, replacing any earlier record of the same files.
+    package func recordStagedSizes(job: Int, release: Int, folder: String, sizes: [String: Int])
+        throws
+    {
+        try database.transaction {
+            for (name, size) in sizes {
+                try recordImportStep(
+                    ImportStep(
+                        jobID: job, releaseID: release, kind: .tagged, path: folder + "/" + name,
+                        sizeBytes: size))
+            }
+        }
+    }
+
+    /// The sizes recorded for the staged files of `folder` by `recordStagedSizes`, by name.
+    package func stagedSizes(job: Int, folder: String) throws -> [String: Int] {
+        var sizes: [String: Int] = [:]
+        let prefix = folder + "/"
+        for step in try importSteps(job: job) where step.kind == .tagged {
+            if step.path.hasPrefix(prefix), let size = step.sizeBytes {
+                sizes[String(step.path.dropFirst(prefix.count))] = size
+            }
+        }
+        return sizes
     }
 
     /// Forgets the job `job`'s steps, once it's imported.

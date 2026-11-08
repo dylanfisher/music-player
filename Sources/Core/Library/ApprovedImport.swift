@@ -41,6 +41,30 @@ package struct ApprovedImport: Sendable {
     }
 }
 
+extension ApprovedImport {
+    /// The job's files with the sizes they have since the player's tag write, where one was
+    /// recorded, else the sizes the service staged. The service's sizes are fixed at staging,
+    /// and a tag write can grow a file when its padding runs out.
+    func sizedAfterTagging(by index: LibraryIndex) throws -> [DownloadJob.File] {
+        try index.sizedAfterTagging(files, job: jobID, folder: folder)
+    }
+}
+
+extension LibraryIndex {
+    /// `files` of the staged folder `folder` of the job `job`, with the sizes recorded after
+    /// the player's tag write where there are any, else the ones the service staged them with.
+    package func sizedAfterTagging(_ files: [DownloadJob.File], job: Int, folder: String) throws
+        -> [DownloadJob.File]
+    {
+        let recorded = try stagedSizes(job: job, folder: folder)
+        return files.map { file in
+            var file = file
+            file.sizeBytes = recorded[file.name] ?? file.sizeBytes
+            return file
+        }
+    }
+}
+
 /// How an import run ended.
 package enum ImportOutcome: Equatable, Sendable {
     /// Every file is in the library at these paths, and `imported` is in the outbox.
@@ -96,16 +120,18 @@ package struct ImportRun {
         }
 
         let destinations: [String]
+        let sizes: [DownloadJob.File]
         do {
+            sizes = try job.sizedAfterTagging(by: index)
             destinations = try move.moveIn(
                 job: job.jobID, release: job.releaseID, folder: job.folder,
-                files: job.files.map { ($0.name, $0.sizeBytes) }, ledger: index)
+                files: sizes.map { ($0.name, $0.sizeBytes) }, ledger: index)
         } catch {
             return fail(.move, "\(error)", job)
         }
         var directories = Set(destinations.map(parentOf))
         if let upgrade = job.upgrade {
-            if let problem = verify(destinations, job) { return fail(.move, problem, job) }
+            if let problem = verify(destinations, sizes) { return fail(.move, problem, job) }
             let old: [ImportStep]
             do {
                 old = try ledgerOldFiles(upgrade, destinations, job)
@@ -144,13 +170,14 @@ package struct ImportRun {
         return nil
     }
 
-    /// Each moved file read again: its tags read, its size the staged ledger's, and as many
+    /// Each moved file read again: its tags read, its size the one it was staged with (after the
+    /// player's tag write, when it made one), and as many
     /// as the job has. Nil when they all hold.
-    private func verify(_ destinations: [String], _ job: ApprovedImport) -> String? {
-        guard destinations.count == job.files.count else {
-            return "\(destinations.count) files moved, the job has \(job.files.count)"
+    private func verify(_ destinations: [String], _ files: [DownloadJob.File]) -> String? {
+        guard destinations.count == files.count else {
+            return "\(destinations.count) files moved, the job has \(files.count)"
         }
-        for (path, file) in zip(destinations, job.files) {
+        for (path, file) in zip(destinations, files) {
             var info = stat()
             guard lstat(path, &info) == 0 else { return "\(path) isn't there" }
             guard Int(info.st_size) == file.sizeBytes else {

@@ -55,6 +55,15 @@ does, from `Core/Discogs/StagedWriter.swift`:
   again; it must be empty. A failure, or a change set that isn't empty, makes the run a
   discrepancy with the reason, or an error.
 
+**File sizes.** The service's file sizes are fixed when it stages a job, and a tag write grows a
+file when its padding runs out. The player holds a file to the service's size only before its own
+write. After the write, a clean run, or an Apply in the tagger, records what each file measures,
+in the index's import ledger (kind `tagged`, by job and file), and every later check (the read in
+a rerun, the tagger's read-back, the move's preflight, the upgrade's verify) holds the file to
+that size. A read accepts either size, so a job the service stages again is read afresh. The
+record is in the index of the Mac that wrote, so a job tagged on another Mac, whose files grew,
+is refused at Approve here with the file's size in the reason. Approve on the Mac that tagged it.
+
 **Several Macs.** Only the lease holder writes. A Mac that takes over a job another left
 half-tagged reads the files again and reruns the whole test from the start; it never trusts the
 reported status, and the read-back is what tells it a write finished, since the recovery journal
