@@ -468,8 +468,12 @@ final class TaggerModel {
         var plan = ApplyPlan(albumIDs: [], files: [], fieldCount: 0, problems: readProblems)
         for album in chosen {
             let albumFiles = album.album.tracks.compactMap { byID[$0.fileID] }
-            guard albumFiles.count == album.album.tracks.count else {
-                plan.problems.append("\(albumTitle(album.album)): not every file could be read")
+            let unread = album.album.tracks.count - albumFiles.count
+            guard unread == 0 else {
+                // Each file that couldn't be read is a problem of its own already.
+                plan.problems.append(
+                    "\(albumTitle(album.album)): \(unread) file\(unread == 1 ? "" : "s")"
+                        + " unreadable or no longer in the library")
                 continue
             }
             let set = changeSet(albumFiles, album)

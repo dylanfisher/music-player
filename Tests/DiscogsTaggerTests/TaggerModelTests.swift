@@ -326,6 +326,23 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
 }
 
 @MainActor
+@Test func applySaysAnAlbumsFileIsGoneAsViewChangesDoes() async throws {
+    let seen = Seen()
+    let tagger = await model(
+        seen, albums: [one],
+        matches: { album, _ in
+            match(album, release(10, album.title, titles: stockholm), tier: .exact)
+        },
+        files: { ids in [file(one, 0)].filter { ids.contains($0.id) } })
+    tagger.analyze()
+    await tagger.finished()
+    let plan = try #require(await tagger.plan([1]))
+    #expect(plan.albumIDs.isEmpty)
+    #expect(
+        plan.problems == ["Persuader – Stockholm: 2 files unreadable or no longer in the library"])
+}
+
+@MainActor
 @Test func theTiersListsFollowAChoiceThatMovesAnAlbum() async throws {
     let tagger = await model(Seen(), albums: [one, two], matches: matches)
     tagger.analyze()
