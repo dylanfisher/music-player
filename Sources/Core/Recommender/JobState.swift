@@ -1,6 +1,6 @@
 /// Where a download job is in its lifecycle. The service sets the states up to `staged`, the
 /// player those from `approved` on, and either one `failed` and `cancelled`.
-enum JobState: String, Equatable, Sendable, CaseIterable, Decodable {
+package enum JobState: String, Equatable, Sendable, CaseIterable, Decodable {
     /// Waiting for its search.
     case queued
     case searching
@@ -26,7 +26,7 @@ enum JobState: String, Equatable, Sendable, CaseIterable, Decodable {
 
     /// Thrown as `UnknownJobState` for a name the contract doesn't have, so the caller can
     /// show it as an error rather than skip the job.
-    init(from decoder: any Decoder) throws {
+    package init(from decoder: any Decoder) throws {
         let name = try decoder.singleValueContainer().decode(String.self)
         guard let state = JobState(rawValue: name) else { throw UnknownJobState(name: name) }
         self = state

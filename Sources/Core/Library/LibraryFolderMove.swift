@@ -119,7 +119,7 @@ struct LibraryFolderMove: Sendable {
             }
             let destination = libraryFolder + "/" + libraryFolderPath(for: tags, of: source)
             let key = destination.precomposedStringWithCanonicalMapping
-            if exists(destination) || seen.contains(key) { taken.append(destination) }
+            if pathExists(destination) || seen.contains(key) { taken.append(destination) }
             seen.insert(key)
             planned.append(
                 Planned(
@@ -150,8 +150,8 @@ struct LibraryFolderMove: Sendable {
     private func take(_ move: Planned, _ roots: (staging: String, library: String))
         throws(MoveRefusal)
     {
-        let sourceThere = exists(move.source)
-        let destinationThere = exists(move.destination)
+        let sourceThere = pathExists(move.source)
+        let destinationThere = pathExists(move.destination)
         switch (sourceThere, destinationThere) {
         case (false, true):
             // Moved by a run before.
@@ -214,7 +214,7 @@ struct LibraryFolderMove: Sendable {
     /// no `..`.
     private func checkDestination(_ parent: String, _ library: String) throws(MoveRefusal) {
         var existing = parent
-        while !exists(existing), existing != "/" {
+        while !pathExists(existing), existing != "/" {
             existing = (existing as NSString).deletingLastPathComponent
         }
         guard let real = resolved(existing), real == library || isPath(real, under: library)
@@ -272,7 +272,8 @@ enum MoveRefusal: Error, Equatable, CustomStringConvertible {
     }
 }
 
-private func exists(_ path: String) -> Bool {
+/// Whether anything is at `path`, a symbolic link included.
+func pathExists(_ path: String) -> Bool {
     var info = stat()
     return lstat(path, &info) == 0
 }

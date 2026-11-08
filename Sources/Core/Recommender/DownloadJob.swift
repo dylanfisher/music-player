@@ -133,8 +133,8 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     }
 
     /// What the player last reported of its tag run.
-    struct Tagging: Equatable, Sendable, Decodable {
-        enum Status: String, Equatable, Sendable, Codable {
+    package struct Tagging: Equatable, Sendable, Decodable {
+        package enum Status: String, Equatable, Sendable, Codable {
             case none, running, clean, discrepancy, error
         }
 
@@ -151,7 +151,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             self.reasons = reasons
         }
 
-        init(from decoder: any Decoder) throws {
+        package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             status = try container.decode(Status.self, forKey: .status)
             reasons = try container.decode([String].self, forKey: .reasons)

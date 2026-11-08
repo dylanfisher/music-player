@@ -1,7 +1,7 @@
 /// A report or a claim the player sends for one job through `downloads/handoff`.
-enum HandoffEvent: Equatable, Sendable, Encodable {
+package enum HandoffEvent: Equatable, Sendable, Encodable {
     /// The stages the player runs, which only it reports as failed.
-    enum Stage: String, Equatable, Sendable, Encodable {
+    package enum Stage: String, Equatable, Sendable, Encodable {
         case tag, move, delete, carry
     }
 
@@ -34,7 +34,7 @@ enum HandoffEvent: Equatable, Sendable, Encodable {
         case tagging, claim, release, approved, importing, imported, rejected, failed
     }
 
-    func encode(to encoder: any Encoder) throws {
+    package func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         let type: EventType
         switch self {
@@ -58,5 +58,15 @@ enum HandoffEvent: Equatable, Sendable, Encodable {
             try container.encode(reason, forKey: .reason)
         }
         try container.encode(type, forKey: .type)
+    }
+
+    /// The event as a report in the outbox holds it, its keys sorted, so a report queued twice
+    /// is the same text.
+    package var json: String {
+        do {
+            return String(decoding: try requestEncoder.encode(self), as: UTF8.self)
+        } catch {
+            preconditionFailure("an event always encodes: \(error)")
+        }
     }
 }

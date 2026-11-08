@@ -82,7 +82,9 @@ let package = Package(
         ),
         .target(
             name: "Library",
-            dependencies: ["DisplayText", "Log", "Metadata", "Settings", "SQLite"],
+            dependencies: [
+                "DisplayText", "Log", "Metadata", "Recommender", "Settings", "SQLite",
+            ],
             path: "Sources/Core/Library",
             swiftSettings: strictSwift
         ),
@@ -390,7 +392,9 @@ let package = Package(
         ),
         .testTarget(
             name: "LibraryTests",
-            dependencies: ["Fixtures", "Library", "Metadata", "Settings", "SQLite", "TagWriter"],
+            dependencies: [
+                "Fixtures", "Library", "Metadata", "Recommender", "Settings", "SQLite", "TagWriter",
+            ],
             exclude: ["Crashes"],
             swiftSettings: strictSwift
         ),
