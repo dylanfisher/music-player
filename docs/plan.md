@@ -862,11 +862,19 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       (`CatalogKey.matchKey`), which agrees on all 56 fold, 16 similarity and 7 score cases;
       the Foundation fold missed 7 and 2. Catalog keys stay on Foundation. 11 AutoTag tests,
       each check also caught by a mutation.
-- [ ] **54.5 StagedWriter.** `Core/Discogs/StagedWriter.swift`: `TagWriter.write` with a second
+- [x] **54.5 StagedWriter.** `Core/Discogs/StagedWriter.swift`: `TagWriter.write` with a second
       `TagUndoJournal` in its own folder and a write closure that doesn't call the watcher, the
       staging folder guard, a read-back that must find no changes. Tests: a path outside staging
       refused, the main journal untouched (undo after a staged write reverts the library edit
       before it), a staged file never in the index.
+      Result: `StagedWriter` writes a clean run's edits through `TagWriter` with a journal in
+      `staged-tags/tag-undo` under the data folder and tells no watcher; every path is resolved
+      with `realpath`, links included, and the whole run is refused (`StagedPathRefused`)
+      before any write if one is outside the staging folder or missing. The files are then
+      read back and the overwrite change set must be empty. Its `write(_:)` is the closure the
+      staged tagger (54.11) will use. Nothing calls it yet, so no staged file is written until
+      54.10 wires it after ADR 0138's approval. 5 tests; the guard and the journal's folder
+      each caught by a mutation.
 
 #### 54c. Approve
 
