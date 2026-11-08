@@ -49,6 +49,8 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     private(set) var buttons: [DownloadAction: NSButton] = [:]
     /// The rows shown, in the window's order.
     private(set) var rows: [DownloadRow] = []
+    /// How many times the table has reloaded its rows.
+    private(set) var reloads = 0
     private var canAdd = false
 
     /// Whether `action` applies to `row` now.
@@ -145,11 +147,14 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     /// Shows `rows`, keeping the selected job selected while it's there, and `status` below.
     func show(_ rows: [DownloadRow], status: String, canAdd: Bool) {
         let selected = selectedRow?.id
-        self.rows = rows
         self.canAdd = canAdd
-        table.reloadData()
-        if let selected, let row = rows.firstIndex(where: { $0.id == selected }) {
-            table.selectRowIndexes([row], byExtendingSelection: false)
+        if rows != self.rows {
+            reloads += 1
+            self.rows = rows
+            table.reloadData()
+            if let selected, let row = rows.firstIndex(where: { $0.id == selected }) {
+                table.selectRowIndexes([row], byExtendingSelection: false)
+            }
         }
         statusLabel.stringValue = status
         statusLabel.isHidden = status.isEmpty

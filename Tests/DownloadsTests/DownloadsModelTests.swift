@@ -278,3 +278,93 @@ private func model(_ service: FakeService) -> DownloadsModel {
     #expect(downloads.connection == .answering)
     #expect(downloads.rows.first?.style.isDimmed == false)
 }
+
+/// Holds the first list until `open`, counting the lists running at once.
+private final class HeldList: @unchecked Sendable {
+    private let lock = NSLock()
+    private var running = 0
+    private var calls = 0
+    private var longest = 0
+    private var gate: CheckedContinuation<Void, Never>?
+    private var opened = false
+
+    var started: Int { lock.withLock { calls } }
+    var most: Int { lock.withLock { longest } }
+    var isHolding: Bool { lock.withLock { gate != nil } }
+
+    func enter() async {
+        let first = lock.withLock { () -> Bool in
+            running += 1
+            calls += 1
+            longest = max(longest, running)
+            return calls == 1
+        }
+        guard first else { return }
+        await withCheckedContinuation { (wake: CheckedContinuation<Void, Never>) in
+            let resume = lock.withLock { () -> Bool in
+                if opened { return true }
+                gate = wake
+                return false
+            }
+            if resume { wake.resume() }
+        }
+    }
+
+    func leave() { lock.withLock { running -= 1 } }
+
+    func open() {
+        lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            opened = true
+            defer { gate = nil }
+            return gate
+        }?.resume()
+    }
+}
+
+@MainActor @Test func pollsRunOneAtATimeSoAnOldReplyCantOverwriteANewerOne() async {
+    let service = FakeService([job(1)])
+    let held = HeldList()
+    var wrapped = service.service
+    let inner = wrapped.refreshed
+    wrapped.refreshed = { jobs throws(RecommenderError) in
+        await held.enter()
+        defer { held.leave() }
+        return try await inner(jobs)
+    }
+    let downloads = DownloadsModel(
+        service: wrapped, machine: FakeService.machine, now: { Date(timeIntervalSince1970: 0) },
+        sleep: { try await service.clock.sleep($0) })
+    let first = Task { await downloads.poll() }
+    await eventually("the first list held") { held.isHolding }
+    let second = Task { await downloads.poll() }
+    for _ in 0..<200 { await Task.yield() }
+    #expect(held.started == 1, "the second waits for the first")
+    held.open()
+    await first.value
+    await second.value
+    #expect(held.started == 2)
+    #expect(held.most == 1)
+    #expect(downloads.rows.map(\.id) == [1])
+}
+
+@MainActor @Test func aPollThatBringsNothingNewChangesNothingShown() async {
+    let service = FakeService([job(1)])
+    let downloads = model(service)
+    var changes = 0
+    downloads.changed = { changes += 1 }
+    await downloads.poll()
+    #expect(changes == 1, "the first answer changes the connection")
+    await downloads.poll()
+    await downloads.poll()
+    #expect(changes == 1)
+
+    service.put(
+        job(1, revision: 2) { $0.tagging = DownloadJob.Tagging(status: .clean, reasons: []) })
+    await downloads.poll()
+    #expect(changes == 2)
+    service.down = true
+    await downloads.poll()
+    #expect(changes == 3)
+    await downloads.poll()
+    #expect(changes == 3, "the same failure again")
+}

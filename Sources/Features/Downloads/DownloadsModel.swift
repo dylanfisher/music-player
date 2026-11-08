@@ -37,6 +37,8 @@ final class DownloadsModel {
     private(set) var isWindowOpen = false
     private var lastGood: Date?
     private var polling: Task<Void, Never>?
+    /// The last poll started, which the next waits for.
+    private var lastPoll: Task<Void, Never>?
 
     /// Called after anything shown changes.
     var changed: () -> Void = {}
@@ -112,15 +114,33 @@ final class DownloadsModel {
         }
     }
 
-    /// Brings the jobs up to date. A reply that resets the epoch drops every row first; a
-    /// failure keeps the rows as they were, dimmed, and says why.
+    /// Brings the jobs up to date, after any poll before it: each asks from the jobs the one
+    /// before it left, so an old reply can't overwrite a newer one. A reply that resets the
+    /// epoch drops every row first; a failure keeps the rows as they were, dimmed, and says why.
+    /// Cancelling the caller cancels the request.
     func poll() async {
+        let before = lastPoll
+        let mine = Task { [self] in
+            await before?.value
+            await refresh()
+        }
+        lastPoll = mine
+        await withTaskCancellationHandler {
+            await mine.value
+        } onCancel: {
+            mine.cancel()
+        }
+    }
+
+    private func refresh() async {
+        guard !Task.isCancelled else { return }
         let refreshed = service.refreshed
-        let jobs = jobs
+        let before = jobs
+        let connectionBefore = connection
         do throws(RecommenderError) {
-            let next = try await refreshed(jobs)
+            let next = try await refreshed(before)
             guard !Task.isCancelled else { return }
-            self.jobs = next
+            jobs = next
             lastGood = now()
             connection = .answering
             took(Array(next.rows.values))
@@ -129,6 +149,8 @@ final class DownloadsModel {
             guard !Task.isCancelled else { return }
             connection = .down(error.description, lastGood: lastGood)
         }
+        // Most polls find nothing new; the rows and the window are left alone then.
+        guard jobs.rows != before.rows || connection != connectionBefore else { return }
         buildRows()
         changed()
     }

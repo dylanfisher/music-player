@@ -133,7 +133,8 @@ package final class Downloads {
                 Task {
                     await coordinator.take(jobs)
                     let problems = await coordinator.problems
-                    guard self.session === session else { return }
+                    // The poll refreshed the rows; only a new problem changes what shows.
+                    guard self.session === session, problems != session.problems else { return }
                     session.problems = problems
                     self.refresh()
                 }

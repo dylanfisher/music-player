@@ -129,3 +129,18 @@ private func rows() -> [DownloadRow] {
     service.down = true
     #expect(await model.cancel(1)?.contains("192.0.2.7") == true)
 }
+
+@MainActor
+@Test func theTableIsReloadedOnlyWhenTheRowsChange() throws {
+    let window = DownloadsWindow()
+    window.show(rows(), status: "", canAdd: true)
+    #expect(window.reloads == 1)
+    window.table.selectRowIndexes([1], byExtendingSelection: false)
+    window.show(rows(), status: "Can't reach the service", canAdd: false)
+    #expect(window.reloads == 1, "the same rows, a new status")
+    #expect(window.statusLabel.stringValue == "Can't reach the service")
+    #expect(window.table.selectedRow == 1)
+    window.show(Array(rows().dropFirst()), status: "", canAdd: true)
+    #expect(window.reloads == 2)
+    window.window?.close()
+}
