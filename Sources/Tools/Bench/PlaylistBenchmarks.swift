@@ -45,5 +45,32 @@ let playlistBenchmarks = [
                 value: p95(samples),
                 notes: ["\(count) of \(paths.count) tracks match, limited to 1000 by plays"])
         }
-    }
+    },
+    Benchmark(
+        name: "playlists: list a smart playlist of \"has\" rules over every fixture track (p95)",
+        budget: Budget(appleSilicon: 50, oldMac: 150, unit: .milliseconds)
+    ) {
+        try withLibraryCopy("smart-playlist-has") { databaseURL in
+            let index = try LibraryIndex(at: databaseURL)
+            let total = try index.trackIDs(sortedBy: .path).count
+            // The rules that hold for every track first, so every track's every list is split
+            // before the genre picks one style's worth of tracks, as a playlist of one would.
+            let rules = SmartRules(
+                match: .all,
+                rules: [
+                    SmartRule(.publisher, .doesNotHave, .text("Warp")),
+                    SmartRule(.grouping, .doesNotHave, .text("Strings")),
+                    SmartRule(.mood, .doesNotHave, .text("Dub Techno")),
+                    SmartRule(.genre, .has, .text("Electronic")),
+                ])
+            let id = try index.createPlaylist(named: "Bench", rules: rules)
+            let filter = TrackFilter(source: .playlist(id))
+            var count = 0
+            let samples = try millisecondSamples(
+                (0..<30).map { _ in
+                    { count = try index.trackIDs(filter, sortedBy: .artist).count }
+                })
+            return Measured(value: p95(samples), notes: ["\(count) of \(total) tracks match"])
+        }
+    },
 ]

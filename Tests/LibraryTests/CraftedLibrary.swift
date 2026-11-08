@@ -25,6 +25,9 @@ struct Crafted {
     var barcode: String? = nil
     var date: String? = nil
     var media: String? = nil
+    var genre: String? = nil
+    var mood: String? = nil
+    var grouping: String? = nil
 
     var scanned: ScannedFile {
         var tags = TrackTags()
@@ -40,6 +43,9 @@ struct Crafted {
         tags.barcode = barcode
         tags.date = date
         tags.media = media
+        tags.genre = genre
+        tags.mood = mood
+        tags.grouping = grouping
         let audio = TrackAudio(
             codec: codec, sampleRateHz: rateHz, bitsPerSample: 16, channels: 2,
             lengthFrames: Int(seconds * Double(rateHz)))

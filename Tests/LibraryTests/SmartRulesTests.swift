@@ -58,7 +58,7 @@ private func decode(_ json: String) throws -> SmartRules {
     _ = try library.scan()
     let index = try library.index()
     for field in SmartField.allCases {
-        for comparison in SmartComparison.comparisons(for: field.kind) {
+        for comparison in SmartComparison.comparisons(for: field) {
             let value: SmartValue = field.kind == .text ? .text("a") : .number(1)
             let rule = SmartRule(field, comparison, value)
             #expect(rule.problem == nil)
@@ -69,7 +69,7 @@ private func decode(_ json: String) throws -> SmartRules {
             }
         }
         for comparison in SmartComparison.allCases
-        where !SmartComparison.comparisons(for: field.kind).contains(comparison) {
+        where !SmartComparison.comparisons(for: field).contains(comparison) {
             #expect(SmartRule(field, comparison, .number(1)).problem != nil)
         }
     }
@@ -118,6 +118,49 @@ private func smartPaths(_ index: LibraryIndex, _ rules: SmartRules) throws -> Se
         try smartPaths(
             index, SmartRules(match: .all, rules: [.init(.title, .contains, .text("%"))]))
             == Set(rows.filter { $0.title.contains("%") }.map(\.path)))
+}
+
+@Test func hasMatchesOnlyAWholePartOfAList() throws {
+    let index = try craftedIndex(
+        [
+            Crafted(
+                path: "/m/end", genre: "Electronic - Dub Techno, Techno", mood: "House, Techno"),
+            Crafted(path: "/m/start", genre: "Techno", mood: "Techno, Minimal"),
+            Crafted(path: "/m/middle", mood: "Deep House, techno, Minimal"),
+            Crafted(path: "/m/word", genre: "Electronic - ", mood: "Dub Techno"),
+            Crafted(
+                path: "/m/folk", genre: "Folk, World, & Country - Folk",
+                mood: "Folk, World, & Country"),
+            Crafted(path: "/m/none", label: "Échelle, Warp", grouping: "Warp"),
+            Crafted(path: "/m/joined", label: "Stage & Warp"),
+        ].map(\.scanned))
+    func paths(_ field: SmartField, _ comparison: SmartComparison, _ text: String) throws
+        -> [String]
+    {
+        try smartPaths(
+            index, SmartRules(match: .all, rules: [.init(field, comparison, .text(text))])
+        )
+        .map { ($0 as NSString).lastPathComponent }.sorted()
+    }
+    // At the start, in the middle and at the end of the list; not where only a word is the text.
+    #expect(try paths(.mood, .has, "Techno") == ["end", "middle", "start"])
+    #expect(try paths(.mood, .doesNotHave, "techno") == ["folk", "joined", "none", "word"])
+    #expect(try paths(.mood, .has, "Dub") == [])
+    // The genre's " - " splits too, and its parts fold as the column sorts.
+    #expect(try paths(.genre, .has, "electronic") == ["end", "word"])
+    #expect(try paths(.genre, .has, "dub techno") == ["end"])
+    #expect(try paths(.genre, .has, "Techno") == ["end", "start"])
+    // A genre with commas of its own matches typed whole, its parts in turn.
+    #expect(try paths(.genre, .has, "Folk, World, & Country") == ["folk"])
+    #expect(try paths(.mood, .has, "Folk, World, & Country") == ["folk"])
+    #expect(try paths(.genre, .has, "Country") == [])
+    #expect(try paths(.mood, .has, "Techno, Minimal") == ["middle", "start"])
+    // Labels are lists too, but " & " is in names ("Stage & Screen"), so it doesn't split.
+    #expect(try paths(.publisher, .has, "Warp") == ["none"])
+    #expect(try paths(.publisher, .has, "Stage & Warp") == ["joined"])
+    #expect(try paths(.grouping, .has, "warp") == ["none"])
+    #expect(SmartRule(.title, .has, .text("a")).problem != nil)
+    #expect(SmartComparison.comparisons(for: .title).contains(.has) == false)
 }
 
 @Test func statsRulesAndALimitPickByPlays() throws {

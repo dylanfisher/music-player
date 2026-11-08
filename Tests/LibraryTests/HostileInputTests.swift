@@ -101,6 +101,11 @@ private func expected(
             case .isNot: return value != typed
             case .startsWith: return value.hasPrefix(typed)
             case .endsWith: return value.hasSuffix(typed)
+            case .has, .doesNotHave:
+                let list = { (text: String) in
+                    ", " + text.replacingOccurrences(of: " - ", with: ", ") + ", "
+                }
+                return list(value).contains(list(typed)) == (comparison == .has)
             case .greaterThan, .lessThan, .inLast, .notInLast:
                 preconditionFailure("\(comparison) isn't a text comparison")
             }
@@ -128,7 +133,7 @@ private func expected(
         for (word, text) in hostile {
             let typedValues = [text, "a\(text)b", value(word), "\(word) a\(text)", "\(text)b"]
             for typed in typedValues {
-                for comparison in SmartComparison.comparisons(for: .text) {
+                for comparison in SmartComparison.comparisons(for: field) {
                     let rule = SmartRule(field, comparison, .text(typed))
                     #expect(rule.problem == nil)
                     let rules = SmartRules(match: .all, rules: [rule])

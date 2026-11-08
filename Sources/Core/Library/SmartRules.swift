@@ -69,7 +69,7 @@ public struct SmartRule: Codable, Equatable, Sendable {
     /// Why the rule can't be compiled, or nil when it can: the comparison must suit the field,
     /// and the value must be text for a text field and a whole number otherwise.
     public var problem: String? {
-        guard SmartComparison.comparisons(for: field.kind).contains(comparison) else {
+        guard SmartComparison.comparisons(for: field).contains(comparison) else {
             return "\(field.rawValue) can't be compared with \(comparison.rawValue)"
         }
         switch (field.kind, value) {
@@ -200,20 +200,34 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
         default: false
         }
     }
+
+    /// Whether the field's text is often a list, which "has" splits into its parts: genres and
+    /// styles as YATE writes them, and labels (ADR 0135).
+    var isList: Bool {
+        switch self {
+        case .genre, .mood, .grouping, .publisher: true
+        default: false
+        }
+    }
 }
 
 public enum SmartComparison: String, Codable, CaseIterable, Sendable {
     case contains, doesNotContain, `is`, isNot, startsWith, endsWith
+    /// One of the parts of a list field's value is the text, whole (ADR 0135).
+    case has
+    case doesNotHave
     case greaterThan, lessThan
     /// Within the last so many days.
     case inLast
     /// Not within the last so many days, or never.
     case notInLast
 
-    /// The comparisons that suit a field of `kind`, in the order the editor lists them.
-    public static func comparisons(for kind: SmartField.Kind) -> [SmartComparison] {
-        switch kind {
-        case .text: [.contains, .doesNotContain, .is, .isNot, .startsWith, .endsWith]
+    /// The comparisons that suit `field`, in the order the editor lists them.
+    public static func comparisons(for field: SmartField) -> [SmartComparison] {
+        switch field.kind {
+        case .text:
+            [.contains, .doesNotContain, .is, .isNot, .startsWith, .endsWith]
+                + (field.isList ? [.has, .doesNotHave] : [])
         case .number: [.is, .isNot, .greaterThan, .lessThan]
         case .date: [.inLast, .notInLast]
         }
@@ -336,6 +350,14 @@ extension SmartRule {
             case .isNot: return (notLike, [escaped])
             case .startsWith: return (like, ["\(escaped)%"])
             case .endsWith: return (like, ["%\(escaped)"])
+            case .has, .doesNotHave:
+                // With ", " added at both ends and in place of each " - ", every part of the
+                // value has ", " on both sides, so a part matches only whole; a typed list
+                // matches those parts in turn.
+                let parts = "(', ' || replace(\(subject), ' - ', ', ') || ', ')"
+                let pattern = "%, " + escaped.replacingOccurrences(of: " - ", with: ", ") + ", %"
+                let not = comparison == .doesNotHave ? "NOT " : ""
+                return ("\(parts) \(not)LIKE ? ESCAPE '\\'", [pattern])
             case .greaterThan, .lessThan, .inLast, .notInLast:
                 preconditionFailure("\(comparison) on text; SmartRule.problem rejects it")
             }
@@ -351,7 +373,7 @@ extension SmartRule {
                     "(\(expression) IS NULL OR \(expression) < ?)",
                     [now - Double(number) * secondsPerDay]
                 )
-            case .contains, .doesNotContain, .startsWith, .endsWith:
+            case .contains, .doesNotContain, .startsWith, .endsWith, .has, .doesNotHave:
                 preconditionFailure("\(comparison) on a number; SmartRule.problem rejects it")
             }
         }

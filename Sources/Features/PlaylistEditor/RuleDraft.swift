@@ -60,7 +60,7 @@ public struct RuleDraft: Equatable, Sendable {
     /// Sets a row's field. A comparison the new field can't take becomes its first one, and a
     /// value of the other kind is cleared.
     mutating func setField(_ field: SmartField, at index: Int) {
-        let comparisons = SmartComparison.comparisons(for: field.kind)
+        let comparisons = SmartComparison.comparisons(for: field)
         if !comparisons.contains(rows[index].comparison) {
             rows[index].comparison = comparisons[0]
         }
@@ -70,7 +70,7 @@ public struct RuleDraft: Equatable, Sendable {
 
     mutating func setComparison(_ comparison: SmartComparison, at index: Int) {
         precondition(
-            SmartComparison.comparisons(for: rows[index].field.kind).contains(comparison),
+            SmartComparison.comparisons(for: rows[index].field).contains(comparison),
             "\(comparison) for \(rows[index].field)")
         rows[index].comparison = comparison
     }

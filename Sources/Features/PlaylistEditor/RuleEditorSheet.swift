@@ -119,7 +119,7 @@ public final class RuleEditorSheet: NSObject, NSTextFieldDelegate {
             field.target = self
             field.action = #selector(fieldChanged(_:))
 
-            let comparisons = SmartComparison.comparisons(for: row.field.kind)
+            let comparisons = SmartComparison.comparisons(for: row.field)
             let comparison = NSPopUpButton()
             for each in comparisons { comparison.addItem(withTitle: each.title) }
             comparison.selectItem(at: comparisons.firstIndex(of: row.comparison) ?? 0)
@@ -178,7 +178,7 @@ public final class RuleEditorSheet: NSObject, NSTextFieldDelegate {
     }
 
     @objc private func comparisonChanged(_ sender: NSPopUpButton) {
-        let comparisons = SmartComparison.comparisons(for: draft.rows[sender.tag].field.kind)
+        let comparisons = SmartComparison.comparisons(for: draft.rows[sender.tag].field)
         draft.setComparison(comparisons[sender.indexOfSelectedItem], at: sender.tag)
     }
 

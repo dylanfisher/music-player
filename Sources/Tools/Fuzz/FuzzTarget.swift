@@ -319,7 +319,7 @@ private let rules = FuzzTarget(
         ]
         return try examples.map { Array(try $0.json().utf8) }
             + SmartField.allCases.flatMap { field in
-                try SmartComparison.comparisons(for: field.kind).map { comparison in
+                try SmartComparison.comparisons(for: field).map { comparison in
                     let value: SmartValue = field.kind == .text ? .text("a") : .number(3)
                     let rules = SmartRules(
                         match: .all, rules: [SmartRule(field, comparison, value)])

@@ -24,6 +24,8 @@ extension SmartComparison {
         case .isNot: "isn't"
         case .startsWith: "starts with"
         case .endsWith: "ends with"
+        case .has: "has"
+        case .doesNotHave: "doesn't have"
         case .greaterThan: "is more than"
         case .lessThan: "is less than"
         case .inLast: "is in the last"
