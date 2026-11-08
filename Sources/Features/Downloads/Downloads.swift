@@ -258,8 +258,8 @@ package final class Downloads {
     private func act(_ action: DownloadAction, _ row: DownloadRow) {
         guard let session, let job = session.model.job(row.id) else { return }
         switch action {
-        case .approve: review(job, session, resuming: false)
-        case .resumeHere: review(job, session, resuming: true)
+        case .approve: Task { await review(job, session, resuming: false) }
+        case .resumeHere: Task { await review(job, session, resuming: true) }
         case .reject:
             confirm(
                 "Reject \(row.album)?",
@@ -311,65 +311,68 @@ package final class Downloads {
     }
 
     /// Approve… and Resume Here: takes the review claim (Resume Here takes it over when it
-    /// runs), works out the plan, and runs the import once the sheet approves it. Cancel gives
-    /// a claim Approve took back.
-    private func review(_ job: DownloadJob, _ session: Session, resuming: Bool) {
+    /// runs), works out the plan, and runs the import once the sheet approves it. Every way out
+    /// before the import gives a claim Approve took back. Returns when the sheet is up.
+    func review(_ job: DownloadJob, _ session: Session, resuming: Bool) async {
         guard let coordinator = session.coordinator else { return }
         let setup = session.setup
-        Task {
-            var job = job
-            if !resuming {
-                do throws(RecommenderError) {
-                    job = try await coordinator.claimReview(job.id)
-                } catch {
-                    return alert("Another Mac may be reviewing this album", [error.description])
-                }
-                session.model.took(job)
-                guard DownloadRow(job, machine: setup.machine)?.canApprove == true else {
-                    return alert(
-                        "This album can't be approved now",
-                        ["It's \(job.state.rawValue), tagged \(job.tagging.status.rawValue)."])
-                }
-            }
-            let places: ImportPlaces
-            do {
-                places = try await setup.places()
+        var job = job
+        let id = job.id
+        let giveUp = { @MainActor @Sendable in
+            guard !resuming else { return }
+            do throws(RecommenderError) {
+                session.model.took(try await coordinator.releaseReview(id))
             } catch {
-                return alert("The staging or library folder wasn't found", ["\(error)"])
-            }
-            let plan = await ApprovalPlan.build(
-                job, places: places, databaseURL: setup.databaseURL,
-                catalog: session.canTag ? setup.catalog : nil)
-            let approve = ApproveSheet(plan: plan, album: DownloadRow.album(job.release))
-            present(approve) {
-                guard let approved = approve.result else {
-                    guard !resuming else { return }
-                    Task {
-                        do throws(RecommenderError) {
-                            session.model.took(try await coordinator.releaseReview(job.id))
-                        } catch {
-                            logger.info("job \(job.id)'s review claim not given up: \(error)")
-                        }
-                    }
-                    return
-                }
-                Task {
-                    let outcome =
-                        resuming
-                        ? await coordinator.resumeHere(approved)
-                        : await coordinator.approve(approved)
-                    switch outcome {
-                    case .imported: break
-                    case .refused(let why): self.alert("The album wasn't imported", [why])
-                    case .failed(let stage, let why):
-                        self.alert(
-                            "The import stopped at \(stage.rawValue)",
-                            [why, "Retry goes on from there."])
-                    }
-                    await session.model.poll()
-                }
+                logger.info("job \(id)'s review claim not given up: \(error)")
             }
         }
+        if !resuming {
+            do throws(RecommenderError) {
+                job = try await coordinator.claimReview(job.id)
+            } catch {
+                return alert("Another Mac may be reviewing this album", [error.description])
+            }
+            session.model.took(job)
+            guard DownloadRow(job, machine: setup.machine)?.canApprove == true else {
+                await giveUp()
+                return alert(
+                    "This album can't be approved now",
+                    ["It's \(job.state.rawValue), tagged \(job.tagging.status.rawValue)."])
+            }
+        }
+        let places: ImportPlaces
+        do {
+            places = try await setup.places()
+        } catch {
+            await giveUp()
+            return alert("The staging or library folder wasn't found", ["\(error)"])
+        }
+        let plan = await ApprovalPlan.build(
+            job, places: places, databaseURL: setup.databaseURL,
+            catalog: session.canTag ? setup.catalog : nil)
+        let approve = ApproveSheet(plan: plan, album: DownloadRow.album(job.release))
+        let shown = present(approve) {
+            guard let approved = approve.result else {
+                Task { await giveUp() }
+                return
+            }
+            Task {
+                let outcome =
+                    resuming
+                    ? await coordinator.resumeHere(approved)
+                    : await coordinator.approve(approved)
+                switch outcome {
+                case .imported: break
+                case .refused(let why): self.alert("The album wasn't imported", [why])
+                case .failed(let stage, let why):
+                    self.alert(
+                        "The import stopped at \(stage.rawValue)",
+                        [why, "Retry goes on from there."])
+                }
+                await session.model.poll()
+            }
+        }
+        if !shown { await giveUp() }
     }
 
     private func retry(_ job: DownloadJob, _ row: DownloadRow, _ session: Session) {
@@ -546,10 +549,13 @@ package final class Downloads {
     // MARK: - Sheets and alerts
 
     /// Shows `controller`'s window as a sheet over the window, calling `ended` once it closes.
-    private func present(_ controller: NSWindowController, ended: @escaping () -> Void) {
+    /// Shows `controller` as a sheet of the window; false when it can't, because the window
+    /// isn't up or a sheet is.
+    @discardableResult
+    private func present(_ controller: NSWindowController, ended: @escaping () -> Void) -> Bool {
         guard let window = self.controller?.window, let sheetWindow = controller.window,
             sheet == nil
-        else { return }
+        else { return false }
         sheet = controller
         refresh()
         window.beginSheet(sheetWindow) { _ in
@@ -557,6 +563,7 @@ package final class Downloads {
             ended()
             self.refresh()
         }
+        return true
     }
 
     private func confirm(

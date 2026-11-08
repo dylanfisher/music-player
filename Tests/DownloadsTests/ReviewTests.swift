@@ -1,0 +1,72 @@
+import Foundation
+import Testing
+
+@testable import Discogs
+@testable import Downloads
+@testable import Library
+@testable import Recommender
+@testable import Settings
+
+// Approve… takes the review claim before it looks at the job, so each way out before the sheet
+// decides gives the claim back.
+
+private struct NoFolder: Error {}
+
+/// Downloads started on `service`, with its first poll taken, and a staging folder that is
+/// there only if `places` says so.
+@MainActor
+private func started(
+    _ service: FakeService, places: @escaping @Sendable () async throws -> ImportPlaces
+) async throws -> (Downloads, Downloads.Session) {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "review-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let database = folder.appendingPathComponent("library.sqlite", isDirectory: false)
+    _ = try LibraryIndex(at: database)
+    let downloads = Downloads()
+    downloads.start(
+        Downloads.Setup(
+            machine: FakeService.machine, service: service.service, databaseURL: database,
+            dataDirectory: folder, catalog: folder.appendingPathComponent("none.sqlite"),
+            mapping: DiscogsPreset.oneToOne.mapping, share: nil, places: places,
+            trash: { _ in nil }, carry: { _ in MoveListImport(problems: []) }, rescan: { _ in }))
+    let session = try #require(downloads.session)
+    await eventually("the coordinator") { session.coordinator != nil }
+    return (downloads, session)
+}
+
+private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
+
+@MainActor
+@Test func aJobThatCantBeApprovedGivesTheClaimBack() async throws {
+    let service = FakeService([job(1)])
+    let (downloads, session) = try await started(service) { throw NoFolder() }
+    await downloads.review(try #require(service.job(1)), session, resuming: false)
+    #expect(service.eventTypes.suffix(2) == ["claim", "release"])
+    #expect(service.job(1)?.review == nil)
+    downloads.stop()
+}
+
+@MainActor
+@Test func aMissingStagingFolderGivesTheClaimBack() async throws {
+    let service = FakeService([job(1) { $0.tagging = clean }])
+    let (downloads, session) = try await started(service) { throw NoFolder() }
+    await downloads.review(try #require(service.job(1)), session, resuming: false)
+    #expect(service.eventTypes.suffix(2) == ["claim", "release"])
+    #expect(service.job(1)?.review == nil)
+    downloads.stop()
+}
+
+@MainActor
+@Test func aSheetThatCantShowGivesTheClaimBack() async throws {
+    let service = FakeService([job(1) { $0.tagging = clean }])
+    let nowhere = FileManager.default.temporaryDirectory.path + "/\(UUID().uuidString)"
+    let (downloads, session) = try await started(service) {
+        ImportPlaces(stagingRoot: nowhere, libraryFolder: nowhere, shareRoot: nowhere)
+    }
+    // The window was never shown, so there is nothing to put the sheet on.
+    await downloads.review(try #require(service.job(1)), session, resuming: false)
+    #expect(service.eventTypes.suffix(2) == ["claim", "release"])
+    #expect(service.job(1)?.review == nil)
+    downloads.stop()
+}
