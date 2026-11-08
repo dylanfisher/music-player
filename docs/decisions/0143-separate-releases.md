@@ -53,7 +53,8 @@ two apart (53.13).
   of an index built the other way) asks 0136's Rescan Now / Quit. Quit leaves the file as it
   was, so the next launch asks again until the owner rescans or sets the option back.
 - **Order:** the Album pane sorts by title, then year (the earliest track's, with the subquery
-  Albums by Year uses), so releases of one title list oldest first. The track table's fallback
+  Albums by Year uses), so releases of one title list oldest first, and one with no year last,
+  as Albums by Year puts albums with none. The track table's fallback
   order adds the album id after the album title, so each release's tracks stay together; it
   sorts by no year, which would cost a subquery per track row, so two releases come in the
   order they were added.
@@ -71,5 +72,12 @@ two apart (53.13).
 ## Consequences
 
 With the option on, a remaster and its original are two albums, each under its own year. Two
-releases of one title and artist read the same in the Album pane, told apart only by order.
-Turning the option on or off reads every file again; plays, ratings and playlists stay.
+releases of one title and artist read the same in the Album pane, told apart only by order,
+oldest first and a release with no year last. Everything else that groups by album id follows:
+Listening Stats' top albums, Library Health's album rows and the Discogs tagger's albums list
+the releases as separate rows of the same name. Turning the option on or off reads every file
+again; plays, ratings and playlists stay.
+
+`--rescan-confirmed` covers one launch and one question: the option changing to the value it
+names, with nothing else to rebuild. It isn't forwarded by a later relaunch, and the relaunch
+that passes it gives up after 30 seconds if the quit was cancelled.
