@@ -135,6 +135,19 @@ private final class Drop: NSObject, @MainActor NSDraggingInfo {
     #expect(droppedTracks.map(\.0) == [mix])
     #expect(droppedTracks.map(\.1) == [[browser.model.trackIDs[2]]])
     #expect(droppedFiles.isEmpty)
+    // Off a playlist, the rows' URLs aren't taken as files to add to the library.
+    let library = outline.item(atRow: 1)
+    #expect(
+        sidebar.outlineView(
+            outline, validateDrop: ownRows, proposedItem: library,
+            proposedChildIndex: NSOutlineViewDropOnItemIndex) == [])
+    #expect(!sidebar.outlineView(outline, acceptDrop: ownRows, item: library, childIndex: -1))
+    #expect(!sidebar.outlineView(outline, acceptDrop: ownRows, item: nil, childIndex: 0))
+    #expect(droppedFiles.isEmpty)
+    #expect(
+        sidebar.outlineView(
+            outline, validateDrop: Drop(pasteboard, from: nil), proposedItem: library,
+            proposedChildIndex: NSOutlineViewDropOnItemIndex) == .copy)
 
     #expect(
         sidebar.outlineView(

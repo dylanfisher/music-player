@@ -258,14 +258,19 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 
     // MARK: Dropping tracks on a playlist
 
+    /// Whether another app started the drag, so its file URLs are files to add or import. The
+    /// app's own rows carry their files too, for other apps, but drop here as tracks
+    /// (ADR 0141).
+    private func fromAnotherApp(_ info: any NSDraggingInfo) -> Bool {
+        info.draggingSource == nil
+    }
+
     func outlineView(
         _ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo,
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
-        // Files from another app; the app's own rows carry their files too, for other apps,
-        // but drop here as tracks.
-        if info.draggingSource == nil,
+        if fromAnotherApp(info),
             !playlistFileURLs(info.draggingPasteboard).isEmpty
                 || !addableFileURLs(info.draggingPasteboard).isEmpty
         {
@@ -284,7 +289,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         _ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?,
         childIndex index: Int
     ) -> Bool {
-        if info.draggingSource == nil {
+        if fromAnotherApp(info) {
             let files = playlistFileURLs(info.draggingPasteboard)
             if !files.isEmpty {
                 dropPlaylistFiles(files)
