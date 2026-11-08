@@ -83,3 +83,41 @@ private func track(_ path: String, album: String, release: String?, master: Stri
     #expect(albums[1].artist == "Artist")
     #expect(albums[1].label == nil)
 }
+
+@Test func theTaggersReviewsAreKeptByPathThroughAnIndexRebuild() throws {
+    let files = [
+        track("/m/a/1.flac", album: "Rejected", release: nil),
+        track("/m/a/2.flac", album: "Rejected", release: nil),
+        track("/m/b/1.flac", album: "Chosen", release: nil),
+        track("/m/c/1.flac", album: "Forgotten", release: nil),
+    ]
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("reviews-\(UUID().uuidString)/library.sqlite")
+    let index = try LibraryIndex(at: url)
+    try index.store(files)
+    let albums = { (index: LibraryIndex) in
+        Dictionary(
+            uniqueKeysWithValues: try index.database.prepare("SELECT title, id FROM albums").map {
+                (try $0.text(0), try $0.int64(1))
+            })
+    }
+    try index.setDiscogsReview(
+        .rejected, files: try ids(index, ["/m/a/1.flac", "/m/a/2.flac"]))
+    try index.setDiscogsReview(.chosen(releaseID: 42), files: try ids(index, ["/m/b/1.flac"]))
+    try index.setDiscogsReview(.rejected, files: try ids(index, ["/m/c/1.flac"]))
+    try index.setDiscogsReview(nil, files: try ids(index, ["/m/c/1.flac"]))
+    let before = try albums(index)
+    #expect(
+        try index.discogsReviews() == [
+            before["Rejected"]!: .rejected, before["Chosen"]!: .chosen(releaseID: 42),
+        ])
+
+    try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
+    let rebuilt = try LibraryIndex(at: url)
+    try rebuilt.store(files)
+    let after = try albums(rebuilt)
+    #expect(
+        try rebuilt.discogsReviews() == [
+            after["Rejected"]!: .rejected, after["Chosen"]!: .chosen(releaseID: 42),
+        ])
+}

@@ -44,6 +44,21 @@ public actor LibraryReader {
         }.value
     }
 
+    /// Every album as the Discogs matcher compares it (ADR 0131), on a connection of its own,
+    /// so the window's queries don't wait for the whole library's tracks.
+    public nonisolated func discogsAlbums() async throws -> [DiscogsAlbum] {
+        let url = databaseURL
+        return try await Task.detached { try LibraryIndex(at: url).discogsAlbums() }.value
+    }
+
+    /// The Discogs tagger's reviews, by album ID (ADR 0133).
+    public func discogsReviews() throws -> [Int64: DiscogsReview] { try index.discogsReviews() }
+
+    /// Records `review` for an album's tracks, `fileIDs`; nil forgets it.
+    public func setDiscogsReview(_ review: DiscogsReview?, files fileIDs: [Int64]) throws {
+        try index.setDiscogsReview(review, files: fileIDs)
+    }
+
     /// A connection for Listening Stats' reads, opened off the main thread.
     public nonisolated func statsReader() async throws -> StatsReader {
         let url = databaseURL

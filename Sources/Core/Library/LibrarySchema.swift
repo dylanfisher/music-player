@@ -46,6 +46,10 @@ enum SchemaPart: String, CaseIterable {
     /// done (ADR 0119). A part of its own beside `measures`, so adding it kept the measures
     /// already made, and a cache as they are.
     case analysisRun
+    /// The Discogs tagger's review: the albums the user rejected and the releases chosen for
+    /// others (ADR 0133), keyed by path ID, so a second session doesn't redo it. A part of its
+    /// own for the same reason as `loved`.
+    case discogsReviews
 
     var sql: String {
         switch self {
@@ -62,6 +66,7 @@ enum SchemaPart: String, CaseIterable {
         case .dismissed: dismissedSchema
         case .measures: measuresSchema
         case .analysisRun: analysisRunSchema
+        case .discogsReviews: discogsReviewsSchema
         }
     }
 
@@ -87,6 +92,7 @@ enum SchemaPart: String, CaseIterable {
         case .dismissed: [dismissedProblemsTable]
         case .measures: [measuresTable]
         case .analysisRun: [analysisRunTable, measuredAtTable, analysisFailuresTable]
+        case .discogsReviews: [discogsReviewsTable]
         }
     }
 }
@@ -113,6 +119,7 @@ let measuresTable = "measures"
 let analysisRunTable = "analysis_run"
 let measuredAtTable = "measured_at"
 let analysisFailuresTable = "analysis_failures"
+let discogsReviewsTable = "discogs_reviews"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
@@ -341,6 +348,15 @@ private let dismissedSchema = """
     CREATE TABLE \(dismissedProblemsTable) (
         line TEXT PRIMARY KEY
     ) WITHOUT ROWID;
+    """
+
+private let discogsReviewsSchema = """
+    -- A row for each track of an album the user reviewed in the Discogs tagger: the release
+    -- chosen for it, or NULL when the album was rejected.
+    CREATE TABLE \(discogsReviewsTable) (
+        path_id INTEGER PRIMARY KEY REFERENCES paths (id),
+        release_id INTEGER
+    );
     """
 
 private let measuresSchema = """
