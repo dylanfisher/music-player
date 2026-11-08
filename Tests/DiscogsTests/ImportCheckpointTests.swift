@@ -237,7 +237,8 @@ func aCrashInEachStageResumesToTheCatalogOfAnImportStraightThrough(
     for id in 0..<5000 { try insert.run("killed\(id)", "after the checkpoint", id) }
     for suffix in ["", "-journal"] {
         try FileManager.default.copyItem(
-            atPath: building.path + suffix, toPath: copy.appendingPathExtension("importing").path + suffix)
+            atPath: building.path + suffix,
+            toPath: copy.appendingPathExtension("importing").path + suffix)
     }
     try writer.execute("ROLLBACK")
     try expectResumed(folder, into: copy, like: straight)
@@ -271,6 +272,15 @@ func aCrashInEachStageResumesToTheCatalogOfAnImportStraightThrough(
         #expect(summary.resumedBytes == 0)
         #expect(try contents(of: folder.catalog) == contents(of: straight))
     }
+    // A checkpoint that matches its hash but whose record is before its access point.
+    try await stopImport(folder, into: folder.catalog, in: .reading(.artists))
+    var inconsistent = try checkpoint(of: folder.catalog)
+    inconsistent.position?.record.offset = -1
+    let database = try Database(rollbackJournalAt: building, creating: false)
+    try database.transaction { try inconsistent.write(to: database) }
+    #expect(unfinishedImport(of: folder.catalog) == nil)
+    #expect(try folder.importCatalog().resumedBytes == 0)
+    #expect(try contents(of: folder.catalog) == contents(of: straight))
     // Not a database at all.
     try Data("not SQLite".utf8).write(to: building)
     #expect(unfinishedImport(of: folder.catalog) == nil)
@@ -295,7 +305,8 @@ func aCrashInEachStageResumesToTheCatalogOfAnImportStraightThrough(
     let straight = try straightImport(folder)
     try FileManager.default.createDirectory(
         at: folder.catalog.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try FileManager.default.copyItem(at: straight, to: folder.catalog.appendingPathExtension("importing"))
+    try FileManager.default.copyItem(
+        at: straight, to: folder.catalog.appendingPathExtension("importing"))
     var stages: [CatalogImportProgress.Stage] = []
     let summary = try folder.importCatalog { stages.append($0.stage) }
     #expect(stages == [.finished])

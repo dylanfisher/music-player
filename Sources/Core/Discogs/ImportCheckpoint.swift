@@ -72,17 +72,32 @@ struct ImportCheckpoint: Codable, Equatable, Sendable {
     }
 
     /// The checkpoint in `database`. Throws `Damaged` when there's none, or it doesn't match
-    /// its hash or decode.
+    /// its hash, decode, or agree with itself.
     static func read(from database: Database) throws -> ImportCheckpoint {
         let rows = try database.prepare("SELECT checkpoint, sha256 FROM import_checkpoint").map {
             (json: try $0.text(0), hash: try $0.text(1))
         }
         guard rows.count == 1, sha256(rows[0].json) == rows[0].hash else { throw Damaged() }
+        let checkpoint: ImportCheckpoint
         do {
-            return try JSONDecoder().decode(ImportCheckpoint.self, from: Data(rows[0].json.utf8))
+            checkpoint = try JSONDecoder().decode(
+                ImportCheckpoint.self, from: Data(rows[0].json.utf8))
         } catch {
             throw Damaged()
         }
+        guard checkpoint.isConsistent else { throw Damaged() }
+        return checkpoint
+    }
+
+    /// Whether its numbers can be resumed from: a file being read, and the record after the
+    /// access point. A checkpoint as written always is.
+    private var isConsistent: Bool {
+        guard (0...DumpKind.allCases.count).contains(filesFinished), finishedBytes >= 0,
+            finishedBytes <= totalBytes, records.values.allSatisfy({ $0 >= 0 })
+        else { return false }
+        guard let position else { return true }
+        return kind != nil && position.record.line >= 1
+            && position.record.offset >= position.accessPoint.inflatedOffset
     }
 
     /// A checkpoint that's missing, or isn't what was written.
