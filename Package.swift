@@ -337,6 +337,7 @@ let package = Package(
                 "Discogs", "DiscogsImport", "Fixtures", "Library", "Metadata", "Recommender",
                 "SQLite", "Settings", "TagWriter",
             ],
+            resources: [.copy("Fixtures")],
             swiftSettings: strictSwift
         ),
         .testTarget(

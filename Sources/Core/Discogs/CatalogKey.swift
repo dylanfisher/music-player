@@ -20,6 +20,32 @@ enum CatalogKey {
         return String(folded)
     }
 
+    /// The key the matcher compares titles by, music-recommender's too (ADR 0140): `fold`'s
+    /// steps, but with `LatinFold`'s letters in place of Foundation's accent and case folding,
+    /// so a letter outside the table, Cyrillic or Vietnamese, keeps its case and its marks.
+    static func matchKey(_ text: String, title: Bool = false) -> String {
+        var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = replacing(suffix, in: text)
+        if title { text = replacing(editionWords, in: text) }
+        var mapped = ""
+        for scalar in text.unicodeScalars {
+            if scalar == "&" {
+                mapped += " and "
+            } else if scalar.isASCII {
+                mapped.unicodeScalars.append(contentsOf: String(scalar).lowercased().unicodeScalars)
+            } else if let base = LatinFold.bases[scalar] {
+                mapped += base
+            } else {
+                mapped.unicodeScalars.append(scalar)
+            }
+        }
+        mapped = mapped.trimmingCharacters(in: .whitespacesAndNewlines)
+        if mapped.hasPrefix("the ") { mapped.removeFirst(4) }
+        var folded = String.UnicodeScalarView()
+        folded.append(contentsOf: mapped.unicodeScalars.filter(isKept))
+        return String(folded)
+    }
+
     /// `name` without the "(2)" Discogs adds to tell artists or labels of one name apart.
     static func withoutNumberSuffix(_ name: String) -> String { replacing(suffix, in: name) }
 
@@ -79,7 +105,7 @@ enum CatalogKey {
     /// Discogs's suffix that tells apart artists or labels of the same name: "Soleil (2)".
     private static let suffix = regex(#"\s*\(\d+\)$"#)
     /// Words that name an edition of an album rather than the album.
-    private static let editionWordList =
+    static let editionWordList =
         #"remaster\w*|deluxe|edition|sacd|expanded|anniversary|reissue|bonus|mono|stereo|special|limited|collector'?s|hi-?res|24[- ]?bit|\d+ ?khz|cd ?\d+|dis[ck] ?\d+"#
     /// A bracketed part of a title naming an edition rather than the album.
     private static let editionWords = regex(
