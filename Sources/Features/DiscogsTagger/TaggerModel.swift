@@ -117,7 +117,12 @@ final class TaggerModel {
     private(set) var status = ""
     var source = Source.catalog
     var scope = Scope.library
-    private(set) var albums: [Album] = []
+    private(set) var albums: [Album] = [] {
+        didSet { tierOrder = [:] }
+    }
+    /// Each tier's albums as places in `albums`, in list order, once sorted: the window lists
+    /// them on every progress report, and sorting thousands each time stalls it.
+    private var tierOrder: [MatchTier: [Int]] = [:]
     var tab = MatchTier.exact
     var selectedID: Int64?
     var mapping: DiscogsMapping
@@ -175,12 +180,16 @@ final class TaggerModel {
 
     /// The albums of `tier`, by artist and then title.
     func albums(in tier: MatchTier) -> [Album] {
-        albums.filter { $0.match.tier == tier }.sorted { a, b in
-            let artist = (a.album.artist ?? "").localizedStandardCompare(b.album.artist ?? "")
+        if let order = tierOrder[tier] { return order.map { albums[$0] } }
+        let order = albums.indices.filter { albums[$0].match.tier == tier }.sorted { a, b in
+            let (a, b) = (albums[a].album, albums[b].album)
+            let artist = (a.artist ?? "").localizedStandardCompare(b.artist ?? "")
             return artist != .orderedSame
                 ? artist == .orderedAscending
-                : a.album.title.localizedStandardCompare(b.album.title) == .orderedAscending
+                : a.title.localizedStandardCompare(b.title) == .orderedAscending
         }
+        tierOrder[tier] = order
+        return order.map { albums[$0] }
     }
 
     func count(_ tier: MatchTier) -> Int { albums.count { $0.match.tier == tier } }

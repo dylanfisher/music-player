@@ -324,3 +324,17 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     await tagger.choose(11, for: 1)
     #expect(seen.skips == [true, false, false], "a choice is rescored with the skip too")
 }
+
+@MainActor
+@Test func theTiersListsFollowAChoiceThatMovesAnAlbum() async throws {
+    let tagger = await model(Seen(), albums: [one, two], matches: matches)
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.albums(in: .exact).map(\.id) == [1])
+    #expect(tagger.albums(in: .likely).map(\.id) == [2])
+    await tagger.choose(12, for: 1)
+    #expect(tagger.albums(in: .exact).isEmpty)
+    #expect(tagger.albums(in: .likely).map(\.id) == [2, 1], "by artist, then title")
+    await tagger.setRejected(true, 1)
+    #expect(tagger.albums(in: .likely).first { $0.id == 1 }?.isRejected == true)
+}
