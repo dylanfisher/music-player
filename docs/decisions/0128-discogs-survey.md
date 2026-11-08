@@ -1,7 +1,7 @@
 # 0128. What the owner's Discogs tags look like, and agents reading the library to find out
 
 - **Date:** 2026-11-07
-- **Status:** accepted
+- **Status:** accepted; amended 2026-11-07 (51f): the layout is a test fixture, not a preset
 - **Amends:** [0020](0020-tag-writing.md) (no test or tool touches a real library)
 
 ## Context
@@ -70,7 +70,8 @@ artists differ. Per track: the ordinal position and the track number text.
 
 Key names are compared uppercased when read (ADR 0129); the table spells them as the files do.
 
-**The owner's layout**, the "Like my library" preset:
+**The owner's layout**, a test fixture since 51f; the shipped YATE preset takes its keys and
+spellings but not its `GENRE` and `GROUPING` (ADR 0132):
 
 - `GENRE` is `{genre} - {styles}`: the first Discogs genre, " - ", then the styles joined with
   ", " (15,761 of 15,842 files), as `Electronic - Dub Techno, House, Techno, Minimal`. With no

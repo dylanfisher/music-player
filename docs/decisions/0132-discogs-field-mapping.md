@@ -1,7 +1,8 @@
 # 0132. The Discogs field mapping, its presets, and the changes it works out
 
 - **Date:** 2026-11-07
-- **Status:** accepted
+- **Status:** accepted; amended 2026-11-07 (51f): the shipped presets and styles to `MOOD`
+  only
 - **See also:** [0003](0003-settings-schema.md) (the settings schema), [0128](0128-discogs-survey.md)
   (the owner's layout and YATE's keys), [0129](0129-custom-tag-fields.md) (custom keys, `WXXX`
   and `TIPL`), [0131](0131-discogs-matching.md) (the match a mapping is applied to)
@@ -77,24 +78,40 @@ are on write one tag in one format.
 
 ### The presets
 
-- **One to one**, the default: each field to its own tag, replaced. Genres to `GENRE`, styles to
-  `STYLE`, label to `LABEL` (" & " between labels), and YATE's key names for the rest.
-- **Minimal**: the release id, the label, the catalog number and the year; the rest off.
-- **Like my library**: ADR 0128's layout. `GENRE` is `{genre} - {styles}` with ", ", `MOOD` the
-  styles, `LABEL` and `GROUPING` every label with " & ", repeats kept, `ARTIST` and `ALBUMARTIST`
-  canonical with "(2)" dropped and Discogs's joins, `DATE` in full, `MEDIA` as YATE writes it,
-  the artist list canonical with "(2)" kept, and YATE's spellings per format: the ordinal
-  position and track number text in title case in MP4 and ID3, the release country under its own
-  key and `COUNTRY`, URLs as `WXXX` frames in ID3, credits in `INVOLVEDPEOPLE` (`Name (Role)` in
-  FLAC, `Role;;;Name,Name` in MP4) and `TIPL` in ID3, `PRODUCER` apart. Titles, track and disc
-  numbers and totals, composer, lyricist, conductor and remixer fill empty tags only: the survey
-  didn't measure how the owner's albums hold them, so the preset never overwrites them.
-  Compilation and the disc subtitle are off.
+The owner decided on 2026-11-07 that no preset is made from his library, since the app will be
+shared, and that the styles go to one tag, `MOOD`, in every preset: it is a standard field in
+all three tag formats, so other apps read it, and the index keeps it (51.19). No preset writes
+a `STYLE` key.
 
-What the survey didn't record, and the preset guesses: a URL is `https://www.discogs.com/<kind>/<id>`;
-`PRODUCER` and the credits put `;;;` between values; labels keep Discogs's "(2)". A test album
-for each format, hand-written from ADR 0128's examples, keeps every tag it has under Like my
-library, URLs apart; the survey's cache of the library is gone and no test reads the library.
+- **One to one**, the default: each field to its own tag, replaced. Genres to `GENRE` and
+  styles to `MOOD`, each joined with ", ", label to `LABEL` (" & " between labels), and YATE's
+  key names for the rest.
+- **Minimal**: the release id, the label, the catalog number and the year; the rest off.
+- **YATE**: YATE's keys and spellings per format (ADR 0128), every field replaced. `GENRE` the
+  genres joined with ", ", `MOOD` the styles, `LABEL` every label with " & ", repeats kept,
+  `ARTIST` and `ALBUMARTIST` canonical with "(2)" dropped and Discogs's joins, `DATE` in full,
+  `MEDIA` as YATE writes it, the artist list canonical with "(2)" kept; the ordinal position
+  and track number text in title case in MP4 and ID3, the release country under its own key
+  and `COUNTRY`, URLs as `WXXX` frames in ID3, credits in `INVOLVEDPEOPLE` (`Name (Role)` in
+  FLAC, `Role;;;Name,Name` in MP4) and `TIPL` in ID3, `PRODUCER` apart.
+
+**The owner's layout,** which shipped as "Like my library" until 51f, is a test fixture
+(`Tests/DiscogsTests/OwnersLayout.swift`): YATE with `GENRE` as `{genre} - {styles}`,
+`GROUPING` the labels too, titles, track and disc numbers and totals, composer, lyricist,
+conductor and remixer filling empty tags only (the survey didn't measure how the owner's albums
+hold them), and compilation and the disc subtitle off. The write-back tests apply it to a test
+album for each format, hand-written from ADR 0128's examples, and check that every tag it has
+is kept, URLs apart; the survey's cache of the library is gone and no test reads the library.
+
+What the survey didn't record, and YATE's preset guesses: a URL is
+`https://www.discogs.com/<kind>/<id>`; `PRODUCER` and the credits put `;;;` between values;
+labels keep Discogs's "(2)".
+
+**The owner's saved mapping, "Mine"**, is One to one with "Keep existing values" applied
+(`DiscogsMapping.keepingExistingValues()`): titles, artists, album artists, track and disc
+numbers and totals, composer, conductor, lyricist, remixer and the date fill only empty tags.
+It lives in his `config.json` under `discogs.savedMappings`, as any saved mapping does; the app
+ships no copy of it.
 
 ### The change set
 

@@ -35,10 +35,10 @@ public struct NamedDiscogsMapping: SettingValue {
 }
 
 /// The mappings the app has (ADR 0132): "One to one", the default, sends each Discogs field to
-/// a tag of its own; "Minimal" writes the release id, label, catalog number and year; "Like my
-/// library" writes what the owner's matched albums carry, in YATE's spellings (ADR 0128).
+/// a tag of its own; "Minimal" writes the release id, label, catalog number and year; "YATE"
+/// writes YATE's keys in its spellings per format (ADR 0128). Each sends the styles to `MOOD`.
 public enum DiscogsPreset {
-    public static let all = [oneToOne, minimal, likeMyLibrary]
+    public static let all = [oneToOne, minimal, yate]
 
     public static let oneToOne = NamedDiscogsMapping(
         name: "One to one", mapping: DiscogsMapping(oneToOneRules).checkedOnce())
@@ -58,16 +58,14 @@ public enum DiscogsPreset {
                     ], uniquingKeysWith: { _, preset in preset })
         ).checkedOnce())
 
-    public static let likeMyLibrary = NamedDiscogsMapping(
-        name: "Like my library", mapping: DiscogsMapping(likeMyLibraryRules).checkedOnce())
+    public static let yate = NamedDiscogsMapping(
+        name: "YATE", mapping: DiscogsMapping(yateRules).checkedOnce())
 }
 
 /// "A & B", as YATE joins several labels (ADR 0128).
 private let labelFormat = DiscogsFieldFormat(join: " & ")
 private let listFormat = DiscogsFieldFormat(join: ", ")
 private let yateListFormat = DiscogsFieldFormat(join: DiscogsKey.valueSeparator)
-/// The key one to one sends the styles to; no standard field holds them.
-private let styleKey = "STYLE"
 
 private func numbered(_ name: String) -> DiscogsTarget {
     .key(PerTagFormat(name), numbered: PerTagFormat(name))
@@ -89,7 +87,7 @@ private let oneToOneRules: [DiscogsField: DiscogsFieldRule] = [
     .country: DiscogsFieldRule(.replace, [.key(DiscogsKey.country)]),
     .date: DiscogsFieldRule(.replace, [.field(.date)]),
     .genres: DiscogsFieldRule(.replace, [.field(.genre)], format: listFormat),
-    .styles: DiscogsFieldRule(.replace, [.key(styleKey)], format: listFormat),
+    .styles: DiscogsFieldRule(.replace, [.field(.mood)], format: listFormat),
     .media: DiscogsFieldRule(.replace, [.field(.media)], format: listFormat),
     .compilation: DiscogsFieldRule(.replace, [.field(.compilation)]),
     .discCount: DiscogsFieldRule(.replace, [.field(.discTotal)]),
@@ -125,11 +123,11 @@ private func url(_ name: String, numbered: Bool = false) -> DiscogsTarget {
     return .key(names, numbered: numbered ? names : nil)
 }
 
-/// Canonical names without Discogs's "(2)", joined with its join words, as the owner's
-/// `ARTIST` and `ALBUMARTIST` are.
+/// Canonical names without Discogs's "(2)", joined with its join words, as YATE writes
+/// `ARTIST` and `ALBUMARTIST`.
 private let artistFormat = DiscogsFieldFormat(names: .canonical, suffixes: .drop)
 
-private let likeMyLibraryRules: [DiscogsField: DiscogsFieldRule] = [
+private let yateRules: [DiscogsField: DiscogsFieldRule] = [
     .releaseID: DiscogsFieldRule(.replace, [.key(DiscogsKey.releaseID)]),
     .masterID: DiscogsFieldRule(.replace, [.key(DiscogsKey.masterID)]),
     .releaseURL: DiscogsFieldRule(.replace, [url(DiscogsKey.releaseURL)]),
@@ -138,8 +136,7 @@ private let likeMyLibraryRules: [DiscogsField: DiscogsFieldRule] = [
     .albumArtist: DiscogsFieldRule(.replace, [.field(.albumArtist)], format: artistFormat),
     .albumArtistURL: DiscogsFieldRule(
         .replace, [url(DiscogsKey.albumArtistURL, numbered: true)]),
-    .label: DiscogsFieldRule(
-        .replace, [.field(.publisher), .field(.grouping)], format: labelFormat),
+    .label: DiscogsFieldRule(.replace, [.field(.publisher)], format: labelFormat),
     .labelURL: DiscogsFieldRule(.replace, [url(DiscogsKey.labelURL, numbered: true)]),
     .catalogNumber: DiscogsFieldRule(.replace, [.field(.catalogNumber)]),
     .labelCatalogNumbers: DiscogsFieldRule(
@@ -159,16 +156,12 @@ private let likeMyLibraryRules: [DiscogsField: DiscogsFieldRule] = [
             titled(DiscogsKey.country, DiscogsKey.country.capitalized),
         ]),
     .date: DiscogsFieldRule(.replace, [.field(.date)], format: DiscogsFieldFormat(date: .full)),
-    .genres: DiscogsFieldRule(
-        .replace, [.field(.genre)],
-        format: DiscogsFieldFormat(
-            join: ", ",
-            template: DiscogsField.firstGenreToken + " - " + DiscogsField.styles.token)),
+    .genres: DiscogsFieldRule(.replace, [.field(.genre)], format: listFormat),
     .styles: DiscogsFieldRule(.replace, [.field(.mood)], format: listFormat),
     .media: DiscogsFieldRule(.replace, [.field(.media)], format: listFormat),
-    .compilation: DiscogsFieldRule(.off, [.field(.compilation)]),
-    .discCount: DiscogsFieldRule(.fillEmpty, [.field(.discTotal)]),
-    .title: DiscogsFieldRule(.fillEmpty, [.field(.title)]),
+    .compilation: DiscogsFieldRule(.replace, [.field(.compilation)]),
+    .discCount: DiscogsFieldRule(.replace, [.field(.discTotal)]),
+    .title: DiscogsFieldRule(.replace, [.field(.title)]),
     .artist: DiscogsFieldRule(.replace, [.field(.artist)], format: artistFormat),
     .artistList: DiscogsFieldRule(
         .replace, [.key(DiscogsKey.artistList)],
@@ -177,18 +170,18 @@ private let likeMyLibraryRules: [DiscogsField: DiscogsFieldRule] = [
     .artistNameVariations: DiscogsFieldRule(
         .replace, [.key(DiscogsKey.nameVariationList)], format: yateListFormat),
     .artistURL: DiscogsFieldRule(.replace, [url(DiscogsKey.artistURL, numbered: true)]),
-    .trackNumber: DiscogsFieldRule(.fillEmpty, [.field(.trackNumber)]),
-    .trackCount: DiscogsFieldRule(.fillEmpty, [.field(.trackTotal)]),
-    .discNumber: DiscogsFieldRule(.fillEmpty, [.field(.discNumber)]),
+    .trackNumber: DiscogsFieldRule(.replace, [.field(.trackNumber)]),
+    .trackCount: DiscogsFieldRule(.replace, [.field(.trackTotal)]),
+    .discNumber: DiscogsFieldRule(.replace, [.field(.discNumber)]),
     .position: DiscogsFieldRule(
         .replace, [titled(DiscogsKey.trackNumberText, DiscogsKey.trackNumberTextTitled)]),
     .ordinalPosition: DiscogsFieldRule(
         .replace, [titled(DiscogsKey.ordinalPosition, DiscogsKey.ordinalPositionTitled)]),
-    .discSubtitle: DiscogsFieldRule(.off, [.field(.discSubtitle)]),
-    .composer: DiscogsFieldRule(.fillEmpty, [.field(.composer)], format: listFormat),
-    .conductor: DiscogsFieldRule(.fillEmpty, [.field(.conductor)], format: listFormat),
-    .lyricist: DiscogsFieldRule(.fillEmpty, [.field(.lyricist)], format: listFormat),
-    .remixer: DiscogsFieldRule(.fillEmpty, [.field(.remixer)], format: listFormat),
+    .discSubtitle: DiscogsFieldRule(.replace, [.field(.discSubtitle)]),
+    .composer: DiscogsFieldRule(.replace, [.field(.composer)], format: listFormat),
+    .conductor: DiscogsFieldRule(.replace, [.field(.conductor)], format: listFormat),
+    .lyricist: DiscogsFieldRule(.replace, [.field(.lyricist)], format: listFormat),
+    .remixer: DiscogsFieldRule(.replace, [.field(.remixer)], format: listFormat),
     .producer: DiscogsFieldRule(
         .replace, [.key(DiscogsKey.producer)], format: yateListFormat),
     .involvedPeople: DiscogsFieldRule(

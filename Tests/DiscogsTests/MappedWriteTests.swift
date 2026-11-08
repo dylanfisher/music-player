@@ -74,9 +74,12 @@ private func albumFiles(_ urls: [URL]) throws -> [AlbumFile] {
     return files
 }
 
-@Test(arguments: WrittenSample.allCases, DiscogsPreset.all.map(\.name))
+/// The presets and the owner's layout, which YATE's keys in ID3 put to the test.
+private let mappings = DiscogsPreset.all + [ownersLayout]
+
+@Test(arguments: WrittenSample.allCases, mappings.map(\.name))
 func aMappingsEditsWriteAndReadBackAsMeant(_ sample: WrittenSample, _ preset: String) throws {
-    let mapping = try #require(DiscogsPreset.all.first { $0.name == preset }).mapping
+    let mapping = try #require(mappings.first { $0.name == preset }).mapping
     let urls = try sample.copies()
     let set = changeSet(for: try albumFiles(urls), match: match(release), mapping: mapping)
     #expect(!set.files.flatMap(\.changes).isEmpty)

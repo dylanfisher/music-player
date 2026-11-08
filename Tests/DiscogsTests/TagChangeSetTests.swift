@@ -62,7 +62,7 @@ private func changed(
     #expect(first["barcode"] == "0123")
     #expect(first["COUNTRY"] == "Europe")
     #expect(first["genre"] == "Rock, Pop")
-    #expect(first["STYLE"] == "Indie Rock")
+    #expect(first["mood"] == "Indie Rock")
     #expect(first["media"] == "CD (Album), DVD")
     #expect(first["compilation"] == nil, "0 against a file that isn't one: no change")
     #expect(first["title"] == "Opener")
@@ -159,6 +159,7 @@ private func changed(
     var mapping = oneToOne
     mapping[.album].mode = .fillEmpty
     mapping[.title].mode = .off
+    mapping[.styles].targets = [.key("STYLE")]
     let current = tags {
         $0.album = "My Title"
         $0.date = "1999"

@@ -5,13 +5,13 @@ import Testing
 @testable import Metadata
 @testable import Settings
 
-// "Like my library" applied to a release reproduces the tags the owner's matched albums
+// The owner's layout applied to a release reproduces the tags the owner's matched albums
 // carry. The albums are written by hand from ADR 0128's findings and examples, one per tag
 // format, with each format's spellings as the survey found them; the survey's cache of the
 // library is gone, and no test reads the library. The survey didn't record the URLs' values,
 // so those are left out of the comparison, and these releases have no credits.
 
-private let likeMyLibrary = DiscogsPreset.likeMyLibrary.mapping
+private let likeMyLibrary = ownersLayout.mapping
 private let unrecorded: Set<DiscogsField> = [
     .releaseURL, .masterURL, .artistURL, .albumArtistURL, .labelURL,
 ]

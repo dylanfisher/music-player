@@ -40,7 +40,7 @@ private func mappingProblem(_ json: String) -> String? {
         #expect(try roundTripped(preset.mapping) == preset.mapping, "\(preset.name)")
         #expect(Set(preset.mapping.rules.keys) == Set(DiscogsField.allCases), "\(preset.name)")
     }
-    #expect(DiscogsPreset.all.map(\.name) == ["One to one", "Minimal", "Like my library"])
+    #expect(DiscogsPreset.all.map(\.name) == ["One to one", "Minimal", "YATE"])
     // A preset's check is kept, and a change to its rules checks them again.
     var changed = DiscogsPreset.oneToOne.mapping
     changed[.album] = DiscogsFieldRule(.replace, [])
@@ -53,7 +53,7 @@ private func mappingProblem(_ json: String) -> String? {
     let oneToOne = DiscogsPreset.oneToOne.mapping
     #expect(oneToOne.rules.values.allSatisfy { $0.mode == .replace && $0.targets.count == 1 })
     #expect(oneToOne[.genres].targets == [.field(.genre)])
-    #expect(oneToOne[.styles].targets == [.key("STYLE")])
+    #expect(oneToOne[.styles].targets == [.field(.mood)])
     #expect(oneToOne[.label].targets == [.field(.publisher)])
     let minimal = DiscogsPreset.minimal.mapping
     #expect(
@@ -62,8 +62,18 @@ private func mappingProblem(_ json: String) -> String? {
     #expect(minimal[.date].format.date == .year)
 }
 
-@Test func likeMyLibrarySpellsKeysAsYATEDoesInEachFormat() {
-    let mapping = DiscogsPreset.likeMyLibrary.mapping
+@Test func everyPresetSendsTheStylesToMoodOnly() {
+    for preset in DiscogsPreset.all {
+        #expect(preset.mapping[.styles].targets == [.field(.mood)], "\(preset.name)")
+        #expect(
+            !preset.mapping.rules.values.contains { rule in
+                rule.targets.contains { $0.tag(in: .vorbis).name.uppercased() == "STYLE" }
+            }, "\(preset.name)")
+    }
+}
+
+@Test func yateSpellsKeysAsYATEDoesInEachFormat() {
+    let mapping = DiscogsPreset.yate.mapping
     func tags(_ field: DiscogsField, _ format: TagFormat) -> [String] {
         mapping[field].targets.map { $0.tag(in: format).name }
     }
@@ -76,9 +86,12 @@ private func mappingProblem(_ json: String) -> String? {
     #expect(tags(.position, .id3) == ["Track Number Text"])
     #expect(tags(.country, .vorbis) == ["DISCOGS_ALBUM_RELEASECOUNTRY", "COUNTRY"])
     #expect(tags(.country, .mp4) == ["Discogs Album Release Country", "Country"])
-    #expect(tags(.label, .id3) == ["publisher", "grouping"])
-    #expect(tags(.styles, .mp4) == ["mood"])
-    #expect(mapping[.genres].format.template == "{genre} - {styles}")
+    // Plain genres and labels: the owner's own `GENRE` and `GROUPING` are no preset's.
+    #expect(tags(.label, .id3) == ["publisher"])
+    #expect(tags(.genres, .vorbis) == ["genre"])
+    #expect(mapping[.genres].format.template == nil)
+    #expect(mapping[.genres].format.join == ", ")
+    #expect(mapping.rules.values.allSatisfy { $0.mode == .replace })
     let numbers = mapping[.labelCatalogNumbers].targets[0]
     #expect(numbers.tag(in: .vorbis, value: 1) == .custom("DISCOGS CATALOG NUMBER-2"))
     #expect(numbers.tag(in: .mp4, value: 2) == .custom("DISCOGS_CATALOG_NUMBER-3"))
@@ -86,6 +99,21 @@ private func mappingProblem(_ json: String) -> String? {
         mapping[.artistURL].targets[0].tag(in: .id3, value: 1)
             == .custom("WXXX:DISCOGS_ARTIST_URL-2"))
     #expect(mapping[.releaseURL].targets[0].tag(in: .id3, value: 1) == nil)
+}
+
+@Test func keepingExistingValuesFillsOnlyTheEmptyTagsOfTheKeptFields() {
+    let kept = DiscogsPreset.oneToOne.mapping.keepingExistingValues()
+    for field in DiscogsField.allCases {
+        let expected: DiscogsFieldRule.Mode =
+            DiscogsMapping.keptFields.contains(field) ? .fillEmpty : .replace
+        #expect(kept[field].mode == expected, "\(field)")
+        #expect(kept[field].targets == DiscogsPreset.oneToOne.mapping[field].targets)
+    }
+    // A field that's off stays off.
+    let minimal = DiscogsPreset.minimal.mapping.keepingExistingValues()
+    #expect(minimal[.title].mode == .off)
+    #expect(minimal[.date].mode == .fillEmpty)
+    #expect(minimal[.label].mode == .replace)
 }
 
 @Test func aTargetIsAStringUnlessItIsSpelledPerFormatOrNumbered() throws {

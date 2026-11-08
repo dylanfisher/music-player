@@ -9,7 +9,8 @@ public struct DiscogsFieldRule: Codable, Equatable, Sendable {
     }
 
     public var mode: Mode
-    /// Every tag the value goes to; a field can go to several (styles to `STYLE` and `MOOD`).
+    /// Every tag the value goes to; a field can go to several (the label to `LABEL` and
+    /// `GROUPING`).
     public var targets: [DiscogsTarget]
     public var format: DiscogsFieldFormat
 

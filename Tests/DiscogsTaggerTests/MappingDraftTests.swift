@@ -25,10 +25,10 @@ import Testing
 }
 
 @Test func aKeySpelledPerFormatIsShownButNotEditedAsText() {
-    var draft = MappingDraft(mapping: DiscogsPreset.likeMyLibrary.mapping, saved: [])
+    var draft = MappingDraft(mapping: DiscogsPreset.yate.mapping, saved: [])
     let spelled = DiscogsField.allCases.first { !draft.targetsEditable($0) }
     guard let spelled else {
-        Issue.record("Like my library spells some key per format")
+        Issue.record("YATE spells some key per format")
         return
     }
     let before = draft.mapping[spelled].targets

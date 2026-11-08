@@ -25,7 +25,7 @@ the fields. A WAV's ID3 tag fills it before its RIFF INFO list.
 
 **ID3's links and credits.** YATE writes the Discogs URLs to MP3 and AIFF as `WXXX` frames and
 the credits as `TIPL` (ADR 0128), and the owner decided on 2026-11-07 that both are read and
-written, so "Like my library" matches YATE in every format. A `WXXX` frame is the custom key
+written, so a mapping can match YATE in every format. A `WXXX` frame is the custom key
 `WXXX:<description>` (2.2's `WXX` too), and the involved people list, `TIPL` or 2.3's `IPLS`
 (2.2's `IPL`), is the key `TIPL`, its roles and names joined with `;;;`, YATE's separator
 between values: `Producer;;;A, B;;;Mastered By;;;C`. They are named apart from a `TXXX` of the

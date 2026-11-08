@@ -35,6 +35,22 @@ public struct DiscogsMapping: SettingValue {
         set { rules[field] = newValue }
     }
 
+    /// The fields a user's own tags often hold better than Discogs: "Keep existing values" in
+    /// the tagger fills only their empty tags (51.23).
+    static let keptFields: [DiscogsField] = [
+        .title, .artist, .albumArtist, .trackNumber, .trackCount, .discNumber, .discCount,
+        .composer, .conductor, .lyricist, .remixer, .date,
+    ]
+
+    /// This mapping with each of `keptFields` that replaces its tags filling only empty ones.
+    public func keepingExistingValues() -> DiscogsMapping {
+        var mapping = self
+        for field in Self.keptFields where mapping[field].mode == .replace {
+            mapping[field].mode = .fillEmpty
+        }
+        return mapping
+    }
+
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: FieldKey.self)
         var rules: [DiscogsField: DiscogsFieldRule] = [:]
