@@ -70,7 +70,8 @@ extension AppDelegate {
                 indexPath: databaseURL.path, indexBytes: try Database.sizeBytes(at: databaseURL),
                 snapshots: try snapshots(in: folder).map {
                     LibraryDatabase.Snapshot(
-                        path: $0.url.path, day: $0.day, written: $0.written, bytes: $0.bytes)
+                        path: $0.url.path, day: $0.day, written: $0.written, bytes: $0.bytes,
+                        beforeRestore: $0.isBeforeRestore)
                 }, lastFailure: lastFailure)
         }.value
     }

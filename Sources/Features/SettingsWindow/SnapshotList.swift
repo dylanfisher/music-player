@@ -54,7 +54,7 @@ final class SnapshotList: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let snapshot = snapshots[row]
         let text =
             tableColumn?.identifier == Self.writtenColumn
-            ? LibraryDatabase.writtenText(snapshot.written)
+            ? snapshot.takenText
             : LibraryDatabase.bytesText(snapshot.bytes)
         let label = NSTextField(labelWithString: text)
         label.lineBreakMode = .byTruncatingTail

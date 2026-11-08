@@ -22,20 +22,24 @@ public struct SnapshotFile: Equatable, Sendable {
 
     /// The local day it's of, `YYYY-MM-DD`.
     public var day: String { name.day }
+    /// Whether a restore wrote it, of the index it replaced.
+    public var isBeforeRestore: Bool { name.beforeRestoreTime != nil }
 }
 
 /// Writes the index as `library-YYYY-MM-DD.sqlite.gz` in `folder`, for the local day `date`
-/// falls on, replacing that day's snapshot if there is one, then deletes the snapshots rotation
+/// falls on, replacing that day's snapshot if there is one, or with `beforeRestore` under a
+/// name of its own for that second, then deletes the snapshots rotation
 /// no longer keeps, and returns where it wrote (ADR 0142). The index is copied with
 /// `VACUUM INTO`, a read, which leaves it as it was; the copy is compressed beside the
 /// snapshot, then renamed over it, so the folder never holds a snapshot cut short under a
 /// snapshot's name.
 @discardableResult
 func writeSnapshot(
-    of index: LibraryIndex, into folder: URL, on date: Date, calendar: Calendar = .current
+    of index: LibraryIndex, into folder: URL, on date: Date, beforeRestore: Bool = false,
+    calendar: Calendar = .current
 ) throws -> URL {
     try writing.withLock {
-        let name = SnapshotName(of: date, calendar: calendar)
+        let name = SnapshotName(of: date, beforeRestore: beforeRestore, calendar: calendar)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try removePartials(in: folder, olderThan: Date().addingTimeInterval(-leftoverSeconds))
         let token = UUID().uuidString
@@ -57,8 +61,8 @@ func writeSnapshot(
     }
 }
 
-/// The snapshots in `folder`, newest first, and none while there is no folder. Other files
-/// there are left out.
+/// The snapshots in `folder`, the newest written first, and none while there is no folder.
+/// Other files there are left out.
 public func snapshots(in folder: URL) throws -> [SnapshotFile] {
     let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
     let urls: [URL]
@@ -76,7 +80,7 @@ public func snapshots(in folder: URL) throws -> [SnapshotFile] {
         }
         return SnapshotFile(name: name, url: url, bytes: bytes, written: written)
     }
-    .sorted { $0.name > $1.name }
+    .sorted { ($0.written, $0.name) > ($1.written, $1.name) }
 }
 
 /// Deletes the snapshots in `folder` that rotation no longer keeps, and only those: nothing

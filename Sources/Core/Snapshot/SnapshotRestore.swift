@@ -9,8 +9,8 @@ private let logger = moduleLogger()
 /// it whole, snapshots the current index into `snapshotFolder`, and leaves a marker naming the
 /// snapshot, so the next launch puts the unpacked file in the index's place before it opens
 /// (ADR 0142). A snapshot that doesn't unpack, or unpacks damaged, throws with nothing
-/// replaced. The current index's snapshot comes after the check, since on the day of the
-/// chosen snapshot it replaces that file.
+/// replaced. The current index's snapshot has a name of its own, so it never replaces the
+/// day's, which may be the one chosen.
 public func prepareRestore(
     of snapshot: URL, databaseURL: URL, snapshotFolder: URL, now: Date
 ) throws {
@@ -25,7 +25,8 @@ public func prepareRestore(
         try removeIfThere(restoring)
         throw error
     }
-    try writeSnapshot(of: LibraryIndex(at: databaseURL), into: snapshotFolder, on: now)
+    try writeSnapshot(
+        of: LibraryIndex(at: databaseURL), into: snapshotFolder, on: now, beforeRestore: true)
     try Data((snapshot.lastPathComponent + "\n").utf8).write(
         to: restoreMarkerURL(databaseURL), options: .atomic)
 }

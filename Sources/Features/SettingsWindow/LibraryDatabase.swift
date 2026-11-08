@@ -11,12 +11,20 @@ public struct LibraryDatabase: Sendable, Equatable {
         public var written: Date
         /// Its size on disk, compressed.
         public var bytes: Int
+        /// Whether a restore wrote it, of the index it replaced.
+        public var beforeRestore: Bool
 
-        public init(path: String, day: String, written: Date, bytes: Int) {
+        public init(path: String, day: String, written: Date, bytes: Int, beforeRestore: Bool) {
             self.path = path
             self.day = day
             self.written = written
             self.bytes = bytes
+            self.beforeRestore = beforeRestore
+        }
+
+        /// The list's Taken column.
+        var takenText: String {
+            LibraryDatabase.writtenText(written) + (beforeRestore ? " (before a restore)" : "")
         }
     }
 

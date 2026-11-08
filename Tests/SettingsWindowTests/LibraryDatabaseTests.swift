@@ -9,10 +9,10 @@ import Testing
 private let home = NSHomeDirectory()
 private let newest = LibraryDatabase.Snapshot(
     path: "/tmp/Backups/library-2026-11-08.sqlite.gz", day: "2026-11-08",
-    written: Date(timeIntervalSince1970: 1_794_000_000), bytes: 4_200_000)
+    written: Date(timeIntervalSince1970: 1_794_000_000), bytes: 4_200_000, beforeRestore: true)
 private let older = LibraryDatabase.Snapshot(
     path: "/tmp/Backups/library-2026-11-07.sqlite.gz", day: "2026-11-07",
-    written: Date(timeIntervalSince1970: 1_793_900_000), bytes: 4_100_000)
+    written: Date(timeIntervalSince1970: 1_793_900_000), bytes: 4_100_000, beforeRestore: false)
 private let database = LibraryDatabase(
     indexPath: home + "/Library/Application Support/MusicPlayer/library.sqlite",
     indexBytes: 25_000_000, snapshots: [newest, older], lastFailure: nil)
@@ -95,4 +95,9 @@ private func settingsPane(
         ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(labels)
     }
     #expect(labels(pane.view).contains("Backups, beside the library"))
+}
+
+@Test func aSnapshotBeforeARestoreSaysSo() {
+    #expect(newest.takenText == LibraryDatabase.writtenText(newest.written) + " (before a restore)")
+    #expect(older.takenText == LibraryDatabase.writtenText(older.written))
 }

@@ -21,6 +21,11 @@ private func noon(_ day: Int) -> Date {
     let name = SnapshotName(of: noon(304), calendar: utcCalendar)
     #expect(name.fileName == "library-2026-11-01.sqlite.gz")
     #expect(SnapshotName(fileName: name.fileName) == name)
+    let restore = SnapshotName(of: noon(304), beforeRestore: true, calendar: utcCalendar)
+    #expect(restore.fileName == "library-2026-11-01-before-restore-120000.sqlite.gz")
+    #expect(SnapshotName(fileName: restore.fileName) == restore)
+    #expect(restore != name && name < restore)
+    #expect(SnapshotName(fileName: "library-2026-11-01-before-restore-250000.sqlite.gz") == nil)
     // A day starts at local midnight: 23:30 UTC is the next day in Tokyo.
     var tokyo = utcCalendar
     tokyo.timeZone = try #require(TimeZone(identifier: "Asia/Tokyo"))

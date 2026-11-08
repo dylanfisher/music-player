@@ -25,7 +25,8 @@ private func names(in folder: URL) throws -> [String] {
     // Nothing is replaced until the next launch.
     #expect(try counts(library.index()).plays == before.plays + 1)
     let saved = try snapshots(in: library.snapshotFolder)
-    #expect(saved.map(\.name) == [SnapshotName(of: Date()), SnapshotName(of: yesterday)])
+    #expect(saved.map(\.isBeforeRestore) == [true, false])
+    #expect(saved[1].name == SnapshotName(of: yesterday))
 
     #expect(try applyPendingRestore(databaseURL: library.databaseURL) == snapshot.lastPathComponent)
     #expect(try counts(library.index()) == before)
@@ -36,7 +37,7 @@ private func names(in folder: URL) throws -> [String] {
     // A second launch has nothing to restore.
     #expect(try applyPendingRestore(databaseURL: library.databaseURL) == nil)
 
-    // The index before the restore is today's snapshot, with the play the restore undid.
+    // The index before the restore is a snapshot, with the play the restore undid.
     let unpacked = library.directory.appendingPathComponent("before-restore.sqlite")
     try GzipFile.decompress(saved[0].url, to: unpacked)
     #expect(try counts(LibraryIndex(at: unpacked)).plays == before.plays + 1)
@@ -78,4 +79,37 @@ private func names(in folder: URL) throws -> [String] {
         return false
     }
     #expect(try applyPendingRestore(databaseURL: library.databaseURL) == nil)
+}
+
+/// Restoring the day's own snapshot: the index before the restore takes a name of its own, so
+/// the day's snapshot is still the one restored, and Settings lists both.
+@Test func aRestoreTheSameDayKeepsTheDaysSnapshot() throws {
+    let library = try SnapshotTestLibrary()
+    let now = Date()
+    let today = try writeSnapshot(of: library.index(), into: library.snapshotFolder, on: now)
+    let before = try counts(library.index())
+    try library.index().recordPlay(library.played, at: SnapshotTestLibrary.playedAt + 60)
+    try prepareRestore(
+        of: today, databaseURL: library.databaseURL, snapshotFolder: library.snapshotFolder,
+        now: now.addingTimeInterval(1))
+    let saved = try snapshots(in: library.snapshotFolder)
+    #expect(saved.count == 2)
+    #expect(saved.map(\.day) == [SnapshotName(of: now).day, SnapshotName(of: now).day])
+    let daily = try #require(saved.first { !$0.isBeforeRestore })
+    #expect(daily.url.lastPathComponent == today.lastPathComponent)
+    let unpacked = library.directory.appendingPathComponent("daily.sqlite")
+    try GzipFile.decompress(today, to: unpacked)
+    #expect(try counts(LibraryIndex(at: unpacked)) == before)
+    _ = try applyPendingRestore(databaseURL: library.databaseURL)
+    #expect(try counts(library.index()) == before)
+}
+
+@Test func onlyTheNewestSnapshotsBeforeARestoreAreKept() {
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    let names = (0..<5).map {
+        SnapshotName(of: start.addingTimeInterval(Double($0) * 61), beforeRestore: true)
+    }
+    let daily = SnapshotName(of: start)
+    #expect(
+        Set(SnapshotRotation.expired(names + [daily])) == Set(names.prefix(2)))
 }
