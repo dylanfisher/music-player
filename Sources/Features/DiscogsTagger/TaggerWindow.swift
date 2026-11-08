@@ -606,7 +606,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             do {
                 detail = try await model.release(id)
             } catch {
-                return alert("The release couldn't be read", ["\(error)"], over: sheetWindow)
+                // Over the tagger when Other Releases was closed while the release was read.
+                let over = sheetWindow.sheetParent != nil ? sheetWindow : nil
+                return alert("The release couldn't be read", ["\(error)"], over: over)
             }
             // Other Releases was closed while the release was read.
             guard sheetWindow.sheetParent != nil else { return }
