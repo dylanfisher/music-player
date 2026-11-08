@@ -187,6 +187,14 @@ public struct TagEditorModel: Equatable, Sendable {
         }
     }
 
+    /// The Discogs release ids the tracks carry, each once, in the tracks' order; a value that
+    /// isn't a number is left out. The Discogs tab shows the first.
+    var discogsReleaseIDs: [Int] {
+        var seen = Set<Int>()
+        return tracks.compactMap { $0.tags.custom[DiscogsKey.releaseID].flatMap { Int($0) } }
+            .filter { seen.insert($0).inserted }
+    }
+
     private func text(_ field: TagEditField, in tags: TrackTags) -> String {
         if let property = field.textField?.textProperty { return tags[keyPath: property] ?? "" }
         if let property = field.numberProperty {

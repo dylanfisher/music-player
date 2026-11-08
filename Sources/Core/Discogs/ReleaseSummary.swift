@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 import Settings
 
@@ -31,8 +32,22 @@ public struct ReleaseDetail: Equatable, Sendable {
         public var seconds: Int?
     }
 
+    /// A release-level credit, as Get Info's Discogs tab lists it.
+    struct Credit: Equatable, Sendable {
+        var role: String
+        /// As the release prints it, "(2)" dropped.
+        var name: String
+        /// "A1 to B2, C1"; empty for the whole release.
+        var tracks: String
+    }
+
     public var summary: ReleaseSummary
     public var tracks: [Track]
+    /// As Discogs writes it, "1999-03-00"; empty when it has none.
+    var released = ""
+    var genres: [String] = []
+    var styles: [String] = []
+    var credits: [Credit] = []
 }
 
 extension CatalogRelease {
@@ -56,7 +71,49 @@ extension CatalogRelease {
                 seconds: ReleaseTracklist.seconds(track))
         }
         return ReleaseDetail(
-            summary: summary, tracks: tracks.flatMap { [row($0)] + $0.subTracks.map(row) })
+            summary: summary, tracks: tracks.flatMap { [row($0)] + $0.subTracks.map(row) },
+            released: released ?? "", genres: genres, styles: styles,
+            credits: credits.map {
+                ReleaseDetail.Credit(
+                    role: $0.role,
+                    name: CatalogKey.withoutNumberSuffix($0.nameVariation ?? $0.name),
+                    tracks: $0.tracks ?? "")
+            })
+    }
+}
+
+extension ReleaseDetail {
+    /// The release as Get Info's Discogs tab shows it, as plain lines to select and copy: the
+    /// heading, then label and catalog number, country, date, format, genres and styles, then
+    /// the credits and the tracklist, a tab between a track's position, title and length.
+    public var text: String {
+        let heading = "\(summary.artist) – \(summary.title)"
+        let label = [summary.label, summary.catalogNumber].filter { !$0.isEmpty }
+            .joined(separator: " – ")
+        // Discogs writes an unknown month or day as 00.
+        let date = released.split(separator: "-").prefix { $0 != "00" }.joined(separator: "-")
+        let facts = [
+            ("Label", label), ("Country", summary.country), ("Released", date),
+            ("Format", summary.format), ("Genres", genres.joined(separator: ", ")),
+            ("Styles", styles.joined(separator: ", ")),
+        ]
+        .filter { !$0.1.isEmpty }.map { "\($0): \($1)" }
+        var sections = [([heading] + facts).joined(separator: "\n")]
+        if !credits.isEmpty {
+            let lines = credits.map { credit in
+                "\(credit.role): \(credit.name)"
+                    + (credit.tracks.isEmpty ? "" : " (\(credit.tracks))")
+            }
+            sections.append((["Credits"] + lines).joined(separator: "\n"))
+        }
+        if !tracks.isEmpty {
+            let lines = tracks.map { track in
+                [track.position, track.title, track.seconds.map { clock(Double($0)) } ?? ""]
+                    .joined(separator: "\t")
+            }
+            sections.append((["Tracklist"] + lines).joined(separator: "\n"))
+        }
+        return sections.joined(separator: "\n\n")
     }
 }
 

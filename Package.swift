@@ -188,8 +188,8 @@ let package = Package(
         .target(
             name: "TagEditor",
             dependencies: [
-                "Artwork", "Commands", "DisplayText", "Library", "Log", "Metadata", "Settings",
-                "TagWriter",
+                "Artwork", "Commands", "Discogs", "DisplayText", "Library", "Log", "Metadata",
+                "Settings", "TagWriter",
             ],
             path: "Sources/Features/TagEditor",
             swiftSettings: strictSwift
@@ -501,7 +501,9 @@ let package = Package(
         ),
         .testTarget(
             name: "TagEditorTests",
-            dependencies: ["Commands", "Fixtures", "Metadata", "TagEditor", "TagWriter"],
+            dependencies: [
+                "Commands", "Discogs", "Fixtures", "Metadata", "TagEditor", "TagWriter",
+            ],
             swiftSettings: strictSwift
         ),
         .testTarget(

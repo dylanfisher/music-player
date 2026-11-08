@@ -2,6 +2,7 @@ import Analysis
 import AppKit
 import Artwork
 import Commands
+import Discogs
 import DiscogsTagger
 import HALOutput
 import KeyChord
@@ -627,6 +628,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editing.place = state?[\.infoPlace].map { NSPoint(x: $0.x, y: $0.y) }
         editing.placeChanged = { [weak self] corner in
             self?.saver?.set(\.infoPlace, InfoWindowPlace(x: corner.x, y: corner.y))
+        }
+        // The local catalog only: the tab is what an import of the dumps holds.
+        editing.release = { [weak self] id in
+            guard let self, let settings else { throw CancellationError() }
+            return try await releaseDetail(
+                id, catalogAt: paths.discogsCatalogFile(settings[\.discogsCatalogPath]))
         }
         return editing
     }

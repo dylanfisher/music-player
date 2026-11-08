@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import Discogs
 import Log
 import Metadata
 import TagWriter
@@ -32,6 +33,9 @@ public final class TagEditing {
     public var place: NSPoint?
     /// Called when the user moves an info window, with its new top left corner, to save it.
     public var placeChanged: (NSPoint) -> Void = { _ in }
+    /// Reads a release from the local catalog for an info window's Discogs tab: nil when the
+    /// catalog doesn't have it, and `CatalogError.missing` when there's no catalog.
+    public var release: @MainActor (Int) async throws -> ReleaseDetail? = { _ in nil }
 
     /// What the editor does to the files and the screen, so tests can stand in for each.
     struct Effects {
@@ -170,6 +174,7 @@ public final class TagEditing {
             self.commandTarget = nil
         }
         editor.isEnabled = { [weak self, weak editor] in self?.canRun($0, on: editor) == true }
+        editor.release = { [weak self] in try await self?.release($0) ?? nil }
         editor.commandsChanged = { [weak self] in self?.refreshCommands() }
         editor.saved = { [weak self, weak editor] edit in
             guard let self, let editor else { return }
