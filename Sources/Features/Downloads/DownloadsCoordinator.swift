@@ -47,6 +47,11 @@ actor DownloadsCoordinator {
     private var opened: LibraryIndex?
     private var releasedStaleLeases = false
     private var recoveredStagedWrites = false
+    /// Whether the outbox may hold a report: at launch, which finds what a run before left, then
+    /// after a report is queued or a send wasn't answered. A poll with none doesn't look.
+    private var outboxMayHold = true
+    /// How many times the outbox was read to send it.
+    private(set) var outboxReads = 0
     /// The job being tagged; one at a time.
     private var tagging: Int?
     /// The jobs whose lease a renewal found another Mac holding.
@@ -89,7 +94,7 @@ actor DownloadsCoordinator {
                 }
             }
         }
-        await flush()
+        if outboxMayHold { await flush() }
         guard let autoTag = effects.autoTag else { return }
         if !recoveredStagedWrites {
             recoveredStagedWrites = true
@@ -232,6 +237,8 @@ actor DownloadsCoordinator {
     /// reports were all answered.
     func deliver(_ id: Int) async -> String? {
         refused.removeAll { $0.jobID == id }
+        // The run queued its reports through an index of its own.
+        outboxMayHold = true
         await flush()
         if let refusal = refused.first(where: { $0.jobID == id }) {
             return "music-recommender refused \(refusal.name): \(refusal.why)"
@@ -247,6 +254,7 @@ actor DownloadsCoordinator {
     }
 
     private func sendOutbox() async -> Bool {
+        outboxReads += 1
         let reports: [QueuedImportReport]
         do {
             reports = try index().importReports()
@@ -286,6 +294,7 @@ actor DownloadsCoordinator {
                 }
             }
         }
+        outboxMayHold = false
         return true
     }
 
@@ -303,6 +312,7 @@ actor DownloadsCoordinator {
         do {
             _ = try index().queueImportReport(
                 job: job.id, release: job.release.releaseID, body: event.json)
+            outboxMayHold = true
         } catch {
             note("job \(job.id)'s report couldn't be queued: \(error)")
         }
@@ -367,6 +377,7 @@ actor DownloadsCoordinator {
             return .refused(stale)
         }
         let outcome = await effects.importRun(job) { [self] in await deliver(job.jobID) }
+        outboxMayHold = true
         await flush()
         return outcome
     }

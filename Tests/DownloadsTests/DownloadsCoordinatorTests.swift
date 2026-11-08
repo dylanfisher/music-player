@@ -497,3 +497,26 @@ private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
     await coordinator.take([job(1)])
     #expect(await coordinator.problems.first == "01.flac couldn't be put back")
 }
+
+@Test func anIdlePollNeverLooksAtTheOutbox() async throws {
+    let setup = try Setup([job(1) { $0.tagging = clean }])
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1) { $0.tagging = clean }])
+    #expect(await coordinator.outboxReads == 1, "the first poll finds what a run before left")
+    await coordinator.take([job(1) { $0.tagging = clean }])
+    await coordinator.take([job(1) { $0.tagging = clean }])
+    #expect(await coordinator.outboxReads == 1)
+}
+
+@Test func anOutboxThatWasntEmptiedIsLookedAtAgainAndOneWithNothingIsNot() async throws {
+    let setup = try Setup([job(1) { $0.tagging = clean }])
+    _ = try setup.index.queueImportReport(job: 1, release: 4242, body: HandoffEvent.release.json)
+    let coordinator = setup.coordinator()
+    setup.service.failHandoffs(1)
+    await coordinator.take([])
+    await coordinator.take([])
+    #expect(await coordinator.outboxReads == 2, "the first send failed, so the next poll sends")
+    #expect(try setup.outbox().isEmpty)
+    await coordinator.take([])
+    #expect(await coordinator.outboxReads == 2)
+}
