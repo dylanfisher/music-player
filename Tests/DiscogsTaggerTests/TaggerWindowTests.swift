@@ -338,3 +338,44 @@ private final class Imports: @unchecked Sendable {
     #expect(controller.mappingButton.toolTip?.isEmpty == false)
     controller.window?.close()
 }
+
+/// How many times the catalog was checked, from any thread.
+private final class Checks: @unchecked Sendable {
+    // `count` is guarded by `lock`.
+    private let lock = NSLock()
+    private var count = 0
+
+    func next() -> Int {
+        lock.withLock {
+            count += 1
+            return count
+        }
+    }
+}
+
+@MainActor
+@Test func theImportButtonKeepsItsTitleWhileTheCatalogIsChecked() async throws {
+    let gate = Gate()
+    let checks = Checks()
+    let tagger = TaggerModel(
+        effects: .init(
+            albums: { [] }, reviews: { [:] }, review: { _, _ in },
+            match: { _, _, _, _ in [] }, summaries: { _ in [] }, read: { _, _ in ([], []) },
+            checkCatalog: {
+                if checks.next() > 1 { gate.wait() }
+                return readyCatalog
+            },
+            unfinishedImport: { nil },
+            importCatalog: { _, _, _ in throw CatalogImportError.stopped }),
+        mapping: DiscogsPreset.minimal.mapping, savedMappings: [], choices: defaultChoices)
+    await tagger.checkCatalog()
+    let controller = TaggerWindow(model: tagger)
+    #expect(controller.importButton.title == "Reimport Discogs Dump…")
+    let checking = Task { await tagger.checkCatalog() }
+    try await eventually { tagger.catalog == .checking }
+    #expect(controller.importButton.title == "Reimport Discogs Dump…")
+    gate.open()
+    await checking.value
+    #expect(controller.importButton.title == "Reimport Discogs Dump…")
+    controller.window?.close()
+}

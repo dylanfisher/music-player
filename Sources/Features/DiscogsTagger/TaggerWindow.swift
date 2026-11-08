@@ -230,9 +230,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         catalogImportButton.isHidden = false
         revealButton.isHidden = true
         catalogLabel.toolTip = nil
-        importButton.title = Self.importTitle
         switch model.catalog {
         case .checking:
+            // The title the last check gave stays until this one answers.
             break
         case .ready(let status):
             catalogLabel.stringValue = status.shown
@@ -244,8 +244,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             catalogLabel.stringValue =
                 "There's no Discogs catalog on this Mac, so there's nothing to match with."
                 + " Import Discogs Dump… builds one from the dumps folder."
+            importButton.title = Self.importTitle
         case .unusable(let why):
             catalogLabel.stringValue = "The Discogs catalog can't be used: \(why)."
+            importButton.title = Self.importTitle
         }
         resumeBox.isHidden = model.unfinished == nil || model.isBusy
         if let unfinished = model.unfinished {
