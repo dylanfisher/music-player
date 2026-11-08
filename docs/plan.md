@@ -477,11 +477,15 @@ Implementation plan, part 51b (ADR 0130):
       - **Incomplete:** a different track count, a weak tracklist match, or a partial id.
       - **No candidate**, and **Matched** (already has a release id; refresh offered).
       Thresholds are named constants, tuned on the owner's matched albums: run on them with
-      their ids hidden, at least 95% of them should come back Exact or Likely with the same
-      release or a twin of it, and none Exact with a release that is neither (decided by the
-      owner on 2026-11-07). A twin is equal to the tagged release in every tag the matcher
-      compares (tracklist, catalog number, barcode, date, `MEDIA`, country) and stays Exact;
-      albums left Incomplete because the owner kept another track count aren't counted.
+      their ids hidden, at least 95% of those counted should come back Exact or Likely with
+      the same release or a twin of it, and at most 2% Exact with a release that is neither
+      (decided by the owner on 2026-11-07). A twin is equal to the tagged release in every
+      tag the matcher compares (tracklist, catalog number, barcode, date, `MEDIA`, country)
+      and stays Exact. Not counted: albums whose tagged release isn't in the dump or doesn't
+      fit the files (another track count, titles changed since the tagging), and albums left
+      Incomplete because the owner kept another track count. Albums whose tagged release
+      Discogs has changed since (its date or format) are counted, and reported as known
+      misses.
 - [ ] **51.9 Tests.** Albums from fixtures against a fixture catalog for each tier, the tie-break
       order, bonus and hidden tracks, multi-disc sets, vinyl positions, sub-tracks, and
       `Artist (2)` and ANV names.
