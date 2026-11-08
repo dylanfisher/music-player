@@ -236,12 +236,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             show(done, of: total, "Reading \(number(done)) of \(number(total)) files")
         case .importing(let step):
             // Building the indexes is one statement that a stop can't interrupt.
-            stoppable = step?.stage != .indexing
+            stoppable = !model.activity.isIndexing
             progress.isHidden = false
             progress.doubleValue = step?.fraction ?? 0
             statusLabel.stringValue = step?.text ?? "Starting the import"
         }
-        analyzeButton.title = stoppable ? "Stop" : "Analyze"
+        let indexing = model.activity.isIndexing
+        analyzeButton.title = stoppable || indexing ? "Stop" : "Analyze"
         analyzeButton.isEnabled = stoppable || model.canAnalyze
 
         for (index, tier) in MatchTier.allCases.enumerated() {

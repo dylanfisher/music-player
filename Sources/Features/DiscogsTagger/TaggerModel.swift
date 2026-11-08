@@ -44,6 +44,11 @@ final class TaggerModel {
         case reading(done: Int, total: Int)
         /// Nil until the import's first report.
         case importing(CatalogImportProgress?)
+
+        /// The import is building its indexes, which a stop can't interrupt.
+        var isIndexing: Bool {
+            if case .importing(let step) = self { step?.stage == .indexing } else { false }
+        }
     }
 
     /// An album Analyze matched, with what the user decided about it.
@@ -470,6 +475,9 @@ final class TaggerModel {
         for index in albums.indices where failed.contains(albums[index].id) {
             albums[index].applied = false
         }
+        status =
+            "\(number(failed.count)) album\(failed.count == 1 ? "" : "s") not fully written;"
+            + " Apply can try again"
         changed()
     }
 

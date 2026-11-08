@@ -199,6 +199,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     // A file of album 4 that wasn't written puts that album back, and only that one.
     completion([try #require(plan.files.first { $0.path.hasSuffix("/400.flac") }).path])
     #expect(tagger.applicable(.exact).map(\.id) == [4], "a failed write can be applied again")
+    #expect(tagger.status == "1 album not fully written; Apply can try again")
 }
 
 @MainActor
