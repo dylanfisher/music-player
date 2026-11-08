@@ -19,6 +19,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let width = 640.0
     /// The title of the box of the config file's place and buttons.
     static let configTitle = "Config"
+    /// The config file's and the database's button that shows the file in Finder.
+    private static let revealTitle = "Reveal in Finder"
     /// How long Copy Default Config's button says "Copied".
     static let copiedSeconds = 1.5
     /// How long a color well's color stays the same before it's saved: a drag in the color
@@ -57,8 +59,19 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// Show Library Health, in the Library section; nil in a pane without that section.
     private(set) var healthButton: NSButton?
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
-    private var libraryFolderLabel: NSTextField?
-    private var libraryFolderButtons: (change: NSButton, clear: NSButton)?
+    /// The folder rows' paths and buttons, by key.
+    private var folderLabels: [String: NSTextField] = [:]
+    private var folderButtons: [String: (change: NSButton, clear: NSButton)] = [:]
+    /// The Library section's database rows (ADR 0142), nil in a pane without that section.
+    private(set) var indexPathLabel: NSTextField?
+    private(set) var indexSizeLabel: NSTextField?
+    private(set) var lastSnapshotLabel: NSTextField?
+    private(set) var backUpButton: NSButton?
+    private(set) var restoreButton: NSButton?
+    private let backUpSpinner = NSProgressIndicator()
+    private(set) var snapshotList: SnapshotList?
+    /// Counts the database's reads, so an older one that ends later shows nothing.
+    private var databaseReads = 0
     /// The template rows' lines under their fields, saying why the text typed isn't saved.
     private var templateProblems: [String: NSTextField] = [:]
     /// The color rows' wells, and their Default buttons, which set null.
@@ -180,7 +193,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         path.lineBreakMode = .byTruncatingMiddle
         path.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let open = button(AppCommands.title(of: .openConfigFile), #selector(openConfig))
-        let reveal = button("Reveal in Finder", #selector(revealConfig))
+        let reveal = button(Self.revealTitle, #selector(revealConfig))
         copyButton.title = AppCommands.title(of: .copyDefaultConfig)
         copyButton.bezelStyle = .rounded
         copyButton.target = self
@@ -197,6 +210,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     private func addRow(_ row: GeneralModel.Row, to grid: NSGridView) {
+        let snapshots = row.key == AppSettings().snapshotFolder.key
+        if snapshots { addIndexRow(to: grid) }
+        defer { if snapshots { addSnapshotRows(to: grid) } }
         if let group = row.group, let buttons = groupButtons[group.title] {
             let control = makeControl(row)
             controls[row.key] = control
@@ -264,6 +280,101 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     @objc private func showHealth() { actions.showHealth() }
+
+    /// The index's path and size, and a button to show it in Finder, above the snapshot folder.
+    private func addIndexRow(to grid: NSGridView) {
+        let path = NSTextField(labelWithString: "")
+        path.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        path.lineBreakMode = .byTruncatingMiddle
+        path.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let size = NSTextField(labelWithString: "")
+        size.textColor = .secondaryLabelColor
+        indexPathLabel = path
+        indexSizeLabel = size
+        let reveal = button(Self.revealTitle, #selector(revealIndex))
+        let line = NSStackView(views: [path, size, reveal])
+        grid.addRow(with: [NSTextField(labelWithString: "Database:"), line])
+    }
+
+    /// The last snapshot's time with Back Up Now, then the snapshots with Restore…, under the
+    /// snapshot folder.
+    private func addSnapshotRows(to grid: NSGridView) {
+        let last = NSTextField(wrappingLabelWithString: "")
+        last.preferredMaxLayoutWidth = Self.summaryWidth
+        lastSnapshotLabel = last
+        let backUp = button("Back Up Now", #selector(backUpNow))
+        backUpButton = backUp
+        backUpSpinner.style = .spinning
+        backUpSpinner.controlSize = .small
+        backUpSpinner.isDisplayedWhenStopped = false
+        let line = NSStackView(views: [last, backUp, backUpSpinner])
+        grid.addRow(with: [NSTextField(labelWithString: "Last Snapshot:"), line])
+        let list = SnapshotList()
+        let restore = button("Restore…", #selector(restoreSnapshot))
+        restore.isEnabled = false
+        list.selectionChanged = { [weak self, weak list] in
+            self?.restoreButton?.isEnabled = list?.selected != nil
+        }
+        snapshotList = list
+        restoreButton = restore
+        let summary = NSTextField(
+            wrappingLabelWithString:
+                "A snapshot is written once a day and kept for a week, then one a week for four"
+                + " more. Restoring one replaces the plays, ratings and playlists too.")
+        summary.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        summary.textColor = .secondaryLabelColor
+        summary.preferredMaxLayoutWidth = Self.summaryWidth
+        let cell = NSStackView(views: [list.scroll, restore, summary])
+        cell.orientation = .vertical
+        cell.alignment = .leading
+        cell.spacing = 6
+        grid.addRow(with: [NSTextField(labelWithString: "Snapshots:"), cell])
+    }
+
+    /// Reads the index's size and the snapshots off the main actor and shows them; a pane
+    /// without the Library section reads nothing.
+    func showDatabase() async {
+        guard indexPathLabel != nil else { return }
+        databaseReads += 1
+        let read = databaseReads
+        do {
+            let database = try await actions.libraryDatabase()
+            guard read == databaseReads else { return }
+            indexPathLabel?.stringValue = database.pathText
+            indexPathLabel?.toolTip = database.indexPath
+            indexSizeLabel?.stringValue = database.sizeText
+            lastSnapshotLabel?.stringValue = database.lastSnapshotText
+            snapshotList?.snapshots = database.snapshots
+            restoreButton?.isEnabled = snapshotList?.selected != nil
+        } catch {
+            guard read == databaseReads else { return }
+            logger.error("couldn't read the library's files: \(error)")
+            lastSnapshotLabel?.stringValue = "The snapshots couldn't be read: \(error)"
+        }
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        Task { await showDatabase() }
+    }
+
+    @objc private func revealIndex() { actions.revealIndex() }
+
+    @objc private func backUpNow() {
+        backUpButton?.isEnabled = false
+        backUpSpinner.startAnimation(nil)
+        Task {
+            await actions.backUpNow()
+            backUpSpinner.stopAnimation(nil)
+            backUpButton?.isEnabled = true
+            await showDatabase()
+        }
+    }
+
+    @objc private func restoreSnapshot() {
+        guard let snapshot = snapshotList?.selected else { return }
+        actions.restoreSnapshot(snapshot)
+    }
 
     /// A disclosure triangle and `title`, which show and hide the row `key` under them.
     private func disclosureLine(_ title: String, _ key: String) -> NSView {
@@ -391,18 +502,18 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             let stack = NSStackView(views: [folder, change, open, clear])
             stack.identifier = NSUserInterfaceItemIdentifier(row.key)
             return stack
-        case .libraryFolder:
+        case .folder:
             let folder = NSTextField(labelWithString: "")
             folder.lineBreakMode = .byTruncatingMiddle
             folder.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             folder.setAccessibilityLabel(row.title)
-            let change = button("", #selector(chooseLibraryFolder(_:)))
-            let clear = button("Clear", #selector(clearLibraryFolder(_:)))
+            let change = button("", #selector(chooseFolder(_:)))
+            let clear = button("Clear", #selector(clearFolder(_:)))
             for button in [change, clear] {
                 button.identifier = NSUserInterfaceItemIdentifier(row.key)
             }
-            libraryFolderLabel = folder
-            libraryFolderButtons = (change, clear)
+            folderLabels[row.key] = folder
+            folderButtons[row.key] = (change, clear)
             let stack = NSStackView(views: [folder, change, clear])
             stack.identifier = NSUserInterfaceItemIdentifier(row.key)
             return stack
@@ -494,15 +605,17 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             syncFolderButtons?.change.title = name == nil ? "Choose…" : "Change…"
             syncFolderButtons?.open.isEnabled = name != nil
             syncFolderButtons?.clear.isEnabled = name != nil
-        case .libraryFolder:
+        case .folder(let emptyText, _):
             let path = model.text(row.key)
             let enabled = model.isEnabled(row.key)
-            libraryFolderLabel?.stringValue = path.isEmpty ? noValueText : path
-            libraryFolderLabel?.toolTip = path.isEmpty ? nil : path
-            libraryFolderLabel?.textColor = enabled ? .labelColor : .disabledControlTextColor
-            libraryFolderButtons?.change.title = path.isEmpty ? "Choose…" : "Change…"
-            libraryFolderButtons?.change.isEnabled = enabled
-            libraryFolderButtons?.clear.isEnabled = enabled && !path.isEmpty
+            let label = folderLabels[row.key]
+            let buttons = folderButtons[row.key]
+            label?.stringValue = path.isEmpty ? emptyText : path
+            label?.toolTip = path.isEmpty ? nil : path
+            label?.textColor = enabled ? .labelColor : .disabledControlTextColor
+            buttons?.change.title = path.isEmpty ? "Choose…" : "Change…"
+            buttons?.change.isEnabled = enabled
+            buttons?.clear.isEnabled = enabled && !path.isEmpty
         case .barLayout:
             barBuilders[row.key]?.reload()
         case .color:
@@ -561,18 +674,18 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
 
     @objc private func chooseSyncFolder() { actions.chooseSyncFolder() }
 
-    /// Asks for the library folder in a sheet. Only its path is stored, so nothing here reads
-    /// the volume.
-    @objc private func chooseLibraryFolder(_ button: NSButton) {
-        guard let key = button.identifier?.rawValue, let window = view.window else { return }
+    /// Asks for a folder row's folder in a sheet. Only its path is stored, so nothing here
+    /// reads the volume.
+    @objc private func chooseFolder(_ button: NSButton) {
+        guard let key = button.identifier?.rawValue, let window = view.window,
+            case .folder(_, let message) = model.rows.first(where: { $0.key == key })?.control
+        else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "Choose"
-        panel.message =
-            "Choose the folder that files added to the library are copied into. Files already in"
-            + " it aren't moved or renamed."
+        panel.message = message
         let current = model.text(key)
         if !current.isEmpty {
             panel.directoryURL = URL(fileURLWithPath: current, isDirectory: true)
@@ -584,7 +697,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func clearLibraryFolder(_ button: NSButton) {
+    @objc private func clearFolder(_ button: NSButton) {
         guard let key = button.identifier?.rawValue else { return }
         attempt { try model.clear(key) }
     }

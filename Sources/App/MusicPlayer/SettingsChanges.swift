@@ -252,6 +252,20 @@ extension AppDelegate {
                     } else if dispatcher?.run(.checkHealth) != true {
                         NSSound.beep()
                     }
+                },
+                libraryDatabase: { [weak self] in
+                    guard let self else { throw CancellationError() }
+                    return try await libraryDatabase()
+                },
+                revealIndex: { [paths] in
+                    NSWorkspace.shared.activateFileViewerSelecting([
+                        libraryFileURL(in: paths.dataDirectory)
+                    ])
+                },
+                backUpNow: { [weak self] in await self?.backUpNow() },
+                restoreSnapshot: { [weak self] snapshot in
+                    guard let window = self?.settingsWindow?.window else { return }
+                    self?.confirmRestoring(snapshot, over: window)
                 }))
         settingsWindow = controller
         return controller

@@ -1,14 +1,19 @@
+import AppKit
 import Foundation
 import Library
+import SQLite
 import Settings
+import SettingsWindow
 import Snapshot
 
-/// The library's daily snapshots and Back Up Now (ADR 0142): each runs between the watcher's
-/// scans, so never during a scan or sync.
+/// The library's daily snapshots, Back Up Now and Restore… (ADR 0142): each runs between the
+/// watcher's scans, so never during a scan or sync.
 extension AppDelegate {
     /// How often the app asks for the day's snapshot after the launch's: once the day changes,
     /// the next ask writes it.
     static let snapshotCheckSeconds = 3600.0
+    /// What the alert says when a restore fails, before or at the launch that applies it.
+    static let restoreFailedTitle = "The snapshot couldn't be restored"
 
     /// The snapshot folder the settings give now.
     var snapshotFolder: URL? { settings.map { paths.snapshotDirectory($0[\.snapshotFolder]) } }
@@ -53,5 +58,92 @@ extension AppDelegate {
                 MainActor.assumeIsolated { self?.startDailySnapshots() }
             }
         }
+    }
+
+    /// The index's place and size and the snapshots, read off the main actor.
+    func libraryDatabase() async throws -> LibraryDatabase {
+        guard let folder = snapshotFolder else { throw CancellationError() }
+        let databaseURL = libraryFileURL(in: paths.dataDirectory)
+        let lastFailure = snapshotScheduler?.lastFailure
+        return try await Task.detached {
+            LibraryDatabase(
+                indexPath: databaseURL.path, indexBytes: try Database.sizeBytes(at: databaseURL),
+                snapshots: try snapshots(in: folder).map {
+                    LibraryDatabase.Snapshot(
+                        path: $0.url.path, day: $0.name.day, written: $0.written, bytes: $0.bytes)
+                }, lastFailure: lastFailure)
+        }.value
+    }
+
+    /// Back Up Now: the day's snapshot, written between scans whether or not there is one.
+    func backUpNow() async {
+        guard let scheduler = snapshotScheduler, let folder = snapshotFolder else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            betweenScans {
+                scheduler.write(into: folder, now: Date())
+                continuation.resume()
+            }
+        }
+    }
+
+    /// Restore…: asks over `window`, then prepares the restore between scans and relaunches.
+    func confirmRestoring(_ snapshot: LibraryDatabase.Snapshot, over window: NSWindow) {
+        let alert = NSAlert()
+        alert.messageText = "Replace the library with the snapshot of \(snapshot.day)?"
+        alert.informativeText =
+            "Plays, ratings and playlists in it replace the current ones. The library as it is"
+            + " now is snapshotted first, and the app quits and opens again to make the change."
+        alert.addButton(withTitle: "Restore and Relaunch")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.restore(snapshot)
+        }
+    }
+
+    private func restore(_ snapshot: LibraryDatabase.Snapshot) {
+        guard let folder = snapshotFolder else { return }
+        let databaseURL = libraryFileURL(in: paths.dataDirectory)
+        let source = URL(fileURLWithPath: snapshot.path, isDirectory: false)
+        betweenScans { [weak self] in
+            let prepared = Result {
+                try prepareRestore(
+                    of: source, databaseURL: databaseURL, snapshotFolder: folder, now: Date())
+            }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    switch prepared {
+                    case .success: self?.relaunch()
+                    case .failure(let error):
+                        self?.fail(Self.restoreFailedTitle, error)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Quits, and opens the app again with the same arguments once this process has ended, so
+    /// the next launch's swap finds no connection open on the index. Outside an app bundle, as
+    /// from `swift run`, it only quits; the next launch restores.
+    private func relaunch() {
+        let app = Bundle.main.bundleURL
+        if app.pathExtension == "app" {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh", isDirectory: false)
+            process.arguments =
+                [
+                    "-c",
+                    "while /bin/kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null;"
+                        + " do /bin/sleep 0.2; done; app=$1; shift; exec /usr/bin/open -n \"$app\""
+                        + " --args \"$@\"",
+                    "relaunch", app.path,
+                ] + CommandLine.arguments.dropFirst()
+            do {
+                try process.run()
+            } catch {
+                fail("The app couldn't open again; open it to finish the restore", error)
+            }
+        }
+        NSApp.terminate(nil)
     }
 }

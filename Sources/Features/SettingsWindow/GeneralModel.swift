@@ -19,8 +19,9 @@ public final class GeneralModel {
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
         case syncFolder
-        /// The library folder's path, with buttons to choose one and to clear it.
-        case libraryFolder
+        /// A folder's path, with buttons to choose one and to clear it: `emptyText` shows while
+        /// it's null, and the panel that asks for one says `message`.
+        case folder(emptyText: String, message: String)
         /// The output device, picked from the devices and renderers found.
         case output
         /// The network renderer, which the output device's row lists and picks too.
@@ -209,7 +210,16 @@ public final class GeneralModel {
             switch setting.kind {
             case _ where setting.key == schema.outputDeviceUID.key: .output
             case _ where setting.key == schema.outputRenderer.key: .renderer
-            case _ where setting.key == schema.libraryFolder.key: .libraryFolder
+            case _ where setting.key == schema.libraryFolder.key:
+                .folder(
+                    emptyText: noValueText,
+                    message: "Choose the folder that files added to the library are copied into."
+                        + " Files already in it aren't moved or renamed.")
+            case _ where setting.key == schema.snapshotFolder.key:
+                .folder(
+                    emptyText: "Backups, beside the library",
+                    message: "Choose a folder outside your music for the library's daily"
+                        + " snapshots. The app writes only its snapshots there.")
             case .bool: .checkbox
             case .choice(let choices): .popUp(choices)
             case .integer: .number(whole: true, optional: false)
@@ -417,7 +427,7 @@ public final class GeneralModel {
             try set(key, number)
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
-        case .libraryFolder:
+        case .folder:
             try set(key, trimmed.isEmpty ? NSNull() : trimmed)
         case .template:
             // Saved as it's typed, so a keystroke that leaves the template as it is, a space

@@ -12,12 +12,12 @@ public struct SnapshotName: Hashable, Comparable, Sendable {
     private static let partialSuffix = ".partial"
 
     /// The name for the local day `date` falls on.
-    public init(of date: Date, calendar: Calendar = .current) {
+    init(of date: Date, calendar: Calendar = .current) {
         day = Self.dayFormatter(calendar.timeZone).string(from: date)
     }
 
     /// The name `fileName` is, or nil for any other file.
-    public init?(fileName: String) {
+    init?(fileName: String) {
         guard fileName.hasPrefix(Self.prefix), fileName.hasSuffix(Self.suffix) else { return nil }
         let day = String(fileName.dropFirst(Self.prefix.count).dropLast(Self.suffix.count))
         // A day that formats back the same, so `library-2026-1-5.sqlite.gz` isn't one. In UTC,
@@ -28,7 +28,7 @@ public struct SnapshotName: Hashable, Comparable, Sendable {
         self.day = day
     }
 
-    public var fileName: String { Self.prefix + day + Self.suffix }
+    var fileName: String { Self.prefix + day + Self.suffix }
 
     /// The gzip file while it's written.
     var partialFileName: String { fileName + Self.partialSuffix }

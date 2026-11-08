@@ -1,6 +1,7 @@
 import Settings
 
-/// What the Settings window asks the app to do with the config file and the library.
+/// What the Settings window asks the app to do with the config file, the library and its
+/// snapshots.
 public struct SettingsActions {
     public var openConfigFile: () -> Void
     public var revealConfigFile: () -> Void
@@ -23,6 +24,15 @@ public struct SettingsActions {
     public var chooseOutput: (OutputChoice) -> Void
     /// Shows Library Health in the main window, from the Library section's button.
     public var showHealth: () -> Void
+    /// The index's place and size and the snapshots, which the Library section shows.
+    public var libraryDatabase: () async throws -> LibraryDatabase
+    /// Shows the index's file in Finder.
+    public var revealIndex: () -> Void
+    /// Back Up Now: writes the day's snapshot between scans, and returns once it's written or
+    /// failed.
+    public var backUpNow: () async -> Void
+    /// Restore… on a snapshot: asks first, then relaunches into it.
+    public var restoreSnapshot: (LibraryDatabase.Snapshot) -> Void
 
     public init(
         openConfigFile: @escaping () -> Void, revealConfigFile: @escaping () -> Void,
@@ -32,7 +42,10 @@ public struct SettingsActions {
         rescanNow: @escaping () -> Void, rescanFolders: @escaping ([Int]) -> Void,
         outputs: @escaping () -> [OutputOption],
         searchOutputs: @escaping () -> Void, chooseOutput: @escaping (OutputChoice) -> Void,
-        showHealth: @escaping () -> Void
+        showHealth: @escaping () -> Void,
+        libraryDatabase: @escaping () async throws -> LibraryDatabase,
+        revealIndex: @escaping () -> Void, backUpNow: @escaping () async -> Void,
+        restoreSnapshot: @escaping (LibraryDatabase.Snapshot) -> Void
     ) {
         self.openConfigFile = openConfigFile
         self.revealConfigFile = revealConfigFile
@@ -47,5 +60,9 @@ public struct SettingsActions {
         self.searchOutputs = searchOutputs
         self.chooseOutput = chooseOutput
         self.showHealth = showHealth
+        self.libraryDatabase = libraryDatabase
+        self.revealIndex = revealIndex
+        self.backUpNow = backUpNow
+        self.restoreSnapshot = restoreSnapshot
     }
 }

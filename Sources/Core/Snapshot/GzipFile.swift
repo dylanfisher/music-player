@@ -71,8 +71,8 @@ enum GzipFile {
                     case Z_OK, Z_BUF_ERROR: break
                     case Z_STREAM_END: ended = true
                     default:
-                        throw .gzip(
-                            name, stream.msg.map { String(cString: $0) } ?? "zlib error \(result)")
+                        let reason = stream.msg.map { String(cString: $0) }
+                        throw .gzip(name, reason ?? "inflate returned \(result)")
                     }
                     try files.write(chunkBytes - Int(stream.avail_out))
                 } while stream.avail_out == 0 && !ended

@@ -39,14 +39,22 @@ private func actions(
     rescanNow: @escaping () -> Void = {}, rescanFolders: @escaping ([Int]) -> Void = { _ in },
     outputs: @escaping () -> [OutputOption] = { [] },
     chooseOutput: @escaping (OutputChoice) -> Void = { _ in },
-    showHealth: @escaping () -> Void = {}
+    showHealth: @escaping () -> Void = {},
+    libraryDatabase: @escaping () async throws -> LibraryDatabase = {
+        LibraryDatabase(
+            indexPath: "/tmp/library.sqlite", indexBytes: 0, snapshots: [], lastFailure: nil)
+    },
+    revealIndex: @escaping () -> Void = {}, backUpNow: @escaping () async -> Void = {},
+    restoreSnapshot: @escaping (LibraryDatabase.Snapshot) -> Void = { _ in }
 ) -> SettingsActions {
     SettingsActions(
         openConfigFile: openConfigFile, revealConfigFile: {}, copyDefaultConfig: {},
         chooseSyncFolder: chooseSyncFolder, openSyncFolder: openSyncFolder, addFolder: addFolder,
         removeFolder: removeFolder, rescanNow: rescanNow,
         rescanFolders: rescanFolders, outputs: outputs,
-        searchOutputs: {}, chooseOutput: chooseOutput, showHealth: showHealth)
+        searchOutputs: {}, chooseOutput: chooseOutput, showHealth: showHealth,
+        libraryDatabase: libraryDatabase, revealIndex: revealIndex, backUpNow: backUpNow,
+        restoreSnapshot: restoreSnapshot)
 }
 
 private var appearanceChoices: [SettingKind.Choice] {
@@ -647,7 +655,11 @@ private func waitFor(_ condition: () -> Bool) async throws {
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
         set: { key, json in stored[key] = json }, isBlocked: { false })
-    #expect(model.rows.first { $0.key == schema.libraryFolder.key }?.control == .libraryFolder)
+    let row = model.rows.first { $0.key == schema.libraryFolder.key }
+    guard case .folder(noValueText, _) = row?.control else {
+        Issue.record("\(String(describing: row))")
+        return
+    }
     let pane = GeneralPane(
         model: model, configPath: nil, actions: actions(), sections: [.libraryFolder])
     #expect(labels(in: pane.view).contains(noValueText))
