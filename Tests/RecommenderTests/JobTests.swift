@@ -244,3 +244,17 @@ private let snapshot = ReleaseSnapshot(
         #expect(jobs == before)
     }
 }
+
+@Test func anOutboxReportReadsBackAsTheEventItWas() throws {
+    let events: [HandoffEvent] = [
+        .lease, .releaseLease, .tagging(.init(status: .discrepancy, reasons: ["a bonus track"])),
+        .tagging(.init(status: .clean, reasons: [])), .claim(takeOver: false),
+        .claim(takeOver: true), .release, .approved, .importing, .imported, .rejected,
+        .failed(.carry, reason: "no room"),
+    ]
+    for event in events {
+        #expect(try HandoffEvent(json: event.json) == event)
+    }
+    #expect(throws: (any Error).self) { try HandoffEvent(json: #"{"type": "approved", "x": 1}"#) }
+    #expect(throws: (any Error).self) { try HandoffEvent(json: #"{"type": "shrug"}"#) }
+}

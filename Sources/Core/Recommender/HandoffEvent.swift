@@ -1,7 +1,9 @@
+import Foundation
+
 /// A report or a claim the player sends for one job through `downloads/handoff`.
-package enum HandoffEvent: Equatable, Sendable, Encodable {
+package enum HandoffEvent: Equatable, Sendable, Codable {
     /// The stages the player runs, which only it reports as failed.
-    package enum Stage: String, Equatable, Sendable, Encodable {
+    package enum Stage: String, Equatable, Sendable, Codable {
         case tag, move, delete, carry
     }
 
@@ -28,7 +30,7 @@ package enum HandoffEvent: Equatable, Sendable, Encodable {
     }
 
     /// `event.type`, one for each case.
-    private enum EventType: String, Encodable {
+    private enum EventType: String, Codable {
         case lease
         case releaseLease = "release_lease"
         case tagging, claim, release, approved, importing, imported, rejected, failed
@@ -58,6 +60,44 @@ package enum HandoffEvent: Equatable, Sendable, Encodable {
             try container.encode(reason, forKey: .reason)
         }
         try container.encode(type, forKey: .type)
+    }
+
+    package init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(EventType.self, forKey: .type) {
+        case .lease: self = .lease
+        case .releaseLease: self = .releaseLease
+        case .tagging:
+            self = .tagging(
+                DownloadJob.Tagging(
+                    status: try container.decode(DownloadJob.Tagging.Status.self, forKey: .status),
+                    reasons: try container.decode([String].self, forKey: .reasons)))
+        case .claim:
+            self = .claim(
+                takeOver: try container.decodeIfPresent(Bool.self, forKey: .takeOver) ?? false)
+        case .release: self = .release
+        case .approved: self = .approved
+        case .importing: self = .importing
+        case .imported: self = .imported
+        case .rejected: self = .rejected
+        case .failed:
+            self = .failed(
+                try container.decode(Stage.self, forKey: .stage),
+                reason: try container.decode(String.self, forKey: .reason))
+        }
+    }
+
+    /// The event a report in the outbox holds, from its `json`. Refused unless the text is
+    /// exactly an event's encoding, so nothing but this player's own reports is sent.
+    package init(json: String) throws {
+        let event = try replyDecoder.decode(HandoffEvent.self, from: Data(json.utf8))
+        let object = { (text: String) in
+            try JSONSerialization.jsonObject(with: Data(text.utf8)) as? NSDictionary
+        }
+        guard try object(event.json) == object(json) else {
+            throw RecommenderError.Kind.unreadable("\(json) isn't a handoff event's encoding")
+        }
+        self = event
     }
 
     /// The event as a report in the outbox holds it, its keys sorted, so a report queued twice
