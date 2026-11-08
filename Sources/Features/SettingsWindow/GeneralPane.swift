@@ -55,6 +55,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// Show Library Health, in the Library section; nil in a pane without that section.
     private(set) var healthButton: NSButton?
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
+    private var stagingFolderLabel: NSTextField?
+    private var stagingFolderButtons: (change: NSButton, clear: NSButton)?
     private var libraryFolderLabel: NSTextField?
     private var libraryFolderButtons: (change: NSButton, clear: NSButton)?
     /// The template rows' lines under their fields, saying why the text typed isn't saved.
@@ -305,7 +307,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
 
     /// A number, text or template row's field.
     private func textField(_ row: GeneralModel.Row, optional: Bool) -> NSTextField {
-        let field = NSTextField()
+        let field = row.control == .secret ? NSSecureTextField() : NSTextField()
         field.identifier = NSUserInterfaceItemIdentifier(row.key)
         field.placeholderString = optional ? noValueText : nil
         field.delegate = self
@@ -371,6 +373,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             stack.alignment = .leading
             stack.spacing = 2
             return stack
+        case .secret: return textField(row, optional: true)
         case .number(_, let optional), .text(let optional):
             let field = textField(row, optional: optional)
             guard let unit = row.unit else { return field }
@@ -387,6 +390,19 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             syncFolderLabel = folder
             syncFolderButtons = (change, open, clear)
             let stack = NSStackView(views: [folder, change, open, clear])
+            stack.identifier = NSUserInterfaceItemIdentifier(row.key)
+            return stack
+        case .stagingFolder:
+            let folder = NSTextField(labelWithString: "")
+            folder.lineBreakMode = .byTruncatingTail
+            folder.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            folder.setAccessibilityLabel(row.title)
+            let change = button("", #selector(chooseStagingFolder))
+            let clear = button("Clear", #selector(clearSyncFolder(_:)))
+            clear.identifier = NSUserInterfaceItemIdentifier(row.key)
+            stagingFolderLabel = folder
+            stagingFolderButtons = (change, clear)
+            let stack = NSStackView(views: [folder, change, clear])
             stack.identifier = NSUserInterfaceItemIdentifier(row.key)
             return stack
         case .libraryFolder:
@@ -475,7 +491,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             let raw = model.choice(row.key)
             popUp?.selectItem(
                 at: popUp?.itemArray.firstIndex { $0.representedObject as? String == raw } ?? -1)
-        case .number, .text, .template:
+        case .number, .text, .template, .secret:
             guard let field = fields[row.key], field.currentEditor() == nil
             else { return }
             field.stringValue = model.text(row.key)
@@ -492,6 +508,12 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             syncFolderButtons?.change.title = name == nil ? "Choose…" : "Change…"
             syncFolderButtons?.open.isEnabled = name != nil
             syncFolderButtons?.clear.isEnabled = name != nil
+        case .stagingFolder:
+            let name = model.syncFolderName(row.key)
+            stagingFolderLabel?.stringValue = name ?? noValueText
+            stagingFolderLabel?.toolTip = model.syncFolder(row.key)
+            stagingFolderButtons?.change.title = name == nil ? "Choose…" : "Change…"
+            stagingFolderButtons?.clear.isEnabled = name != nil
         case .libraryFolder:
             let path = model.text(row.key)
             let enabled = model.isEnabled(row.key)
@@ -558,6 +580,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     @objc private func chooseSyncFolder() { actions.chooseSyncFolder() }
+
+    @objc private func chooseStagingFolder() { actions.chooseStagingFolder() }
 
     /// Asks for the library folder in a sheet. Only its path is stored, so nothing here reads
     /// the volume.

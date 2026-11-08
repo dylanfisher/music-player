@@ -13,12 +13,16 @@ public final class GeneralModel {
         /// A number field; `whole` takes integers only, `optional` means empty is null.
         case number(whole: Bool, optional: Bool)
         case text(optional: Bool)
+        /// A field that hides what's typed, for a secret; empty is null (ADR 0136).
+        case secret
         /// A text field for a template, beside a help button that lists its tokens.
         case template([SettingKind.Token])
         /// Watched folders, which the Watched Folders pane lists, adds and removes.
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
         case syncFolder
+        /// The staging folder, with buttons to choose one and to clear it.
+        case stagingFolder
         /// The library folder's path, with buttons to choose one and to clear it.
         case libraryFolder
         /// The output device, picked from the devices and renderers found.
@@ -69,7 +73,7 @@ public final class GeneralModel {
     enum Section: CaseIterable {
         /// The Playback pane's.
         case output, playCounts
-        case library, sync, receiver
+        case library, sync, receiver, downloads
         /// Shown under the Watched Folders pane's list, as Swinsian has them.
         case folderChanges, libraryFolder, networkFolders
         /// The Appearance pane's.
@@ -86,6 +90,7 @@ public final class GeneralModel {
             case .library: "Library"
             case .sync: "Sync"
             case .receiver: "Receiver"
+            case .downloads: "Downloads"
             case .folderChanges: "Folder Changes"
             case .libraryFolder: AppSettings().libraryFolder.title
             case .networkFolders: "Network Folders"
@@ -107,6 +112,7 @@ public final class GeneralModel {
             case .library: ["library."]
             case .sync: ["sync."]
             case .receiver: ["receiver."]
+            case .downloads: ["recommender.", "import."]
             case .folderChanges: [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key]
             case .libraryFolder: [schema.copyAddedFiles.key, schema.libraryFolder.key]
             case .networkFolders:
@@ -217,9 +223,11 @@ public final class GeneralModel {
             case .optional(.number): .number(whole: false, optional: true)
             case .string: .text(optional: false)
             case .optional(.string): .text(optional: true)
+            case .optional(.secret): .secret
             case .template(let tokens): .template(tokens)
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
+            case .optional(.stagingFolder): .stagingFolder
             case .barLayout(let bar):
                 .barLayout(bar, defaultLayout: barLayout(setting.defaultValue))
             case .color: .color(optional: false)
@@ -345,12 +353,13 @@ public final class GeneralModel {
         try set(key, folders)
     }
 
-    /// The sync folder as `folders` shows a folder; nil for none.
+    /// The sync or staging folder as `folders` shows a folder; nil for none.
     public func syncFolder(_ key: String) -> String? {
         (value(key) as? [String: Any]).flatMap(folderText)
     }
 
-    /// The sync folder's own name, or its share's for the share itself; nil for none.
+    /// The sync or staging folder's own name, or its share's for the share itself; nil for
+    /// none.
     func syncFolderName(_ key: String) -> String? {
         guard let folder = value(key) as? [String: Any], let path = folder["path"] as? String
         else { return nil }
@@ -416,6 +425,8 @@ public final class GeneralModel {
             try set(key, number)
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
+        case .secret:
+            try set(key, trimmed.isEmpty ? NSNull() : trimmed)
         case .libraryFolder:
             try set(key, trimmed.isEmpty ? NSNull() : trimmed)
         case .template:
@@ -423,7 +434,7 @@ public final class GeneralModel {
             // at the end, writes nothing.
             guard trimmed != self.text(key) else { return }
             try set(key, trimmed)
-        case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .barLayout, .color,
+        case .checkbox, .popUp, .folders, .syncFolder, .stagingFolder, .output, .renderer, .barLayout, .color,
             .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }

@@ -5,8 +5,8 @@
 - **Amends:** [0020](0020-tag-writing.md) (who writes music files, and when),
   [0133](0133-one-confirmation-for-a-match-set.md) (what counts as the confirmation)
 - **See also:** [0131](0131-discogs-matching.md) (the tiers),
-  [0132](0132-discogs-field-mapping.md) (the mapping), ADR 0136 (the staging
-  folder setting), [0139](0139-moving-downloads-into-the-library.md) (Approve)
+  [0132](0132-discogs-field-mapping.md) (the mapping), [0136](0136-the-service-token.md) (the
+  staging folder setting), [0139](0139-moving-downloads-into-the-library.md) (Approve)
 
 ## Context
 

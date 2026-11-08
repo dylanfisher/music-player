@@ -34,7 +34,7 @@ private func model() -> (GeneralModel, () -> [String: Any]) {
 @MainActor
 private func actions(
     openConfigFile: @escaping () -> Void = {}, chooseSyncFolder: @escaping () -> Void = {},
-    openSyncFolder: @escaping () -> Void = {},
+    openSyncFolder: @escaping () -> Void = {}, chooseStagingFolder: @escaping () -> Void = {},
     addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in },
     rescanNow: @escaping () -> Void = {}, rescanFolders: @escaping ([Int]) -> Void = { _ in },
     outputs: @escaping () -> [OutputOption] = { [] },
@@ -43,7 +43,8 @@ private func actions(
 ) -> SettingsActions {
     SettingsActions(
         openConfigFile: openConfigFile, revealConfigFile: {}, copyDefaultConfig: {},
-        chooseSyncFolder: chooseSyncFolder, openSyncFolder: openSyncFolder, addFolder: addFolder,
+        chooseSyncFolder: chooseSyncFolder, openSyncFolder: openSyncFolder,
+        chooseStagingFolder: chooseStagingFolder, addFolder: addFolder,
         removeFolder: removeFolder, rescanNow: rescanNow,
         rescanFolders: rescanFolders, outputs: outputs,
         searchOutputs: {}, chooseOutput: chooseOutput, showHealth: showHealth)
@@ -280,7 +281,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let sections = model.sections
     #expect(
         sections.map(\.section) == [
-            .output, .playCounts, .library, .sync, .receiver, .folderChanges, .libraryFolder,
+            .output, .playCounts, .library, .sync, .receiver, .downloads, .folderChanges,
+            .libraryFolder,
             .networkFolders,
             .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
         ])
@@ -973,4 +975,45 @@ private func visibleLabels(in view: NSView) -> [String] {
     window.layoutIfNeeded()
     #expect(pane.view.frame.height == closed)
     #expect(window.frame.maxY == top)
+}
+
+@MainActor @Test func theServiceSettingsSitInDownloadsWithTheTokenHidden() throws {
+    let schema = AppSettings()
+    nonisolated(unsafe) var values: [String: Any] = [schema.recommenderToken.key: NSNull()]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { values[$0] },
+        set: { key, json in values[key] = json }, isBlocked: { false })
+    #expect(
+        model.sections.first { $0.section == .downloads }?.rows.map(\.key) == [
+            schema.recommenderAddress.key, schema.recommenderPort.key,
+            schema.recommenderToken.key, schema.stagingFolder.key,
+        ])
+    #expect(model.rows.first { $0.key == schema.recommenderToken.key }?.control == .secret)
+    #expect(model.rows.first { $0.key == schema.stagingFolder.key }?.control == .stagingFolder)
+    try model.setText(schema.recommenderToken.key, " abc123 ")
+    #expect(values[schema.recommenderToken.key] as? String == "abc123")
+    try model.setText(schema.recommenderToken.key, "")
+    #expect(values[schema.recommenderToken.key] is NSNull)
+
+    var chosen = 0
+    let pane = GeneralPane(
+        model: model, configPath: "/tmp/config.json",
+        actions: actions(chooseStagingFolder: { chosen += 1 }), sections: [.downloads])
+    func field(_ view: NSView) -> NSTextField? {
+        if let field = view as? NSTextField, view.identifier?.rawValue == schema.recommenderToken.key {
+            return field
+        }
+        return view.subviews.lazy.compactMap(field).first
+    }
+    #expect(try #require(field(pane.view)) is NSSecureTextField)
+
+    #expect(labels(in: pane.view).contains(noValueText))
+    try click(#require(button("Choose…", in: pane.view)))
+    #expect(chosen == 1)
+    values[schema.stagingFolder.key] = ["share": "smb://nas/music", "path": "staging"]
+    pane.reload()
+    #expect(labels(in: pane.view).contains("staging"))
+    #expect(button("Change…", in: pane.view) != nil)
+    try click(#require(button("Clear", in: pane.view)))
+    #expect(values[schema.stagingFolder.key] is NSNull)
 }

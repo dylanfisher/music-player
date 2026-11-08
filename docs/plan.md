@@ -684,9 +684,10 @@ From the owner's testing on 2026-11-07, before 51 closes.
 
 ### 52. Discogs API
 
-- [ ] **52.1 The token.** An optional Discogs personal access token, the player's first secret:
-      an ADR, the AGENTS.md "no secrets" line rewritten for it, kept only in `config.json` at
-      mode 0600, never copied elsewhere.
+- [ ] **52.1 The token.** An optional Discogs personal access token, a second secret kept as
+      [ADR 0136](decisions/0136-the-service-token.md) keeps the service's: an ADR, the AGENTS.md
+      secrets line extended for it, kept only in `config.json` at mode 0600, never copied
+      elsewhere.
       Without a token the API is used unauthenticated, within its lower rate limit.
 - [ ] **52.2 The client.** Search and release requests, paced by the rate-limit headers, with a
       size cap, a timeout and typed errors, cached in the index by release id. ADR 0025 gains

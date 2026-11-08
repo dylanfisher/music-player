@@ -951,6 +951,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Asks for the staging folder, stored by share when it's on one, as a watched folder is.
+    func chooseStagingFolder() {
+        guard let settings else { return }
+        let panel = stagingFolderPanel()
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Task {
+                let found = await blockingFileWork { Result { try folderToWatch(at: url) } }
+                do {
+                    let folder = try found.get()
+                    try settings.set(
+                        \.stagingFolder, to: StagingFolder(path: folder.path, share: folder.share))
+                } catch {
+                    self?.fail("Couldn't stage downloads in \(url.standardizedFileURL.path)", error)
+                }
+            }
+        }
+    }
+
     /// Opens the sync folder in Finder where it is now, or says in a sheet over `window` why
     /// it can't.
     func openSyncFolder(over window: NSWindow) {

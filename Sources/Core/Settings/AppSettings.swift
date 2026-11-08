@@ -74,6 +74,18 @@ public struct AppSettings: SettingsSchema {
     public let discogsFillSortArtist = Setting(
         "discogs.fillSortArtist", title: "Fill Sort Artist from Album Artist", default: false,
         "The Discogs tagger gives files without a sort artist the album artist.")
+    let recommenderAddress = Setting<IPAddressSetting?>(
+        "recommender.address", title: "Service Address", default: nil,
+        "The IP address of the Mac running music-recommender; host names aren't taken.")
+    let recommenderPort = Setting(
+        "recommender.port", title: "Service Port", default: 7878, range: 1...65535,
+        "The port music-recommender's API listens on.")
+    let recommenderToken = Setting<ServiceToken?>(
+        "recommender.token", title: "Service Token", default: nil,
+        "The token music-recommender's config holds; the file is then yours alone.")
+    public let stagingFolder = Setting<StagingFolder?>(
+        "import.stagingFolder", title: "Staging Folder", default: nil,
+        "Where music-recommender puts downloads for review, outside your music folders.")
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")
@@ -181,6 +193,23 @@ public struct AppSettings: SettingsSchema {
                     key: discogsCatalogPath.key,
                     reason: "it's inside the watched folder \"\(watched.path)\"; the catalog must"
                         + " be outside every watched folder, since the app writes it"))
+        }
+        if let staging = values[stagingFolder.key] as? StagingFolder {
+            var others = folders.map { (path: $0.path, share: $0.share) }
+            if let library = values[libraryFolder.key] as? String {
+                others.append((path: library, share: nil))
+            }
+            if let sync = values[syncFolder.key] as? SyncFolder {
+                others.append((path: sync.path, share: sync.share))
+            }
+            if let other = staging.overlap(others) {
+                conflicts.append(
+                    SettingConflict(
+                        key: stagingFolder.key,
+                        reason: "it overlaps \"\(other)\"; the staging folder must be apart from"
+                            + " the watched, library and sync folders, since the service deletes"
+                            + " in it and the app moves files out of it"))
+            }
         }
         return conflicts
     }
