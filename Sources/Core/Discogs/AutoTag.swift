@@ -34,7 +34,7 @@ package struct AutoTagRun: Sendable {
 package func autoTag(
     _ job: StagedJob, stagingRoot: String, catalogAt catalog: URL, mapping: DiscogsMapping
 ) async throws -> AutoTagRun {
-    let staged = StagedAlbum(job, stagingRoot: stagingRoot)
+    let staged = await blockingFileWork { StagedAlbum(job, stagingRoot: stagingRoot) }
     guard staged.problems.isEmpty else {
         return AutoTagRun(
             verdict: .error(staged.problems), staged: staged, match: nil, changes: nil, edits: [])
