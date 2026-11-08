@@ -1,0 +1,150 @@
+import Foundation
+import Recommender
+
+/// The Downloads window's state, with no AppKit: the service's jobs as rows, and the polling
+/// that keeps them current. It polls every 2 s while the window is open and a job is moving,
+/// and every 60 s otherwise, from launch to quit, so a job queued on another Mac appears. The
+/// requests run off the main actor; only the rows are kept here.
+@MainActor
+final class DownloadsModel {
+    /// Waits about this many seconds. Throws when cancelled.
+    typealias Sleep = @Sendable (TimeInterval) async throws -> Void
+
+    /// The poll's interval while the window is open and a job is moving.
+    nonisolated static let activeInterval: TimeInterval = 2
+    /// The poll's interval otherwise.
+    nonisolated static let idleInterval: TimeInterval = 60
+
+    /// Whether the service answered the last poll.
+    enum Connection: Equatable {
+        /// Before the first reply.
+        case waiting
+        case answering
+        /// The last poll failed, saying why and naming the address tried; the rows are as
+        /// they were at `lastGood`, nil when no poll has answered yet.
+        case down(String, lastGood: Date?)
+    }
+
+    private let service: DownloadsService
+    /// This Mac's name, as the service knows it.
+    let machine: String
+    private let now: () -> Date
+    private let sleep: Sleep
+
+    private(set) var jobs = DownloadJobs()
+    private(set) var rows: [DownloadRow] = []
+    private(set) var connection = Connection.waiting
+    private(set) var isWindowOpen = false
+    private var lastGood: Date?
+    private var polling: Task<Void, Never>?
+
+    /// Called after anything shown changes.
+    var changed: () -> Void = {}
+    /// Hears every job after each poll that answered, for the coordinator.
+    var took: ([DownloadJob]) -> Void = { _ in }
+
+    init(
+        service: DownloadsService, machine: String, now: @escaping () -> Date = Date.init,
+        sleep: @escaping Sleep = { seconds in
+            try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1e9))
+        }
+    ) {
+        self.service = service
+        self.machine = machine
+        self.now = now
+        self.sleep = sleep
+    }
+
+    /// Whether `job` changes often enough to poll it every 2 s: the service is working on it,
+    /// or the player is tagging or importing it. A job waiting for the owner, or for a search
+    /// hours away, isn't.
+    nonisolated static func isMoving(_ job: DownloadJob) -> Bool {
+        switch job.state {
+        case .queued, .searching, .candidateFound, .downloading, .downloaded, .approved,
+            .importing:
+            true
+        case .staged: job.tagging.status == .none || job.tagging.status == .running
+        case .notFound, .failed, .imported, .rejected, .cancelled: false
+        }
+    }
+
+    /// How long to wait before the next poll.
+    nonisolated static func interval(windowOpen: Bool, jobs: some Sequence<DownloadJob>)
+        -> TimeInterval
+    {
+        windowOpen && jobs.contains(where: isMoving) ? activeInterval : idleInterval
+    }
+
+    /// Starts polling, with a poll now.
+    func start() { restart(pollingFirst: true) }
+
+    /// Stops polling, at quit.
+    func stop() {
+        polling?.cancel()
+        polling = nil
+    }
+
+    /// Opening the window polls at once and then at its pace; closing it cancels the request
+    /// running and goes back to the idle pace.
+    func setWindowOpen(_ open: Bool) {
+        guard open != isWindowOpen else { return }
+        isWindowOpen = open
+        guard polling != nil else { return }
+        restart(pollingFirst: open)
+    }
+
+    private func restart(pollingFirst: Bool) {
+        polling?.cancel()
+        polling = Task { [weak self] in
+            var pollNow = pollingFirst
+            while !Task.isCancelled {
+                guard let self else { return }
+                if pollNow { await self.poll() }
+                pollNow = true
+                let wait = Self.interval(windowOpen: self.isWindowOpen, jobs: self.jobs.rows.values)
+                let sleep = self.sleep
+                do {
+                    try await sleep(wait)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    /// Brings the jobs up to date. A reply that resets the epoch drops every row first; a
+    /// failure keeps the rows as they were, dimmed, and says why.
+    func poll() async {
+        let refreshed = service.refreshed
+        let jobs = jobs
+        do throws(RecommenderError) {
+            let next = try await refreshed(jobs)
+            guard !Task.isCancelled else { return }
+            self.jobs = next
+            lastGood = now()
+            connection = .answering
+            took(Array(next.rows.values))
+        } catch {
+            // A poll the window's closing cancelled isn't the service failing.
+            guard !Task.isCancelled else { return }
+            connection = .down(error.description, lastGood: lastGood)
+        }
+        buildRows()
+        changed()
+    }
+
+    /// Takes a job a call the window made answered with, so the row shows it before the next
+    /// poll.
+    func took(_ job: DownloadJob) {
+        jobs.rows[job.id] = job
+        buildRows()
+        changed()
+    }
+
+    private func buildRows() {
+        let answering = connection == .answering
+        rows = jobs.rows.values.compactMap {
+            DownloadRow($0, machine: machine, answering: answering)
+        }.sorted(by: DownloadRow.listed)
+    }
+}

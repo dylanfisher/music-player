@@ -5,7 +5,7 @@ import Settings
 /// Talks to music-recommender, the service that downloads albums from Soulseek and stages them
 /// for review (ADR 0137). Every route is a POST of a JSON object with the bearer token, over
 /// `LocalHTTPClient`, to an address the owner typed into Settings.
-struct RecommenderClient: Sendable {
+package struct RecommenderClient: Sendable {
     let host: IPAddress
     let port: UInt16
     let token: ServiceToken

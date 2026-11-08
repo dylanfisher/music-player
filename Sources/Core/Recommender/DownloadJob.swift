@@ -1,21 +1,21 @@
 /// A download job as the service reports it, whole, as it is now. Times are seconds since 1970.
 package struct DownloadJob: Equatable, Sendable, Decodable {
     /// How the job was made.
-    enum Source: String, Equatable, Sendable, Codable {
+    package enum Source: String, Equatable, Sendable, Codable {
         case manual, upgrade, recommendation
     }
 
     /// The step a `failed` job failed at.
-    enum FailedStage: String, Equatable, Sendable, Codable {
+    package enum FailedStage: String, Equatable, Sendable, Codable {
         case search, download, stage, tag, move, delete, carry
     }
 
     /// The release, from the snapshot it was made with.
-    struct Release: Equatable, Sendable, Decodable {
-        var releaseID: Int
-        var artist: String
-        var title: String
-        var year: Int?
+    package struct Release: Equatable, Sendable, Decodable {
+        package var releaseID: Int
+        package var artist: String
+        package var title: String
+        package var year: Int?
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case releaseID = "release_id"
@@ -29,7 +29,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             self.year = year
         }
 
-        init(from decoder: any Decoder) throws {
+        package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             releaseID = try container.decode(Int.self, forKey: .releaseID)
             artist = try container.decode(String.self, forKey: .artist)
@@ -39,11 +39,11 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     }
 
     /// A `downloading` job's transfers so far.
-    struct Progress: Equatable, Sendable, Decodable {
-        var filesDone: Int
-        var filesTotal: Int
-        var bytesDone: Int
-        var bytesTotal: Int
+    package struct Progress: Equatable, Sendable, Decodable {
+        package var filesDone: Int
+        package var filesTotal: Int
+        package var bytesDone: Int
+        package var bytesTotal: Int
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case filesDone = "files_done"
@@ -52,7 +52,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             case bytesTotal = "bytes_total"
         }
 
-        init(from decoder: any Decoder) throws {
+        package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             filesDone = try container.decode(Int.self, forKey: .filesDone)
             filesTotal = try container.decode(Int.self, forKey: .filesTotal)
@@ -69,12 +69,12 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
 
         /// The Soulseek user.
         var peer: String
-        var format: Format
-        var bitDepth: Int?
-        var sampleRateHz: Int?
-        var bitrateKbps: Int?
-        var variableBitrate: Bool?
-        var fileCount: Int
+        package var format: Format
+        package var bitDepth: Int?
+        package var sampleRateHz: Int?
+        package var bitrateKbps: Int?
+        package var variableBitrate: Bool?
+        package var fileCount: Int
         var bytes: Int
         /// The index into the snapshot's `tracklists` the files matched.
         var tracklist: Int
@@ -134,13 +134,13 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
 
     /// What the player last reported of its tag run.
     package struct Tagging: Equatable, Sendable, Decodable {
-        enum Status: String, Equatable, Sendable, Codable {
+        package enum Status: String, Equatable, Sendable, Codable {
             case none, running, clean, discrepancy, error
         }
 
-        var status: Status
+        package var status: Status
         /// Empty unless `discrepancy` or `error`.
-        var reasons: [String]
+        package var reasons: [String]
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case status, reasons
@@ -159,8 +159,8 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     }
 
     /// A live tagging lease or review claim: whose, and until when.
-    struct Hold: Equatable, Sendable, Decodable {
-        var machine: String
+    package struct Hold: Equatable, Sendable, Decodable {
+        package var machine: String
         var expiresAt: Int
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
@@ -173,7 +173,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             self.expiresAt = expiresAt
         }
 
-        init(from decoder: any Decoder) throws {
+        package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             machine = try container.decode(String.self, forKey: .machine)
             expiresAt = try container.decode(Int.self, forKey: .expiresAt)
@@ -204,34 +204,34 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     }
 
     /// Never reused.
-    var id: Int
+    package var id: Int
     /// The store's revision when the job last changed; it only grows.
     package var revision: Int
-    var source: Source
-    var formatPolicy: FormatPolicy
-    var release: Release
-    var state: JobState
+    package var source: Source
+    package var formatPolicy: FormatPolicy
+    package var release: Release
+    package var state: JobState
     /// Set with `failed` only.
-    var failedStage: FailedStage?
+    package var failedStage: FailedStage?
     /// One line for the window: why it's `not_found`, failed or cancelled.
-    var reason: String?
+    package var reason: String?
     /// Search attempts so far, from 1.
     var attempt: Int
     var nextAttemptAt: Int?
-    var progress: Progress?
-    var candidate: Candidate?
+    package var progress: Progress?
+    package var candidate: Candidate?
     /// In release order; empty until a candidate is chosen.
     var files: [File]
     /// From `staged` on: the job's folder in the staging folder, one component.
-    var stagedPath: String?
-    var tagging: Tagging
-    var lease: Hold?
-    var review: Hold?
+    package var stagedPath: String?
+    package var tagging: Tagging
+    package var lease: Hold?
+    package var review: Hold?
     /// Set for `source` `upgrade` only.
     var upgrade: Upgrade?
     /// Whether a rejected or cancelled job's files are still being deleted.
     var cleanupPending: Bool
-    var createdAt: Int
+    package var createdAt: Int
     var updatedAt: Int
 
     private enum CodingKeys: String, CodingKey, CaseIterable {

@@ -2,7 +2,7 @@
 /// to. A job that changed comes whole and replaces its row; nothing is sent as a difference.
 package struct DownloadJobs: Equatable, Sendable {
     /// Every job the service has, by id, as of the last page taken.
-    var rows: [Int: DownloadJob] = [:]
+    package var rows: [Int: DownloadJob] = [:]
     /// The store's epoch from the last reply; nil before the first.
     var epoch: String?
     /// The revision of the last job taken, 0 before any.

@@ -30,7 +30,7 @@ extension RecommenderClient {
 
     /// Sends `event` for the job `id` as `machine`, the same name on every request from this
     /// Mac.
-    func handoff(_ id: Int, machine: String, _ event: HandoffEvent)
+    package func handoff(_ id: Int, machine: String, _ event: HandoffEvent)
         async throws(RecommenderError) -> DownloadJob
     {
         try await call(
@@ -41,7 +41,7 @@ extension RecommenderClient {
 
     /// `jobs` brought up to date: every page from its epoch and revision until the service
     /// has no more.
-    func refreshed(_ jobs: DownloadJobs) async throws(RecommenderError) -> DownloadJobs {
+    package func refreshed(_ jobs: DownloadJobs) async throws(RecommenderError) -> DownloadJobs {
         var jobs = jobs
         while true {
             let page = try await call(

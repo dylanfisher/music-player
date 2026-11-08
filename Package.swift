@@ -206,6 +206,14 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Downloads",
+            dependencies: [
+                "Discogs", "DisplayText", "Library", "Log", "Recommender", "Settings", "TagWriter",
+            ],
+            path: "Sources/Features/Downloads",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Spectrum",
             dependencies: ["Analysis", "DisplayText", "Library"],
             path: "Sources/Features/Spectrum",
@@ -348,6 +356,11 @@ let package = Package(
                 "Discogs", "DiscogsTagger", "Fixtures", "Library", "Metadata", "Settings",
                 "TagWriter",
             ],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "DownloadsTests",
+            dependencies: ["Discogs", "Downloads", "Library", "LocalNetwork", "Recommender"],
             swiftSettings: strictSwift
         ),
         .testTarget(

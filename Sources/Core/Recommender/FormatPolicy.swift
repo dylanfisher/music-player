@@ -1,5 +1,5 @@
 /// Which files a download takes (the service's `docs/api.md`, Format policies).
-enum FormatPolicy: String, Equatable, Sendable, Codable, CaseIterable {
+package enum FormatPolicy: String, Equatable, Sendable, Codable, CaseIterable {
     /// FLAC files. The default.
     case flac
     /// FLAC or ALAC.
