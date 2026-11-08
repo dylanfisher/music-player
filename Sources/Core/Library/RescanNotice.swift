@@ -12,7 +12,7 @@ public struct RescanNotice: Equatable, Sendable {
         self.parts = refilled
     }
 
-    public var title: String { "The library needs a rescan" }
+    public var title: String { "Rescan the Library?" }
 
     public var text: String {
         (parts.compactMap(\.rescanWhy)

@@ -34,6 +34,8 @@ public final class LibraryIndex {
     /// memory only: a quit in the middle of the rescan reads as a plain scan at the next
     /// launch (ADR 0136).
     private(set) var rebuiltParts: [SchemaPart] = []
+    /// Whether this open rebuilt the index, which the scans then fill again.
+    public var rebuiltIndex: Bool { rebuiltParts.contains(.index) }
     /// Unreadable files kept beside the library; older ones are deleted when another is moved.
     static let keptUnreadableFiles = 3
     /// The wall clock sync events are stamped by, in milliseconds since 1970; tests set their

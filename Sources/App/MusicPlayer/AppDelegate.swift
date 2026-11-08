@@ -215,6 +215,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             showConfigProblems()
             settings.startWatching()
+        } catch LibraryError.rescanDeclined {
+            // Quit at the rescan question, which left the index as it was.
+            NSApp.terminate(nil)
         } catch {
             fail("The library couldn't open", error)
         }
@@ -242,7 +245,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Rows for the table come from a connection of the main thread's own. It opens first,
         // so it alone may move an unreadable file aside, before any other connection opens.
-        let index = try LibraryIndex(at: databaseURL, movingAsideIfUnreadable: true)
+        let index = try LibraryIndex(
+            at: databaseURL, movingAsideIfUnreadable: true, confirmRescan: askToRescan)
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,

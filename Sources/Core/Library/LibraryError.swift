@@ -1,4 +1,4 @@
-enum LibraryError: Error, Equatable, CustomStringConvertible {
+public enum LibraryError: Error, Equatable, CustomStringConvertible {
     /// A stored warning or failure kind this build doesn't know, from a database another build
     /// wrote.
     case unknownKind(String)
@@ -21,7 +21,7 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
     /// The owner answered the rescan question with Quit, so the index was left as it was.
     case rescanDeclined
 
-    var description: String {
+    public var description: String {
         switch self {
         case .unknownKind(let name): "the library database holds an unknown kind \"\(name)\""
         case .notWatched(let path):

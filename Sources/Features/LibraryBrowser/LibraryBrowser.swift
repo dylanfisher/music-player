@@ -221,6 +221,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     ) {
         self.reader = reader
         self.index = index
+        status.rebuildingIndex = index.rebuiltIndex
         self.browserHeight = browserHeight
         model = BrowserModel(
             reader: reader, sortColumn: layout.sortColumn, ascending: layout.sortAscending,
