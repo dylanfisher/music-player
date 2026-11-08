@@ -345,6 +345,9 @@ final class FakeService: @unchecked Sendable {
                 if job.state != .imported {
                     try needClaim([.approved, .importing])
                     job.state = .imported
+                } else if let review = job.review, review.machine != me {
+                    // A repeat is answered unchanged unless another machine holds the job now.
+                    throw refuse(.claimed, review)
                 }
             case .rejected:
                 if job.state != .rejected {

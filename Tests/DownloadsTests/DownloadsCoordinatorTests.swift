@@ -520,3 +520,36 @@ private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
     await coordinator.take([])
     #expect(await coordinator.outboxReads == 2)
 }
+
+@Test func anImportedReportRefusedBecauseTheJobIsImportedAlreadyForgetsTheLedger() async throws {
+    // Another Mac finished the import and holds the claim now, so the repeat is refused.
+    let imported = job(1, .imported) {
+        $0.tagging = clean
+        $0.review = DownloadJob.Hold(machine: "Kitchen", expiresAt: 1_794_150_000)
+    }
+    let setup = try Setup([imported])
+    try setup.index.recordImportStep(
+        ImportStep(
+            jobID: 1, releaseID: 4242, kind: .moved, path: "job-1/01 First Song.flac",
+            destination: "library/A/01 First Song.flac", sizeBytes: 1))
+    _ = try setup.index.queueImportReport(job: 1, release: 4242, body: HandoffEvent.imported.json)
+    let coordinator = setup.coordinator()
+    await coordinator.take([imported])
+    #expect(try setup.outbox().isEmpty)
+    #expect(try setup.ledger(1).isEmpty)
+    #expect(await coordinator.problems.isEmpty, "expected, so nothing to tell the owner")
+}
+
+@Test func anImportedReportRefusedForAJobNotImportedKeepsTheLedger() async throws {
+    let setup = try Setup([job(1, .approved) { $0.tagging = clean }])
+    try setup.index.recordImportStep(
+        ImportStep(
+            jobID: 1, releaseID: 4242, kind: .moved, path: "job-1/01 First Song.flac",
+            destination: "library/A/01 First Song.flac", sizeBytes: 1))
+    _ = try setup.index.queueImportReport(job: 1, release: 4242, body: HandoffEvent.imported.json)
+    let coordinator = setup.coordinator()
+    await coordinator.take([try #require(setup.service.job(1))])
+    #expect(try setup.outbox().isEmpty)
+    #expect(try setup.ledger(1).count == 1, "a resume still needs it")
+    #expect(await coordinator.problems.count == 1)
+}

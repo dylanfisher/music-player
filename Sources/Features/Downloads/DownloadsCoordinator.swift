@@ -47,6 +47,8 @@ actor DownloadsCoordinator {
     private var opened: LibraryIndex?
     private var releasedStaleLeases = false
     private var recoveredStagedWrites = false
+    /// The state each job had at the last poll.
+    private var states: [Int: JobState] = [:]
     /// Whether the outbox may hold a report: at launch, which finds what a run before left, then
     /// after a report is queued or a send wasn't answered. A poll with none doesn't look.
     private var outboxMayHold = true
@@ -84,6 +86,7 @@ actor DownloadsCoordinator {
     /// from before it launched; then sends the outbox, and tags the jobs waiting for it.
     func take(_ jobs: [DownloadJob]) async {
         var jobs = jobs
+        states = Dictionary(jobs.map { ($0.id, $0.state) }, uniquingKeysWith: { _, last in last })
         if !releasedStaleLeases {
             releasedStaleLeases = true
             for (offset, job) in jobs.enumerated() where job.lease?.machine == machine {
@@ -272,10 +275,18 @@ actor DownloadsCoordinator {
                 continue
             }
             var delivered = true
+            var importedAlready = false
             do {
                 _ = try await effects.service.handoff(report.jobID, event)
             } catch {
                 switch error.kind {
+                case .refused(let refusal)
+                where event == .imported
+                    && (refusal.state == JobState.imported.rawValue
+                        || states[report.jobID] == .imported):
+                    // Another Mac finished the job: this Mac's ledger has nothing left to resume.
+                    importedAlready = true
+                    logger.info("job \(report.jobID) was imported already; its ledger is dropped")
                 case .refused, .badRequest:
                     delivered = false
                     note("job \(report.jobID)'s \(event.name) report was refused: \(error)")
@@ -286,7 +297,7 @@ actor DownloadsCoordinator {
                 }
             }
             guard remove(report) else { return false }
-            if delivered, event == .imported {
+            if event == .imported, delivered || importedAlready {
                 do {
                     try index().forgetImportJob(report.jobID)
                 } catch {

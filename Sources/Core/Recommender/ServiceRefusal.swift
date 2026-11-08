@@ -22,7 +22,8 @@ package struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConve
     var code: Code
     var message: String
     var jobID: Int? = nil
-    var state: String? = nil
+    /// For `illegalTransition`, the job's state.
+    package var state: String? = nil
     var machine: String? = nil
     var expiresAt: Int? = nil
 
