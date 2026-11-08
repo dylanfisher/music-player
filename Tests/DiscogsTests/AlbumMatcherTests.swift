@@ -423,22 +423,33 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(result.tier == .exact)
 }
 
-@Test func anArtistWithADiscogsSuffixOrAnANVIsFoundByItsName() throws {
+@Test func anArtistWithADiscogsSuffixOrAnANVIsFoundByEitherName() throws {
     // Discogs's "Soleil (2)", tagged as "Soleil".
     let suffixed = try match(
         album(stockholmTitles, artist: "Soleil"),
         releases: release(10, artist: "Soleil (2)", tracks: stockholm))
     #expect(suffixed.tier == .exact)
     // A credit printed with an ANV is found by the canonical name, which the owner's tags use
-    // (ADR 0128), and by the catalog number when tagged with the ANV.
+    // (ADR 0128), and by the ANV with no catalog number in the tags.
     let canonical = try match(
         album(stockholmTitles, artist: "Jesper Dahlbäck"),
         releases: release(10, artist: "Jesper Dahlbäck", anv: "Dahlbäck", tracks: stockholm))
     #expect(canonical.tier == .exact)
     let variation = try match(
-        album(stockholmTitles, artist: "Dahlbäck", label: "Svek", catalogNumber: "SK 032"),
+        album(stockholmTitles, artist: "Dahlbäck"),
         releases: release(10, artist: "Jesper Dahlbäck", anv: "Dahlbäck", tracks: stockholm))
     #expect(variation.tier == .exact)
+    #expect(variation.release?.id == 10)
+    // A release of a master that prints the ANV finds the master, and so its releases.
+    let ofMaster = try match(
+        album(stockholmTitles, artist: "Dahlbäck"),
+        masters: master(5, main: 11, artist: "Jesper Dahlbäck"),
+        releases: release(
+            10, artist: "Jesper Dahlbäck", anv: "Dahlbäck", master: 5, catno: "SK 031",
+            tracks: stockholm)
+            + release(11, artist: "Jesper Dahlbäck", master: 5, main: true, tracks: stockholm))
+    #expect(ofMaster.tier != .noCandidate)
+    #expect(Set([ofMaster.releaseID] + ofMaster.candidates.map(\.releaseID)) == [10, 11])
 }
 
 @Test func titlesAndArtistsAreAlsoTriedTheOtherWaysTheyAreTagged() throws {

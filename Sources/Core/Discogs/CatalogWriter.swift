@@ -109,7 +109,12 @@ final class CatalogWriter {
         try insertRelease.run(
             release.id, release.masterID, release.isMainRelease, release.title, release.country,
             release.released, try json(release.lists))
-        if release.masterID == nil {
+        if let master = release.masterID {
+            // A release can print a name its master doesn't, which finds the master too.
+            try addTitleKeys(
+                artists: release.artists, title: release.title, master: master,
+                variationsOnly: true)
+        } else {
             try addTitleKeys(artists: release.artists, title: release.title, release: release.id)
         }
         for barcode in Set(release.barcodes.map(CatalogKey.barcode)) where !barcode.isEmpty {
@@ -127,13 +132,19 @@ final class CatalogWriter {
     }
 
     /// The title keys of a master, or of a release with no master, which the matcher looks
-    /// albums up by.
+    /// albums up by: the artists by name and by the name variations (ANVs) the record prints,
+    /// as an album may be tagged with either. `variationsOnly` leaves out the keys of the
+    /// names, as for a release whose master has them.
     private func addTitleKeys(
-        artists: [CatalogArtistCredit], title: String, master: Int? = nil, release: Int? = nil
+        artists: [CatalogArtistCredit], title: String, master: Int? = nil, release: Int? = nil,
+        variationsOnly: Bool = false
     ) throws {
         let titleKey = CatalogKey.fold(title, title: true)
         guard !titleKey.isEmpty else { return }
-        for artistKey in CatalogKey.artistKeys(artists.map(\.name)).sorted() {
+        let names = CatalogKey.artistKeys(artists.map(\.name))
+        let variations = CatalogKey.artistKeys(artists.map { $0.nameVariation ?? $0.name })
+        let keys = variationsOnly ? variations.subtracting(names) : names.union(variations)
+        for artistKey in keys.sorted() {
             try insertTitleKey.run(artistKey, titleKey, master, release)
         }
     }
