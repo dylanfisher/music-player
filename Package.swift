@@ -299,7 +299,7 @@ let package = Package(
             name: "Bench",
             dependencies: [
                 "Analysis", "Artwork", "Commands", "Discogs", "DiscogsTagger", "DisplayText",
-                "Fixtures", "HALOutput",
+                "Fixtures", "HALOutput", "HTTPSClient",
                 "Library",
                 "LibraryBrowser",
                 "Metadata", "Palette", "Playback", "QueueView", "SQLite", "Settings", "TagEditor",

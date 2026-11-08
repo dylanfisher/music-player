@@ -11,7 +11,8 @@ import TagWriter
 /// per tier with its count, each an album list; the selected album's release beside its
 /// tracklist, file against track; and the buttons that review it and apply a tier. With a
 /// catalog it says which dump it's of, when it was imported, its size and where it is; without
-/// one it says so and offers the import, and Analyze stays off. After an import stopped before
+/// one it says so and offers the import, and Analyze stays off for Local Catalog; the Discogs
+/// API, and Both as the API alone, still analyze (ADR 0139). After an import stopped before
 /// it finished it offers Resume Import and Start Over.
 @MainActor
 final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
@@ -29,7 +30,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         checkboxWithTitle: "Skip Blu-ray, DVD and video", target: nil, action: nil)
     let sortArtistBox = NSButton(
         checkboxWithTitle: "Fill sort artist from album artist", target: nil, action: nil)
+    /// The API and Both items' tooltip without a token.
+    static let noTokenTip =
+        "No Discogs token in config.json: only releases already tagged with an ID are looked up"
     static let importTitle = "Import Discogs Dump…"
+
     static let reimportTitle = "Reimport Discogs Dump…"
     let importButton = NSButton(title: TaggerWindow.importTitle, target: nil, action: nil)
     let progress = NSProgressIndicator()
@@ -107,12 +112,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     // MARK: - Layout
 
     private func build(in window: NSWindow) {
-        sourcePopUp.autoenablesItems = false
-        for source in TaggerModel.Source.allCases {
-            sourcePopUp.addItem(withTitle: source.title)
-            sourcePopUp.lastItem?.isEnabled = source.isAvailable
-            if !source.isAvailable { sourcePopUp.lastItem?.toolTip = "Comes with the Discogs API" }
-        }
+        sourcePopUp.addItems(withTitles: DiscogsSource.allCases.map(\.title))
+        sourcePopUp.target = self
+        sourcePopUp.action = #selector(sourceChosen)
         scopePopUp.addItems(withTitles: TaggerModel.Scope.allCases.map(\.title))
         scopePopUp.target = self
         scopePopUp.action = #selector(scopeChosen)
@@ -269,9 +271,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         case .checking: catalogShown = nil
         case .ready(let status): catalogShown = (status.shown, status.detail, true)
         case .missing:
+            let asked = model.source == .catalog ? "" : ", so the Discogs API is asked"
             catalogShown = (
-                "There's no Discogs catalog on this Mac; Import Discogs Dump… builds one.", nil,
-                false
+                "There's no Discogs catalog on this Mac\(asked); Import Discogs Dump… builds one.",
+                nil, false
             )
         case .unusable(let why):
             let text = "The Discogs catalog can't be used: \(why)."
@@ -299,7 +302,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             // pass that happens to come.
             window?.contentView?.layoutSubtreeIfNeeded()
         }
-        sourcePopUp.selectItem(at: TaggerModel.Source.allCases.firstIndex(of: model.source)!)
+        sourcePopUp.selectItem(at: DiscogsSource.allCases.firstIndex(of: model.source)!)
+        sourcePopUp.isEnabled = !model.isBusy
+        let tokenTip = model.hasToken() ? nil : Self.noTokenTip
+        for (item, source) in zip(sourcePopUp.itemArray, DiscogsSource.allCases) {
+            item.toolTip = source == .catalog ? nil : tokenTip
+        }
         scopePopUp.selectItem(at: TaggerModel.Scope.allCases.firstIndex(of: model.scope)!)
         scopePopUp.isEnabled = !model.isBusy
         importButton.isEnabled = !model.isBusy
@@ -317,7 +325,21 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             statusLabel.stringValue = model.status
         case .analyzing(let done, let total):
             stoppable = true
-            show(done, of: total, "Analyzing \(number(done)) of \(number(total)) albums")
+            let api = model.matchProgress.flatMap { progress in
+                progress.apiAlbumCount.map { (progress.apiAlbumsDone ?? 0, $0) }
+            }
+            if let (apiDone, apiTotal) = api {
+                show(
+                    apiDone, of: apiTotal,
+                    "Catalog \(number(done)) of \(number(total)), then Discogs \(number(apiDone))"
+                        + " of \(number(apiTotal))")
+            } else {
+                let what = model.runSource == .api ? "Asking Discogs about" : "Analyzing"
+                show(done, of: total, "\(what) \(number(done)) of \(number(total)) albums")
+            }
+            if let seconds = model.matchProgress?.waitingSeconds {
+                statusLabel.stringValue += "; waiting \(number(seconds)) s for Discogs's rate limit"
+            }
         case .reading(let done, let total):
             stoppable = true
             show(done, of: total, "Reading \(number(done)) of \(number(total)) files")
@@ -366,6 +388,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 [
                     summary.label, summary.catalogNumber, summary.country, summary.year,
                     summary.format, "Release \(summary.id)",
+                    album?.match.origin == .api ? "from the Discogs API" : "",
                 ]
                 .filter { !$0.isEmpty }.joined(separator: " · ")
         } else {
@@ -497,6 +520,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     }
 
     // MARK: - Actions
+
+    @objc private func sourceChosen() {
+        model.chooseSource(DiscogsSource.allCases[sourcePopUp.indexOfSelectedItem])
+    }
 
     @objc private func scopeChosen() {
         model.scope = TaggerModel.Scope.allCases[scopePopUp.indexOfSelectedItem]

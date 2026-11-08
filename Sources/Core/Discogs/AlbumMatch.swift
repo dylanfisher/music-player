@@ -55,12 +55,6 @@ public enum MatchOrigin: Equatable, Sendable {
     case catalog, api
 }
 
-/// What a matching run asks: the local catalog, the Discogs API, or both, the catalog first
-/// and the API for the albums it can't place (ADR 0139).
-public enum MatchSource: Equatable, Sendable {
-    case catalog, api, both
-}
-
 /// How far a matching run has got. In Both, `albumsDone` and `albumCount` are the catalog's
 /// pass and `apiAlbumsDone` and `apiAlbumCount` the API's, once it starts; with the API alone
 /// they're nil and the first two count the API's albums.

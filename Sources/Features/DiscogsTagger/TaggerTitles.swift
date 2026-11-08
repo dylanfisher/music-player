@@ -91,16 +91,6 @@ func openOnDiscogs(_ id: Int, through open: (URL) -> Void = { NSWorkspace.shared
     open(discogsPage(id))
 }
 
-extension TaggerModel.Source {
-    var title: String {
-        switch self {
-        case .catalog: "Local Catalog"
-        case .api: "Discogs API"
-        case .both: "Both"
-        }
-    }
-}
-
 extension DiscogsField {
     /// As the Field Mapping and View Changes sheets name it, after YATE's Release screen: the
     /// track table's column's title where the two are the same tag.

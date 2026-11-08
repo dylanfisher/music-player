@@ -226,7 +226,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     let tagger = TaggerModel(
         effects: .init(
             albums: { [one] }, reviews: { [:] }, review: { _, _ in },
-            match: { albums, _, _, _ in albums.map { matches($0, nil) } },
+            match: { albums, _, _, _, _ in albums.map { matches($0, nil) } },
             summaries: { _ in [] }, release: { _ in nil },
             read: { ids, _ in
                 seen.read(ids)
@@ -256,7 +256,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     let tagger = TaggerModel(
         effects: .init(
             albums: { [] }, reviews: { [:] }, review: { _, _ in },
-            match: { _, _, _, _ in [] }, summaries: { _ in [] }, release: { _ in nil },
+            match: { _, _, _, _, _ in [] }, summaries: { _ in [] }, release: { _ in nil },
             read: { _, _ in ([], []) },
             checkCatalog: {
                 checks.read([])

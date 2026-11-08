@@ -20,14 +20,6 @@ final class TaggerModel {
         case unmatched
     }
 
-    /// Where releases come from. Only the local catalog until phase 52; the window shows the
-    /// others disabled.
-    enum Source: CaseIterable {
-        case catalog, api, both
-
-        var isAvailable: Bool { self == .catalog }
-    }
-
     enum CatalogState: Equatable {
         case checking
         case ready(CatalogStatus)
@@ -86,11 +78,11 @@ final class TaggerModel {
         var albums: @Sendable () async throws -> [DiscogsAlbum]
         var reviews: @Sendable () async throws -> [Int64: DiscogsReview]
         var review: @Sendable (DiscogsReview?, [Int64]) async throws -> Void
-        /// Matches the albums, taking the chosen releases and leaving out video releases when
-        /// the flag is set.
+        /// Matches the albums from the source given, taking the chosen releases and leaving
+        /// out video releases when the flag is set.
         var match:
             @Sendable (
-                [DiscogsAlbum], [Int64: Int], Bool,
+                [DiscogsAlbum], [Int64: Int], Bool, DiscogsSource,
                 @escaping @Sendable (AlbumMatchProgress) -> Void
             ) async throws -> [AlbumMatch]
         var summaries: @Sendable ([Int]) async throws -> [ReleaseSummary]
@@ -117,7 +109,18 @@ final class TaggerModel {
     private(set) var activity = Activity.idle
     /// What the last Analyze, import or Apply ended with, for the line under the toolbar.
     private(set) var status = ""
-    var source = Source.catalog
+    /// Where Analyze looks releases up. Until the first catalog check, the saved one, or the
+    /// catalog; then, when none was saved, the catalog when there is one, else the API.
+    private(set) var source: DiscogsSource
+    /// Whether a source was saved or chosen, which the first catalog check then leaves alone.
+    private var sourceChosen: Bool
+    /// The running Analyze's last progress: the API's albums and its waits.
+    private(set) var matchProgress: AlbumMatchProgress?
+    /// Whether the config file has a Discogs token, without which the API only looks up the
+    /// release ids albums are tagged with.
+    var hasToken: () -> Bool = { false }
+    /// Saves the source the user chose, as this Mac's.
+    var sourceSaved: (DiscogsSource) -> Void = { _ in }
     var scope = Scope.library
     private(set) var albums: [Album] = [] {
         didSet { tierOrder = [:] }
@@ -151,9 +154,11 @@ final class TaggerModel {
 
     init(
         effects: Effects, mapping: DiscogsMapping, savedMappings: [NamedDiscogsMapping],
-        choices: TaggerChoices
+        choices: TaggerChoices, source: DiscogsSource? = nil
     ) {
         self.effects = effects
+        self.source = source ?? .catalog
+        sourceChosen = source != nil
         self.mapping = mapping
         self.savedMappings = savedMappings
         self.choices = choices
@@ -188,8 +193,32 @@ final class TaggerModel {
     }
 
     var isBusy: Bool { activity != .idle }
+    /// Whether Analyze can start: the catalog source needs a catalog in place, Both a finished
+    /// check, and the API nothing more (ADR 0139).
     var canAnalyze: Bool {
-        if case .ready = catalog { !isBusy } else { false }
+        guard !isBusy else { return false }
+        return switch source {
+        case .catalog: isCatalogReady
+        case .api: true
+        case .both: catalog != .checking
+        }
+    }
+
+    var isCatalogReady: Bool {
+        if case .ready = catalog { true } else { false }
+    }
+
+    /// The source a run asks: Both without a catalog, as on a Mac that has none, asks the API
+    /// alone.
+    var runSource: DiscogsSource { source == .both && !isCatalogReady ? .api : source }
+
+    /// Makes `source` the one Analyze asks, and saves it.
+    func chooseSource(_ source: DiscogsSource) {
+        guard source != self.source || !sourceChosen else { return }
+        self.source = source
+        sourceChosen = true
+        sourceSaved(source)
+        changed()
     }
 
     /// The albums of `tier`, by artist and then title.
@@ -228,6 +257,7 @@ final class TaggerModel {
         changed()
         catalog = await effects.checkCatalog()
         unfinished = await effects.unfinishedImport()
+        if !sourceChosen { source = isCatalogReady ? .catalog : .api }
         changed()
     }
 
@@ -283,8 +313,9 @@ final class TaggerModel {
         return true
     }
 
-    /// Matches the scope's albums with the catalog, off the main thread, taking each album's
-    /// remembered review; the albums shown are replaced once it finishes.
+    /// Matches the scope's albums from the source, off the main thread, taking each album's
+    /// remembered review; the albums shown are replaced once it finishes. A Discogs error that
+    /// stops the run is one alert, and the albums shown stay the last run's.
     func analyze() {
         guard canAnalyze else { return }
         let selection: Set<Int64>
@@ -299,9 +330,12 @@ final class TaggerModel {
         run += 1
         let current = run
         activity = .analyzing(done: 0, total: 0)
+        matchProgress = nil
         status = ""
         changed()
         let scope = scope
+        let source = runSource
+        let alone = source != self.source
         let effects = effects
         let skipsVideo = choices.skipVideo
         let started = Date()
@@ -319,10 +353,12 @@ final class TaggerModel {
                 let chosen = reviews.compactMapValues { review -> Int? in
                     if case .chosen(let id) = review { id } else { nil }
                 }
-                let matches = try await effects.match(albums, chosen, skipsVideo) { progress in
+                let matches = try await effects.match(albums, chosen, skipsVideo, source) {
+                    progress in
                     Task { @MainActor [self] in
                         guard self.run == current, case .analyzing = activity else { return }
                         activity = .analyzing(done: progress.albumsDone, total: progress.albumCount)
+                        matchProgress = progress
                         changed()
                     }
                 }
@@ -335,8 +371,12 @@ final class TaggerModel {
                 status = String(
                     format: "Analyzed %@ albums in %.1f s", number(albums.count),
                     Date().timeIntervalSince(started))
+                if alone { status += "; with no catalog, Both asked the Discogs API alone" }
             } catch is CancellationError {
                 status = "Analyze stopped; the albums shown are the last run's"
+            } catch let error as DiscogsAPIError {
+                status = "Analyze stopped; the albums shown are the last run's"
+                failed(sentence(error.description), [])
             } catch {
                 status = "Analyze failed"
                 failed("The albums couldn't be matched", ["\(error)"])
@@ -376,7 +416,7 @@ final class TaggerModel {
         let album = albums[index].album
         do {
             let match = try await effects.match(
-                [album], [albumID: releaseID], choices.skipVideo
+                [album], [albumID: releaseID], choices.skipVideo, runSource
             ) { _ in }
             try await effects.review(.chosen(releaseID: releaseID), album.tracks.map(\.fileID))
             guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
@@ -576,6 +616,9 @@ final class TaggerModel {
         changed()
     }
 }
+
+/// `text` with its first letter capitalized, as an alert's message starts.
+private func sentence(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
 
 /// "Artist – Title", or the title alone, as the album list and the problems name an album.
 func albumTitle(_ album: DiscogsAlbum) -> String {

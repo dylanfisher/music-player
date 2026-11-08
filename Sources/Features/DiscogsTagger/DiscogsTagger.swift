@@ -39,15 +39,23 @@ public final class DiscogsTagger {
     public var dumpsFolder: () -> URL? = { nil }
     /// Saves the folder the user chose to import from.
     public var dumpsFolderChosen: (URL) -> Void = { _ in }
+    /// Saves the source the user chose, as this Mac's.
+    public var sourceChosen: (DiscogsSource) -> Void {
+        get { model.sourceSaved }
+        set { model.sourceSaved = newValue }
+    }
     /// The size, column widths and sort each sheet was left at, set before the window is
     /// first shown, and what saves them as a sheet closes.
     public var sheetLayouts = TaggerSheetLayouts()
     public var sheetLayoutsChosen: (TaggerSheetLayouts) -> Void = { _ in }
 
-    /// `reader` gives the albums and keeps the reviews; `catalog` is the catalog's file.
+    /// `reader` gives the albums and keeps the reviews; `catalog` is the catalog's file. `api`
+    /// gives the Discogs API as the config file's token has it now, which the app builds, so
+    /// this module reads no setting; `source` is the one this Mac last chose.
     public init(
         reader: LibraryReader, catalog: URL, mapping: DiscogsMapping,
         savedMappings: [NamedDiscogsMapping], choices: TaggerChoices,
+        source: DiscogsSource?, api: @escaping @MainActor @Sendable () -> DiscogsAPI,
         importing: @escaping Import
     ) {
         model = TaggerModel(
@@ -55,12 +63,14 @@ public final class DiscogsTagger {
                 albums: { try await reader.discogsAlbums() },
                 reviews: { try await reader.discogsReviews() },
                 review: { try await reader.setDiscogsReview($0, files: $1) },
-                match: {
+                match: { albums, chosen, skipping, source, progress in
                     try await matchAlbums(
-                        $0, catalogAt: catalog, choosing: $1, skippingVideo: $2, progress: $3)
+                        albums, catalogAt: catalog, source: source,
+                        api: source == .catalog ? nil : await api(), choosing: chosen,
+                        skippingVideo: skipping, progress: progress)
                 },
-                summaries: { try await releaseSummaries($0, catalogAt: catalog) },
-                release: { try await releaseDetail($0, catalogAt: catalog) },
+                summaries: { try await releaseSummaries($0, catalogAt: catalog, api: await api()) },
+                release: { try await releaseDetail($0, catalogAt: catalog, api: await api()) },
                 read: { ids, progress in
                     let paths = try await reader.paths(ids: ids)
                     let files = ids.compactMap { id in paths[id].map { (id: id, path: $0) } }
@@ -78,7 +88,8 @@ public final class DiscogsTagger {
                 checkCatalog: { await catalogState(at: catalog) },
                 unfinishedImport: { await blockingFileWork { unfinishedImport(of: catalog) } },
                 importCatalog: importing),
-            mapping: mapping, savedMappings: savedMappings, choices: choices)
+            mapping: mapping, savedMappings: savedMappings, choices: choices, source: source)
+        model.hasToken = { api().hasToken }
     }
 
     init(model: TaggerModel) {
@@ -101,7 +112,8 @@ public final class DiscogsTagger {
     }
 
     /// Shows the window, checking the catalog the first time. With tracks selected in the
-    /// library, it's scoped to their albums and, with a catalog in place, analyzes them at once.
+    /// library, it's scoped to their albums and, with a catalog in place and Local Catalog the
+    /// source, analyzes them at once. The API is never asked without a click on Analyze.
     public func show() {
         let opening = controller == nil
         if let controller {
@@ -115,7 +127,8 @@ public final class DiscogsTagger {
         guard opening || scoped else { return }
         Task {
             if opening { await model.checkCatalog() }
-            if scoped, model.canAnalyze { model.analyze() }
+            if scoped, model.source == .catalog, model.canAnalyze { model.analyze() }
+
         }
     }
 

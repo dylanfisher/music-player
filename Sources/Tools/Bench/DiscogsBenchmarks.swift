@@ -3,8 +3,16 @@ import Discogs
 import DiscogsTagger
 import Fixtures
 import Foundation
+import HTTPSClient
 import Library
 import Settings
+
+/// The Discogs API for the window's row, which never connects: the bench opens no socket to
+/// the internet.
+private let offlineDiscogs = DiscogsAPI(
+    token: nil, userAgent: DiscogsAPI.userAgent(version: "bench"),
+    transport: { _, _, _, _ throws(HTTPSError) in throw .offline },
+    cache: DiscogsCache(read: { _, _ in nil }, store: { _, _, _ in }))
 
 /// The releases in the import rows' fixture dump: about a thousandth of the 2026-11-01 dump.
 private let fixtureReleases = 20_000
@@ -224,6 +232,7 @@ let discogsBenchmarks = [
                     mapping: DiscogsPreset.oneToOne.mapping, savedMappings: [],
                     choices: TaggerChoices(
                         keepExistingValues: false, skipVideo: true, fillSortArtist: false),
+                    source: .catalog, api: { offlineDiscogs },
                     importing: { _, _, _ in throw CatalogImportError.stopped })
                 let start = DispatchTime.now().uptimeNanoseconds
                 tagger.show()

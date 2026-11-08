@@ -1,5 +1,6 @@
 import Foundation
 import Library
+import Settings
 
 /// Matches each of `albums` with the catalog at `catalog`, the Discogs API or both, as `source`
 /// says (ADRs 0131 and 0139), off the calling thread, in their order. The catalog is opened for
@@ -11,7 +12,7 @@ import Library
 /// others score (ADR 0133). `skippingVideo` leaves out the releases that are only Blu-ray, DVD
 /// or video (ADR 0132). `api` is required for `.api` and `.both`.
 public func matchAlbums(
-    _ albums: [DiscogsAlbum], catalogAt catalog: URL, source: MatchSource = .catalog,
+    _ albums: [DiscogsAlbum], catalogAt catalog: URL, source: DiscogsSource = .catalog,
     api: DiscogsAPI? = nil, choosing chosen: [Int64: Int], skippingVideo: Bool,
     progress: @escaping @Sendable (AlbumMatchProgress) -> Void
 ) async throws -> [AlbumMatch] {

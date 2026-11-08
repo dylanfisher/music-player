@@ -62,7 +62,7 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(window.importButton.title == "Import Discogs Dump…")
     #expect(window.importButton.superview === window.catalogLabel.superview, "beside the line")
     #expect(window.revealButton.isHidden)
-    #expect(window.sourcePopUp.itemArray.map { $0.isEnabled } == [true, false, false])
+    #expect(window.sourcePopUp.itemArray.map { $0.isEnabled } == [true, true, true])
     window.window?.close()
 }
 
@@ -439,7 +439,7 @@ private final class Checks: @unchecked Sendable {
     let tagger = TaggerModel(
         effects: .init(
             albums: { [] }, reviews: { [:] }, review: { _, _ in },
-            match: { _, _, _, _ in [] }, summaries: { _ in [] }, release: { _ in nil },
+            match: { _, _, _, _, _ in [] }, summaries: { _ in [] }, release: { _ in nil },
             read: { _, _ in ([], []) },
             checkCatalog: {
                 if checks.next() > 1 { gate.wait() }

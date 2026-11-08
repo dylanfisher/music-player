@@ -1,6 +1,7 @@
 import Foundation
 import HTTPSClient
 import Library
+import Settings
 import Testing
 
 @testable import Discogs
@@ -44,7 +45,7 @@ private func fixtureCatalog() throws -> DumpFolder {
 }
 
 private func run(
-    _ albums: [DiscogsAlbum], _ source: MatchSource, catalog: URL, api: DiscogsAPI?,
+    _ albums: [DiscogsAlbum], _ source: DiscogsSource, catalog: URL, api: DiscogsAPI?,
     choosing chosen: [Int64: Int] = [:], heard: Recorded<AlbumMatchProgress> = .init()
 ) async throws -> [AlbumMatch] {
     try await matchAlbums(

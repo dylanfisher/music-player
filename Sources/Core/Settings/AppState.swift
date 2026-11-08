@@ -99,6 +99,10 @@ public struct AppState: SettingsSchema {
     public let taggerSheets = Setting(
         "discogsTagger.sheets", title: "Discogs Tagger Sheets", default: TaggerSheetLayouts(),
         "The size, column widths and sort each of the Discogs tagger's sheets was left at.")
+    public let taggerSource = Setting<DiscogsSource?>(
+        "discogsTagger.source", title: "Discogs Tagger Source", default: nil,
+        "Where the Discogs tagger last looked releases up on this Mac. Null asks the catalog"
+            + " when there is one, else the Discogs API.")
     public let deviceProfiles = Setting(
         "output.profiles", title: "Device Profiles", default: DeviceProfiles(profiles: []),
         "Each output device's hog mode, digital volume and volume, and the rates and formats it"
