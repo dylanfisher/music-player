@@ -585,7 +585,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                         ? ["The albums' files already hold what the mapping writes."]
                         : plan.problems)
             }
-            let (message, detail) = TaggerModel.confirmation(plan)
+            let (message, detail) = TaggerModel.confirmation(plan, staged: model.isStaged)
             let question = NSAlert()
             question.messageText = message
             question.informativeText = detail

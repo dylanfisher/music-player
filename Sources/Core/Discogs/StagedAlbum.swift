@@ -6,7 +6,7 @@ import Recommender
 /// A job music-recommender staged, as AutoTag takes it: the release it downloaded, where, in
 /// what format, and its files as the service reported them.
 package struct StagedJob: Sendable {
-    var releaseID: Int
+    package var releaseID: Int
     /// As the snapshot spelled it, for a file name that starts with it.
     var artist: String
     /// The job's folder in the staging folder, one component: its `stagedPath`.
@@ -30,9 +30,9 @@ extension StagedJob {
 /// A staged job's files read for matching (ADR 0138): each with a synthetic negative id, so
 /// none can be taken for a file in the index, and the album the matcher compares, which
 /// nothing here writes.
-struct StagedAlbum: Sendable {
+package struct StagedAlbum: Sendable {
     /// The album's id, which no album in the index has.
-    static let albumID: Int64 = -1
+    package static let albumID: Int64 = -1
     /// The largest file the service stages, which a file on the share is held to again.
     static let maxFileBytes = 2048 * 1024 * 1024
 

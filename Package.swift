@@ -353,8 +353,8 @@ let package = Package(
         .testTarget(
             name: "DiscogsTaggerTests",
             dependencies: [
-                "Discogs", "DiscogsTagger", "Fixtures", "Library", "Metadata", "Settings",
-                "TagWriter",
+                "Discogs", "DiscogsTagger", "Fixtures", "Library", "Metadata", "Recommender",
+                "Settings", "TagWriter",
             ],
             swiftSettings: strictSwift
         ),

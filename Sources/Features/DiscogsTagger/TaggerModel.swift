@@ -109,6 +109,8 @@ final class TaggerModel {
     }
 
     private let effects: Effects
+    /// The staged job the tagger is open on; nil for the library's tagger.
+    let staged: Staged?
     private(set) var catalog = CatalogState.checking
     /// An import stopped, quit or killed before it finished, which Resume Import carries on.
     private(set) var unfinished: UnfinishedImport?
@@ -149,9 +151,10 @@ final class TaggerModel {
 
     init(
         effects: Effects, mapping: DiscogsMapping, savedMappings: [NamedDiscogsMapping],
-        choices: TaggerChoices
+        choices: TaggerChoices, staged: Staged? = nil
     ) {
         self.effects = effects
+        self.staged = staged
         self.mapping = mapping
         self.savedMappings = savedMappings
         self.choices = choices
@@ -178,7 +181,7 @@ final class TaggerModel {
     private var rescoreWhenIdle = false
 
     /// The changes `album`'s files would get from the mapping, with the choices applied.
-    private func changeSet(_ files: [AlbumFile], _ album: Album) -> AlbumChangeSet {
+    func changeSet(_ files: [AlbumFile], _ album: Album) -> AlbumChangeSet {
         Discogs.changeSet(
             for: files, match: album.match,
             mapping: choices.keepExistingValues ? mapping.keepingExistingValues() : mapping,
@@ -314,6 +317,8 @@ final class TaggerModel {
                         album: album, match: match, review: reviews[album.id],
                         chosen: chosen[album.id])
                 }
+                // A staged job's one album opens on its tier's tab, whichever it is.
+                if staged != nil, let only = self.albums.first { tab = only.match.tier }
                 if selected == nil { selectedID = self.albums(in: tab).first?.id }
                 status = String(
                     format: "Analyzed %@ albums in %.1f s", number(albums.count),
@@ -509,15 +514,21 @@ final class TaggerModel {
         return plan
     }
 
+    /// What a staged write can't do, for the sheet and the status line: its journal is its
+    /// own, for a crash, and stays out of Edit > Undo (ADR 0138).
+    static let stagedWrite = " These are staged files: Edit > Undo doesn't put them back."
+
     /// The question Apply's confirmation sheet asks.
-    static func confirmation(_ plan: ApplyPlan) -> (message: String, detail: String) {
+    static func confirmation(_ plan: ApplyPlan, staged: Bool = false) -> (
+        message: String, detail: String
+    ) {
         let albums = plan.albumIDs.count
         let message =
             "Change \(number(plan.fieldCount)) tags in \(number(plan.files.count)) files of "
             + "\(number(albums)) album\(albums == 1 ? "" : "s")?"
         var detail =
             "Each file gets the values the field mapping writes, as View Changes shows them."
-            + " Undo Tag Edit puts them all back."
+            + (staged ? Self.stagedWrite : " Undo Tag Edit puts them all back.")
         if !plan.problems.isEmpty {
             detail +=
                 "\n\n\(plan.problems.count) left out: "
@@ -528,7 +539,7 @@ final class TaggerModel {
     }
 
     /// Lets an album whose files weren't all written be applied again.
-    private func reopen(_ plan: ApplyPlan, unwritten: Set<String>) {
+    func reopen(_ plan: ApplyPlan, unwritten: Set<String>) {
         let failed = Set(unwritten.compactMap { plan.albumOfPath[$0] })
         guard !failed.isEmpty else { return }
         for index in albums.indices where failed.contains(albums[index].id) {
@@ -543,14 +554,18 @@ final class TaggerModel {
     /// Hands the plan's edits to the writer: the user has confirmed them.
     func apply(_ plan: ApplyPlan) {
         guard !plan.files.isEmpty else { return }
-        write(plan.files) { [weak self] unwritten in self?.reopen(plan, unwritten: unwritten) }
+        if let staged {
+            applyStaged(plan, staged)
+        } else {
+            write(plan.files) { [weak self] unwritten in self?.reopen(plan, unwritten: unwritten) }
+        }
         let applied = Set(plan.albumIDs)
         for index in albums.indices where applied.contains(albums[index].id) {
             albums[index].applied = true
         }
         status =
             "Writing \(number(plan.fieldCount)) tags to \(number(plan.files.count)) files;"
-            + " Undo Tag Edit puts them back"
+            + (staged == nil ? " Undo Tag Edit puts them back" : Self.stagedWrite)
         changed()
     }
 }

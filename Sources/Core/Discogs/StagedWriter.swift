@@ -7,7 +7,7 @@ import TagWriter
 /// journal of its own, so a crash mid-write is put back at the next write on this Mac and
 /// Edit > Undo never sees it. Nothing here tells the library watcher, so no staged file is
 /// read into the index. Calls block on file I/O; make them off the main thread.
-struct StagedWriter: Sendable {
+package struct StagedWriter: Sendable {
     /// Where the staged journal is kept under the app's data directory, apart from the main
     /// one's `tag-undo`.
     static let folderName = "staged-tags"
@@ -45,11 +45,13 @@ struct StagedWriter: Sendable {
         guard read.problems.isEmpty else { return .error(read.problems) }
         let left = changeSet(for: read.files, match: match, mapping: mapping.overwriting())
             .files.flatMap(\.changes)
-        guard left.isEmpty else {
-            return .discrepancy(
-                ["the files read back with \(left.count) tags still to change"])
-        }
-        return .clean
+        return Self.verdict(readingBack: left.count)
+    }
+
+    /// The verdict of files read back after a staged write with `left` tags the mapping would
+    /// still change: clean only when there are none.
+    package static func verdict(readingBack left: Int) -> AutoTagRun.Verdict {
+        left == 0 ? .clean : .discrepancy(["the files read back with \(left) tags still to change"])
     }
 
     /// Writes `edits` with the staged journal and nothing else: the write the staged tagger's
