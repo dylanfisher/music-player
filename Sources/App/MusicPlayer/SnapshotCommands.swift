@@ -103,7 +103,7 @@ extension AppDelegate {
     func libraryDatabase() async throws -> LibraryDatabase {
         guard let folder = snapshotFolder else { throw CancellationError() }
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
-        let lastFailure = snapshotScheduler?.lastFailure
+        let lastProblem = snapshotScheduler?.lastProblem
         return try await Task.detached {
             LibraryDatabase(
                 indexPath: databaseURL.path, indexBytes: try Database.sizeBytes(at: databaseURL),
@@ -111,7 +111,7 @@ extension AppDelegate {
                     LibraryDatabase.Snapshot(
                         path: $0.url.path, day: $0.day, written: $0.written, bytes: $0.bytes,
                         beforeRestore: $0.isBeforeRestore)
-                }, lastFailure: lastFailure)
+                }, lastProblem: lastProblem)
         }.value
     }
 

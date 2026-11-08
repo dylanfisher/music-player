@@ -222,3 +222,20 @@ private struct Refused: Error {}
     }
     #expect(try applyPendingRestore(databaseURL: library.databaseURL) == .none)
 }
+
+/// The index's snapshot before the restore fails: the unpacked file goes too, and nothing waits.
+@Test func aFailedSnapshotBeforeARestoreLeavesNothingPending() throws {
+    let library = try SnapshotTestLibrary()
+    let snapshot = try writeSnapshot(
+        of: library.index(), into: library.snapshotFolder, on: Date().addingTimeInterval(-86_400))
+    // A file where the folder for the snapshot before the restore should be.
+    let blocked = library.directory.appendingPathComponent("Blocked")
+    try Data().write(to: blocked)
+    #expect(throws: (any Error).self) {
+        try prepareRestore(
+            of: snapshot, databaseURL: library.databaseURL, snapshotFolder: blocked, now: Date())
+    }
+    let left = try names(in: library.directory)
+    #expect(!left.contains { $0.hasPrefix("library.sqlite.restoring") })
+    #expect(!left.contains("restore.pending"))
+}

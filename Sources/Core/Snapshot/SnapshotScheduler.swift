@@ -12,7 +12,7 @@ public final class SnapshotScheduler: @unchecked Sendable {
     private let databaseURL: URL
     /// Guards the fields below it.
     private let lock = NSLock()
-    private var failure: String?
+    private var problem: String?
     /// Whether a daily job is waiting to run, so a second ask doesn't queue another.
     private var queued = false
 
@@ -20,8 +20,8 @@ public final class SnapshotScheduler: @unchecked Sendable {
         self.databaseURL = databaseURL
     }
 
-    /// Why the last snapshot failed, or nil when the last one tried was written.
-    public var lastFailure: String? { lock.withLock { failure } }
+    /// What went wrong with the last snapshot, as Settings says it, or nil when nothing did.
+    public var lastProblem: String? { lock.withLock { problem } }
 
     /// A job that writes the day's snapshot into `folder` unless it has one, for the caller to
     /// run between scans; nil while an earlier one hasn't run, so a second ask queues nothing.
@@ -52,12 +52,19 @@ public final class SnapshotScheduler: @unchecked Sendable {
     }
 
     /// Back Up Now: writes the snapshot of the day `now` falls on into `folder`, replacing the
-    /// day's, and rotates. Returns whether it worked; `lastFailure` says why not.
+    /// day's, and rotates. Returns whether it was written; `lastProblem` says what went wrong.
     @discardableResult
     public func write(into folder: URL, now: Date) -> Bool {
         do {
             try writeSnapshot(of: try LibraryIndex(at: databaseURL), into: folder, on: now)
-            lock.withLock { failure = nil }
+            lock.withLock { problem = nil }
+            return true
+        } catch SnapshotError.notRotated(let detail) {
+            logger.error("snapshotted the library, but older snapshots weren't deleted: \(detail)")
+            lock.withLock {
+                problem =
+                    "The last snapshot was written, but older ones couldn't be deleted: \(detail)"
+            }
             return true
         } catch {
             record(error)
@@ -67,6 +74,6 @@ public final class SnapshotScheduler: @unchecked Sendable {
 
     private func record(_ error: any Error) {
         logger.error("couldn't snapshot the library: \(error)")
-        lock.withLock { failure = "\(error)" }
+        lock.withLock { problem = "The last snapshot failed: \(error)" }
     }
 }

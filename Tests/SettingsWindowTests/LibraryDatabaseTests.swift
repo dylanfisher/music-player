@@ -15,7 +15,7 @@ private let older = LibraryDatabase.Snapshot(
     written: Date(timeIntervalSince1970: 1_793_900_000), bytes: 4_100_000, beforeRestore: false)
 private let database = LibraryDatabase(
     indexPath: home + "/Library/Application Support/MusicPlayer/library.sqlite",
-    indexBytes: 25_000_000, snapshots: [newest, older], lastFailure: nil)
+    indexBytes: 25_000_000, snapshots: [newest, older], lastProblem: nil)
 
 @Test func theLastSnapshotRowSaysWhenOrWhyNot() {
     #expect(database.lastSnapshotText == LibraryDatabase.writtenText(newest.written))
@@ -23,8 +23,8 @@ private let database = LibraryDatabase(
     none.snapshots = []
     #expect(none.lastSnapshotText == "None yet")
     var failed = database
-    failed.lastFailure = "the disk is full"
-    #expect(failed.lastSnapshotText == "Last snapshot failed: the disk is full")
+    failed.lastProblem = "The last snapshot failed: the disk is full"
+    #expect(failed.lastSnapshotText == "The last snapshot failed: the disk is full")
     #expect(database.pathText == "~/Library/Application Support/MusicPlayer/library.sqlite")
     #expect(
         database.sizeText

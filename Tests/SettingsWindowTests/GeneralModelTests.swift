@@ -42,7 +42,7 @@ private func actions(
     showHealth: @escaping () -> Void = {},
     libraryDatabase: @escaping () async throws -> LibraryDatabase = {
         LibraryDatabase(
-            indexPath: "/tmp/library.sqlite", indexBytes: 0, snapshots: [], lastFailure: nil)
+            indexPath: "/tmp/library.sqlite", indexBytes: 0, snapshots: [], lastProblem: nil)
     },
     revealIndex: @escaping () -> Void = {}, backUpNow: @escaping () async -> Void = {},
     restoreSnapshot: @escaping (LibraryDatabase.Snapshot) -> Void = { _ in }

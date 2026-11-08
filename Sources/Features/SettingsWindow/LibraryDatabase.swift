@@ -33,14 +33,14 @@ public struct LibraryDatabase: Sendable, Equatable {
     public var indexBytes: Int
     /// Newest first.
     public var snapshots: [Snapshot]
-    /// Why the last snapshot failed, while the app has run, or nil.
-    public var lastFailure: String?
+    /// What went wrong with the last snapshot, while the app has run, in a sentence, or nil.
+    public var lastProblem: String?
 
-    public init(indexPath: String, indexBytes: Int, snapshots: [Snapshot], lastFailure: String?) {
+    public init(indexPath: String, indexBytes: Int, snapshots: [Snapshot], lastProblem: String?) {
         self.indexPath = indexPath
         self.indexBytes = indexBytes
         self.snapshots = snapshots
-        self.lastFailure = lastFailure
+        self.lastProblem = lastProblem
     }
 
     /// The index's path with the home folder as `~`.
@@ -48,9 +48,10 @@ public struct LibraryDatabase: Sendable, Equatable {
 
     var sizeText: String { Self.bytesText(indexBytes) }
 
-    /// The Last Snapshot row: why the last one failed, else when the newest was written.
+    /// The Last Snapshot row: what went wrong with the last one, else when the newest was
+    /// written.
     var lastSnapshotText: String {
-        if let lastFailure { return "Last snapshot failed: \(lastFailure)" }
+        if let lastProblem { return lastProblem }
         guard let newest = snapshots.first else { return "None yet" }
         return Self.writtenText(newest.written)
     }

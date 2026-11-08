@@ -26,8 +26,15 @@ public func prepareRestore(
         try removeIfThere(restoring)
         throw error
     }
-    try writeSnapshot(
-        of: LibraryIndex(at: databaseURL), into: snapshotFolder, on: now, beforeRestore: true)
+    do {
+        try writeSnapshot(
+            of: LibraryIndex(at: databaseURL), into: snapshotFolder, on: now, beforeRestore: true)
+    } catch SnapshotError.notRotated(let detail) {
+        logger.error("snapshotted the index before the restore, but \(detail)")
+    } catch {
+        try removeIfThere(restoring)
+        throw error
+    }
     try Data((snapshot.lastPathComponent + "\n").utf8).write(
         to: restoreMarkerURL(databaseURL), options: .atomic)
 }

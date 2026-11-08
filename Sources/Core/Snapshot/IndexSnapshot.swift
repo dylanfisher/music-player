@@ -32,7 +32,8 @@ public struct SnapshotFile: Equatable, Sendable {
 /// no longer keeps, and returns where it wrote (ADR 0142). The index is copied with
 /// `VACUUM INTO`, a read, which leaves it as it was; the copy is compressed beside the
 /// snapshot, then renamed over it, so the folder never holds a snapshot cut short under a
-/// snapshot's name.
+/// snapshot's name. When only the rotation fails, it throws `SnapshotError.notRotated`, with
+/// the snapshot written.
 @discardableResult
 func writeSnapshot(
     of index: LibraryIndex, into folder: URL, on date: Date, beforeRestore: Bool = false,
@@ -56,13 +57,18 @@ func writeSnapshot(
             removeLeftover(packed)
             throw error
         }
-        try rotateSnapshots(in: folder, calendar: calendar)
+        do {
+            try rotateSnapshots(in: folder, calendar: calendar)
+        } catch {
+            throw SnapshotError.notRotated("\(error)")
+        }
         return snapshot
     }
 }
 
 /// The snapshots in `folder`, the newest written first, and none while there is no folder.
-/// Other files there are left out.
+/// Other files there are left out, and so is a snapshot whose size or date can't be read,
+/// which is logged.
 public func snapshots(in folder: URL) throws -> [SnapshotFile] {
     let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
     let urls: [URL]
@@ -72,13 +78,17 @@ public func snapshots(in folder: URL) throws -> [SnapshotFile] {
     } catch CocoaError.fileReadNoSuchFile {
         return []
     }
-    return try urls.compactMap { url in
+    return urls.compactMap { url in
         guard let name = SnapshotName(fileName: url.lastPathComponent) else { return nil }
-        let values = try url.resourceValues(forKeys: Set(keys))
-        guard let bytes = values.fileSize, let written = values.contentModificationDate else {
-            throw SnapshotError.file(url.path, "its size or date can't be read")
+        do {
+            let values = try url.resourceValues(forKeys: Set(keys))
+            guard let bytes = values.fileSize, let written = values.contentModificationDate
+            else { throw SnapshotError.file(url.path, "its size or date can't be read") }
+            return SnapshotFile(name: name, url: url, bytes: bytes, written: written)
+        } catch {
+            logger.error("leaving out the snapshot \(url.path): \(error)")
+            return nil
         }
-        return SnapshotFile(name: name, url: url, bytes: bytes, written: written)
     }
     .sorted { ($0.written, $0.name) > ($1.written, $1.name) }
 }
