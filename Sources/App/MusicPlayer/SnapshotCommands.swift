@@ -60,6 +60,45 @@ extension AppDelegate {
         }
     }
 
+    /// Puts a prepared restore in place, then holds the index in use for as long as the app
+    /// runs. What happened is told once the window is up, since `fail` quits a launch that has
+    /// none. An index a failed restore couldn't move back throws, so none is opened.
+    func applyRestoreAtLaunch(databaseURL: URL) throws {
+        let outcome: Result<PendingRestore, any Error>
+        do {
+            outcome = .success(try applyPendingRestore(databaseURL: databaseURL))
+        } catch let error as Snapshot.SnapshotError {
+            if case .indexNotPutBack = error { throw error }
+            outcome = .failure(error)
+        } catch {
+            outcome = .failure(error)
+        }
+        indexInUse = try IndexInUse(databaseURL: databaseURL)
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.tell(outcome) }
+        }
+    }
+
+    private func tell(_ outcome: Result<PendingRestore, any Error>) {
+        let alert = NSAlert()
+        switch outcome {
+        case .success(.none): return
+        case .success(.applied(let name)):
+            alert.messageText = "The library was restored from \(name)"
+            alert.informativeText =
+                "The library as it was before is in the snapshot folder, as the snapshot marked"
+                + " “before a restore”."
+        case .success(.waiting(let reason)):
+            alert.messageText = "The snapshot wasn't restored yet"
+            alert.informativeText =
+                "\(reason.prefix(1).uppercased() + reason.dropFirst()). It's"
+                + " restored at the next launch."
+        case .failure(let error):
+            return fail(Self.restoreFailedTitle, error)
+        }
+        alert.runModal()
+    }
+
     /// The index's place and size and the snapshots, read off the main actor.
     func libraryDatabase() async throws -> LibraryDatabase {
         guard let folder = snapshotFolder else { throw CancellationError() }

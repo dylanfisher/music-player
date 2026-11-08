@@ -86,6 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var snapshotScheduler: SnapshotScheduler?
     /// Asks for the day's snapshot every hour, once the launch's scans have ended.
     var snapshotTimer: Timer?
+    /// Held while the app runs, so a restore at another copy's launch waits (ADR 0142).
+    var indexInUse: IndexInUse?
     private var shareChanges: ShareChangeObserver?
     private(set) var output: DeviceOutput?
     /// Each device's state before playback first changed it, shared by every provider made for
@@ -243,17 +245,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.saver = saver
         let layout = WindowSettings(settings, state: state)
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
-        do {
-            // Before any connection opens the index, which the restore replaces (ADR 0142).
-            _ = try applyPendingRestore(databaseURL: databaseURL)
-        } catch {
-            // Once the window is up: `fail` quits a launch that has none.
-            DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated {
-                    self?.fail(Self.restoreFailedTitle, error)
-                }
-            }
-        }
+        // Before any connection opens the index, which a restore replaces (ADR 0142).
+        try applyRestoreAtLaunch(databaseURL: databaseURL)
         do {
             try Database.readAhead(at: databaseURL)
         } catch {

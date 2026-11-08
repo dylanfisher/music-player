@@ -336,6 +336,35 @@ private func movedAside(in folder: URL) throws -> [String] {
             == moved.suffix(LibraryIndex.keptUnreadableFiles).map(\.lastPathComponent))
 }
 
+/// Files moved aside for a restore are pruned among themselves, and only when asked: a
+/// restore prunes once it's in place.
+@Test func filesMovedAsideArePrunedByTheirReason() throws {
+    let library = try TestLibrary()
+    let folder = library.databaseURL.deletingLastPathComponent()
+    try Data(repeating: 0x5A, count: 8192).write(to: library.databaseURL)
+    let unreadable = try #require(
+        LibraryIndex(at: library.databaseURL, movingAsideIfUnreadable: true).movedAside)
+    func replaced() throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: folder.path)
+            .filter {
+                $0.hasPrefix("library.sqlite.replaced-") && !$0.hasSuffix("-wal")
+                    && !$0.hasSuffix("-shm")
+            }.sorted()
+    }
+    var moved: [URL] = []
+    for _ in 0...LibraryIndex.keptUnreadableFiles {
+        try Data("index".utf8).write(to: library.databaseURL)
+        moved.append(
+            try LibraryIndex.moveAside(library.databaseURL, reason: "replaced", pruning: false))
+    }
+    #expect(try replaced() == moved.map(\.lastPathComponent).sorted())
+    try LibraryIndex.pruneMovedAside(library.databaseURL, reason: "replaced")
+    #expect(
+        try replaced()
+            == moved.map(\.lastPathComponent).sorted().suffix(LibraryIndex.keptUnreadableFiles))
+    #expect(try movedAside(in: folder) == [unreadable.lastPathComponent])
+}
+
 @Test func aLockedDatabaseAtLaunchFailsAndIsntMovedAside() throws {
     let library = try TestLibrary()
     _ = try library.scan()

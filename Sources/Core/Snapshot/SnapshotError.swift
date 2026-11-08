@@ -9,6 +9,9 @@ public enum SnapshotError: Error, Equatable, CustomStringConvertible {
     /// A restore was asked for at launch, and the unpacked snapshot it would put in place is
     /// gone: its path.
     case restoreMissing(String)
+    /// A restore at launch moved the index aside to this path and could neither put the
+    /// snapshot in its place nor move it back: why.
+    case indexNotPutBack(String, String)
 
     public var description: String {
         switch self {
@@ -18,6 +21,9 @@ public enum SnapshotError: Error, Equatable, CustomStringConvertible {
             "\(name) holds a damaged library, so it can't be restored: \(detail)"
         case .restoreMissing(let path):
             "the snapshot to restore was to be at \(path), but it's gone; the library is as it was"
+        case .indexNotPutBack(let path, let detail):
+            "the library was moved to \(path) for a restore, which failed, and it couldn't be"
+                + " moved back (\(detail)); move it back to library.sqlite before opening the app"
         }
     }
 }

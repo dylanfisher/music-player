@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Library
 import Log
@@ -31,28 +32,120 @@ public func prepareRestore(
         to: restoreMarkerURL(databaseURL), options: .atomic)
 }
 
+/// What a launch's look for a prepared restore found.
+public enum PendingRestore: Equatable, Sendable {
+    case none
+    /// The snapshot, by its file's name, is the index now.
+    case applied(String)
+    /// The restore waits for the next launch, for this reason.
+    case waiting(String)
+}
+
+/// The moved-aside index's reason, as `library.sqlite.replaced-<stamp>`.
+private let replacedReason = "replaced"
+
 /// At launch, before the index opens: when a restore was prepared, moves the index aside, as
-/// `library.sqlite.replaced-<stamp>`, and the unpacked snapshot into its place. Returns the
-/// snapshot's name, or nil when no restore was waiting.
-public func applyPendingRestore(databaseURL: URL) throws -> String? {
+/// `library.sqlite.replaced-<stamp>`, and the unpacked snapshot into its place (ADR 0142). It
+/// waits while another copy of the app holds the index (`IndexInUse`). When the move into
+/// place fails, the index goes back and the restore waits, throwing why; when it can't go
+/// back, `SnapshotError.indexNotPutBack` says where it is, and nothing should open an index.
+/// The replaced indexes are pruned only once the restore is in place, so a failed one never
+/// prunes the index it moved.
+public func applyPendingRestore(databaseURL: URL) throws -> PendingRestore {
+    try applyPendingRestore(databaseURL: databaseURL, move: LibraryIndex.move)
+}
+
+/// `applyPendingRestore(databaseURL:)` moving files with `move`, which tests fail.
+func applyPendingRestore(
+    databaseURL: URL, move: (URL, URL) throws -> Void
+) throws -> PendingRestore {
     let marker = restoreMarkerURL(databaseURL)
     let named: String
     do {
         named = try String(contentsOf: marker, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     } catch CocoaError.fileReadNoSuchFile {
-        return nil
+        return .none
     }
+    guard let swapping = try IndexInUse.exclusive(databaseURL) else {
+        return .waiting("another copy of the app has the library open")
+    }
+    defer { withExtendedLifetime(swapping) {} }
     let restoring = restoringFileURL(databaseURL)
+    let index = FileManager.default.fileExists(atPath: databaseURL.path)
     guard FileManager.default.fileExists(atPath: restoring.path) else {
         try FileManager.default.removeItem(at: marker)
-        throw SnapshotError.restoreMissing(restoring.path)
+        // Only the move into place takes the unpacked file away: the launch that moved it
+        // stopped before it deleted the marker.
+        guard index else { throw SnapshotError.restoreMissing(restoring.path) }
+        return .applied(named)
     }
-    let aside = try LibraryIndex.moveAside(databaseURL, reason: "replaced")
-    try rename(restoring, to: databaseURL)
+    let aside =
+        index
+        ? try LibraryIndex.moveAside(databaseURL, reason: replacedReason, pruning: false) : nil
+    do {
+        try move(restoring, databaseURL)
+    } catch {
+        guard let aside else { throw error }
+        do {
+            try move(aside, databaseURL)
+        } catch let putBack {
+            throw SnapshotError.indexNotPutBack(aside.path, "\(error); then \(putBack)")
+        }
+        throw error
+    }
     try FileManager.default.removeItem(at: marker)
-    logger.notice("restored the library from \(named); the index it replaced is \(aside.path)")
-    return named
+    logger.notice(
+        "restored the library from \(named), moving the index it replaced to \(aside?.path ?? "nowhere, as there was none")"
+    )
+    do {
+        try LibraryIndex.pruneMovedAside(databaseURL, reason: replacedReason)
+    } catch {
+        logger.error("couldn't delete the older indexes restores replaced: \(error)")
+    }
+    return .applied(named)
+}
+
+/// A lock on `library.sqlite.in-use` beside the index, held shared by each copy of the app
+/// for as long as it runs and exclusive by a restore's swap at launch, so the swap never
+/// replaces an index another copy has open (ADR 0142). It's released when this is freed.
+public final class IndexInUse {
+    private let descriptor: Int32
+
+    /// Waits for a swap under way, then holds the lock shared.
+    public convenience init(databaseURL: URL) throws {
+        guard let descriptor = try Self.lock(databaseURL, LOCK_SH) else {
+            preconditionFailure("a lock that waits returned without it")
+        }
+        self.init(descriptor: descriptor)
+    }
+
+    private init(descriptor: Int32) {
+        self.descriptor = descriptor
+    }
+
+    deinit { Darwin.close(descriptor) }
+
+    /// The lock exclusive, without waiting: nil while another holds it.
+    static func exclusive(_ databaseURL: URL) throws -> IndexInUse? {
+        try lock(databaseURL, LOCK_EX | LOCK_NB).map { IndexInUse(descriptor: $0) }
+    }
+
+    /// The lock file's descriptor holding `operation`, or nil when it would wait.
+    private static func lock(_ databaseURL: URL, _ operation: Int32) throws -> Int32? {
+        let path = databaseURL.path + ".in-use"
+        let descriptor = Darwin.open(path, O_CREAT | O_RDWR | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else {
+            throw SnapshotError.file(path, String(cString: strerror(errno)))
+        }
+        guard flock(descriptor, operation) == 0 else {
+            let reason = errno
+            Darwin.close(descriptor)
+            if reason == EWOULDBLOCK { return nil }
+            throw SnapshotError.file(path, String(cString: strerror(reason)))
+        }
+        return descriptor
+    }
 }
 
 /// `library.sqlite.restoring`: the snapshot unpacked, until the next launch puts it in place.

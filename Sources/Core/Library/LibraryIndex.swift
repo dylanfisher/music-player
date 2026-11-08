@@ -109,22 +109,42 @@ public final class LibraryIndex {
         }
     }
 
+    /// What SQLite keeps beside a database: its log and shared memory, which move with it.
+    private static let movedSuffixes = ["", Database.walSuffix, Database.shmSuffix]
+
     /// Renames the file at `url`, with its log and shared memory, which would otherwise be read
-    /// into the new file, to a name no other move uses, `<name>.<reason>-<stamp>`, and deletes
-    /// all but the newest `keptUnreadableFiles` moved before for the same reason. A restore of
-    /// a snapshot moves the index it replaces with the reason `replaced` (ADR 0142).
-    package static func moveAside(_ url: URL, reason: String = "unreadable") throws -> URL {
+    /// into the new file, to a name no other move uses, `<name>.<reason>-<stamp>`, and unless
+    /// `pruning` is false, deletes all but the newest `keptUnreadableFiles` moved for the same
+    /// reason. A restore of a snapshot moves the index it replaces with the reason `replaced`,
+    /// and prunes only once the restore is in place (ADR 0142).
+    package static func moveAside(
+        _ url: URL, reason: String = "unreadable", pruning: Bool = true
+    ) throws -> URL {
         let stamp = ISO8601DateFormatter.string(
             from: Date(), timeZone: .current,
             formatOptions: [.withInternetDateTime, .withFractionalSeconds]
         ).replacingOccurrences(of: ":", with: "-")
-        let prefix = url.lastPathComponent + ".\(reason)-"
         let aside = url.deletingLastPathComponent().appendingPathComponent(
-            prefix + stamp + "-" + UUID().uuidString.prefix(8))
-        let suffixes = ["", Database.walSuffix, Database.shmSuffix]
-        for suffix in suffixes where FileManager.default.fileExists(atPath: url.path + suffix) {
-            try FileManager.default.moveItem(atPath: url.path + suffix, toPath: aside.path + suffix)
+            url.lastPathComponent + ".\(reason)-" + stamp + "-" + UUID().uuidString.prefix(8))
+        try move(url, to: aside)
+        if pruning { try pruneMovedAside(url, reason: reason) }
+        return aside
+    }
+
+    /// Renames the database at `url`, with its log and shared memory, to `destination`.
+    package static func move(_ url: URL, to destination: URL) throws {
+        for suffix in movedSuffixes where FileManager.default.fileExists(atPath: url.path + suffix)
+        {
+            try FileManager.default.moveItem(
+                atPath: url.path + suffix, toPath: destination.path + suffix)
         }
+    }
+
+    /// Deletes all but the newest `keptUnreadableFiles` files `moveAside` moved from `url` for
+    /// `reason`, with their logs and shared memory.
+    package static func pruneMovedAside(_ url: URL, reason: String) throws {
+        let prefix = url.lastPathComponent + ".\(reason)-"
+        let suffixes = movedSuffixes
         let folder = url.deletingLastPathComponent()
         let moved = try FileManager.default.contentsOfDirectory(atPath: folder.path)
             .filter { $0.hasPrefix(prefix) && !suffixes.dropFirst().contains(where: $0.hasSuffix) }
@@ -135,7 +155,6 @@ public final class LibraryIndex {
                 try FileManager.default.removeItem(atPath: folder.path + "/" + old + suffix)
             }
         }
-        return aside
     }
 
     /// Writes a compacted copy of the whole database to a new file at `url`, from one read
