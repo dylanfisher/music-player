@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 import Library
 import Log
@@ -27,7 +26,6 @@ public func prepareRestore(
         throw error
     }
     try writeSnapshot(of: LibraryIndex(at: databaseURL), into: snapshotFolder, on: now)
-    try rotateSnapshots(in: snapshotFolder)
     try Data((snapshot.lastPathComponent + "\n").utf8).write(
         to: restoreMarkerURL(databaseURL), options: .atomic)
 }
@@ -50,9 +48,7 @@ public func applyPendingRestore(databaseURL: URL) throws -> String? {
         throw SnapshotError.restoreMissing(restoring.path)
     }
     let aside = try LibraryIndex.moveAside(databaseURL, reason: "replaced")
-    guard rename(restoring.path, databaseURL.path) == 0 else {
-        throw SnapshotError.file(databaseURL.path, String(cString: strerror(errno)))
-    }
+    try rename(restoring, to: databaseURL)
     try FileManager.default.removeItem(at: marker)
     logger.notice("restored the library from \(named); the index it replaced is \(aside.path)")
     return named
@@ -81,13 +77,5 @@ private func checkWhole(_ url: URL, name: String) throws {
     }
     guard found == ["ok"] else {
         throw SnapshotError.damaged(name, found.prefix(3).joined(separator: "; "))
-    }
-}
-
-private func removeIfThere(_ url: URL) throws {
-    do {
-        try FileManager.default.removeItem(at: url)
-    } catch CocoaError.fileNoSuchFile {
-        return
     }
 }

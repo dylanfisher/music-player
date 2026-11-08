@@ -57,7 +57,6 @@ public final class SnapshotScheduler: @unchecked Sendable {
     public func write(into folder: URL, now: Date) -> Bool {
         do {
             try writeSnapshot(of: try LibraryIndex(at: databaseURL), into: folder, on: now)
-            try rotateSnapshots(in: folder)
             lock.withLock { failure = nil }
             return true
         } catch {

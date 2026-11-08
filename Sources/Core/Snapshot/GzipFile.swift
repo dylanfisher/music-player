@@ -8,7 +8,7 @@ enum GzipFile {
     /// How much is read from a file, and written, at a time.
     static let chunkBytes = 1 << 20
     /// zlib's default level: most of the size of level 9 at a fraction of the time.
-    static let level: Int32 = 6
+    private static let level: Int32 = 6
     /// 15 + 16: the largest window, with gzip's header and trailer rather than zlib's.
     private static let gzipWindowBits: Int32 = 15 + 16
 

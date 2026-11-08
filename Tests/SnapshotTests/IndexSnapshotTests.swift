@@ -48,13 +48,11 @@ private func noon(_ day: Int) -> Date {
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let other = folder.appendingPathComponent("notes.txt", isDirectory: false)
     try Data("mine".utf8).write(to: other)
+    let index = try SnapshotTestLibrary().index()
     for day in 0..<60 {
-        let name = SnapshotName(of: noon(day), calendar: utcCalendar)
-        try Data(name.day.utf8).write(
-            to: folder.appendingPathComponent(name.fileName, isDirectory: false))
-        try rotateSnapshots(in: folder, calendar: utcCalendar)
+        try writeSnapshot(of: index, into: folder, on: noon(day), calendar: utcCalendar)
     }
-    let kept = try snapshots(in: folder).map(\.name.day)
+    let kept = try snapshots(in: folder).map(\.day)
     // Day 59 is Sunday 2026-03-01; its week started on Monday 02-23.
     #expect(
         kept == [
