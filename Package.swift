@@ -325,7 +325,9 @@ let package = Package(
         .testTarget(
             name: "DiscogsTests",
             dependencies: [
-                "Discogs", "Fixtures", "Library", "Metadata", "SQLite", "Settings", "TagWriter",
+                // DiscogsImport, built for the tests that kill it partway through an import.
+                "Discogs", "DiscogsImport", "Fixtures", "Library", "Metadata", "SQLite",
+                "Settings", "TagWriter",
             ],
             swiftSettings: strictSwift
         ),

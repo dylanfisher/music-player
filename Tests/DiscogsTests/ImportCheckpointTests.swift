@@ -162,6 +162,63 @@ func aStopInEachStageResumesToTheCatalogOfAnImportStraightThrough(
     try expectResumed(folder, into: folder.catalog, like: straight)
 }
 
+/// The DiscogsImport tool the build put beside this test bundle, found from the bundle's own
+/// binary, as the test runner loads it.
+private func importTool() throws -> URL {
+    var image = Dl_info()
+    try #require(dladdr(#dsohandle, &image) != 0, "this test's image has no path")
+    var folder = URL(fileURLWithPath: String(cString: image.dli_fname), isDirectory: false)
+    while folder.path != "/" {
+        folder.deleteLastPathComponent()
+        let tool = folder.appendingPathComponent("DiscogsImport", isDirectory: false)
+        if FileManager.default.isExecutableFile(atPath: tool.path) { return tool }
+    }
+    throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "DiscogsImport"])
+}
+
+@Test(arguments: stages)
+func aCrashInEachStageResumesToTheCatalogOfAnImportStraightThrough(
+    _ stage: CatalogImportProgress.Stage
+) throws {
+    let folder = try DumpFolder()
+    try writeSet(folder)
+    let straight = try straightImport(folder)
+    let name =
+        switch stage {
+        case .reading(let kind): kind.rawValue
+        default: "indexing"
+        }
+    let process = Process()
+    process.executableURL = try importTool()
+    process.arguments = [
+        folder.dumps.path, "--catalog", folder.catalog.path, "--checkpoint-bytes",
+        "\(smallCheckpointBytes)", "--crash-at", name,
+    ]
+    // A home of its own, so the tool reads no config file and finds no watched folders.
+    let home = folder.directory.appendingPathComponent("home", isDirectory: true)
+    try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+    process.environment = ["CFFIXED_USER_HOME": home.path, "HOME": home.path]
+    let errors = Pipe()
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = errors
+    try process.run()
+    let message = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    process.waitUntilExit()
+    #expect(message.isEmpty)
+    #expect(process.terminationReason == .uncaughtSignal)
+    #expect(process.terminationStatus == SIGKILL)
+    let saved = try checkpoint(of: folder.catalog)
+    #expect(!saved.indexed)
+    if case .reading(let kind) = stage {
+        // Killed at the first report after a checkpoint in the file: inside it, or at its end.
+        let index = try #require(DumpKind.allCases.firstIndex(of: kind))
+        #expect(saved.filesFinished == index || saved.filesFinished == index + 1)
+    } else {
+        #expect(saved.filesFinished == DumpKind.allCases.count)
+    }
+    try expectResumed(folder, into: folder.catalog, like: straight)
+}
+
 @Test func rowsWrittenAfterTheLastCheckpointAreRolledBackBeforeAResume() async throws {
     let folder = try DumpFolder()
     try writeSet(folder)
