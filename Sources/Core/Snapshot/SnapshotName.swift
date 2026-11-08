@@ -30,20 +30,21 @@ public struct SnapshotName: Hashable, Comparable, Sendable {
 
     var fileName: String { Self.prefix + day + Self.suffix }
 
-    /// The gzip file while it's written.
-    var partialFileName: String { fileName + Self.partialSuffix }
+    /// The gzip file while one write, `token`, writes it. Hidden, as Finder shows the folder,
+    /// and the write's own, so two writes never share a file.
+    func partialFileName(_ token: String) -> String {
+        "." + Self.prefix + day + "-" + token + Self.suffix + Self.partialSuffix
+    }
 
-    /// The index's copy, before it's compressed. Hidden, as Finder shows the folder.
-    var copyFileName: String { "." + Self.prefix + day + ".sqlite" + Self.partialSuffix }
+    /// The index's copy for one write, `token`, before it's compressed.
+    func copyFileName(_ token: String) -> String {
+        "." + Self.prefix + day + "-" + token + ".sqlite" + Self.partialSuffix
+    }
 
-    /// Whether `fileName` is a file the writer leaves only when it's stopped partway.
+    /// Whether `fileName` is a file a write makes and deletes, left only when it's stopped
+    /// partway.
     static func isPartial(_ fileName: String) -> Bool {
-        guard fileName.hasSuffix(partialSuffix) else { return false }
-        let name = String(fileName.dropLast(partialSuffix.count))
-        if SnapshotName(fileName: name) != nil { return true }
-        guard name.hasPrefix("."), name.hasSuffix(".sqlite") else { return false }
-        return SnapshotName(fileName: String(name.dropFirst().dropLast(".sqlite".count)) + suffix)
-            != nil
+        fileName.hasPrefix("." + prefix) && fileName.hasSuffix(partialSuffix)
     }
 
     /// The start of the day in `calendar`.

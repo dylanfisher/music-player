@@ -4,6 +4,13 @@ import Log
 
 private let logger = moduleLogger()
 
+/// Held through each snapshot write, so two never run at once: the daily job, Back Up Now
+/// and a restore's snapshot can come from different queues.
+private let writing = NSLock()
+/// How old a write's file has to be before another write takes it for one stopped partway,
+/// rather than a write of another copy of the app still under way.
+private let leftoverSeconds = 3600.0
+
 /// A snapshot in the snapshot folder, as Settings lists it.
 public struct SnapshotFile: Equatable, Sendable {
     let name: SnapshotName
@@ -27,23 +34,27 @@ public struct SnapshotFile: Equatable, Sendable {
 func writeSnapshot(
     of index: LibraryIndex, into folder: URL, on date: Date, calendar: Calendar = .current
 ) throws -> URL {
-    let name = SnapshotName(of: date, calendar: calendar)
-    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    try removePartials(in: folder)
-    let copy = folder.appendingPathComponent(name.copyFileName, isDirectory: false)
-    let packed = folder.appendingPathComponent(name.partialFileName, isDirectory: false)
-    let snapshot = folder.appendingPathComponent(name.fileName, isDirectory: false)
-    defer { removeLeftover(copy) }
-    try index.copy(to: copy)
-    do {
-        try GzipFile.compress(copy, to: packed)
-        try rename(packed, to: snapshot)
-    } catch {
-        removeLeftover(packed)
-        throw error
+    try writing.withLock {
+        let name = SnapshotName(of: date, calendar: calendar)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try removePartials(in: folder, olderThan: Date().addingTimeInterval(-leftoverSeconds))
+        let token = UUID().uuidString
+        let copy = folder.appendingPathComponent(name.copyFileName(token), isDirectory: false)
+        let packed = folder.appendingPathComponent(
+            name.partialFileName(token), isDirectory: false)
+        let snapshot = folder.appendingPathComponent(name.fileName, isDirectory: false)
+        defer { removeLeftover(copy) }
+        try index.copy(to: copy)
+        do {
+            try GzipFile.compress(copy, to: packed)
+            try rename(packed, to: snapshot)
+        } catch {
+            removeLeftover(packed)
+            throw error
+        }
+        try rotateSnapshots(in: folder, calendar: calendar)
+        return snapshot
     }
-    try rotateSnapshots(in: folder, calendar: calendar)
-    return snapshot
 }
 
 /// The snapshots in `folder`, newest first, and none while there is no folder. Other files
@@ -78,12 +89,16 @@ private func rotateSnapshots(in folder: URL, calendar: Calendar) throws {
     }
 }
 
-/// Deletes what a write stopped partway left in `folder`.
-private func removePartials(in folder: URL) throws {
+/// Deletes the files in `folder` that writes stopped partway left, last changed before
+/// `cutoff`.
+func removePartials(in folder: URL, olderThan cutoff: Date) throws {
     for name in try FileManager.default.contentsOfDirectory(atPath: folder.path)
     where SnapshotName.isPartial(name) {
-        try FileManager.default.removeItem(
-            at: folder.appendingPathComponent(name, isDirectory: false))
+        let url = folder.appendingPathComponent(name, isDirectory: false)
+        let changed = try url.resourceValues(forKeys: [.contentModificationDateKey])
+            .contentModificationDate
+        guard let changed, changed < cutoff else { continue }
+        try removeIfThere(url)
     }
 }
 

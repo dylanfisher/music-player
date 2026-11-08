@@ -34,10 +34,13 @@ private func noon(_ day: Int) -> Date {
     ] {
         #expect(SnapshotName(fileName: other) == nil, "\(other)")
     }
-    #expect(SnapshotName.isPartial(name.partialFileName))
-    #expect(SnapshotName.isPartial(name.copyFileName))
+    #expect(SnapshotName.isPartial(name.partialFileName("a")))
+    #expect(SnapshotName.isPartial(name.copyFileName("a")))
+    #expect(name.partialFileName("a") != name.partialFileName("b"))
+    #expect(SnapshotName(fileName: name.partialFileName("a")) == nil)
     #expect(!SnapshotName.isPartial(name.fileName))
     #expect(!SnapshotName.isPartial("notes.partial"))
+    #expect(!SnapshotName.isPartial(".notes.partial"))
 }
 
 /// A snapshot a day for 60 days, rotated after each, as the scheduler does: the last 7 days
@@ -133,4 +136,67 @@ private func noon(_ day: Int) -> Date {
     #expect(throws: SnapshotError.self) {
         try GzipFile.decompress(damaged, to: folder.appendingPathComponent("damaged"))
     }
+}
+
+/// A write's leftovers older than the cutoff go; a newer one, maybe another copy's write under
+/// way, and every other file stay.
+@Test func onlyOldLeftoversOfAWriteAreDeleted() throws {
+    let folder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("partials-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let name = SnapshotName(of: noon(1), calendar: utcCalendar)
+    let old = folder.appendingPathComponent(name.copyFileName("old"))
+    let new = folder.appendingPathComponent(name.partialFileName("new"))
+    let mine = folder.appendingPathComponent(".notes.partial")
+    let snapshot = folder.appendingPathComponent(name.fileName)
+    for url in [old, new, mine, snapshot] { try Data("x".utf8).write(to: url) }
+    let hourAgo = Date().addingTimeInterval(-3600)
+    try FileManager.default.setAttributes(
+        [.modificationDate: hourAgo.addingTimeInterval(-60)], ofItemAtPath: old.path)
+    try FileManager.default.setAttributes(
+        [.modificationDate: hourAgo.addingTimeInterval(-60)], ofItemAtPath: mine.path)
+    try removePartials(in: folder, olderThan: hourAgo)
+    #expect(
+        try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
+            == [new, mine, snapshot].map(\.lastPathComponent).sorted())
+}
+
+/// Writes from several queues at once, as the daily job, Back Up Now and a restore can be,
+/// each finish whole: one snapshot of the day that unpacks to the library, and no leftovers.
+@Test func writesAtOnceTakeTurns() throws {
+    let library = try SnapshotTestLibrary()
+    let before = try counts(library.index())
+    let folder = library.snapshotFolder
+    let path = library.databaseURL
+    let failures = Failures()
+    // Each opens its index first, so the writes themselves start together.
+    let indexes = try (0..<8).map { _ in try LibraryIndex(at: path) }
+    let shared = UnsafeIndexes(indexes)
+    DispatchQueue.concurrentPerform(iterations: indexes.count) { position in
+        do {
+            try writeSnapshot(of: shared.indexes[position], into: folder, on: noon(304))
+        } catch {
+            failures.add("\(error)")
+        }
+    }
+    #expect(failures.all.isEmpty)
+    let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+    #expect(names == [SnapshotName(of: noon(304)).fileName])
+    let unpacked = library.directory.appendingPathComponent("unpacked.sqlite")
+    try GzipFile.decompress(folder.appendingPathComponent(names[0]), to: unpacked)
+    #expect(try counts(LibraryIndex(at: unpacked)) == before)
+}
+
+/// Connections handed to one thread each, which `LibraryIndex` allows.
+private final class UnsafeIndexes: @unchecked Sendable {
+    let indexes: [LibraryIndex]
+    init(_ indexes: [LibraryIndex]) { self.indexes = indexes }
+}
+
+private final class Failures: @unchecked Sendable {
+    private let lock = NSLock()
+    private var found: [String] = []
+
+    func add(_ failure: String) { lock.withLock { found.append(failure) } }
+    var all: [String] { lock.withLock { found } }
 }
