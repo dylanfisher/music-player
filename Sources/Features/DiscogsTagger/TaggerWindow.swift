@@ -229,6 +229,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         catalogBox.isHidden = model.catalog == .checking
         catalogImportButton.isHidden = false
         revealButton.isHidden = true
+        catalogLabel.toolTip = nil
         importButton.title = Self.importTitle
         switch model.catalog {
         case .checking:
