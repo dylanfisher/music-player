@@ -42,14 +42,32 @@ package enum HandoffEvent: Equatable, Sendable, Codable {
         case .lease, .releaseLease, .release, .approved, .importing, .imported, .rejected: break
         case .tagging(let tagging):
             try container.encode(tagging.status, forKey: .status)
-            try container.encode(tagging.reasons, forKey: .reasons)
+            try container.encode(tagging.reasons.map(Self.fitted), forKey: .reasons)
         case .claim(let takeOver):
             if takeOver { try container.encode(true, forKey: .takeOver) }
         case .failed(let stage, let reason):
             try container.encode(stage, forKey: .stage)
-            try container.encode(reason, forKey: .reason)
+            try container.encode(Self.fitted(reason), forKey: .reason)
         }
         try container.encode(type, forKey: .type)
+    }
+
+    /// The most characters the service takes in a string; it refuses a longer one, and a
+    /// refused `failed` or `tagging` report would never be delivered.
+    static let maxTextCharacters = 1000
+
+    /// `text`, or its start with an ellipsis when it's over the service's limit. The service
+    /// counts Unicode scalars, and the cut is between characters, so none is split.
+    static func fitted(_ text: String) -> String {
+        guard text.unicodeScalars.count > maxTextCharacters else { return text }
+        var kept = ""
+        var scalars = 0
+        for character in text {
+            scalars += character.unicodeScalars.count
+            if scalars > maxTextCharacters - 1 { break }
+            kept.append(character)
+        }
+        return kept + "…"
     }
 
     /// `event.type`, as the service names the event: "lease", "approved".

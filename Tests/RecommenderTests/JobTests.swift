@@ -258,3 +258,47 @@ private let snapshot = ReleaseSnapshot(
     #expect(throws: (any Error).self) { try HandoffEvent(json: #"{"type": "approved", "x": 1}"#) }
     #expect(throws: (any Error).self) { try HandoffEvent(json: #"{"type": "shrug"}"#) }
 }
+
+/// The service refuses a string over this many characters (`MAX_STRING_CHARS` in its API).
+private let serviceLimit = 1000
+
+/// The strings of an event's encoding that carry text: a failure's reason, a tagging's reasons.
+private func texts(_ event: HandoffEvent) throws -> [String] {
+    let object =
+        try #require(
+            try JSONSerialization.jsonObject(with: Data(event.json.utf8)) as? [String: Any])
+    return (object["reason"] as? String).map { [$0] } ?? (object["reasons"] as? [String] ?? [])
+}
+
+@Test func aReasonOverTheServicesLimitIsCutWithAnEllipsis() throws {
+    let long = String(repeating: "x", count: 5000)
+    let failed = try texts(.failed(.move, reason: long))
+    #expect(failed.count == 1)
+    #expect(failed[0].unicodeScalars.count == serviceLimit)
+    #expect(failed[0] == String(repeating: "x", count: serviceLimit - 1) + "…")
+
+    let reasons = try texts(.tagging(.init(status: .error, reasons: ["short", long])))
+    #expect(reasons[0] == "short")
+    #expect(reasons[1].unicodeScalars.count == serviceLimit)
+}
+
+@Test func aReasonAtTheLimitIsLeftAlone() throws {
+    let exact = String(repeating: "é", count: serviceLimit)
+    #expect(try texts(.failed(.tag, reason: exact)) == [exact])
+}
+
+@Test func aCutNeverSplitsACharacter() throws {
+    // A family emoji is five scalars: the first falls within the budget and the rest don't,
+    // so all of it goes.
+    let family = "👨‍👩‍👧"
+    let long = String(repeating: "x", count: serviceLimit - 4) + family + family
+    let cut = try #require(try texts(.failed(.delete, reason: long)).first)
+    #expect(cut == String(repeating: "x", count: serviceLimit - 4) + "…")
+    #expect(cut.unicodeScalars.count <= serviceLimit)
+}
+
+@Test func aCutEventStillReadsBackFromTheOutbox() throws {
+    let event = HandoffEvent.failed(.carry, reason: String(repeating: "y", count: 3000))
+    let read = try HandoffEvent(json: event.json)
+    #expect(read.json == event.json)
+}
