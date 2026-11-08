@@ -631,7 +631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // The local catalog only: the tab is what an import of the dumps holds.
         editing.release = { [weak self] id in
-            guard let self, let settings else { throw CancellationError() }
+            guard let self, let settings else { throw NoSettings() }
             return try await releaseDetail(
                 id, catalogAt: paths.discogsCatalogFile(settings[\.discogsCatalogPath]))
         }
@@ -1057,4 +1057,10 @@ enum PlayRequestError: Error, CustomStringConvertible {
         case .noStart(let first, let count): "track \(first + 1) of \(count) isn't in the queue"
         }
     }
+}
+
+/// Get Info's Discogs tab asked for the catalog before the settings that name it were read,
+/// or as the app quits.
+private struct NoSettings: Error, CustomStringConvertible {
+    var description: String { "the settings that name the catalog aren't read" }
 }
