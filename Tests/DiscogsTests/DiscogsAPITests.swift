@@ -217,6 +217,34 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     #expect(fake.requests.count == 1)
 }
 
+@Test func aRequestWaitingItsTurnStopsWhenCancelled() async throws {
+    let fake = FakeDiscogs()
+    let api = DiscogsAPI(
+        token: fakeToken, userAgent: "MusicPlayer/1.0", transport: fake.transport,
+        cache: fake.cache, now: { fake.now },
+        sleep: { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) })
+    // The first holds the turn through a two-minute Retry-After.
+    fake.queue("/releases/1001", status: 429, headers: ["Retry-After": "120"])
+    let holder = Task { _ = try? await api.release(id: 1001) }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    let waiter = Task { () async -> DiscogsAPIError? in
+        do throws(DiscogsAPIError) {
+            _ = try await api.release(id: 1002)
+            return nil
+        } catch {
+            return error
+        }
+    }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    let started = Date()
+    waiter.cancel()
+    #expect(await waiter.value == .cancelled)
+    #expect(Date().timeIntervalSince(started) < 5)
+    #expect(fake.requests.map(\.url.path) == ["/releases/1001"])
+    holder.cancel()
+    await holder.value
+}
+
 @Test func statusesAndNetworkFailuresMapToTheirErrors() async throws {
     let fake = FakeDiscogs()
     let api = fake.api()

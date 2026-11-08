@@ -55,7 +55,8 @@ public actor DiscogsAPI {
     /// Hears the seconds a long wait will take, then nil when it's over.
     private var waiting: @Sendable (Int?) -> Void = { _ in }
     private var busy = false
-    private var queued: [CheckedContinuation<Void, Never>] = []
+    /// The requests waiting for their turn, in order, each by an id its cancel finds it by.
+    private var queued: [(id: UUID, turn: CheckedContinuation<Void, any Error>)] = []
 
     /// `now` is the wall clock, which dates cache entries; `uptime` a clock that only goes
     /// forward, which paces requests, so setting the Mac's clock back can't stall a run;
@@ -193,7 +194,7 @@ public actor DiscogsAPI {
     /// GETs `url` once its turn and the rate limit allow, with the user agent and, to `host`
     /// only, the token. A 200 is returned; any other status throws.
     func get(_ url: URL, cap: Int = jsonCap) async throws(DiscogsAPIError) -> HTTPSResponse {
-        await takeTurn()
+        try await takeTurn()
         defer { endTurn() }
         var refusals = 0
         while true {
@@ -249,20 +250,47 @@ public actor DiscogsAPI {
         if Task.isCancelled { throw .cancelled }
     }
 
-    /// Waits until no other request is under way.
-    private func takeTurn() async {
+    /// Waits until no other request is under way. Cancelling the task stops the wait, so a
+    /// stopped run doesn't wait behind a long `Retry-After`.
+    private func takeTurn() async throws(DiscogsAPIError) {
         guard busy else {
             busy = true
             return
         }
-        await withCheckedContinuation { queued.append($0) }
+        let id = UUID()
+        do {
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation {
+                    (turn: CheckedContinuation<Void, any Error>) in
+                    enqueue(id, turn)
+                }
+            } onCancel: {
+                Task { await self.leaveQueue(id) }
+            }
+        } catch {
+            throw .cancelled
+        }
+    }
+
+    private func enqueue(_ id: UUID, _ turn: CheckedContinuation<Void, any Error>) {
+        if Task.isCancelled {
+            turn.resume(throwing: CancellationError())
+        } else {
+            queued.append((id, turn))
+        }
+    }
+
+    /// Takes a cancelled request out of the queue; one already given its turn isn't in it.
+    private func leaveQueue(_ id: UUID) {
+        guard let index = queued.firstIndex(where: { $0.id == id }) else { return }
+        queued.remove(at: index).turn.resume(throwing: CancellationError())
     }
 
     private func endTurn() {
         if queued.isEmpty {
             busy = false
         } else {
-            queued.removeFirst().resume()
+            queued.removeFirst().turn.resume()
         }
     }
 
