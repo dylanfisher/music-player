@@ -1002,15 +1002,55 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       confirmation and status say Edit > Undo doesn't put staged writes back. 5 tests; 7
       mutations each caught. The live `StagedEffects` and a `DiscogsTagger` entry for App come
       with 54.14.
-- [ ] **54.12 Window.** `DownloadsWindow`: the table (Source, Album, Format, State, Tagging,
+- [x] **54.12 Window.** `DownloadsWindow`: the table (Source, Album, Format, State, Tagging,
       Added), toolbar, context menu, status messages; built on first show. A construction
       test.
-- [ ] **54.13 Sheets.** Upgrades, From Library Selection, Paste a Discogs Release, Approve (with
+      Result: one table of Source (an icon, an upgrade's old quality in its tooltip), Album
+      (the release id in its tooltip), Format, State (a progress bar while downloading, "·
+      Being reviewed on <Mac>"), Tagging (the reasons in its tooltip), Candidate (the peer and
+      size) and Added. Rows through `downloading` are secondary at half alpha, the rest
+      opaque; a failed state is red and a warning tagging orange. A bar of Approve…, Reject…,
+      Retry, Cancel Download, Open in Tagger and Resume Here, the same items in each row's
+      context menu, and Add's menu. `DownloadAction.applies` gates each from the job, this
+      Mac, whether the service answers and whether the Mac has a catalog: nothing while it
+      doesn't answer, only Resume Here on a job another Mac reviews. The status line says why
+      the service didn't answer and when the rows are from, that a Mac with no catalog can't
+      queue or tag, and the coordinator's `problems`; with no address or token it says how to
+      set the service up. `Downloads` is the entry App starts, stops and shows. Tests: the
+      actions as tables, the window's columns, styling, buttons and menu, the status line,
+      the window without a service; 11 mutations each caught.
+- [x] **54.13 Sheets.** Upgrades, From Library Selection, Paste a Discogs Release, Approve (with
       the lossy-origin and lost-stats acknowledgments, and "permanently deleted if the share has
       no Trash"), Reject. Tests of each sheet's model.
-- [ ] **54.14 Wiring.** `App/MusicPlayer/DownloadsCommands.swift`: File > Downloads…, the trash,
+      Result: `QueueSheet` lists `upgradeCandidates(onShare:)` (the staging folder's share;
+      none without one) or the selection's albums, those without one numeric release id as
+      "Tag first", each with a box, and a format: flac, lossless, MP3 320 or any, an upgrade
+      only the first two. Paste takes an id or a discogs.com `/release/<id>` URL. Each
+      choice's snapshot comes from `ReleaseSnapshot.queueable`, so a release the catalog
+      lacks is refused before anything is sent. Approve… takes the review claim, then
+      `ApprovalPlan` lists each move (`LibraryFolderMove.destinations`, the first run's
+      checks with nothing moved), an upgrade's old files placed by `upgradePositions`, with
+      "deleted permanently" on a share with no Trash, the unmatched ones to tick, and
+      `stagedOrigins`' verdicts to acknowledge when they block; it builds `ApprovedImport`.
+      Cancel gives the claim back. Reject and Cancel confirm; Retry asks for a format when
+      it searches again. The service gains create, retry and cancel. Tests: the plan's
+      blockers and import, the sheet's ticks, the pasted id, the selection, the orders, the
+      model's calls against `FakeService`.
+- [x] **54.14 Wiring.** `App/MusicPlayer/DownloadsCommands.swift`: File > Downloads…, the trash,
       rescan, tagger and write closures; the coordinator starts at launch. Tests: the commands'
       enabled rules.
+      Result: File > Downloads… shows the window whenever the main window is up. The downloads
+      start after the first rows draw when the address and token are set, restart on a change
+      to the service, staging, library folder, catalog or mapping settings, stop when either
+      is cleared, and stop at quit. The client is made on each call from the interfaces up
+      then. The import gets `moveToTrash(...).failure`, `watcher.importMoves(lines:)` and
+      `watcher.rescan`; its places are the staging folder where it's found, its share's mount
+      point (else the library folder's volume) and `library.folder`. Open in Tagger opens a
+      `DiscogsTagger(stagedJob:…)` with the live `StagedEffects`. This Mac's name is its
+      computer name. `--snapshot-of downloads` draws the window. `scripts/surface` passes.
+      No test of the command's enabled rule: it is the Discogs tagger's, untested there too.
+      Launched on a scratch home with the service at 192.0.2.7, the window said the address
+      isn't on a local subnet and that the Mac has no catalog.
 - [ ] **Owner checks:** in Settings on each reviewing Mac, the service's IP, port and token and
       the staging folder, the DAC Mac first. On a scratch folder on the share, from the DAC Mac,
       a same-share `RENAME_EXCL` (or the fallback, which the log line names) and a refused
