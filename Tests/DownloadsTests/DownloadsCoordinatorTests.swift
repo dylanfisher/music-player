@@ -102,7 +102,7 @@ private final class Setup {
 
     var index: LibraryIndex { get throws { try LibraryIndex(at: databaseURL) } }
 
-    func coordinator(catalog: Bool = true, failingAfterImport: Int = 0) -> DownloadsCoordinator {
+    func coordinator(catalog: Bool = true, failingAfterClaim: Int = 0) -> DownloadsCoordinator {
         let calls = calls
         let verdict = verdict
         let clock = service.clock
@@ -125,23 +125,30 @@ private final class Setup {
                     if let job = calls.tags.last { grow(job, under: root) }
                     return run.verdict
                 },
-                importRun: { job in
+                importRun: { job, deliver in
                     calls.run(job.jobID)
+                    if calls.imports.count == 1 { service.failHandoffs(failingAfterClaim) }
                     do {
                         let index = try LibraryIndex(at: url)
+                        for event in reports {
+                            if try !index.importReports().contains(where: { $0.body == event.json })
+                            {
+                                _ = try index.queueImportReport(
+                                    job: job.jobID, release: job.releaseID, body: event.json)
+                            }
+                            // ImportRun hears the service before the first rename.
+                            if event == .importing, let why = await deliver() {
+                                return .refused(why)
+                            }
+                        }
                         try index.recordImportStep(
                             ImportStep(
                                 jobID: job.jobID, releaseID: job.releaseID, kind: .moved,
                                 path: "job-\(job.jobID)/01 First Song.flac",
                                 destination: "library/A/01 First Song.flac", sizeBytes: 1))
-                        for event in reports {
-                            _ = try index.queueImportReport(
-                                job: job.jobID, release: job.releaseID, body: event.json)
-                        }
                     } catch {
                         return .refused("\(error)")
                     }
-                    service.failHandoffs(failingAfterImport)
                     return .imported(["library/A/01 First Song.flac"])
                 }))
     }
@@ -292,34 +299,40 @@ func aStagedJobIsTaggedWhenNoRunHoldsIt(
     #expect(clock.waiting.isEmpty)
 }
 
-@Test func anOutboxSendThatFailsIsSentAgainThenTheLedgerForgotten() async throws {
+@Test func anApprovalTheServiceDoesntAnswerMovesNothingAndRunsAgainOnceItDoes() async throws {
     let setup = try Setup([job(1) { $0.tagging = clean }])
-    let coordinator = setup.coordinator(failingAfterImport: 1)
-    let outcome = await coordinator.approve(approved(1))
-    #expect(outcome == .imported(["library/A/01 First Song.flac"]))
-    #expect(setup.service.eventTypes == ["claim", "approved"])
-    #expect(try setup.outbox() == ["approved", "importing", "imported"])
-    #expect(try setup.ledger(1).count == 1)
-
-    #expect(await coordinator.flush())
-    #expect(setup.service.eventTypes == ["claim", "approved", "approved", "importing", "imported"])
-    #expect(try setup.outbox().isEmpty)
+    // `approved` goes out before anything moves, and the service doesn't answer it.
+    let first = await setup.coordinator(failingAfterClaim: 1).approve(approved(1))
+    #expect(first == .refused("music-recommender didn't answer; nothing was moved"))
     #expect(try setup.ledger(1).isEmpty)
+    // The send after the run delivered them, so the job is importing, and a run goes on.
+    #expect(try setup.outbox().isEmpty)
+    #expect(setup.service.job(1)?.state == .importing)
+
+    setup.importReports = [.importing, .imported]
+    var again = approved(1)
+    again.state = .importing
+    let outcome = await setup.coordinator().approve(again)
+    #expect(outcome == .imported(["library/A/01 First Song.flac"]))
     #expect(setup.service.job(1)?.state == .imported)
+    #expect(try setup.ledger(1).isEmpty)
 }
 
-@Test func aReportTheServiceRefusesIsDroppedAndSaid() async throws {
-    // Approved with no clean tagging: the service refuses it, and the rest still go.
+@Test func aReportTheServiceRefusesIsDroppedSaidAndMovesNothing() async throws {
+    // Approved with no clean tagging: the service refuses it, and nothing moves.
     let setup = try Setup([job(1)])
     let coordinator = setup.coordinator()
-    _ = await coordinator.approve(approved(1))
-    #expect(setup.service.eventTypes == ["claim", "approved", "importing", "imported"])
+    let outcome = await coordinator.approve(approved(1))
+    guard case .refused(let why) = outcome else {
+        Issue.record("\(outcome)")
+        return
+    }
+    #expect(why.contains("approved"))
+    #expect(setup.service.eventTypes == ["claim", "approved", "importing"])
     #expect(try setup.outbox().isEmpty)
+    #expect(try setup.ledger(1).isEmpty)
     let problems = await coordinator.problems
-    #expect(problems.count == 3)
     #expect(problems.first?.contains("job 1's approved report") == true)
-    // `imported` wasn't delivered, so the ledger stays for a resume.
-    #expect(try setup.ledger(1).count == 1)
 }
 
 @Test func resumeHereTakesTheClaimOverFromAnotherMac() async throws {

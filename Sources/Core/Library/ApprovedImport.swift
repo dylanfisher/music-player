@@ -76,7 +76,7 @@ package enum ImportOutcome: Equatable, Sendable {
 }
 
 /// Runs Approve's steps (ADR 0139) for one job, as an idempotent sequence over the index's
-/// ledger and outbox: report, move the new files in, and for an upgrade check them, delete the
+/// ledger and outbox: report (and hear the service accept it), move the new files in, and for an upgrade check them, delete the
 /// old files and carry their stats; then rescan and report `imported`. Each step works out
 /// from the ledger and the file system what's left of it, so a run after a crash or a failure,
 /// on this Mac or another, finishes what the last one began. The ledger stays until the outbox
@@ -92,18 +92,23 @@ package struct ImportRun {
     let carry: @Sendable ([(from: String, to: String)]) async throws -> MoveListImport
     /// `LibraryWatcher.rescan(directories:)`.
     let rescan: @Sendable ([String]) -> Void
+    /// Sends the outbox to the service, which must answer `approved` and `importing` before the
+    /// first file moves. Nil when it did, else why not.
+    let deliver: @Sendable () async -> String?
 
     package init(
         index: LibraryIndex, move: LibraryFolderMove,
         trash: @escaping @Sendable ([URL]) async -> String?,
         carry: @escaping @Sendable ([(from: String, to: String)]) async throws -> MoveListImport,
-        rescan: @escaping @Sendable ([String]) -> Void
+        rescan: @escaping @Sendable ([String]) -> Void,
+        deliver: @escaping @Sendable () async -> String?
     ) {
         self.index = index
         self.move = move
         self.trash = trash
         self.carry = carry
         self.rescan = rescan
+        self.deliver = deliver
     }
 
     package func run(_ job: ApprovedImport) async -> ImportOutcome {
@@ -118,6 +123,9 @@ package struct ImportRun {
         } catch {
             return .refused("\(error)")
         }
+        // The service has to know before the first rename, and can refuse: another Mac may
+        // have rejected the job, or its tagging may not be clean.
+        if let refusal = await deliver() { return .refused(refusal) }
 
         let destinations: [String]
         let sizes: [DownloadJob.File]

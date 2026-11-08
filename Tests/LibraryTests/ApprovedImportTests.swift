@@ -74,14 +74,15 @@ private final class ImportFolders {
     func run(
         calls: MoveCalls = MoveCalls(),
         trash: @escaping @Sendable ([URL]) async -> String? = deleting,
-        carry: (@Sendable ([(from: String, to: String)]) async throws -> MoveListImport)? = nil
+        carry: (@Sendable ([(from: String, to: String)]) async throws -> MoveListImport)? = nil,
+        deliver: @escaping @Sendable () async -> String? = { nil }
     ) -> ImportRun {
         let watcher = LibraryWatcher(databaseURL: index.fileURL, networkReaders: nil)
         let rescanned = rescanned
         return ImportRun(
             index: index, move: folders.mover(calls), trash: trash,
             carry: carry ?? { try await watcher.importMoves(lines: $0) },
-            rescan: { rescanned.add($0) })
+            rescan: { rescanned.add($0) }, deliver: deliver)
     }
 
     /// The outbox's reports for the job, by type.
@@ -385,4 +386,28 @@ private func growStagedFiles(_ setup: ImportFolders) throws -> (before: [Int], a
     #expect(try index.stagedSizes(job: 8, folder: "job-8") == ["a.flac": 1])
     try index.forgetImportJob(7)
     #expect(try index.stagedSizes(job: 7, folder: "job-7") == [:])
+}
+
+@Test func aServiceThatRefusesTheReportsMovesNothing() async throws {
+    let setup = try ImportFolders()
+    let heard = Heard()
+    let url = setup.index.fileURL
+    let outcome = await setup.run(deliver: {
+        heard.record(try? LibraryIndex(at: url).importReports().map(\.body))
+        return "the service refused approved"
+    }).run(try setup.job(upgrade: true))
+    #expect(outcome == .refused("the service refused approved"))
+    // Both reports were queued for it to send, and the files hadn't moved when it did.
+    #expect(heard.seen == [[HandoffEvent.approved.json, HandoffEvent.importing.json]])
+    #expect(try setup.folders.staged() == ["01.flac", "02.flac"])
+    #expect(try setup.index.importSteps(job: 7).isEmpty)
+    #expect(oldFilesThere(setup))
+}
+
+final class Heard: @unchecked Sendable {
+    private let lock = NSLock()
+    private var all: [[String]] = []
+
+    func record(_ reports: [String]?) { lock.withLock { all.append(reports ?? []) } }
+    var seen: [[String]] { lock.withLock { all } }
 }

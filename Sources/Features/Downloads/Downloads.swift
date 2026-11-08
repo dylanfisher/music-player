@@ -175,7 +175,7 @@ package final class Downloads {
                 let writer = StagedWriter(stagingRoot: root, dataDirectory: setup.dataDirectory)
                 return await blockingFileWork { writer.write(run, mapping: mapping) }
             },
-            importRun: { job in
+            importRun: { job, deliver in
                 let found: ImportPlaces
                 do {
                     found = try await places()
@@ -190,7 +190,7 @@ package final class Downloads {
                 }
                 return await ImportRun(
                     index: index, move: found.move, trash: setup.trash, carry: setup.carry,
-                    rescan: setup.rescan
+                    rescan: setup.rescan, deliver: deliver
                 ).run(job)
             })
     }

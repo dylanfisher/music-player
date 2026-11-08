@@ -28,8 +28,12 @@ actor DownloadsCoordinator {
         /// Writes a clean run's edits through `StagedWriter` and reads them back, returning
         /// the verdict to report.
         var write: @Sendable (AutoTagRun) async -> AutoTagRun.Verdict
-        /// `ImportRun.run`, with the trash and the watcher's moves and rescan in it.
-        var importRun: @Sendable (ApprovedImport) async -> ImportOutcome
+        /// `ImportRun.run`, with the trash and the watcher's moves and rescan in it. The second
+        /// argument sends the outbox and says why it couldn't: the run calls it once it has
+        /// queued `approved` and `importing`, before the first rename.
+        var importRun:
+            @Sendable (ApprovedImport, @escaping @Sendable () async -> String?) async
+                -> ImportOutcome
     }
 
     /// This Mac's name, as the service knows it.
@@ -43,7 +47,10 @@ actor DownloadsCoordinator {
     private var tagging: Int?
     /// The jobs whose lease a renewal found another Mac holding.
     private var lostLeases: Set<Int> = []
-    private var flushing = false
+    /// The outbox send in progress; another waits for it, then sends what is left.
+    private var sending: Task<Bool, Never>?
+    /// The reports the service refused in the sends since `deliver` last looked.
+    private var refused: [(jobID: Int, name: String, why: String)] = []
     private var importing = false
     /// What went wrong that no call returns: reports the service refused, which the outbox
     /// dropped, and the index's failures, for the window to show.
@@ -187,12 +194,41 @@ actor DownloadsCoordinator {
     /// Sends the outbox's reports in order, dropping each the service answers. One it refuses
     /// is dropped too, and said in `problems`; one it doesn't answer stops the sending, and it
     /// and the rest wait for the next flush, which every poll makes. Once `imported` is
-    /// answered, the job's ledger is forgotten. True when the outbox was emptied.
+    /// answered, or refused because the job is imported already, the job's ledger is
+    /// forgotten. A flush that finds one running waits for it, then sends what is left. True
+    /// when the outbox was emptied.
     @discardableResult
     func flush() async -> Bool {
-        guard !flushing else { return false }
-        flushing = true
-        defer { flushing = false }
+        while let running = sending { _ = await running.value }
+        let task = Task { () -> Bool in
+            let emptied = await sendOutbox()
+            sending = nil
+            return emptied
+        }
+        sending = task
+        return await task.value
+    }
+
+    /// Sends the outbox for an import about to move files, and says why the service wouldn't
+    /// have it: it refused one of the job's reports, or didn't answer. Nil when the job's
+    /// reports were all answered.
+    func deliver(_ id: Int) async -> String? {
+        refused.removeAll { $0.jobID == id }
+        await flush()
+        if let refusal = refused.first(where: { $0.jobID == id }) {
+            return "music-recommender refused \(refusal.name): \(refusal.why)"
+        }
+        do {
+            guard try index().importReports().contains(where: { $0.jobID == id }) else {
+                return nil
+            }
+        } catch {
+            return "the outbox couldn't be read: \(error)"
+        }
+        return "music-recommender didn't answer; nothing was moved"
+    }
+
+    private func sendOutbox() async -> Bool {
         let reports: [QueuedImportReport]
         do {
             reports = try index().importReports()
@@ -217,6 +253,7 @@ actor DownloadsCoordinator {
                 case .refused, .badRequest:
                     delivered = false
                     note("job \(report.jobID)'s \(event.name) report was refused: \(error)")
+                    refused.append((report.jobID, event.name, "\(error)"))
                 default:
                     logger.info("the outbox waits for music-recommender: \(error)")
                     return false
@@ -285,7 +322,7 @@ actor DownloadsCoordinator {
         } catch {
             return .refused("\(error)")
         }
-        let outcome = await effects.importRun(job)
+        let outcome = await effects.importRun(job) { [self] in await deliver(job.jobID) }
         await flush()
         return outcome
     }

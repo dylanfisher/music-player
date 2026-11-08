@@ -32,7 +32,9 @@ permanent delete.
 **Approve is the confirmation.** It is enabled only for a staged job whose tag run was clean and
 whose review claim this Mac holds. Its sheet shows the album, the release, the tags written, the
 format found, and for an upgrade the files it replaces and how each maps to a new one. Nothing
-moves before the owner confirms it.
+moves before the owner confirms it. Once confirmed, the player tells the service `approved` and
+`importing` and waits for its answer before the first rename; if the service refuses, or doesn't
+answer, nothing moves.
 
 **A new album.**
 
