@@ -131,6 +131,7 @@ enum TaggerColumn: String {
 
     /// A column of `width` points with this title. A title's column shares the width the table
     /// gains; the rest keep theirs.
+    @MainActor
     func column(width: CGFloat) -> NSTableColumn {
         let column = NSTableColumn(identifier: identifier)
         column.title = title
