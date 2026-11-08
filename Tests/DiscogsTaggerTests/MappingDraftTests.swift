@@ -62,3 +62,26 @@ import Testing
     }
     #expect(TemplateHelp.text.contains("outside braces is kept as written"))
 }
+
+@Test func anImportedMappingIsShownUnsavedAndABadOneChangesNothing() {
+    var yate = MappingDraft(mapping: DiscogsPreset.yate.mapping, saved: [])
+    yate.setJoin("; ", for: .styles)
+    var draft = MappingDraft(mapping: DiscogsPreset.minimal.mapping, saved: [])
+    #expect(draft.load(yate.exported, from: "Pasted") == nil)
+    #expect(draft.mapping == yate.mapping)
+    #expect(draft.chosenName == nil)
+    #expect(draft.note == "Pasted, not saved; Save As keeps it")
+
+    let before = draft
+    var broken = DiscogsPreset.oneToOne.mapping
+    broken[.styles].format.join = nil
+    for bad in [
+        "", "{", "[1]", "{\"styles\": 1}", MappingDraft(mapping: broken, saved: []).exported,
+    ] {
+        #expect(draft.load(bad, from: "Pasted") != nil, "\(bad)")
+        #expect(draft == before, "\(bad) changed nothing")
+    }
+    #expect(
+        draft.load(MappingDraft(mapping: broken, saved: []).exported, from: "Pasted")
+            == "styles is a list, so it needs a join")
+}

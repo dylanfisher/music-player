@@ -53,6 +53,27 @@ public struct Setting<Value: SettingValue>: Sendable {
         }
         return validate(value).map { .failure($0) } ?? .success(value)
     }
+
+    /// `value` as the config file writes this setting's, for an export of the value alone.
+    public func text(_ value: Value) -> String { jsonText(value) + "\n" }
+
+    /// The value `text` holds, read and checked as the config file's value for this setting
+    /// is: comments allowed, then the same decoding and checks. Throws why it can't be used.
+    public func value(fromText text: String) throws(SettingProblem.Reason) -> Value {
+        let json: Any
+        do {
+            let plain = try ConfigText(text).plainJSON()
+            json = try JSONSerialization.jsonObject(with: Data(plain), options: .fragmentsAllowed)
+        } catch let problem as ConfigProblem {
+            throw .invalid(problem.description)
+        } catch {
+            throw .invalid(jsonProblem(error))
+        }
+        switch decode(json: json) {
+        case .success(let value): return value
+        case .failure(let reason): throw reason
+        }
+    }
 }
 
 extension Setting where Value == Int {

@@ -88,6 +88,26 @@ struct MappingDraft: Equatable {
         mapping[field].format.template = text.isEmpty ? nil : text
     }
 
+    /// The mapping as Export… writes it: as the config file holds its mapping, one encoder for
+    /// both.
+    var exported: String { AppSettings().discogsMapping.text(mapping) }
+
+    /// Shows the mapping `text` holds, unsaved, from Import… or Paste, `source` saying which.
+    /// The problem when the config file wouldn't take it as its mapping, leaving the draft as
+    /// it was.
+    mutating func load(_ text: String, from source: String) -> String? {
+        let loaded: DiscogsMapping
+        do {
+            loaded = try AppSettings().discogsMapping.value(fromText: text)
+        } catch {
+            return error.description
+        }
+        mapping = loaded
+        name = nil
+        note = "\(source), not saved; Save As keeps it"
+        return nil
+    }
+
     /// Whether Save As `name` would replace a saved mapping, which the sheet asks about first.
     func replaces(_ name: String) -> Bool {
         saved.contains { $0.name == name.trimmingCharacters(in: .whitespaces) }

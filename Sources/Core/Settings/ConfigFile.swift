@@ -78,11 +78,7 @@ public enum ConfigFile {
         } catch {
             let offset = (error as NSError).userInfo["NSJSONSerializationErrorIndex"] as? Int
             throw ConfigErrorList([
-                ConfigProblem(
-                    line: offset.map(text.line(at:)),
-                    message:
-                        "isn't valid JSON: \((error as NSError).userInfo[NSDebugDescriptionErrorKey] ?? error)"
-                )
+                ConfigProblem(line: offset.map(text.line(at:)), message: jsonProblem(error))
             ])
         }
         guard let entries = object as? [String: Any] else {
@@ -348,6 +344,11 @@ struct ConfigErrorList: Error {
     init(_ problems: [ConfigProblem]) {
         self.problems = problems
     }
+}
+
+/// Why Foundation couldn't parse a file's text as JSON.
+func jsonProblem(_ error: any Error) -> String {
+    "isn't valid JSON: \((error as NSError).userInfo[NSDebugDescriptionErrorKey] ?? error)"
 }
 
 /// A value as the file writes it: pretty-printed, with sorted keys.

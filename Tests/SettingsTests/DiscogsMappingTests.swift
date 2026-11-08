@@ -212,3 +212,25 @@ private func mappingProblem(_ json: String) -> String? {
         }
     }
 }
+
+@Test func aMappingExportedAloneIsTheConfigFilesValueAndReadsBackChecked() throws {
+    let setting = schema.discogsMapping
+    var mapping = DiscogsPreset.yate.mapping
+    mapping[.styles].format.join = "; "
+    let text = setting.text(mapping)
+    let file = #"{"discogs.mapping": \#(text)}"#
+    #expect(try parsed(file).values["discogs.mapping"] as? DiscogsMapping == mapping)
+    #expect(try setting.value(fromText: text) == mapping)
+    #expect(try setting.value(fromText: "// mine\n" + text) == mapping, "comments as in the file")
+    for (bad, expected) in [
+        ("{", "isn't valid JSON"), ("[]", "expected a Discogs field mapping"),
+        (try mappingJSON { $0["styles"] = nil }, "no rule for styles"),
+    ] {
+        #expect(throws: (any Error).self) { try setting.value(fromText: bad) }
+        do {
+            _ = try setting.value(fromText: bad)
+        } catch {
+            #expect(error.description.contains(expected), "\(bad): \(error)")
+        }
+    }
+}

@@ -1,10 +1,12 @@
 import AppKit
 import Settings
+import UniformTypeIdentifiers
 
 /// Field Mapping… (51.10): every Discogs field, release-level then track-level, with its mode,
 /// its tags, the join between its values and a template; a preset or a saved mapping to start
-/// from, and Save As to keep this one by name. OK saves it as the mapping in use. A key spelled
-/// per format or numbered is shown, and edited in the config file.
+/// from, and Save As to keep this one by name; Import…, Paste and Export… for the mapping as
+/// JSON. OK saves it as the mapping in use. A key spelled per format or numbered is shown, and
+/// edited in the config file.
 @MainActor
 final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource,
     NSTableViewDelegate, NSTextFieldDelegate
@@ -19,6 +21,8 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     let nameField = NSTextField()
     let problemLabel = NSTextField(labelWithString: "")
     let okButton = NSButton(title: "OK", target: nil, action: nil)
+    /// Where Paste reads from; tests use a pasteboard of their own.
+    var pasteboard = NSPasteboard.general
     /// The template help while it shows.
     private var help: NSPopover?
     /// The mapping and saved ones on OK; nil for Cancel.
@@ -33,6 +37,7 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         super.init(window: window)
         build(in: window)
         confirmReplace = { [weak self] name, answer in self?.askToReplace(name, answer) }
+        refused = { [weak self] message, detail in self?.showRefusal(message, detail) }
         refresh()
     }
 
@@ -61,7 +66,16 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         okButton.target = self
         okButton.action = #selector(ok)
         okButton.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [problemLabel, NSView(), cancel, okButton])
+        let file = [
+            NSButton(title: "Import…", target: self, action: #selector(chooseImport)),
+            NSButton(title: "Paste", target: self, action: #selector(paste)),
+            NSButton(title: "Export…", target: self, action: #selector(chooseExport)),
+        ]
+        file[0].toolTip = "Shows a mapping from a JSON file, unsaved"
+        file[1].toolTip = "Shows the mapping copied as JSON, unsaved"
+        file[2].toolTip = "Writes the mapping shown as JSON, as the config file holds it"
+        let buttons = NSStackView(
+            views: file + [problemLabel, NSView(), cancel, okButton])
         let page = NSStackView(views: [top, scroll, buttons])
         page.orientation = .vertical
         page.alignment = .leading
@@ -198,6 +212,78 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
             return NSSound.beep()
         }
         refresh()
+    }
+
+    /// Asks for a JSON file of a mapping and shows it.
+    @objc private func chooseImport() {
+        guard let window else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.message = "Choose a field mapping exported as JSON. It's shown unsaved."
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.importFile(at: url)
+        }
+    }
+
+    /// Shows the mapping in the file at `url`, or says why it can't, changing nothing.
+    func importFile(at url: URL) {
+        let text: String
+        do {
+            text = try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            return refused("The file couldn't be read", "\(error)")
+        }
+        load(text, from: "Imported “\(url.lastPathComponent)”")
+    }
+
+    /// Shows the mapping copied as JSON text.
+    @objc func paste() {
+        guard let text = pasteboard.string(forType: .string) else {
+            return refused("The clipboard holds no text", "Copy a field mapping as JSON first.")
+        }
+        load(text, from: "Pasted")
+    }
+
+    private func load(_ text: String, from source: String) {
+        // Ending the edit in a field commits its text first, so it can't land on what loads.
+        window?.makeFirstResponder(nil)
+        if let problem = draft.load(text, from: source) {
+            return refused("That isn't a field mapping the config file takes", problem)
+        }
+        refresh()
+    }
+
+    /// Asks where to write the mapping shown as JSON, and writes it there.
+    @objc private func chooseExport() {
+        guard let window else { return }
+        window.makeFirstResponder(nil)
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = (draft.chosenName ?? "Field Mapping") + ".json"
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.export(to: url)
+        }
+    }
+
+    func export(to url: URL) {
+        do {
+            try Data(draft.exported.utf8).write(to: url, options: .atomic)
+        } catch {
+            refused("The mapping couldn't be exported", "\(error)")
+        }
+    }
+
+    /// Says why an import, a paste or an export didn't happen; tests hear it in its place.
+    var refused: (String, String) -> Void = { _, _ in }
+
+    private func showRefusal(_ message: String, _ detail: String) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = detail
+        alert.beginSheetModal(for: window)
     }
 
     /// The question Save As asks over the sheet before it replaces a saved mapping.

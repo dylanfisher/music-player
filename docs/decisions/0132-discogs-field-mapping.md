@@ -76,6 +76,14 @@ field or key is named, a list has no join, a template names no field, a key coul
 (a name the writer refuses, a field's name, `WXXX:` or `TIPL` outside ID3), or two fields that
 are on write one tag in one format.
 
+The sheet's Export… writes the mapping shown as `discogs.mapping`'s value alone, the object of
+rules, with the config file's encoder (`Setting.text`), so an export pastes into `config.json`
+as it is. Import… and Paste read that shape with the file's parser and checks
+(`Setting.value(fromText:)`), comments allowed; a mapping the file would refuse is refused with
+the same reason and the sheet keeps what it showed. An export doesn't carry a name: a mapping
+read in shows unsaved, for Save As. Save As chooses the name it saved, even when a preset holds
+the same rules, and asks before it replaces a saved mapping of that name.
+
 ### The presets
 
 The owner decided on 2026-11-07 that no preset is made from his library, since the app will be

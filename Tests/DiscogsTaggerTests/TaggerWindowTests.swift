@@ -260,3 +260,50 @@ private final class Imports: @unchecked Sendable {
     #expect(sheet.presets.titleOfSelectedItem == "Edited")
     #expect(sheet.problemLabel.stringValue.isEmpty, "the note goes with the next edit")
 }
+
+@MainActor
+@Test func aMappingExportedImportedAndPastedBackIsTheOneExported() throws {
+    var mapping = DiscogsPreset.yate.mapping
+    mapping[.genres].format.template = "{genre} - {styles}"
+    let sheet = MappingSheet(draft: MappingDraft(mapping: mapping, saved: []))
+    var refusals: [String] = []
+    sheet.refused = { message, _ in refusals.append(message) }
+    let folder = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let file = folder.appendingPathComponent("mapping.json", isDirectory: false)
+    sheet.export(to: file)
+    let text = try String(contentsOf: file, encoding: .utf8)
+    #expect(text == AppSettings().discogsMapping.text(mapping), "the config file's shape")
+
+    let other = MappingSheet(
+        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: []))
+    other.refused = { message, _ in refusals.append(message) }
+    other.importFile(at: file)
+    #expect(other.draft.mapping == mapping)
+    #expect(other.presets.titleOfSelectedItem == "Edited")
+    #expect(
+        other.problemLabel.stringValue == "Imported “mapping.json”, not saved; Save As keeps it")
+
+    let pasteboard = NSPasteboard.withUniqueName()
+    defer { pasteboard.releaseGlobally() }
+    let pasted = MappingSheet(
+        draft: MappingDraft(mapping: DiscogsPreset.minimal.mapping, saved: []))
+    pasted.pasteboard = pasteboard
+    pasted.refused = { message, _ in refusals.append(message) }
+    pasteboard.clearContents()
+    pasteboard.setString(text, forType: .string)
+    pasted.paste()
+    #expect(pasted.draft.mapping == mapping)
+    #expect(refusals.isEmpty)
+
+    pasteboard.clearContents()
+    pasteboard.setString("{\"styles\": {}}", forType: .string)
+    pasted.paste()
+    #expect(pasted.draft.mapping == mapping, "a bad paste changes nothing")
+    #expect(refusals == ["That isn't a field mapping the config file takes"])
+    other.importFile(at: folder.appendingPathComponent("missing.json", isDirectory: false))
+    #expect(other.draft.mapping == mapping)
+    #expect(refusals.last == "The file couldn't be read")
+}
