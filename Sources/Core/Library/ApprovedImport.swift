@@ -129,7 +129,7 @@ struct ImportRun {
             do {
                 _ = try readMetadata(at: URL(fileURLWithPath: path, isDirectory: false))
             } catch {
-                return "\(path)'s tags don't read: \(error)"
+                return MoveRefusal.unreadable(path, "\(error)").description
             }
         }
         return nil
@@ -212,7 +212,7 @@ struct ImportRun {
         do {
             let result = try await carry(lines)
             guard result.problems.isEmpty else {
-                return result.problems.map { "line \($0.line): \($0.reason)" }
+                return result.problems.map(\.description)
                     .joined(separator: "; ")
             }
             return nil

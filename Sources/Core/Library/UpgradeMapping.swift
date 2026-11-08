@@ -56,7 +56,8 @@ enum UpgradeRefusal: Error, Equatable, CustomStringConvertible {
         switch self {
         case .notInLibrary(let path): "\(path) isn't in the library"
         case .otherRelease(let path, let found, let expected):
-            "\(path) is tagged with release \(found ?? "none"), not \(expected)"
+            "\(path) is tagged with " + (found.map { "release \($0)" } ?? "no release")
+                + ", not \(expected)"
         }
     }
 }

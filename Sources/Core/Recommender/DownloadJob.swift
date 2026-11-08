@@ -134,7 +134,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
 
     /// What the player last reported of its tag run.
     package struct Tagging: Equatable, Sendable, Decodable {
-        package enum Status: String, Equatable, Sendable, Codable {
+        enum Status: String, Equatable, Sendable, Codable {
             case none, running, clean, discrepancy, error
         }
 
