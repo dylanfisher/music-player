@@ -40,7 +40,14 @@ public struct TagUndoJournal: Sendable {
     package struct Entry: Equatable, Sendable {
         let sequence: Int
         let folder: URL
+        /// Which window made the edit, written with its folder; nil for an entry read back,
+        /// whose origin `newestEdit` reads from the folder.
+        var origin: TagEditOrigin?
+        var originFile: URL { folder.appendingPathComponent(originName) }
     }
+
+    /// The file in an edit's folder that names its origin, which the listing of records skips.
+    static let originName = "origin"
 
     /// One file of an edit: its record and its old bytes, by number in the entry.
     package struct Handle: Equatable, Sendable {
@@ -113,13 +120,36 @@ public struct TagUndoJournal: Sendable {
         case edited(lowerBound: Int, upperBound: Int)
     }
 
-    /// A new, empty edit after the newest one.
-    package func newEntry() throws(TagWriteError) -> Entry {
+    /// A new, empty edit after the newest one, made by `origin`.
+    package func newEntry(origin: TagEditOrigin = .tagEditor) throws(TagWriteError) -> Entry {
         let sequence = (try sequences(in: directory).last ?? 0) + 1
         let entry = Entry(
-            sequence: sequence, folder: directory.appendingPathComponent(name(sequence)))
+            sequence: sequence, folder: directory.appendingPathComponent(name(sequence)),
+            origin: origin)
         try makeFolder(of: entry)
         return entry
+    }
+
+    /// Who made the newest edit and how many files it holds, without changing the journal;
+    /// nil for an empty journal. The origin is nil for an edit whose folder doesn't name one.
+    func newestEdit() throws(TagWriteError) -> (origin: TagEditOrigin?, fileCount: Int)? {
+        for sequence in try sequences(in: directory).reversed() {
+            let entry = Entry(
+                sequence: sequence, folder: directory.appendingPathComponent(name(sequence)))
+            let count = try sequences(in: entry.folder).count
+            guard count > 0 else { continue }
+            guard FileManager.default.fileExists(atPath: entry.originFile.path) else {
+                return (nil, count)
+            }
+            do {
+                let named = try String(contentsOf: entry.originFile, encoding: .utf8)
+                // One this build doesn't know is discarded, as stored data has one shape.
+                return (TagEditOrigin(rawValue: named), count)
+            } catch {
+                throw journalError("can't read \(entry.originFile.path): \(error)")
+            }
+        }
+        return nil
     }
 
     /// Makes `entry`'s folder if it isn't there: removing an edit's last file removes its
@@ -129,6 +159,7 @@ public struct TagUndoJournal: Sendable {
         do {
             try FileManager.default.createDirectory(
                 at: entry.folder, withIntermediateDirectories: true)
+            try entry.origin.map { try Data($0.rawValue.utf8).write(to: entry.originFile) }
         } catch {
             throw journalError("can't make \(entry.folder.path): \(error)")
         }

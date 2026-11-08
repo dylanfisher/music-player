@@ -41,13 +41,17 @@ public final class TagEditing {
             @Sendable ([String], @escaping @Sendable () -> Bool) -> (
                 tracks: [EditableTrack], problems: [String]
             )
-        /// Writes each file its edit, telling its last argument how far it's got, from any
-        /// thread.
+        /// Writes each file its edit, as made in the window the origin names, telling its last
+        /// argument how far it's got, from any thread.
         var write:
             @Sendable (
-                [(path: String, edit: TagEdit)], @escaping @Sendable (TagWriteProgress) -> Void
+                [(path: String, edit: TagEdit)], TagEditOrigin,
+                @escaping @Sendable (TagWriteProgress) -> Void
             ) -> TagWriteReport
         var undo: @Sendable () -> TagWriteReport
+        /// Who made the newest edit and how many files it holds, nil with none to undo.
+        var newestEdit:
+            @Sendable () throws(TagWriteError) -> (origin: TagEditOrigin?, fileCount: Int)?
         /// Shows an info window in front, beside the main window: at the place given, past the
         /// other info windows' top left corners.
         var present: @MainActor (TagEditorWindow, NSWindow, NSPoint?, [NSPoint]) -> Void
@@ -70,6 +74,21 @@ public final class TagEditing {
                     "Each file is rewritten with the new tags. Undo Tag Edit puts them all back.",
                 button: "Change Tags")
         }
+
+        /// Asked when the newest edit, which Undo Tag Edit undoes, was made in another window.
+        static func undoing(_ origin: TagEditOrigin, _ count: Int) -> Confirmation {
+            let made =
+                switch origin {
+                case .tagEditor: "an info window's"
+                case .discogsTagger: "the Discogs tagger's"
+                }
+            return Confirmation(
+                message: "Undo \(made) edit of \(count) file\(count == 1 ? "" : "s")?",
+                detail:
+                    "Undo Tag Edit undoes the newest tag edit, which wasn't made in this window."
+                    + " Its files get back the tags they had before it.",
+                button: AppCommands.title(of: .undoTagEdit))
+        }
     }
 
     private let effects: Effects
@@ -89,7 +108,8 @@ public final class TagEditing {
     public init(writer: TagWriter) {
         effects = Effects(
             read: { readEditableTracks($0, isStopped: $1) },
-            write: { writer.write($0, progress: $1) }, undo: { writer.undoLast() },
+            write: { writer.write($0, origin: $1, progress: $2) }, undo: { writer.undoLast() },
+            newestEdit: { () throws(TagWriteError) in try writer.newestEdit() },
             present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask,
             alert: showProblems)
         // A write in place a crash cut short is finished before anything reads the file
@@ -256,9 +276,35 @@ public final class TagEditing {
     }
 
     /// Undo Tag Edit: puts back the files of the newest edit, after any write still queued.
-    public func undo(over window: NSWindow) {
+    /// `origin` is the kind of window it's pressed in; when the edit is known to come from
+    /// another, it asks first (ADR 0136).
+    public func undo(over window: NSWindow, from origin: TagEditOrigin) {
         let undo = effects.undo
-        enqueue("undo the tag edit", over: window) { _ in undo() }
+        let newestEdit = effects.newestEdit
+        // Pending while it waits behind the writes queued before it, whose edit it has to see
+        // as the newest.
+        pendingWrites += 1
+        writes.async {
+            let newest = Result { () throws(TagWriteError) in try newestEdit() }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.pendingWrites -= 1
+                    if self.pendingWrites == 0 { self.saving(nil) }
+                    switch newest {
+                    case .success(.some((.some(let made), let count))) where made != origin:
+                        self.effects.confirm(.undoing(made, count), window) { yes in
+                            guard yes else { return }
+                            self.enqueue("undo the tag edit", over: window) { _ in undo() }
+                        }
+                    case .success:
+                        self.enqueue("undo the tag edit", over: window) { _ in undo() }
+                    case .failure(let error):
+                        self.effects.alert(
+                            "Couldn't undo the tag edit", [error.description], window)
+                    }
+                }
+            }
+        }
     }
 
     /// Writes one file at once; a batch asks first, in a sheet on the info window, which stays
@@ -278,13 +324,13 @@ public final class TagEditing {
         let files = paths.map { (path: $0, edit: edit) }
         guard paths.count > 1 else {
             editor.close()
-            enqueue("write the tags", over: window) { write(files, $0) }
+            enqueue("write the tags", over: window) { write(files, .tagEditor, $0) }
             return
         }
         effects.confirm(.writing(paths.count), editor.window) { [weak self, weak editor] yes in
             guard yes, let self else { return }
             editor?.close()
-            self.enqueue("write the tags", over: window) { write(files, $0) }
+            self.enqueue("write the tags", over: window) { write(files, .tagEditor, $0) }
         }
     }
 
@@ -299,7 +345,7 @@ public final class TagEditing {
         guard !files.isEmpty else { return }
         let write = effects.write
         completions[lastWrite + 1] = completion
-        enqueue("write the tags", over: window) { write(files, $0) }
+        enqueue("write the tags", over: window) { write(files, .discogsTagger, $0) }
     }
 
     /// Queues `work`, which is handed what to tell of its progress.

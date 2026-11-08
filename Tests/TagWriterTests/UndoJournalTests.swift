@@ -210,6 +210,27 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
     }
 }
 
+/// The newest edit says which window made it and how many files it holds, without changing the
+/// journal; an edit whose folder names no origin reads as unknown (ADR 0136).
+@Test func theNewestEditSaysWhoMadeIt() throws {
+    let urls = try [Sample.flac.copy(), Sample.mp3v24.copy()]
+    let writer = scratchWriter()
+    #expect(try writer.newestEdit() == nil)
+    expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [urls[0].path]), [urls[0]])
+    let edit = TagEdit(values: [.title: "Two"])
+    expectChanged(
+        writer.write(urls.map { ($0.path, edit) }, origin: .discogsTagger), urls)
+    #expect(try writer.newestEdit()! == (.discogsTagger, 2))
+    #expect(try writer.newestEdit()! == (.discogsTagger, 2), "nothing changed")
+
+    expectChanged(writer.undoLast(), urls.reversed())
+    #expect(try writer.newestEdit()! == (.tagEditor, 1))
+    try FileManager.default.removeItem(
+        at: try newestEntry(writer.journal).appendingPathComponent(TagUndoJournal.originName))
+    #expect(try writer.newestEdit()! == (nil, 1))
+    expectChanged(writer.undoLast(), [urls[0]])
+}
+
 /// The value of the extended attribute `name` of the file at `url`, nil without one.
 private func attribute(_ name: String, of url: URL) -> [UInt8]? {
     let size = getxattr(url.path, name, nil, 0, 0, 0)
