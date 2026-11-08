@@ -162,6 +162,15 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     #expect(DiscogsAPIError.rateLimited.stopsRun)
 }
 
+@Test func aRetryAfterThatIsntAFiniteNumberWaitsAMinute() async throws {
+    for text in ["nan", "inf", "-inf", "soon"] {
+        let fake = FakeDiscogs()
+        fake.queue("/releases/1001", status: 429, headers: ["Retry-After": text])
+        _ = try await fake.api().release(id: 1001)
+        #expect(fake.sleeps.contains(60), "\(text): \(fake.sleeps)")
+    }
+}
+
 @Test func cancellingDuringAWaitStopsIt() async throws {
     let fake = FakeDiscogs()
     let api = DiscogsAPI(

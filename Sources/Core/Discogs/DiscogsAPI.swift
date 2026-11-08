@@ -210,7 +210,11 @@ public actor DiscogsAPI {
             case 429:
                 refusals += 1
                 guard refusals <= Self.rateLimitRetries else { throw .rateLimited }
-                let after = response.header("Retry-After").flatMap { Double($0) } ?? 60
+                // "nan" and "inf" read as numbers, and would skip the wait or make it endless.
+                let after =
+                    response.header("Retry-After").flatMap { Double($0) }.flatMap {
+                        $0.isFinite ? $0 : nil
+                    } ?? 60
                 try await pause(min(max(after, 1), Self.longestRetrySeconds))
             case 401, 403: throw .unauthorized
             case 404: throw .notFound
