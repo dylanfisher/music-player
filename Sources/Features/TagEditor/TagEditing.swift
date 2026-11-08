@@ -77,6 +77,8 @@ public final class TagEditing {
     private(set) var pendingWrites = 0
     /// Where a finished write's failures are shown, by the write's number.
     private var alertWindows: [Int: (action: String, window: NSWindow)] = [:]
+    /// What to tell a Discogs write's caller, by write number.
+    private var completions: [Int: (Set<String>) -> Void] = [:]
     private var lastWrite = 0
     /// Each open window's latest read, so an earlier read that comes back late is dropped.
     private var reads: [ObjectIdentifier: ReadStop] = [:]
@@ -257,9 +259,14 @@ public final class TagEditing {
     /// Writes each file its own edit as one undoable edit, after the writes queued before it,
     /// with a save's progress and its alert over `window` for what failed. The caller has
     /// asked the user: the Discogs tagger's Apply, after its confirmation (ADR 0133).
-    public func write(_ files: [(path: String, edit: TagEdit)], over window: NSWindow) {
+    /// `completion` hears the paths that weren't written, once the write has run.
+    public func write(
+        _ files: [(path: String, edit: TagEdit)], over window: NSWindow,
+        completion: @escaping (Set<String>) -> Void = { _ in }
+    ) {
         guard !files.isEmpty else { return }
         let write = effects.write
+        completions[lastWrite + 1] = completion
         enqueue("write the tags", over: window) { write(files, $0) }
     }
 
@@ -300,6 +307,8 @@ public final class TagEditing {
     private func finished(_ number: Int, _ report: TagWriteReport) {
         pendingWrites -= 1
         if pendingWrites == 0 { saving(nil) }
+        completions.removeValue(forKey: number)?(
+            Set(report.failures.map(\.path) + report.notWritten))
         guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }
         if !report.changed.isEmpty {
             written(report)

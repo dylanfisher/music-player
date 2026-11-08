@@ -42,7 +42,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let applyButton = NSButton(title: "", target: nil, action: nil)
 
     /// Writes the confirmed edits.
-    var write: ([(path: String, edit: TagEdit)]) -> Void = { _ in }
+    var write: ([(path: String, edit: TagEdit)], @escaping (Set<String>) -> Void) -> Void = {
+        _, _ in
+    }
     var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
     var dumpsFolder: () -> URL? = { nil }
     var dumpsFolderChosen: (URL) -> Void = { _ in }
@@ -68,7 +70,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         build(in: window)
         model.changed = { [weak self] in self?.refresh() }
         model.failed = { [weak self] message, details in self?.alert(message, details) }
-        model.write = { [weak self] files in self?.write(files) }
+        model.write = { [weak self] files, completion in self?.write(files, completion) }
         refresh()
     }
 

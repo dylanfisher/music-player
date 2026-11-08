@@ -41,8 +41,8 @@ extension AppDelegate {
                     startingOver: startingOver, progress: progress)
             })
         tagger.selectedTracks = { [weak browser] in try browser?.selectedTrackIDs() ?? [] }
-        tagger.write = { [weak self] files, window in
-            self?.tagEditing.write(files, over: window)
+        tagger.write = { [weak self] files, window, completion in
+            self?.tagEditing.write(files, over: window, completion: completion)
         }
         tagger.mappingChosen = { [weak self] mapping, saved in
             do {

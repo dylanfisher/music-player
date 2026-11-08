@@ -67,6 +67,8 @@ final class TaggerModel {
     struct ApplyPlan {
         var albumIDs: [Int64]
         var files: [(path: String, edit: TagEdit)]
+        /// The album each file belongs to, by path.
+        var albumOfPath: [String: Int64] = [:]
         var fieldCount: Int
         /// The albums left out, each with why: a file that couldn't be read, or a value no
         /// format holds.
@@ -120,7 +122,10 @@ final class TaggerModel {
     /// The selected library tracks' ids, for the selection scope.
     var selectedTracks: () throws -> [Int64] = { [] }
     /// Writes the files' edits as one undoable batch; called only after the user confirmed.
-    var write: ([(path: String, edit: TagEdit)]) -> Void = { _ in }
+    /// The completion hears the paths that weren't written.
+    var write: ([(path: String, edit: TagEdit)], @escaping (Set<String>) -> Void) -> Void = {
+        _, _ in
+    }
 
     private var work: Task<Void, Never>?
     /// Apply's read of the files, which Stop cancels too.
@@ -423,6 +428,7 @@ final class TaggerModel {
                 guard !edits.isEmpty else { continue }
                 plan.albumIDs.append(album.id)
                 plan.files += edits
+                for (path, _) in edits { plan.albumOfPath[path] = album.id }
                 plan.fieldCount += set.files.flatMap(\.changes).count {
                     !album.excluded.contains($0.id)
                 }
@@ -451,10 +457,20 @@ final class TaggerModel {
         return (message, detail)
     }
 
+    /// Lets an album whose files weren't all written be applied again.
+    private func reopen(_ plan: ApplyPlan, unwritten: Set<String>) {
+        let failed = Set(unwritten.compactMap { plan.albumOfPath[$0] })
+        guard !failed.isEmpty else { return }
+        for index in albums.indices where failed.contains(albums[index].id) {
+            albums[index].applied = false
+        }
+        changed()
+    }
+
     /// Hands the plan's edits to the writer: the user has confirmed them.
     func apply(_ plan: ApplyPlan) {
         guard !plan.files.isEmpty else { return }
-        write(plan.files)
+        write(plan.files) { [weak self] unwritten in self?.reopen(plan, unwritten: unwritten) }
         for index in albums.indices where plan.albumIDs.contains(albums[index].id) {
             albums[index].applied = true
         }

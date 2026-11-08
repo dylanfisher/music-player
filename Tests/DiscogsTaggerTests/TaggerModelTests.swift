@@ -162,7 +162,11 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
                 .filter { ids.contains($0.id) }
         })
     var written: [[(path: String, edit: TagEdit)]] = []
-    tagger.write = { written.append($0) }
+    var completion: (Set<String>) -> Void = { _ in }
+    tagger.write = { files, done in
+        written.append(files)
+        completion = done
+    }
     tagger.analyze()
     await tagger.finished()
     #expect(tagger.applicable(.exact).map(\.id) == [4, 1], "not the rejected album")
@@ -191,6 +195,10 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(written.count == 1)
     #expect(written[0].count == 6)
     #expect(tagger.applicable(.exact).isEmpty, "each album is written once a session")
+
+    // A file of album 4 that wasn't written puts that album back, and only that one.
+    completion([try #require(plan.files.first { $0.path.hasSuffix("/400.flac") }).path])
+    #expect(tagger.applicable(.exact).map(\.id) == [4], "a failed write can be applied again")
 }
 
 @MainActor

@@ -26,7 +26,11 @@ public final class DiscogsTagger {
         set { model.selectedTracks = newValue }
     }
     /// Writes the confirmed edits as one undoable batch, over the window given.
-    public var write: ([(path: String, edit: TagEdit)], NSWindow) -> Void = { _, _ in }
+    /// The completion hears the paths that weren't written.
+    public var write:
+        ([(path: String, edit: TagEdit)], NSWindow, @escaping (Set<String>) -> Void) -> Void = {
+            _, _, _ in
+        }
     /// Saves the mapping chosen in the Field Mapping sheet, and the user's saved ones.
     public var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
     /// Where the import's folder panel starts: the dumps folder where it is now, if set.
@@ -89,9 +93,9 @@ public final class DiscogsTagger {
 
     func makeWindow() -> TaggerWindow {
         let made = TaggerWindow(model: model)
-        made.write = { [weak self, weak made] files in
+        made.write = { [weak self, weak made] files, completion in
             guard let self, let window = made?.window else { return }
-            write(files, window)
+            write(files, window, completion)
         }
         made.mappingChosen = { [weak self] mapping, saved in
             self?.model.mapping = mapping
