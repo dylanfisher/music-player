@@ -3,6 +3,8 @@
 - **Date:** 2026-11-01
 - **Status:** accepted
 - **Amends:** [0022](0022-stable-track-identity-and-play-timeline.md)
+- **Amended:** 2026-11-07 (lossless codecs match each other; a move list is a second source of
+  moves)
 
 ## Context
 
@@ -66,6 +68,39 @@ machine.
   made the same move, or has no row for the old path, does nothing with it. A machine with stats
   on both paths (it played the new path before the event arrived) merges them by phase 23's
   rules.
+- **A move list** is the second source of moves (amended 2026-11-07), for a conversion the
+  owner runs with a script that knows each file's old and new path: about 17,600 ALAC `.m4a`
+  files converted to FLAC beside them. **File ▸ Import Moves…** reads a list outside the music
+  folders, one line a file, `<old absolute path>\t<new absolute path>\n`, spelled as the volume
+  lists them, written once the new file is in place and the old one gone. It runs on the scan
+  queue, between scans and syncs, in transactions of 1,000 lines, and reads nothing but the
+  list: of the music it only asks whether a file exists. Paths compare in NFC, as `paths` does.
+  Each line takes one of these:
+  - **The old path has no row** and the new one has stats: a scan matched the move, or the list
+    was imported before. Already done; nothing changes. With no stats on the new path either, the
+    old path was never in the library, and the line is a problem.
+  - **The old path has a row**: it takes the new path through the code a sync `move` takes, so
+    the file keeps its ID, Date Added, plays, history, rating, opinion and playlist entries, and
+    the move is logged for the other Macs as a scan's match is. A new path with a track and no
+    stats is a plain move. A new path with stats of its own merges them by phase 23's rules, as
+    a move arriving after the new path was played does.
+  - **The old path still has a file in the index** (no scan since the conversion): the index
+    lets it go as a scan that found it gone would, then moves it, so the next scan finds nothing
+    gone. When the old file is still on disk the line is a problem and nothing changes.
+  - **The new path has no row** (no scan has seen it): the old row takes the new path, as a sync
+    move to a path this machine hasn't scanned does, and the stats wait there for the scan,
+    which stores the file under that row. The row drops the old file's codec, rate, length and
+    title, which describe a file no longer there: with them it would be lost, and a move
+    candidate for any other track of that length, until the scan. A sync move to a path not
+    scanned drops them too, being the same code.
+  So importing before or after the rescan ends the same. A line that doesn't parse, whose new
+  file isn't on disk, or whose old path is unknown is a problem, listed by line number in the
+  Problems window, and the other lines go on. A sheet says how many moved, merged and were
+  already done.
+- **One function** gives an old row its new path for a sync `move` and for a move list:
+  `takeMove`, beside the merge rules it calls. The two differ only before it: a sync move with
+  the old file still in the index waits for this Mac's scan, since a log can't vouch that the
+  file left; a move list checks the disk, and lets the file go.
 - Users who point machines at separate copies of their music don't share stats, unless the
   relative paths happen to match. Settings say so beside the sync folder.
 

@@ -46,7 +46,9 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   playlist entries whose file left, likely duplicates, albums with gaps, several album artists
   or mixed sample rates, tracks missing art, an album or an album artist, and Lost Stats: files
   with stats that left without a match, which **Resolve Lost Stats…** gives to a track or
-  dismisses. **Show Library Health** (File menu, or the button in Settings ▸ General ▸ Library)
+  dismisses. **Import Moves…** applies a list of moved files' old and new paths, a tab
+  between them, one file a line, so a conversion script's moves keep their stats exactly.
+  **Show Library Health** (File menu, or the button in Settings ▸ General ▸ Library)
   shows a tile per check with its count over the track table, in the browser columns' place;
   a tile lists its tracks below. It runs after a scan and on Show Library Health. ⌘R reveals the selected tracks
   in Searcher, or in Finder when Searcher isn't installed or the File Viewer setting says so.
