@@ -111,7 +111,7 @@ literal "INSERT OR IGNORE INTO \(…) (path_id) VALUES (?)" | files Sources/Core
 literal "--report-launch" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sources/Tools/Bench/WindowBenchmarks.swift | the app's flag, which Bench passes to the app it launches
 literal "fcntl" | files Sources/Primitives/LocalNetwork/HTTPServer.swift Sources/Primitives/LocalSocket/LocalSocketFrame.swift | the system call fcntl(2) named in the HTTP server's error and a socket error
 literal "fstat" | files Sources/Primitives/LocalNetwork/HTTPServer.swift Sources/Primitives/LocalSocket/LocalSocketServer.swift | the system call fstat(2) named in the HTTP server's error and a socket error
-literal "Content-Type" | files Sources/Core/UPnP/SOAPAction.swift Sources/Primitives/LocalNetwork/HTTPServer.swift | the HTTP field name, on a SOAP request and on the server's replies
+literal "Content-Type" | files Sources/Core/Recommender/RecommenderClient.swift Sources/Core/UPnP/SOAPAction.swift Sources/Primitives/LocalNetwork/HTTPServer.swift | the HTTP field name, on a SOAP request, on music-recommender's requests and on the server's replies
 literal "Game" | files Sources/Core/Metadata/ID3v1Genres.swift Sources/Core/Receiver/ReceiverInput.swift | an ID3v1 genre name and the receiver's input of that name
 literal "root" | files Sources/Core/Library/SwinsianArchive.swift Sources/Core/UPnP/DeviceDescription.swift | the root object of Swinsian's archive and the root element of a UPnP description, two formats
 literal "Stereo" | files Sources/Core/Library/BrowserGroupingSQL.swift Sources/Core/Receiver/ReceiverInput.swift | two channels in the browser's Channels column, and the receiver's Stereo sound mode

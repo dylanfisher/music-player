@@ -1,0 +1,3 @@
+{"ok": true, "enabled": true, "off_reason": null,
+ "format_policies": ["flac", "lossless", "mp3_320", "any"], "default_format_policy": "flac",
+ "staging_dir_name": "staging"}

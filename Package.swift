@@ -117,6 +117,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Recommender",
+            dependencies: ["DisplayText", "LocalNetwork", "Settings"],
+            path: "Sources/Core/Recommender",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Settings",
             dependencies: ["KeyChord", "LocalNetwork", "Log", "Metadata", "Playback", "TagWriter"],
             path: "Sources/Core/Settings",
@@ -505,6 +511,12 @@ let package = Package(
         .testTarget(
             name: "ReceiverTests",
             dependencies: ["Fixtures", "LocalNetwork", "Receiver", "UPnP"],
+            resources: [.copy("Fixtures")],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "RecommenderTests",
+            dependencies: ["Fixtures", "LocalNetwork", "Recommender", "Settings"],
             resources: [.copy("Fixtures")],
             swiftSettings: strictSwift
         ),
