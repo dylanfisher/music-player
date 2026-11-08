@@ -105,6 +105,7 @@ struct LibraryFolderMove: Sendable {
         for file in files {
             let stagedPath = folder + "/" + file.name
             let source = stagingRoot + "/" + stagedPath
+            guard pathExists(source) else { throw MoveRefusal.notStaged(source) }
             try checkSource(source, roots.staging)
             let size = sizeOf(source)
             guard size == file.sizeBytes else {
@@ -243,6 +244,9 @@ enum MoveRefusal: Error, Equatable, CustomStringConvertible {
     case unreadable(String, String)
     /// The ledger has no destination for a staged file.
     case notLedgered(String)
+    /// A first run found a file gone from the staging folder: a run on another Mac, whose
+    /// ledger this one doesn't have, may have moved it.
+    case notStaged(String)
     /// The file is neither where it was staged nor where it went.
     case lost(String, String)
     case failed(String, String, String)
@@ -264,6 +268,9 @@ enum MoveRefusal: Error, Equatable, CustomStringConvertible {
             "\(path) is \(found.map { "\($0) bytes" } ?? "missing"), not \(expected) bytes"
         case .unreadable(let path, let detail): "\(path)'s tags don't read: \(detail)"
         case .notLedgered(let path): "the import's steps don't say where \(path) goes"
+        case .notStaged(let path):
+            "\(path) is no longer staged, and this Mac has no record of where it went; resume"
+                + " on the Mac that started the import"
         case .lost(let source, let destination):
             "\(source) is neither in the staging folder nor at \(destination)"
         case .failed(let source, let destination, let detail):

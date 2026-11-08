@@ -260,3 +260,13 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     #expect(exists(outside))
     #expect(!exists(folders.destinations[1]))
 }
+
+@Test func aMacWithoutTheLedgerRefusesAnAlbumAnotherMovedInPart() throws {
+    let folders = try MoveFolders()
+    let files = try folders.files()
+    try FileManager.default.removeItem(atPath: folders.staging + "/job-7/01.flac")
+    #expect(throws: MoveRefusal.notStaged(folders.staging + "/job-7/01.flac")) {
+        try folders.moveIn(files: files)
+    }
+    #expect(try folders.staged() == ["02.flac"])
+}

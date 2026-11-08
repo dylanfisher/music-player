@@ -933,7 +933,10 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       The ledger stays until the outbox's sender forgets it (54.10). The lossy-origin check is
       `stagedOrigins` in `Core/Analysis`: the first and last staged files through
       `analyzeFile(at:)` and `verdicts()`; `lossyOrigin`, `upsampled` or a file that can't be
-      analyzed blocks, for 54.13's sheet. Resume Here is the same run on another Mac. Tests: a
+      analyzed blocks, for 54.13's sheet. The ledger is in each Mac's own index, so Resume Here
+      on another Mac finishes a job whose move hadn't begun; one moved in part is refused,
+      saying to resume on the Mac that started it, since the moved files took the tags their
+      destinations came from. Tests: a
       new album, an upgrade end to end, the unticked block, a truncated file stopped before the
       delete, a failure at the move, the delete and the carry each resumed, a repeat after
       `imported`, reports cut short before the move, a retagged old file kept; 13 tests, and 4
