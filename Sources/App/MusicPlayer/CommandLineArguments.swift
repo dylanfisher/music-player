@@ -22,6 +22,7 @@ enum Flag: String {
     case reportLaunch = "--report-launch"
     case snapshot = "--snapshot"
     case snapshotOf = "--snapshot-of"
+    case rescanConfirmed = "--rescan-confirmed"
 }
 
 /// The value after `flag`, or nil when the flag is absent, last, or followed by another flag.
@@ -65,7 +66,7 @@ private let modeFlags: [Flag] = [.listDevices, .scan, .play, .captureRenderers]
 /// Flags only the window uses.
 private let windowFlags: [Flag] = [
     .measureWindow, .measureLaunch, .measureScroll, .artDelayMs, .reportLaunch, .snapshot,
-    .snapshotOf,
+    .snapshotOf, .rescanConfirmed,
 ]
 private let scanOnlyFlags: [Flag] = [.db, .readers, .scanIOHints]
 

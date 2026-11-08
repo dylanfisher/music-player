@@ -91,3 +91,10 @@ import Testing
         argumentProblem(["--measure-scroll", "scan", "--scan", "/m"])
             == "--measure-scroll is for the window, so it can't go with --scan")
 }
+
+@Test func theRelaunchsRescanFlagIsTheWindows() {
+    #expect(argumentProblem(["--rescan-confirmed"]) == nil)
+    #expect(
+        argumentProblem(["--scan", "/m", "--rescan-confirmed"])
+            == "--rescan-confirmed is for the window, so it can't go with --scan")
+}

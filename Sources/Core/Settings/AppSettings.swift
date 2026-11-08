@@ -86,6 +86,9 @@ public struct AppSettings: SettingsSchema {
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")
+    public let separateReleases = Setting(
+        "library.separateReleases", title: "Separate Releases", default: false,
+        "Make each Discogs release an album, apart from same-titled reissues.")
     public let browserGroupings = Setting(
         "browser.columnGroupings", title: "Browser Column Groupings",
         groupings: BrowserColumn.defaults.map(\.grouping),

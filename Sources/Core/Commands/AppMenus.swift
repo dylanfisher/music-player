@@ -118,6 +118,7 @@ public enum AppMenus {
                     .setting(settings.rescanModifiedFiles.key),
                     .setting(settings.copyAddedFiles.key),
                     .setting(settings.groupByAlbumArtist.key),
+                    .setting(settings.separateReleases.key),
                     .separator, .command(.revealInFinder), .setting(settings.fileViewer.key),
                     .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),
                     .command(.showInPlaylist), .command(.showAlbum), .command(.showArtist),

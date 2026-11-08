@@ -13,7 +13,7 @@ import Settings
 // and the window:
 //   MusicPlayer [--measure-window | --measure-launch
 //     | --measure-scroll trackpad|scan|pages|resize [--art-delay-ms <ms>]]
-//     [--report-launch] [--snapshot <png file> [--snapshot-of <window>]]
+//     [--report-launch] [--snapshot <png file> [--snapshot-of <window>]] [--rescan-confirmed]
 // and in every mode [--home <folder>] [--settings <file>]:
 // --home keeps the config file, library, state file and device record in one folder instead of
 // ~/.config/music-player and Application Support, for tests and runs on the build Mac.
@@ -34,6 +34,8 @@ import Settings
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
 // --snapshot-of draws Library Health, Listening Stats, Year in Review, the palette, the smart
 // playlist editor, the tag editor, or the Settings window's General or Shortcuts pane, instead.
+// --rescan-confirmed rebuilds the index without asking, which the relaunch after a Rescan Now
+// passes, as the question was asked already (ADR 0143).
 let arguments = CommandLine.arguments
 
 func value(after flag: Flag) -> String? { value(after: flag, in: arguments) }
@@ -145,7 +147,7 @@ let app = NSApplication.shared
 let delegate = AppDelegate(
     paths: launchPaths, measuring: measurement, reportingLaunch: given(.reportLaunch),
     snapshotURL: value(after: .snapshot).map { URL(fileURLWithPath: $0, isDirectory: false) },
-    snapshotOf: snapshotTarget)
+    snapshotOf: snapshotTarget, rescanConfirmed: given(.rescanConfirmed))
 app.delegate = delegate
 app.setActivationPolicy(.regular)
 app.run()

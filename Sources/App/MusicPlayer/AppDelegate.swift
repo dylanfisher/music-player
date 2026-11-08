@@ -43,6 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let reportingLaunch: Bool
     private let snapshotURL: URL?
     private let snapshotOf: SnapshotTarget
+    private let rescanConfirmed: Bool
+    /// Whether the index makes an album of each Discogs release, as the window's first open
+    /// built it (ADR 0143). The setting differs from it after a change, until a relaunch.
+    private(set) var separatesReleases: Bool?
     /// How long after the first rows the snapshot waits, for the scan and art to show.
     static let snapshotDelaySeconds = 4.0
     /// How long quitting waits for the outputs to close: longer than a device takes to restore
@@ -165,11 +169,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
     /// `reportingLaunch` prints a line once the first scan of each watched folder has ended.
-    /// `snapshotURL` gets a PNG of the window a few seconds after that.
+    /// `snapshotURL` gets a PNG of the window a few seconds after that. `rescanConfirmed`
+    /// rebuilds the index at launch without asking.
     init(
         paths: AppPaths, measuring: MeasurementKind?, reportingLaunch: Bool, snapshotURL: URL?,
-        snapshotOf: SnapshotTarget
+        snapshotOf: SnapshotTarget, rescanConfirmed: Bool = false
     ) {
+        self.rescanConfirmed = rescanConfirmed
         self.snapshotOf = snapshotOf
         self.paths = paths
         self.measuring = measuring
@@ -255,8 +261,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Rows for the table come from a connection of the main thread's own. It opens first,
         // so it alone may move an unreadable file aside, before any other connection opens.
+        // It alone passes Separate Releases; every other connection keeps what it built.
         let index = try LibraryIndex(
-            at: databaseURL, movingAsideIfUnreadable: true, confirmRescan: askToRescan)
+            at: databaseURL, movingAsideIfUnreadable: true,
+            confirmRescan: rescanConfirmed ? { _ in true } : askToRescan,
+            separateReleases: settings[\.separateReleases])
+        separatesReleases = index.separateReleases
         snapshotScheduler = SnapshotScheduler(databaseURL: databaseURL)
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
