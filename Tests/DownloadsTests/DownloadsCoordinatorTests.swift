@@ -318,21 +318,45 @@ func aStagedJobIsTaggedWhenNoRunHoldsIt(
     #expect(try setup.ledger(1).isEmpty)
 }
 
-@Test func aReportTheServiceRefusesIsDroppedSaidAndMovesNothing() async throws {
-    // Approved with no clean tagging: the service refuses it, and nothing moves.
+@Test func aReportTheServiceRefusesIsDroppedAndSaid() async throws {
+    // Approved with no clean tagging: the service refuses it, and the rest still go.
     let setup = try Setup([job(1)])
-    let coordinator = setup.coordinator()
-    let outcome = await coordinator.approve(approved(1))
-    guard case .refused(let why) = outcome else {
-        Issue.record("\(outcome)")
-        return
+    for event in [HandoffEvent.approved, .importing] {
+        _ = try setup.index.queueImportReport(job: 1, release: 4242, body: event.json)
     }
-    #expect(why.contains("approved"))
-    #expect(setup.service.eventTypes == ["claim", "approved", "importing"])
+    let coordinator = setup.coordinator()
+    #expect(await coordinator.flush())
+    #expect(setup.service.eventTypes == ["approved", "importing"])
     #expect(try setup.outbox().isEmpty)
-    #expect(try setup.ledger(1).isEmpty)
     let problems = await coordinator.problems
+    #expect(problems.count == 2)
     #expect(problems.first?.contains("job 1's approved report") == true)
+}
+
+@Test func aJobTaggedSinceThePollIsNotApprovedUntilItsClean() async throws {
+    // The window showed a clean job, but the service has it untagged now.
+    let setup = try Setup([job(1)])
+    let outcome = await setup.coordinator().approve(approved(1))
+    #expect(outcome == .refused("the job is staged, tagged none, not clean"))
+    #expect(setup.calls.imports.isEmpty)
+    #expect(setup.service.eventTypes == ["claim", "release"])
+    #expect(setup.service.job(1)?.review == nil)
+}
+
+@Test func aJobAnotherMacApprovedSinceThePollIsNotApprovedAgain() async throws {
+    let setup = try Setup([job(1, .approved) { $0.tagging = clean }])
+    let outcome = await setup.coordinator().approve(approved(1))
+    #expect(outcome == .refused("the job is approved, not staged"))
+    #expect(setup.calls.imports.isEmpty)
+}
+
+@Test func aJobTaggedByAnotherMacSinceThePollIsNotTaggedAgain() async throws {
+    // The poll saw it untagged; by the time this Mac leases it, the other Mac finished.
+    let setup = try Setup([job(1) { $0.tagging = clean }])
+    await setup.coordinator().take([job(1)])
+    #expect(setup.calls.tags.isEmpty)
+    #expect(setup.calls.writes == 0)
+    #expect(setup.service.eventTypes == ["lease", "release_lease"])
 }
 
 @Test func resumeHereTakesTheClaimOverFromAnotherMac() async throws {

@@ -22,7 +22,7 @@ package struct ApprovedImport: Sendable {
     package var jobID: Int
     package var releaseID: Int
     /// As the service last listed it: `staged`, `approved` or `importing`.
-    var state: JobState
+    package var state: JobState
     /// The job's folder in the staging folder.
     var folder: String
     var files: [DownloadJob.File]

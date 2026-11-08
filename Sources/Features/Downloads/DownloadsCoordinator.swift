@@ -94,15 +94,25 @@ actor DownloadsCoordinator {
     }
 
     private func tag(
-        _ job: DownloadJob, with autoTag: @Sendable (StagedJob) async throws -> AutoTagRun
+        _ listed: DownloadJob, with autoTag: @Sendable (StagedJob) async throws -> AutoTagRun
     ) async {
-        tagging = job.id
+        tagging = listed.id
         defer { tagging = nil }
+        let job: DownloadJob
         do {
-            _ = try await effects.service.handoff(job.id, .lease)
+            job = try await effects.service.handoff(listed.id, .lease)
         } catch {
             // Another Mac took it first, or the service didn't answer: the next poll says.
-            logger.info("job \(job.id) not tagged here: \(error)")
+            logger.info("job \(listed.id) not tagged here: \(error)")
+            return
+        }
+        // The poll may be old: the job is the service's answer now, which another Mac may have
+        // tagged, or the owner rejected, since.
+        guard job.state == .staged, [.none, .running].contains(job.tagging.status) else {
+            logger.info(
+                "job \(job.id) is \(job.state.rawValue), tagged \(job.tagging.status.rawValue); not tagged here"
+            )
+            await releaseLease(job.id)
             return
         }
         lostLeases.remove(job.id)
@@ -313,14 +323,40 @@ actor DownloadsCoordinator {
         await runImport(job, takingOver: true)
     }
 
+    /// Why `claimed`, the service's answer to the claim, can't be imported as the sheet showed
+    /// it: an approval needs it staged and clean, a resume needs it approved or importing.
+    private static func stale(_ claimed: DownloadJob, for job: ApprovedImport, takingOver: Bool)
+        -> String?
+    {
+        if takingOver || job.state != .staged {
+            guard [.approved, .importing].contains(claimed.state) else {
+                return "the job is \(claimed.state.rawValue), not approving"
+            }
+            return nil
+        }
+        guard claimed.state == .staged else {
+            return "the job is \(claimed.state.rawValue), not staged"
+        }
+        guard claimed.tagging.status == .clean else {
+            return "the job is staged, tagged \(claimed.tagging.status.rawValue), not clean"
+        }
+        return nil
+    }
+
     private func runImport(_ job: ApprovedImport, takingOver: Bool) async -> ImportOutcome {
         guard !importing else { return .refused("another import is running") }
         importing = true
         defer { importing = false }
+        let claimed: DownloadJob
         do {
-            _ = try await effects.service.handoff(job.jobID, .claim(takeOver: takingOver))
+            claimed = try await effects.service.handoff(job.jobID, .claim(takeOver: takingOver))
         } catch {
             return .refused("\(error)")
+        }
+        // The sheet may be old: the job is the service's answer now.
+        if let stale = Self.stale(claimed, for: job, takingOver: takingOver) {
+            _ = try? await effects.service.handoff(job.jobID, .release)
+            return .refused(stale)
         }
         let outcome = await effects.importRun(job) { [self] in await deliver(job.jobID) }
         await flush()
