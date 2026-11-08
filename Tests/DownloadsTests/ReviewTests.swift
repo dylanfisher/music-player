@@ -16,7 +16,7 @@ private struct NoFolder: Error {}
 /// there only if `places` says so.
 @MainActor
 private func started(
-    _ service: FakeService, places: @escaping @Sendable () async throws -> ImportPlaces
+    _ service: DownloadsService, places: @escaping @Sendable () async throws -> ImportPlaces
 ) async throws -> (Downloads, Downloads.Session) {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
         "review-\(UUID().uuidString)", isDirectory: true)
@@ -26,7 +26,7 @@ private func started(
     let downloads = Downloads()
     downloads.start(
         Downloads.Setup(
-            machine: FakeService.machine, service: service.service, databaseURL: database,
+            machine: FakeService.machine, service: service, databaseURL: database,
             dataDirectory: folder, catalog: folder.appendingPathComponent("none.sqlite"),
             mapping: DiscogsPreset.oneToOne.mapping, share: nil, places: places,
             trash: { _ in nil }, carry: { _ in MoveListImport(problems: []) }, rescan: { _ in }))
@@ -40,7 +40,7 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
 @MainActor
 @Test func aJobThatCantBeApprovedGivesTheClaimBack() async throws {
     let service = FakeService([job(1)])
-    let (downloads, session) = try await started(service) { throw NoFolder() }
+    let (downloads, session) = try await started(service.service) { throw NoFolder() }
     await downloads.review(try #require(service.job(1)), session, resuming: false)
     #expect(service.eventTypes.suffix(2) == ["claim", "release"])
     #expect(service.job(1)?.review == nil)
@@ -50,7 +50,7 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
 @MainActor
 @Test func aMissingStagingFolderGivesTheClaimBack() async throws {
     let service = FakeService([job(1) { $0.tagging = clean }])
-    let (downloads, session) = try await started(service) { throw NoFolder() }
+    let (downloads, session) = try await started(service.service) { throw NoFolder() }
     await downloads.review(try #require(service.job(1)), session, resuming: false)
     #expect(service.eventTypes.suffix(2) == ["claim", "release"])
     #expect(service.job(1)?.review == nil)
@@ -61,7 +61,7 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
 @Test func aSheetThatCantShowGivesTheClaimBack() async throws {
     let service = FakeService([job(1) { $0.tagging = clean }])
     let nowhere = FileManager.default.temporaryDirectory.path + "/\(UUID().uuidString)"
-    let (downloads, session) = try await started(service) {
+    let (downloads, session) = try await started(service.service) {
         ImportPlaces(stagingRoot: nowhere, libraryFolder: nowhere, shareRoot: nowhere)
     }
     // The window was never shown, so there is nothing to put the sheet on.
@@ -75,7 +75,7 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
 @Test func aReviewCancelledWhileItChecksShowsNoSheetAndGivesTheClaimBack() async throws {
     let service = FakeService([job(1) { $0.tagging = clean }])
     let nowhere = FileManager.default.temporaryDirectory.path + "/\(UUID().uuidString)"
-    let (downloads, session) = try await started(service) {
+    let (downloads, session) = try await started(service.service) {
         ImportPlaces(stagingRoot: nowhere, libraryFolder: nowhere, shareRoot: nowhere)
     }
     downloads.show()
@@ -90,9 +90,46 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
 }
 
 @MainActor
+@Test func aReviewCancelledWhileItClaimsGivesTheClaimBackIfTheServiceTookIt() async throws {
+    let fake = FakeService([job(1) { $0.tagging = clean }])
+    var service = fake.service
+    let handoff = service.handoff
+    // The service takes the claim, but the cancelled request throws before the reply arrives.
+    service.handoff = { id, event throws(RecommenderError) in
+        let answer = try await handoff(id, event)
+        if case .claim = event, Task.isCancelled {
+            throw RecommenderError(service: "fake", kind: .cancelled)
+        }
+        return answer
+    }
+    let (downloads, session) = try await started(service)  { throw NoFolder() }
+    let listed = try #require(fake.job(1))
+    let review = Task { await downloads.review(listed, session, resuming: false) }
+    review.cancel()
+    await review.value
+    await eventually("the claim given back") { fake.job(1)?.review == nil }
+    downloads.stop()
+}
+
+@MainActor
+@Test func aSecondApproveWhileOneIsInFlightIsIgnored() async throws {
+    let service = FakeService([job(1) { $0.tagging = clean }])
+    let (downloads, session) = try await started(service.service) { throw NoFolder() }
+    let first = Task<Void, Never> { _ = try? await Task.sleep(nanoseconds: 60_000_000_000) }
+    downloads.reviewing = first
+    downloads.startReview(try #require(service.job(1)), session, resuming: false)
+    #expect(downloads.reviewing == first)
+    #expect(!first.isCancelled)
+    #expect(service.eventTypes.isEmpty)
+    downloads.cancelReview()
+    #expect(first.isCancelled)
+    downloads.stop()
+}
+
+@MainActor
 @Test func closingTheWindowOrStoppingCancelsTheReviewInProgress() async throws {
     let service = FakeService([job(1) { $0.tagging = clean }])
-    let (downloads, _) = try await started(service) { throw NoFolder() }
+    let (downloads, _) = try await started(service.service) { throw NoFolder() }
     downloads.show()
     let closed = Task<Void, Never> { _ = try? await Task.sleep(nanoseconds: 60_000_000_000) }
     downloads.reviewing = closed

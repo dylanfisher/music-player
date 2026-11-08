@@ -104,6 +104,7 @@ package final class Downloads {
     private var sheet: NSWindowController?
     /// The Approve… in progress, until its sheet shows or it stops.
     var reviewing: Task<Void, Never>?
+    private var reviewCount = 0
 
     /// The selected library tracks' ids, for From Library Selection.
     package var selectedTracks: () throws -> [Int64] = { [] }
@@ -277,8 +278,8 @@ package final class Downloads {
     private func act(_ action: DownloadAction, _ row: DownloadRow) {
         guard let session, let job = session.model.job(row.id) else { return }
         switch action {
-        case .approve: reviewing = Task { await review(job, session, resuming: false) }
-        case .resumeHere: reviewing = Task { await review(job, session, resuming: true) }
+        case .approve: startReview(job, session, resuming: false)
+        case .resumeHere: startReview(job, session, resuming: true)
         case .reject:
             confirm(
                 "Reject \(row.album)?",
@@ -329,6 +330,19 @@ package final class Downloads {
         }
     }
 
+    /// Starts `review` unless one is in flight, so a quick second click leaves the first
+    /// cancellable.
+    func startReview(_ job: DownloadJob, _ session: Session, resuming: Bool) {
+        guard reviewing == nil else { return }
+        reviewCount += 1
+        let number = reviewCount
+        reviewing = Task {
+            await review(job, session, resuming: resuming)
+            // Whatever way it ended, a later Approve may start; unless this one was replaced.
+            if reviewCount == number { reviewing = nil }
+        }
+    }
+
     /// Stops the Approve… still checking the staged files, which gives its claim back.
     func cancelReview() {
         reviewing?.cancel()
@@ -355,6 +369,12 @@ package final class Downloads {
             do throws(RecommenderError) {
                 job = try await coordinator.claimReview(job.id)
             } catch {
+                if Task.isCancelled {
+                    // The service may have taken the claim before the request was cancelled;
+                    // it goes back from a task of its own, as this one's requests are cancelled.
+                    Task { await giveUp() }
+                    return
+                }
                 return alert("Another Mac may be reviewing this album", [error.description])
             }
             session.model.took(job)
