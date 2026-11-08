@@ -21,9 +21,6 @@ struct ReleaseScore: Equatable, Sendable {
     /// tie-break chooses among.
     var fitsTracklist: Bool { sameCount && titlesInOrder }
 
-    /// Fits the tracklist, and every known length agrees.
-    var isExact: Bool { fitsTracklist && durationsAgree }
-
     var isLikely: Bool { sameCount && tracklist >= MatchThreshold.likelyTracklist }
 
     /// What candidates are ordered by, best last: fitting the tracklist, then Likely, then

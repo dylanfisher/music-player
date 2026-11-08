@@ -79,7 +79,7 @@ func aMappingsEditsWriteAndReadBackAsMeant(_ sample: WrittenSample, _ preset: St
     let mapping = try #require(DiscogsPreset.all.first { $0.name == preset }).mapping
     let urls = try sample.copies()
     let set = changeSet(for: try albumFiles(urls), match: match(release), mapping: mapping)
-    #expect(set.changeCount > 0)
+    #expect(!set.files.flatMap(\.changes).isEmpty)
     let writer = TagWriter(
         journal: TagUndoJournal(
             dataDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(

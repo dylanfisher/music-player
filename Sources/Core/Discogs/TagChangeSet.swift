@@ -47,8 +47,6 @@ public struct FileChanges: Equatable, Sendable {
 public struct AlbumChangeSet: Equatable, Sendable {
     public var files: [FileChanges]
 
-    var changeCount: Int { files.reduce(0) { $0 + $1.changes.count } }
-
     /// Each file's edit with the changes `isIncluded` keeps, as `TagWriter` writes it; a file
     /// left with no change has no edit. Throws for a value no format can hold, naming it, so
     /// the sheet can show it before anything is written.

@@ -220,13 +220,12 @@ private func changed(
     none.release = nil
     let nothing = changeSet(
         for: [albumFile(1, .flac, TrackTags())], match: none, mapping: oneToOne)
-    #expect(nothing.changeCount == 0)
+    #expect(nothing.files.flatMap(\.changes).isEmpty)
 }
 
 @Test func theEditsKeepTheCheckedChangesAndRefuseAValueNoFormatHolds() throws {
     let files = (1...3).map { albumFile(Int64($0), .mp3, TrackTags()) }
     let set = changeSet(for: files, match: match(twoDiscs), mapping: oneToOne)
-    #expect(set.changeCount == set.files.map(\.changes.count).reduce(0, +))
     let onlyTitles = try set.edits { $0.tag == .field(.title) }
     #expect(onlyTitles.map(\.path) == files.map(\.path))
     #expect(
