@@ -32,6 +32,7 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         window.minSize = NSSize(width: 700, height: 360)
         super.init(window: window)
         build(in: window)
+        confirmReplace = { [weak self] name, answer in self?.askToReplace(name, answer) }
         refresh()
     }
 
@@ -86,9 +87,11 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         showProblem()
     }
 
+    /// Shows why the mapping can't be used, or else what Save As did.
     private func showProblem() {
         let problem = draft.problem
-        problemLabel.stringValue = problem ?? ""
+        problemLabel.stringValue = problem ?? draft.note ?? ""
+        problemLabel.textColor = problem == nil ? .secondaryLabelColor : .systemRed
         problemLabel.toolTip = problem
         okButton.isEnabled = problem == nil
     }
@@ -175,12 +178,38 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         refresh()
     }
 
-    @objc private func saveAs() {
-        if let problem = draft.save(as: nameField.stringValue) {
+    /// Asks whether to replace the saved mapping of the name given, then calls back with the
+    /// answer; tests answer in its place.
+    var confirmReplace: (String, @escaping (Bool) -> Void) -> Void = { _, answer in answer(false) }
+
+    /// Saves the draft by the name typed, asking first when that replaces a saved mapping.
+    @objc func saveAs() {
+        let name = nameField.stringValue
+        guard draft.replaces(name) else { return save(as: name) }
+        confirmReplace(name.trimmingCharacters(in: .whitespaces)) { [weak self] yes in
+            if yes { self?.save(as: name) }
+        }
+    }
+
+    private func save(as name: String) {
+        if let problem = draft.save(as: name) {
             problemLabel.stringValue = problem
+            problemLabel.textColor = .systemRed
             return NSSound.beep()
         }
         refresh()
+    }
+
+    /// The question Save As asks over the sheet before it replaces a saved mapping.
+    private func askToReplace(_ name: String, _ answer: @escaping (Bool) -> Void) {
+        guard let window else { return answer(false) }
+        let alert = NSAlert()
+        alert.messageText = "Replace the mapping “\(name)”?"
+        alert.informativeText =
+            "A saved mapping has this name. Replace puts the mapping shown in its place."
+        alert.addButton(withTitle: "Replace")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { answer($0 == .alertFirstButtonReturn) }
     }
 
     /// The template help, beside the template field of the button's row.

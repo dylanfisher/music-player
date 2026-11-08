@@ -5,18 +5,36 @@ import TagWriter
 /// per field, a preset to start from, and the user's own saved by name. Nothing is saved until
 /// the sheet's OK.
 struct MappingDraft: Equatable {
-    var mapping: DiscogsMapping
+    var mapping: DiscogsMapping {
+        didSet { note = nil }
+    }
     var saved: [NamedDiscogsMapping]
+    /// The name last chosen or saved, which the draft is while its mapping is that one's.
+    private var name: String?
+    /// What the last Save As did, until the mapping changes: "Saved as “Mine”".
+    private(set) var note: String?
+
+    init(mapping: DiscogsMapping, saved: [NamedDiscogsMapping]) {
+        self.mapping = mapping
+        self.saved = saved
+    }
 
     /// The presets, then the user's.
     var choices: [NamedDiscogsMapping] { DiscogsPreset.all + saved }
 
-    /// The preset or saved mapping the draft is, if it's one.
-    var chosenName: String? { choices.first { $0.mapping == mapping }?.name }
+    /// The preset or saved mapping the draft is, if it's one: the one last chosen or saved
+    /// when it still is, as two can hold the same mapping.
+    var chosenName: String? {
+        if let name, choices.contains(where: { $0.name == name && $0.mapping == mapping }) {
+            return name
+        }
+        return choices.first { $0.mapping == mapping }?.name
+    }
 
     mutating func use(_ name: String) {
         guard let chosen = choices.first(where: { $0.name == name }) else { return }
         mapping = chosen.mapping
+        self.name = name
     }
 
     /// Why the mapping can't be used, as the settings check says; nil when it can.
@@ -70,14 +88,21 @@ struct MappingDraft: Equatable {
         mapping[field].format.template = text.isEmpty ? nil : text
     }
 
-    /// Saves the draft under `name`, replacing a saved one of that name; the problem when the
-    /// name or the mapping can't be saved.
+    /// Whether Save As `name` would replace a saved mapping, which the sheet asks about first.
+    func replaces(_ name: String) -> Bool {
+        saved.contains { $0.name == name.trimmingCharacters(in: .whitespaces) }
+    }
+
+    /// Saves the draft under `name`, replacing a saved one of that name, and chooses it; the
+    /// problem when the name or the mapping can't be saved.
     mutating func save(as name: String) -> String? {
         let named = NamedDiscogsMapping(
             name: name.trimmingCharacters(in: .whitespaces), mapping: mapping)
         if let problem = named.problem() { return problem }
         saved.removeAll { $0.name == named.name }
         saved.append(named)
+        self.name = named.name
+        note = "Saved as “\(named.name)”"
         return nil
     }
 }

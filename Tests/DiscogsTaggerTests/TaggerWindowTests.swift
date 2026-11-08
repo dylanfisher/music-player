@@ -225,3 +225,38 @@ private final class Imports: @unchecked Sendable {
     #expect(window.skipVideoBox.state == .off)
     try snapshot(try #require(window.window), "discogs-tagger-choices")
 }
+
+@MainActor
+@Test func saveAsChoosesTheNewNameAndAsksBeforeReplacingOne() throws {
+    let mine = NamedDiscogsMapping(name: "Mine", mapping: DiscogsPreset.minimal.mapping)
+    let sheet = MappingSheet(
+        draft: MappingDraft(mapping: DiscogsPreset.oneToOne.mapping, saved: [mine]))
+    var asked: [String] = []
+    var answer = false
+    sheet.confirmReplace = { name, reply in
+        asked.append(name)
+        reply(answer)
+    }
+    sheet.nameField.stringValue = "Copy"
+    sheet.saveAs()
+    #expect(asked.isEmpty, "a new name doesn't ask")
+    #expect(sheet.presets.titleOfSelectedItem == "Copy", "not One to one, which it equals")
+    #expect(sheet.problemLabel.stringValue == "Saved as “Copy”")
+
+    sheet.nameField.stringValue = " Mine "
+    sheet.saveAs()
+    #expect(asked == ["Mine"])
+    #expect(sheet.draft.saved.first { $0.name == "Mine" }?.mapping == mine.mapping, "kept")
+    #expect(sheet.presets.titleOfSelectedItem == "Copy")
+    answer = true
+    sheet.saveAs()
+    #expect(asked == ["Mine", "Mine"])
+    #expect(sheet.draft.saved.map(\.name) == ["Copy", "Mine"])
+    #expect(sheet.draft.saved.last?.mapping == DiscogsPreset.oneToOne.mapping, "replaced")
+    #expect(sheet.presets.titleOfSelectedItem == "Mine")
+    #expect(sheet.problemLabel.stringValue == "Saved as “Mine”")
+
+    sheet.set("STYLE", in: .targets, row: try #require(MappingSheet.fields.firstIndex(of: .styles)))
+    #expect(sheet.presets.titleOfSelectedItem == "Edited")
+    #expect(sheet.problemLabel.stringValue.isEmpty, "the note goes with the next edit")
+}
