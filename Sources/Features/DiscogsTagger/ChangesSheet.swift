@@ -31,9 +31,6 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     /// The release the changes come from.
     let releaseID: Int
 
-    /// The release's page on Discogs.
-    var discogsURL: URL { discogsPage(releaseID) }
-
     init(set: AlbumChangeSet, excluded: Set<TagChange.ID>, title: String, releaseID: Int) {
         self.releaseID = releaseID
         rows = Self.rows(set)
@@ -202,7 +199,7 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         table.reloadData(forRowIndexes: [sender.tag], columnIndexes: [0])
     }
 
-    @objc private func open() { NSWorkspace.shared.open(discogsURL) }
+    @objc private func open() { openOnDiscogs(releaseID) }
 
     @objc private func cancel() { endSheet() }
 

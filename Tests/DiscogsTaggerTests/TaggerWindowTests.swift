@@ -119,7 +119,7 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     ])
     let sheet = ChangesSheet(
         set: set, excluded: [], title: "Persuader – Stockholm", releaseID: 10)
-    #expect(sheet.discogsURL.absoluteString == "https://www.discogs.com/release/10")
+    #expect(sheet.releaseID == 10)
     #expect(sheet.rows.count == 4, "the release id once, a position per file, the DSD file")
     #expect(sheet.text(.fileName, 0) == "All 2 files")
     #expect(sheet.text(.written, 0) == "10")
@@ -214,7 +214,7 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
         (0..<3).map { row in
             [TaggerColumn.position, .title, .releaseTime].map { sheet.text($0, row) }
         } == [["", "Side A", ""], ["A1", "Östermalm", "4:45"], ["A2", "Gamla Stan", "6:10"]])
-    #expect(sheet.discogsURL.absoluteString == releaseURL(42))
+    #expect(discogsPage(detail.summary.id).absoluteString == releaseURL(42))
     #expect(releaseURL(42) == "https://www.discogs.com/release/42")
     try snapshot(try #require(sheet.window), "discogs-view-release")
 }
@@ -727,6 +727,34 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     try await eventually { again.window?.attachedSheet?.windowController is ViewReleaseSheet }
     (again.window?.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
     again.endSheet()
+}
+
+/// The release area's Open on Discogs is on only for an album with a release, and opens that
+/// release's page from the one URL builder.
+@MainActor
+@Test func openOnDiscogsOpensTheSelectedRelease() async throws {
+    let tagger = await analyzed()
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    var opened: [URL] = []
+    controller.openURL = { opened.append($0) }
+    #expect(controller.discogsButton.isEnabled)
+    click(controller.discogsButton)
+    #expect(opened.map(\.absoluteString) == [releaseURL(10)])
+
+    let none = await model(
+        Seen(), albums: [album(3, "Nothing", titles: ["One"])],
+        matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    none.analyze()
+    await none.finished()
+    none.tab = .noCandidate
+    none.selectedID = 3
+    let empty = TaggerWindow(model: none)
+    defer { empty.window?.close() }
+    #expect(!empty.discogsButton.isEnabled)
+    tagger.selectedID = nil
+    controller.refresh()
+    #expect(!controller.discogsButton.isEnabled)
 }
 
 /// The tagger's own windows are its window and any sheet over it, so Undo Tag Edit pressed in a

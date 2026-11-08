@@ -86,6 +86,12 @@ func discogsPage(_ id: Int) -> URL {
     return url
 }
 
+/// Open on Discogs: release `id`'s page, through `open`, the browser unless a test stands in.
+@MainActor
+func openOnDiscogs(_ id: Int, through open: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+    open(discogsPage(id))
+}
+
 extension TaggerModel.Source {
     var title: String {
         switch self {

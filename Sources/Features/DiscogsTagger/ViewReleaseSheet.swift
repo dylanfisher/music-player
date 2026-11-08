@@ -28,9 +28,6 @@ final class ViewReleaseSheet: NSWindowController, TaggerSheet, NSTableViewDataSo
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
-    /// The release's page on Discogs.
-    var discogsURL: URL { discogsPage(release.summary.id) }
-
     private func build(in window: NSWindow) {
         let summary = release.summary
         heading.stringValue = "\(summary.artist) – \(summary.title)"
@@ -85,7 +82,7 @@ final class ViewReleaseSheet: NSWindowController, TaggerSheet, NSTableViewDataSo
         return cell
     }
 
-    @objc private func open() { NSWorkspace.shared.open(discogsURL) }
+    @objc private func open() { openOnDiscogs(release.summary.id) }
 
     @objc private func done() { endSheet() }
 }

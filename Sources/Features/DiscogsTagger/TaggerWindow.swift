@@ -123,7 +123,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             (startOverButton, #selector(startImportOver)),
             (otherReleasesButton, #selector(showOtherReleases)),
             (changesButton, #selector(showChanges)), (rejectButton, #selector(toggleRejected)),
-            (discogsButton, #selector(openOnDiscogs)),
+            (discogsButton, #selector(openReleasePage)),
             (applyButton, #selector(applyAll)),
         ] {
             button.bezelStyle = .rounded
@@ -621,9 +621,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         }
     }
 
-    @objc private func openOnDiscogs() {
+    /// What Open on Discogs opens a page with; tests stand in for the browser.
+    var openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
+
+    @objc private func openReleasePage() {
         guard let id = model.selected?.match.releaseID else { return }
-        NSWorkspace.shared.open(discogsPage(id))
+        openOnDiscogs(id, through: openURL)
     }
 
     @objc private func showChanges() {
