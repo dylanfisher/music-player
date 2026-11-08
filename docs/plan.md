@@ -48,7 +48,9 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 
 1. Phase 51, then 52, then 53 (set by the owner on 2026-11-07).
-2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+2. Phase 54 runs on its own branch beside them (set on 2026-11-08), and waits there for the
+   owner's review.
+3. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -741,6 +743,147 @@ From the owner's testing on 2026-11-07. ADRs numbered when it starts, after 52's
       fixtures; the rescan dialog's Quit leaves the index untouched.
 - [ ] **Owner check:** each in the running app, with a snapshot restored, and the rescan
       dialog on the next build that changes the tracks part.
+
+### 54. Soulseek imports
+
+Albums found and downloaded on Soulseek, tagged from a known Discogs release, and imported only
+after the owner reviews them. The owner asked: "if the album is new from soulseek we can
+automatically write the tags", and "nothing should be imported into the real full music
+tracklist until manually reviewed and approved". The service (`~/projects/music-recommender`
+on mbp2021) searches and downloads with slskd, which only it talks to, and copies each finished
+album into a staging folder on the NAS; its design is
+`~/projects/music-recommender/docs/downloads.md` and its contract `docs/api.md` there (both on
+its branch `phase/5-soulseek` until the owner merges it). The player tags staged albums, lists
+them in a Downloads window, and moves them into the library on Approve.
+
+Runs on the branch `phase/54-soulseek-imports`, which `main` doesn't take until the owner has
+reviewed it. 54.1 is docs only and comes first, so the owner reads the boundary changes before
+code depends on them; then P0.1, P0.2 and 54.2 onward in order. P0.2 and everything after it
+need the service's `docs/api.md`. ADR numbers: 0136 to P0.1 (the service token, the app's first
+secret; 52.1 links to it), 0137 to P0.2 (the client), 0138 and 0139 to 54.1, 0140 to 54.4 (the
+player's copy of the matching rules). ADRs 0136, 0138 and 0139 are Proposed until the owner
+approves them, and AGENTS.md changes only then, with the wording each ADR proposes.
+
+Settled on 2026-11-08. The owner asked for the feature in the words above and chose who talks to
+slskd, staging on the NAS with a move on Approve, and the upgrade's trash; the orchestrator
+settled the rest while the owner was away, for the owner's review with the branch:
+
+| Question | Answer |
+|---|---|
+| Who talks to slskd | The service only, holding its API key; the player talks to the service by an IP address, a port and a bearer token typed into Settings. No Bonjour yet |
+| Staged tag writes | Automatic after a clean match (tier Exact, no unmapped file, the player's mapping agrees with the service's); a discrepancy writes nothing until resolved in the tagger (ADR 0138) |
+| Approve | The confirmation for the move into the library: staged files are renamed into the library folder (ADR 0139) |
+| Upgrade | The old files go through `moveToTrash`, which on the NAS deletes them, and their stats move to the new files (ADR 0139) |
+| Reject | The service deletes the staged folder |
+| Staging folder | `/Volumes/music/staging` on the player Macs, beside `library` on the same share: a setting, and the service reports each job's folder relative to it |
+| Queueing | Manual only: library albums with a release id, or a pasted Discogs release id or URL found in the local catalog. Recommendations are later |
+| Formats | `flac` (the default), `lossless`, `mp3_320` (CBR 320 or V0), `any`. Never 24-bit over 16-bit; no hi-res upgrades. An upgrade always asks for a lossless format |
+| Several Macs | A tagging lease of 10 minutes and a review claim of 24 hours. Rows are gray through `downloading`, opaque from `downloaded` |
+| Undo | Staged writes have a journal of their own, for crash recovery, and stay out of Edit > Undo |
+
+The job's lifecycle, the claims and the API are the service's (its `docs/api.md`); the player
+holds a strict Swift copy of the state table and what it did to the library. Nothing here
+touches real Soulseek, slskd, the library or the NAS: the service is a loopback stub with
+recorded replies, and staging and the library are temporary folders and `SimulatedNAS`.
+
+#### 54a. The service client
+
+- [ ] **P0.1 Settings.** `recommender.address` (an IP literal; a host name is refused),
+      `recommender.port`, `recommender.token` and `import.stagingFolder` (a share and a path,
+      the shape of `library.watchedFolders`, ADR 0028), shown in the Settings window. The token
+      is kept only in `config.json`, which a `ConfigStore` extension writes at mode 0600 once
+      a token is set; it is never logged, shown in a problem's text or copied elsewhere. The
+      staging folder is refused inside a watched folder, the library folder or the sync folder,
+      and checked again whenever any of them changes. ADR 0136. Tests: the 0600 write, each
+      refusal, a watched folder change that would hold the staging folder, the token in no log
+      line or problem.
+- [ ] **P0.2 Client.** A new `Core/Recommender`: `post` with the bearer header on
+      `LocalHTTPClient` (no change to the client beyond what `post(… fields:)` allows), strict
+      models for `ping` and the config route, typed errors (unreachable, 401, 400, `ok:false`,
+      oversize, unknown state) naming the address tried. A fuzz target. ADR 0137. Tests on the
+      loopback stub with recorded replies.
+
+#### 54b. Tagging staged albums
+
+- [ ] **54.1 ADRs.** ADR 0138, staged tag writes: `TagWriter` writes staged files once, after a
+      clean match, with no confirmation of its own; a fixed overwrite mapping, a second journal,
+      a guard that refuses any path outside the staging folder. ADR 0139, the move into the
+      library and the upgrade's order, with the trash-on-SMB rule (the NAS has no Trash, so the
+      upgrade's delete is permanent). Each proposes its AGENTS.md wording. Docs only.
+- [ ] **54.2 Job calls and the snapshot.** The downloads routes in `Core/Recommender` (create,
+      list with epoch, reset and paging by revision with `more`, retry, cancel, handoff);
+      `Core/Discogs/ReleaseSnapshot.swift`, built from `CatalogRelease` with both
+      `ReleaseTracklist.flattenings`; a release not in the local catalog refused at queue time.
+      Tests on the loopback stub and a temporary catalog.
+- [ ] **54.3 Library.** `import_jobs` as a schema part of its own (an outbox of reports, a ledger
+      of steps, cached edits), `LibraryIndex.upgradeCandidates()` (albums whose every track has a
+      release id and is lossy), an album's library-share-relative paths and quality. The scanner
+      skips the staging folder, with a test. Tests on a temporary index.
+- [ ] **54.4 StagedAlbum and AutoTag.** `Core/Discogs/{StagedAlbum,AutoTag}.swift`, without
+      writing: `readAlbumFiles` on the staged paths with synthetic negative ids; a missing or junk
+      title filled from the file name; `matchAlbums(choosing:)` on the job's release; clean or a
+      discrepancy with reasons from `comparison(of:)`; the edits from a fixed overwrite mapping.
+      ADR 0140 records the player's copy of the matching rules and the SHA-256 of
+      `rank-golden.json`, which a test asserts. Tests: exact and clean, wrong title, a missing
+      track, 40 s off, an extra file, an unreadable file, DSD, untagged titles.
+- [ ] **54.5 StagedWriter.** `Core/Discogs/StagedWriter.swift`: `TagWriter.write` with a second
+      `TagUndoJournal` in its own folder and a write closure that doesn't call the watcher, the
+      staging folder guard, a read-back that must find no changes. Tests: a path outside staging
+      refused, the main journal untouched (undo after a staged write reverts the library edit
+      before it), a staged file never in the index.
+
+#### 54c. Approve
+
+- [ ] **54.6 Move into the library.** `Core/Library/LibraryFolderMove.swift`: every destination
+      checked before any moves, `renamex_np(RENAME_EXCL)` with an `lstat` and `rename`
+      fallback on `ENOTSUP` or `EINVAL`, the same volume required, sources only inside the
+      staging folder and destinations only inside `library.folder`, a ledger entry per file.
+      Tests on temporary folders and `SimulatedNAS`: a collision refuses the album, another
+      volume refused, the fallback, each guard.
+- [ ] **54.7 Upgrade mapping and stats.** `Core/Library/UpgradeMapping.swift` (old tracks to new
+      through the release's track index; the ones with no counterpart listed);
+      `LibraryWatcher.importMoves(lines:)` and a `MoveList` from lines. Tests with a temporary
+      index and stats, including `forgetTrashed` then `importMoves`.
+- [ ] **54.8 Approve flow.** The import steps as an idempotent state machine over the ledger and
+      the outbox, for a new album and an upgrade. The lossy-origin check calls `analyzeFile(at:)`
+      and `verdicts()` on the staged files when the Approve sheet is built, never `FileAnalyzer`
+      or `MeasuresCache`, so no staged path enters the index; after the move the upgrade only
+      re-reads tags, sizes and the file count before it deletes the old files. `moveToTrash`
+      and `TrashOutcome` become public in `Features/LibraryBrowser` and reach the coordinator
+      as a closure. Resume, and Resume Here for a job another Mac left. May split into 54.8a
+      (new album) and 54.8b (upgrade). Tests: a failure injected at each step and resumed, the
+      outbox replayed, a truncated moved file refused before the delete, an old track with no
+      counterpart blocking, stats on the new tracks and the moves in the sync log.
+
+#### 54d. The window
+
+- [ ] **54.9 Model.** `Features/Downloads`: `DownloadsModel` with rows, polling (2 s with the
+      window open and a job active, 60 s otherwise) on an injected clock, row styling and
+      Approve's enabled rule as pure functions, the service-down state; `Core/Commands`
+      entries. Tests against a fake client, styling and gating as tables.
+- [ ] **54.10 Coordinator.** `DownloadsCoordinator`: claims and leases, the tag loop, the outbox
+      flush, a stale lease released at launch, the idle poll; clock and effects injected. Tests:
+      a claim race, lease expiry, resume, a crash between tagging steps.
+- [ ] **54.11 Tagger entry.** `TaggerModel(stagedJob:)` with staged effects; the tagger opens
+      with the release chosen, and an Apply that leaves no changes makes the job clean. Tests
+      against fake effects.
+- [ ] **54.12 Window.** `DownloadsWindow`: the table (Source, Album, Format, State, Tagging,
+      Added), toolbar, context menu, status messages; built on first show. A construction
+      test.
+- [ ] **54.13 Sheets.** Upgrades, From Library Selection, Paste a Discogs Release, Approve (with
+      the lossy-origin and lost-stats acknowledgments, and "permanently deleted if the share has
+      no Trash"), Reject. Tests of each sheet's model.
+- [ ] **54.14 Wiring.** `App/MusicPlayer/DownloadsCommands.swift`: File > Downloads…, the trash,
+      rescan, tagger and write closures; the coordinator starts at launch. Tests: the commands'
+      enabled rules.
+- [ ] **Owner checks:** in Settings on each reviewing Mac, the service's IP, port and token and
+      the staging folder, the DAC Mac first. On a scratch folder on the share, from the DAC Mac,
+      a same-share `RENAME_EXCL` (or the fallback, which the log line names) and a refused
+      collision. A new album end to end: queued, staged and clean, approved, in the library. An
+      upgrade of an MP3 album copied first: stats, rating and playlists on the new tracks, the
+      old files gone. A discrepancy (an album with a bonus track) resolved in the tagger, then
+      approved. On mbp2015 the window lists the rows and says it can't queue or tag; with the
+      service stopped, its message.
 
 ### 10. Web remote
 
