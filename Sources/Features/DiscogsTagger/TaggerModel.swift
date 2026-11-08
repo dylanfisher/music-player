@@ -268,9 +268,10 @@ final class TaggerModel {
 
     // MARK: - Analyze
 
-    /// Scopes the window to the library's selection, when there is one; returns whether it
-    /// did.
+    /// Scopes the window to the library's selection, when there is one and nothing runs, whose
+    /// albums are the scope's; returns whether it did.
     func scopeToSelection() -> Bool {
+        guard !isBusy else { return false }
         do {
             guard try !selectedTracks().isEmpty else { return false }
         } catch {

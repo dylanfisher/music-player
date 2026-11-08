@@ -728,3 +728,24 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     (again.window?.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
     again.endSheet()
 }
+
+/// Shown with a selection while an analysis runs, the window keeps the scope of the albums it
+/// is matching.
+@MainActor
+@Test func showingWhileBusyKeepsTheScope() async throws {
+    let gate = Gate()
+    let tagger = DiscogsTagger(
+        model: await model(
+            Seen(), albums: [album(1, "Stockholm", titles: stockholm)],
+            matches: { album, _ in match(album, nil, tier: .noCandidate) }, gate: gate))
+    tagger.show()
+    try await eventually { tagger.model.catalog != .checking }
+    tagger.model.analyze()
+    #expect(tagger.model.isBusy)
+    tagger.selectedTracks = { [100] }
+    tagger.show()
+    #expect(tagger.model.scope == .library)
+    gate.open()
+    await tagger.model.finished()
+    tagger.window?.close()
+}
