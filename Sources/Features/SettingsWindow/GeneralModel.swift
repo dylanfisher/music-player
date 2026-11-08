@@ -13,8 +13,6 @@ public final class GeneralModel {
         /// A number field; `whole` takes integers only, `optional` means empty is null.
         case number(whole: Bool, optional: Bool)
         case text(optional: Bool)
-        /// A field that hides what's typed, for a secret; empty is null (ADR 0144).
-        case secret
         /// A text field for a template, beside a help button that lists its tokens.
         case template([SettingKind.Token])
         /// Watched folders, which the Watched Folders pane lists, adds and removes.
@@ -195,7 +193,8 @@ public final class GeneralModel {
     /// in the config file (ADR 0067). The Discogs window picks the dumps folder, and the
     /// catalog's path is for a Mac short of space, so both are edited there or in the file
     /// (ADR 0130); the field mappings are edited in its Field Mapping sheet, and its choices
-    /// beside it (ADR 0132). The Discogs token is a secret, kept in the file only (ADR 0137).
+    /// beside it (ADR 0132). The Discogs and service tokens are secrets, kept in the file only
+    /// (ADR 0137, ADR 0144).
     private static func isShown(_ key: String, searcherInstalled: Bool) -> Bool {
         let schema = AppSettings()
         return switch key {
@@ -203,7 +202,7 @@ public final class GeneralModel {
             schema.discogsCatalogPath.key, schema.discogsToken.key, schema.discogsMapping.key,
             schema.discogsSavedMappings.key, schema.discogsKeepExistingValues.key,
             schema.discogsSkipVideo.key, schema.discogsFillSortArtist.key,
-            schema.discogsArtwork.key:
+            schema.discogsArtwork.key, schema.recommenderToken.key:
             false
         case schema.fileViewer.key: searcherInstalled
         default: true
@@ -234,7 +233,6 @@ public final class GeneralModel {
             case .optional(.number): .number(whole: false, optional: true)
             case .string: .text(optional: false)
             case .optional(.string): .text(optional: true)
-            case .optional(.secret): .secret
             case .template(let tokens): .template(tokens)
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
@@ -436,8 +434,6 @@ public final class GeneralModel {
             try set(key, number)
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
-        case .secret:
-            try set(key, trimmed.isEmpty ? NSNull() : trimmed)
         case .folder:
             try set(key, trimmed.isEmpty ? NSNull() : trimmed)
         case .template:

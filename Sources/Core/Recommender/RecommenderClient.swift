@@ -61,7 +61,7 @@ package struct RecommenderClient: Sendable {
                 url,
                 fields: [
                     ("Content-Type", "application/json"),
-                    ("Authorization", "Bearer \(token.rawValue)"),
+                    ("Authorization", "Bearer \(token.secret)"),
                 ], body: bytes, keepingRefusals: true)
         } catch {
             throw fail(RecommenderError.Kind(error))

@@ -28,7 +28,7 @@ private func jobReply() throws -> String { #"{"ok": true, "job": \#(try fixture(
         await caught { () async throws(RecommenderError) in try await client.cancel(42) })
     #expect(error.kind == .unauthorized)
     #expect(error.description.contains("127.0.0.1:\(stub.server.port)"))
-    #expect(!error.description.contains(testToken.rawValue))
+    #expect(!error.description.contains(testToken.secret))
 }
 
 @Test func a400IsABadRequestWithItsCode() async throws {

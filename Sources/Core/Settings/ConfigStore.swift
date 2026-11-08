@@ -295,7 +295,6 @@ public final class ConfigStore<Schema: SettingsSchema> {
             }
             replace(with: contents)
             setProblems(contents.skipped)
-            tightenForSecret()
             return true
         } catch {
             for problem in error.problems { logger.error("\(self.fileURL.path): \(problem)") }
@@ -469,53 +468,6 @@ public final class ConfigStore<Schema: SettingsSchema> {
         guard !FileManager.default.fileExists(atPath: fileURL.path) else { return }
         writeNewFile()
         if let writeFailure { throw ConfigProblem(line: nil, message: writeFailure) }
-    }
-}
-
-// MARK: The secret
-
-extension ConfigStore {
-    /// Whether a setting that holds a secret has a value, so the file must be readable by its
-    /// owner alone (ADR 0144). An optional secret's default is null.
-    var holdsSecret: Bool {
-        descriptors.contains { descriptor in
-            switch descriptor.kind {
-            case .secret: true
-            case .optional(.secret):
-                values[descriptor.key].map { !$0.isEqual(to: descriptor.defaultValue) } == true
-            default: false
-            }
-        }
-    }
-
-    /// Makes the file readable by its owner alone if it holds a secret and others can read it,
-    /// as after a token typed in an editor. A failure is logged, and the next write tries again.
-    fileprivate func tightenForSecret() {
-        guard holdsSecret else { return }
-        do {
-            try restrictToOwner(fileURL.resolvingSymlinksInPath(), creating: false)
-        } catch {
-            logger.error("couldn't make \(self.fileURL.path) readable by its owner alone: \(error)")
-        }
-    }
-
-    /// Sets the file at `url` to mode 0600 when its group or others have any access. With
-    /// `creating`, a missing file is made empty at 0600 first, so the atomic write that follows,
-    /// which keeps a file's mode, never puts the secret in a file others can read.
-    fileprivate func restrictToOwner(_ url: URL, creating: Bool) throws {
-        var info = stat()
-        guard stat(url.path, &info) == 0 else {
-            guard errno == ENOENT, creating else { throw POSIXError(.init(rawValue: errno)!) }
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let made = open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
-            guard made >= 0 else { throw POSIXError(.init(rawValue: errno)!) }
-            close(made)
-            return
-        }
-        guard info.st_mode & 0o077 != 0 else { return }
-        guard chmod(url.path, 0o600) == 0 else { throw POSIXError(.init(rawValue: errno)!) }
-        logger.notice("made \(url.path) readable by its owner alone, since it holds a token")
     }
 }
 

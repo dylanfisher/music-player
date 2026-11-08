@@ -95,8 +95,8 @@ package final class Downloads {
 
     /// What the window says while the service isn't set.
     static let notSet =
-        "music-recommender isn't set up on this Mac. Set its address and token in Settings >"
-        + " General to list its downloads."
+        "music-recommender isn't set up on this Mac. Set its address in Settings > General, and"
+        + " its token as \"recommender.token\" in the config file, to list its downloads."
 
     private(set) var session: Session?
     private(set) var controller: DownloadsWindow?

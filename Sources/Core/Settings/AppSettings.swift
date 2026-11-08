@@ -88,7 +88,7 @@ public struct AppSettings: SettingsSchema {
         "The port music-recommender's API listens on.")
     public let recommenderToken = Setting<ServiceToken?>(
         "recommender.token", title: "Service Token", default: nil,
-        "The token music-recommender's config holds; the file is then yours alone.")
+        "The token music-recommender's config holds as player_token, kept in this file only.")
     public let stagingFolder = Setting<StagingFolder?>(
         "import.stagingFolder", title: "Staging Folder", default: nil,
         "Where music-recommender puts downloads for review, outside your music folders.")

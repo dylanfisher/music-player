@@ -1,6 +1,6 @@
 import Foundation
 
-/// A Discogs personal access token, the app's one secret (ADR 0137). It is kept only in the
+/// A Discogs personal access token, a secret (ADR 0137). It is kept only in the
 /// config file and goes only into the Discogs API's `Authorization` header. Printing it, by
 /// interpolation, `String(reflecting:)` or `dump`, gives `<Discogs token>`, so no log line,
 /// error or test message can carry its value.

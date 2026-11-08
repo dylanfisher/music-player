@@ -19,8 +19,8 @@ private func configURL() -> URL {
 }
 
 @MainActor
-private func store(_ url: URL, creating: Bool = false) -> ConfigStore<AppSettings> {
-    ConfigStore(schema, fileURL: url, check: { _, _, _ in nil }, creating: creating)
+private func store(_ url: URL) -> ConfigStore<AppSettings> {
+    ConfigStore(schema, fileURL: url, check: { _, _, _ in nil }, creating: false)
 }
 
 private func mode(_ url: URL) throws -> Int {
@@ -47,16 +47,24 @@ private func mode(_ url: URL) throws -> Int {
     }
 }
 
-@Test func theTokenNeverPrints() throws {
+@Test func theServiceTokenNeverPrintsItsValue() throws {
     let value = try #require(
         try parsed(#"{"recommender.token": "\#(token)"}"#).values["recommender.token"]
             as? ServiceToken)
-    #expect(value.rawValue == token)
-    #expect("\(value)" == "***")
-    #expect(String(reflecting: value) == "***")
+    #expect(value.secret == token)
+    let optional: ServiceToken? = value
+    var dumped = ""
+    dump(value, to: &dumped)
+    for text in [
+        String(describing: value), "\(value)", String(reflecting: value), "\(optional as Any)",
+        String(reflecting: optional), dumped,
+    ] {
+        #expect(!text.contains(token))
+        #expect(text.contains("<service token>"), "\(text)")
+    }
 }
 
-@Test func aRefusedTokenIsNotInTheProblem() throws {
+@Test func aRefusedServiceTokenIsNotInTheProblem() throws {
     for bad in ["\(token) with spaces", "", String(repeating: "x", count: 1025)] {
         do {
             _ = try parsed(#"{"recommender.token": "\#(bad)"}"#)
@@ -69,35 +77,24 @@ private func mode(_ url: URL) throws -> Int {
     }
 }
 
-@MainActor @Test func aFileHoldingTheTokenIsWrittenForItsOwnerOnly() throws {
-    let url = configURL()
-    let settings = store(url, creating: true)
-    try settings.set(\.recommenderPort, to: 7000)
-    #expect(try mode(url) & 0o077 != 0, "a file with no token is left as the system makes it")
-    try settings.set(\.recommenderToken, to: ServiceToken(token))
-    #expect(try mode(url) == 0o600)
-    try settings.set(\.recommenderPort, to: 7001)
-    #expect(try mode(url) == 0o600)
-    #expect(try String(contentsOf: url, encoding: .utf8).contains(token))
-}
-
-@MainActor @Test func aNewFileWithTheTokenIsNeverReadableByOthers() throws {
-    let url = configURL()
-    let settings = store(url)
-    // No file yet, so the token's patch writes a new one.
-    try settings.set(\.recommenderToken, to: ServiceToken(token))
-    #expect(try mode(url) == 0o600)
-}
-
-@MainActor @Test func aTokenTypedIntoALooseFileTightensIt() throws {
+@MainActor @Test func aServiceTokenInAFileOthersCanReadIsntUsed() throws {
     let url = configURL()
     try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try Data(#"{"recommender.token": "\#(token)"}"#.utf8).write(to: url)
-    #expect(try mode(url) & 0o077 != 0)
+    try Data(#"{"recommender.port": 7000, "recommender.token": "\#(token)"}"#.utf8).write(to: url)
+    try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
     let settings = store(url)
-    #expect(settings[\.recommenderToken]?.rawValue == token)
+    #expect(settings.problems.count == 1)
+    #expect(settings.problems.first?.message.contains("\"recommender.token\"") == true)
+    #expect(settings.problems.first?.message.contains(token) == false)
+    #expect(!settings.blocked)
+    #expect(settings[\.recommenderToken] == nil)
+    #expect(settings[\.recommenderPort] == 7000)
+    #expect(try mode(url) == 0o644, "the app leaves the mode to the owner until it writes")
+    try settings.set(\.recommenderPort, to: 7001)
     #expect(try mode(url) == 0o600)
+    #expect(settings.problems.isEmpty)
+    #expect(settings[\.recommenderToken]?.secret == token)
 }
 
 /// A config file with `staging` as the staging folder, `folders` as the watched folders, and

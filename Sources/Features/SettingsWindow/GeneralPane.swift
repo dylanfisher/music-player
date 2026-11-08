@@ -417,7 +417,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
 
     /// A number, text or template row's field.
     private func textField(_ row: GeneralModel.Row, optional: Bool) -> NSTextField {
-        let field = row.control == .secret ? NSSecureTextField() : NSTextField()
+        let field = NSTextField()
         field.identifier = NSUserInterfaceItemIdentifier(row.key)
         field.placeholderString = optional ? noValueText : nil
         field.delegate = self
@@ -483,7 +483,6 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             stack.alignment = .leading
             stack.spacing = 2
             return stack
-        case .secret: return textField(row, optional: true)
         case .number(_, let optional), .text(let optional):
             let field = textField(row, optional: optional)
             guard let unit = row.unit else { return field }
@@ -601,7 +600,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             let raw = model.choice(row.key)
             popUp?.selectItem(
                 at: popUp?.itemArray.firstIndex { $0.representedObject as? String == raw } ?? -1)
-        case .number, .text, .template, .secret:
+        case .number, .text, .template:
             guard let field = fields[row.key], field.currentEditor() == nil
             else { return }
             field.stringValue = model.text(row.key)
