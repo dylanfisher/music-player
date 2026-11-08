@@ -23,15 +23,15 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
     ])
     let metadata = try parse(file).metadata
     #expect(metadata.pictures.map(\.type) == [4, 3, 6])
-    #expect(metadata.pictures.map(\.typeName) == ["Back Cover", "Front Cover", "Media"])
+    #expect(metadata.pictures.map(\.typeName) == ["Back Cover", "Front Cover", "Disc Label"])
     #expect(metadata.art == metadata.pictures[1].art)
     #expect(try pictureBytes(file) == images)
 }
 
 @Test func id3ListsEveryPictureWithItsType() throws {
     func apic(_ type: UInt8, _ description: String, _ image: Data) -> Data {
-        id3Frame("APIC", Data([0]) + ascii("image/png\0") + Data([type]) + ascii(description)
-            + Data([0]) + image)
+        let body = Data([0]) + ascii("image/png\0") + Data([type]) + ascii(description)
+        return id3Frame("APIC", body + Data([0]) + image)
     }
     let file =
         id3Tag([apic(3, "front", images[0]), apic(4, "back", images[1]), apic(0, "", images[2])])
@@ -59,8 +59,9 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
     #expect(try pictureBytes(file) == images)
 }
 
-@Test func aTypePastTheNamedOnesIsOther() {
+@Test func aTypeOtherThanTheCoversLeafletAndDiscIsOther() {
     let art = EmbeddedArt(offset: 0, byteCount: 1, mimeType: "image/png", unsynchronised: false)
-    #expect(EmbeddedPicture(art: art, type: 20).typeName == "Publisher Logo")
+    #expect(EmbeddedPicture(art: art, type: 5).typeName == "Leaflet Page")
+    #expect(EmbeddedPicture(art: art, type: 8).typeName == "Other")
     #expect(EmbeddedPicture(art: art, type: 21).typeName == "Other")
 }

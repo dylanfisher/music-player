@@ -13,10 +13,10 @@ import Testing
     #expect(
         stockholm.text == """
             Persuader – Stockholm
-            Label: Svek – SK 032
-            Country: Sweden
+            Labels: Svek – SK 032
+            Release Country: Sweden
             Released: 1999-03
-            Format: CD (Album)
+            Release Formats: CD (Album)
             Genres: Electronic
             Styles: Techno, Minimal
 

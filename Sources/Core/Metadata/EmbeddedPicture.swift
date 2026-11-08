@@ -5,19 +5,18 @@ public struct EmbeddedPicture: Equatable, Sendable {
     /// whose `covr` gives none.
     var type: UInt32?
 
-    /// What the picture shows, as the ID3 and FLAC specifications name its type; nil when the
-    /// file doesn't say.
+    /// What the picture shows: the front and back covers, a leaflet page and the disc's label
+    /// by name, and every other ID3 and FLAC type as Other; nil when the file doesn't say.
     public var typeName: String? {
-        guard let type else { return nil }
-        return Self.typeNames.indices.contains(Int(type)) ? Self.typeNames[Int(type)] : "Other"
+        switch type {
+        case nil: nil
+        case 3: "Front Cover"
+        case 4: "Back Cover"
+        case 5: "Leaflet Page"
+        case 6: "Disc Label"
+        default: "Other"
+        }
     }
-
-    private static let typeNames = [
-        "Other", "File Icon", "Other File Icon", "Front Cover", "Back Cover", "Leaflet Page",
-        "Media", "Lead Artist", "Artist", "Conductor", "Band", "Composer", "Lyricist",
-        "Recording Location", "During Recording", "During Performance", "Video Capture",
-        "Bright Colored Fish", "Illustration", "Band Logo", "Publisher Logo",
-    ]
 }
 
 /// The front cover (picture type 3) if there is one, otherwise the first picture: the one

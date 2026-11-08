@@ -92,13 +92,13 @@ extension ReleaseDetail {
             .joined(separator: " – ")
         // Discogs writes an unknown month or day as 00.
         let date = released.split(separator: "-").prefix { $0 != "00" }.joined(separator: "-")
-        let facts = [
-            ("Label", label), ("Country", summary.country), ("Released", date),
-            ("Format", summary.format), ("Genres", genres.joined(separator: ", ")),
-            ("Styles", styles.joined(separator: ", ")),
+        let facts: [(DiscogsField, String)] = [
+            (.label, label), (.country, summary.country), (.date, date),
+            (.media, summary.format), (.genres, genres.joined(separator: ", ")),
+            (.styles, styles.joined(separator: ", ")),
         ]
-        .filter { !$0.1.isEmpty }.map { "\($0): \($1)" }
-        var sections = [([heading] + facts).joined(separator: "\n")]
+        let lines = facts.filter { !$0.1.isEmpty }.map { "\($0.title): \($1)" }
+        var sections = [([heading] + lines).joined(separator: "\n")]
         if !credits.isEmpty {
             let lines = credits.map { credit in
                 "\(credit.role): \(credit.name)"

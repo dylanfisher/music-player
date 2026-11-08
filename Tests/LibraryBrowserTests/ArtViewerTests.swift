@@ -83,7 +83,7 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     let right = ("\u{F703}", UInt16(124))
     let left = ("\u{F702}", UInt16(123))
     try press(right.0, right.1)
-    #expect(viewer.placeText == "3 of 3 · Media")
+    #expect(viewer.placeText == "3 of 3 · Disc Label")
     try press(right.0, right.1)
     #expect(viewer.shown == 2, "it stops at the last")
     try press(left.0, left.1)
