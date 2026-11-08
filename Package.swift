@@ -188,6 +188,14 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "DiscogsTagger",
+            dependencies: [
+                "Discogs", "DisplayText", "Library", "Log", "Metadata", "Settings", "TagWriter",
+            ],
+            path: "Sources/Features/DiscogsTagger",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Spectrum",
             dependencies: ["Analysis", "DisplayText", "Library"],
             path: "Sources/Features/Spectrum",
@@ -217,8 +225,8 @@ let package = Package(
         .executableTarget(
             name: "MusicPlayer",
             dependencies: [
-                "Analysis", "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord",
-                "Library",
+                "Analysis", "Artwork", "Commands", "Discogs", "DiscogsTagger", "DisplayText",
+                "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Scripting",
                 "SQLite", "Settings", "SettingsWindow", "Spectrum", "TagEditor", "TagWriter",
@@ -318,6 +326,14 @@ let package = Package(
             name: "DiscogsTests",
             dependencies: [
                 "Discogs", "Fixtures", "Library", "Metadata", "SQLite", "Settings", "TagWriter",
+            ],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "DiscogsTaggerTests",
+            dependencies: [
+                "Discogs", "DiscogsTagger", "Fixtures", "Library", "Metadata", "Settings",
+                "TagWriter",
             ],
             swiftSettings: strictSwift
         ),

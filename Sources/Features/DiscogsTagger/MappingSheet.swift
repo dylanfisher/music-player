@@ -1,0 +1,185 @@
+import AppKit
+import Settings
+
+/// Field Mapping… (51.10): every Discogs field, release-level then track-level, with its mode,
+/// its tags, the join between its values and a template; a preset or a saved mapping to start
+/// from, and Save As to keep this one by name. OK saves it as the mapping in use. A key spelled
+/// per format or numbered is shown, and edited in the config file.
+@MainActor
+final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource,
+    NSTableViewDelegate, NSTextFieldDelegate
+{
+    static let fields =
+        DiscogsField.allCases.filter { $0.level == .release }
+        + DiscogsField.allCases.filter { $0.level == .track }
+
+    private(set) var draft: MappingDraft
+    let presets = NSPopUpButton()
+    let table = NSTableView()
+    let nameField = NSTextField()
+    let problemLabel = NSTextField(labelWithString: "")
+    let okButton = NSButton(title: "OK", target: nil, action: nil)
+    /// The mapping and saved ones on OK; nil for Cancel.
+    private(set) var result: MappingDraft?
+
+    init(draft: MappingDraft) {
+        self.draft = draft
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.minSize = NSSize(width: 700, height: 360)
+        super.init(window: window)
+        build(in: window)
+        refresh()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+
+    private func build(in window: NSWindow) {
+        presets.target = self
+        presets.action = #selector(presetChosen)
+        nameField.placeholderString = "Mapping Name"
+        nameField.widthAnchor.constraint(equalToConstant: 160).isActive = true
+        let save = NSButton(title: "Save As", target: self, action: #selector(saveAs))
+        let top = NSStackView(views: [
+            NSTextField(labelWithString: "Start from:"), presets, NSView(), nameField, save,
+        ])
+        let scroll = taggerTable(
+            table,
+            [(.discogsField, 170), (.mode, 130), (.targets, 260), (.join, 60), (.template, 200)],
+            source: self)
+        table.rowHeight = 24
+        problemLabel.textColor = .systemRed
+        problemLabel.lineBreakMode = .byTruncatingTail
+        problemLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
+        cancel.keyEquivalent = "\u{1b}"
+        okButton.target = self
+        okButton.action = #selector(ok)
+        okButton.keyEquivalent = "\r"
+        let buttons = NSStackView(views: [problemLabel, NSView(), cancel, okButton])
+        let page = NSStackView(views: [top, scroll, buttons])
+        page.orientation = .vertical
+        page.alignment = .leading
+        page.spacing = 10
+        page.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
+        for view in [top, scroll, buttons] {
+            view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -32).isActive = true
+        }
+        window.contentView = page
+    }
+
+    /// Shows the draft: the presets with the one it is checked, each rule, and its problem.
+    func refresh() {
+        presets.removeAllItems()
+        presets.addItems(withTitles: draft.choices.map(\.name))
+        if let name = draft.chosenName {
+            presets.selectItem(withTitle: name)
+        } else {
+            presets.addItem(withTitle: "Edited")
+            presets.selectItem(withTitle: "Edited")
+        }
+        table.reloadData()
+        showProblem()
+    }
+
+    private func showProblem() {
+        let problem = draft.problem
+        problemLabel.stringValue = problem ?? ""
+        problemLabel.toolTip = problem
+        okButton.isEnabled = problem == nil
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int { Self.fields.count }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
+        -> NSView?
+    {
+        let field = Self.fields[row]
+        let rule = draft.mapping[field]
+        switch tableColumn.flatMap({ TaggerColumn(rawValue: $0.identifier.rawValue) }) {
+        case .discogsField?:
+            return NSTextField(labelWithString: field.title)
+        case .mode?:
+            let popUp = NSPopUpButton()
+            popUp.controlSize = .small
+            popUp.addItems(withTitles: DiscogsFieldRule.Mode.shown.map(\.title))
+            popUp.selectItem(at: DiscogsFieldRule.Mode.shown.firstIndex(of: rule.mode)!)
+            popUp.tag = row
+            popUp.target = self
+            popUp.action = #selector(modeChosen)
+            return popUp
+        case let column?:
+            let text: String
+            let editable: Bool
+            switch column {
+            case .targets:
+                (text, editable) = (draft.targetsText(field), draft.targetsEditable(field))
+            case .join: (text, editable) = (rule.format.join ?? "", true)
+            default: (text, editable) = (rule.format.template ?? "", true)
+            }
+            let cell = NSTextField(string: text)
+            cell.isEditable = editable
+            cell.isBordered = editable
+            cell.drawsBackground = editable
+            cell.controlSize = .small
+            cell.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            cell.identifier = column.identifier
+            cell.tag = row
+            cell.delegate = self
+            cell.toolTip = editable ? nil : "Edited in the config file"
+            return cell
+        case nil:
+            return nil
+        }
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let cell = notification.object as? NSTextField, cell !== nameField else { return }
+        guard let column = cell.identifier.flatMap({ TaggerColumn(rawValue: $0.rawValue) })
+        else { return }
+        set(cell.stringValue, in: column, row: cell.tag)
+    }
+
+    /// Sets the text column `column` of the rule on `row`.
+    func set(_ text: String, in column: TaggerColumn, row: Int) {
+        let field = Self.fields[row]
+        switch column {
+        case .targets: draft.setTargets(text, for: field)
+        case .join: draft.setJoin(text, for: field)
+        case .template: draft.setTemplate(text, for: field)
+        default: return
+        }
+        refresh()
+    }
+
+    @objc private func modeChosen(_ sender: NSPopUpButton) {
+        draft.setMode(
+            DiscogsFieldRule.Mode.shown[sender.indexOfSelectedItem], for: Self.fields[sender.tag])
+        refresh()
+    }
+
+    @objc private func presetChosen() {
+        guard let name = presets.titleOfSelectedItem else { return }
+        draft.use(name)
+        refresh()
+    }
+
+    @objc private func saveAs() {
+        if let problem = draft.save(as: nameField.stringValue) {
+            problemLabel.stringValue = problem
+            return NSSound.beep()
+        }
+        refresh()
+    }
+
+    @objc private func cancel() { endSheet() }
+
+    @objc private func ok() {
+        guard draft.problem == nil else { return NSSound.beep() }
+        window?.makeFirstResponder(nil)
+        result = draft
+        endSheet()
+    }
+}

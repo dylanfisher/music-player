@@ -2,6 +2,7 @@ import Analysis
 import AppKit
 import Artwork
 import Commands
+import DiscogsTagger
 import HALOutput
 import KeyChord
 import Library
@@ -118,6 +119,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var ruleEditor: RuleEditorSheet?
     /// The tag editor, which writes music files only after the user saves an edit (ADR 0020).
     private(set) lazy var tagEditing = makeTagEditing()
+    /// The Discogs tagger, once first shown.
+    var discogsTagger: DiscogsTagger?
     private(set) var dispatcher: CommandDispatcher?
     /// Runs the tool's requests and links, once playback is ready.
     var scriptRouter: ScriptRouter?

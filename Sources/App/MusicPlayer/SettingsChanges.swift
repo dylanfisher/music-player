@@ -92,6 +92,15 @@ extension AppDelegate {
         }
         if let dispatcher { settingsWindow?.reload(bindings: dispatcher.bindings) }
         if keys.contains(schema.appearance.key) { applyAppearance(settings[\.appearance]) }
+        if !keys.isDisjoint(with: [schema.discogsMapping.key, schema.discogsSavedMappings.key]) {
+            discogsTagger?.mappingChanged(
+                settings[\.discogsMapping], saved: settings[\.discogsSavedMappings])
+        }
+        // The tagger reads its catalog from one path; the next one shown reads the new one.
+        if keys.contains(schema.discogsCatalogPath.key), let tagger = discogsTagger {
+            tagger.window?.close()
+            discogsTagger = nil
+        }
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
             schema.pausePollingDuringPlayback.key, schema.syncFolder.key,

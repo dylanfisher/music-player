@@ -9,7 +9,7 @@ public struct DumpsFolder: SettingValue {
     public var path: String
     public var share: String?
 
-    init(path: String, share: String? = nil) {
+    public init(path: String, share: String? = nil) {
         self.path = path
         self.share = share
     }

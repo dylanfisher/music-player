@@ -13,7 +13,9 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
 
     /// Whether Discogs's number after a name shared by several artists, as in "Artist (2)", is
     /// kept.
-    public enum Suffixes: String, Codable, Sendable { case keep, drop }
+    public enum Suffixes: String, Codable, Sendable {
+        case keep, drop
+    }
 
     public enum DateForm: String, Codable, Sendable {
         /// As Discogs writes it: "1999", "1999-03-00" or "1999-03-15".

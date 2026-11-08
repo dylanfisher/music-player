@@ -20,7 +20,7 @@ public struct CatalogImportProgress: Equatable, Sendable {
 
     /// How far the import is, from 0 to 1, by the bytes read: the index build at the end
     /// counts as the last bytes.
-    var fraction: Double {
+    public var fraction: Double {
         stage == .finished || totalBytes == 0
             ? 1 : min(1, Double(bytesRead) / Double(totalBytes))
     }

@@ -1345,7 +1345,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// The selected tracks in row order: on the timeline, each track once (ADR 0022).
-    private func selectedTrackIDs() throws -> [Int64] {
+    public func selectedTrackIDs() throws -> [Int64] {
         showsTimeline
             ? try timelineModel.trackIDs(ofRows: timeline.table.selectedRowIndexes)
             : model.ids(ofRows: table.table.selectedRowIndexes)

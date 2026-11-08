@@ -128,12 +128,12 @@ public final class Catalog {
 }
 
 /// Why there's no catalog to read.
-enum CatalogError: Error, Equatable, CustomStringConvertible {
+public enum CatalogError: Error, Equatable, CustomStringConvertible {
     case missing(String)
     /// Its tables are another build's: it's discarded, and the window offers an import.
     case builtByAnotherVersion(String)
 
-    var description: String {
+    public var description: String {
         switch self {
         case .missing(let path): "there's no Discogs catalog at \(path); import a dump first"
         case .builtByAnotherVersion(let path):

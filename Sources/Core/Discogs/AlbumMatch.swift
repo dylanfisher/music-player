@@ -24,8 +24,6 @@ public struct MatchCandidate: Equatable, Sendable {
 
     /// How well its tracklist fits the album's, from 0 to 1 (ADR 0131).
     public var tracklistScore: Double { score.tracklist }
-    /// Whether it has the album's track count and every title in order.
-    public var fitsTracklist: Bool { score.fitsTracklist }
 }
 
 /// What matching found for one album: its tier, the release chosen, how its files map to that

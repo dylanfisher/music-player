@@ -47,7 +47,8 @@ extension AlbumMatch {
         return rows
     }
 
-    private static func state(_ file: DiscogsAlbum.Track, _ track: CatalogTrack) -> TrackComparison
+    private static func state(_ file: DiscogsAlbum.Track, _ track: CatalogTrack)
+        -> TrackComparison
         .State
     {
         let similarity = TitleSimilarity([file.title]).similarities(to: track.title)[0]

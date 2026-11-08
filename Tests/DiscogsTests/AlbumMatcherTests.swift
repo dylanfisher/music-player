@@ -467,7 +467,9 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     try folder.importCatalog()
     let albums = (0..<3).map { _ in album(stockholmTitles) }
     let heard = Heard()
-    let matches = try await matchAlbums(albums, catalogAt: folder.catalog, choosing: [:]) { heard.add($0) }
+    let matches = try await matchAlbums(albums, catalogAt: folder.catalog, choosing: [:]) {
+        heard.add($0)
+    }
     #expect(matches.map(\.tier) == [.exact, .exact, .exact])
     #expect(heard.all.map(\.albumsDone) == [1, 2, 3])
     #expect(heard.all.allSatisfy { $0.albumCount == 3 })
@@ -482,7 +484,9 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
 @Test func matchingWithoutACatalogSaysSo() async throws {
     let folder = try DumpFolder()
     await #expect(throws: CatalogError.missing(folder.catalog.path)) {
-        try await matchAlbums([album(stockholmTitles)], catalogAt: folder.catalog, choosing: [:]) { _ in }
+        try await matchAlbums([album(stockholmTitles)], catalogAt: folder.catalog, choosing: [:]) {
+            _ in
+        }
     }
 }
 
