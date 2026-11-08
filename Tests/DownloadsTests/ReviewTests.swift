@@ -102,7 +102,7 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
         }
         return answer
     }
-    let (downloads, session) = try await started(service)  { throw NoFolder() }
+    let (downloads, session) = try await started(service) { throw NoFolder() }
     let listed = try #require(fake.job(1))
     let review = Task { await downloads.review(listed, session, resuming: false) }
     review.cancel()
