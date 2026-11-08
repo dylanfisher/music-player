@@ -2,7 +2,8 @@
 /// resuming, which the files themselves confirm.
 struct ImportStep: Equatable, Sendable {
     enum Kind: String, Sendable {
-        /// A staged file renamed into the library folder.
+        /// A staged file's rename into the library folder, recorded for every file of the album
+        /// before the first is renamed.
         case moved
         /// An upgrade's old file given to `moveToTrash`.
         case trashed
