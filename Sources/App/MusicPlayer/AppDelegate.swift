@@ -617,8 +617,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editing.written = { [weak self] report in
             self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
         }
-        editing.replaceArtwork = { [weak self] in self?.dispatcher?.run(.replaceArtwork) }
-        editing.removeArtwork = { [weak self] in self?.dispatcher?.run(.removeArtwork) }
+        editing.run = { [weak self] in self?.dispatcher?.run($0) }
+        editing.isEnabled = { [weak self] in self?.dispatcher?.isEnabled($0) == true }
         editing.saving = { [weak self] progress in self?.browser?.showSaving(progress) }
         editing.place = state?[\.infoPlace].map { NSPoint(x: $0.x, y: $0.y) }
         editing.placeChanged = { [weak self] corner in

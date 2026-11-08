@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import Log
 import Metadata
 import TagWriter
@@ -20,10 +21,12 @@ public final class TagEditing {
     /// Called on the main thread as a save goes, for the status bar: "Saving tags: 3 of 20" and
     /// how far along, from 0 to 1; nil once no write is left (ADR 0108).
     public var saving: (_ progress: (text: String, fraction: Double)?) -> Void = { _ in }
-    /// What an info window's art buttons run: the registry's Replace Artwork… and Remove
-    /// Artwork.
-    public var replaceArtwork: () -> Void = {}
-    public var removeArtwork: () -> Void = {}
+    /// Runs one of the registry's tag commands as its menu item does: an info window's Undo
+    /// Tag Edit, Replace Artwork… and Remove Artwork buttons.
+    public var run: (CommandID) -> Void = { _ in }
+    /// Whether the registry enables a tag command now. The buttons follow it, as the menu items
+    /// do, so the two can't disagree.
+    public var isEnabled: (CommandID) -> Bool = { _ in false }
     /// The top left corner the user last moved an info window to, where the next one opens;
     /// nil opens it near the main window's top left.
     public var place: NSPoint?
@@ -124,8 +127,9 @@ public final class TagEditing {
             return
         }
         let editor = TagEditorWindow(paths: paths)
-        editor.replaceArtwork = { [weak self] in self?.replaceArtwork() }
-        editor.removeArtwork = { [weak self] in self?.removeArtwork() }
+        editor.run = { [weak self] in self?.run($0) }
+        editor.isEnabled = { [weak self] in self?.isEnabled($0) == true }
+        editor.commandsChanged = { [weak self] in self?.refreshCommands() }
         editor.saved = { [weak self, weak editor] edit in
             guard let self, let editor else { return }
             self.save(edit, from: editor, over: window)
@@ -134,6 +138,7 @@ public final class TagEditing {
             guard let self, let editor else { return }
             self.editors.removeAll { $0 === editor }
             self.reads.removeValue(forKey: ObjectIdentifier(editor))?.stop()
+            self.refreshCommands()
         }
         editor.moved = { [weak self] corner in
             self?.place = corner
@@ -141,7 +146,14 @@ public final class TagEditing {
         }
         editors.append(editor)
         present(editor, over: window)
+        refreshCommands()
         read(into: editor, over: window)
+    }
+
+    /// Enables every info window's command buttons as the registry's rules say now: the art
+    /// commands act on the active window, so one window's change moves the others' buttons.
+    func refreshCommands() {
+        for editor in editors { editor.refreshCommands() }
     }
 
     private func present(_ editor: TagEditorWindow, over window: NSWindow) {

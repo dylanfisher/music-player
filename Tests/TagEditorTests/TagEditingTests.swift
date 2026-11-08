@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 import Testing
 
+@testable import Commands
+@testable import Fixtures
 @testable import Metadata
 @testable import TagEditor
 @testable import TagWriter
@@ -451,4 +453,52 @@ private final class Titles: @unchecked Sendable {
     #expect(seen.confirmations.isEmpty)
     #expect(seen.written == [["/a.flac"], ["/b.flac", "/c.flac"]])
     #expect(shown.last == .some(nil))
+}
+
+/// An info window's Undo Tag Edit, Replace Artwork… and Remove Artwork buttons ask the
+/// registry, as the menu items do, and run its commands.
+@MainActor
+@Test func theEditorsCommandButtonsFollowTheCommandsRules() async throws {
+    let seen = Seen()
+    let editing = makeEditing(
+        seen,
+        read: { paths, _ in
+            (paths.map { EditableTrack(path: $0, tags: TrackTags(), art: Data([1, 2, 3])) }, [])
+        })
+    // The rules TagCommands gives the registry, with the main window open or closed.
+    var mainWindowOpen = true
+    editing.isEnabled = { id in
+        switch id {
+        case .undoTagEdit: mainWindowOpen
+        case .replaceArtwork: editing.canReplaceArt
+        case .removeArtwork: editing.canRemoveArt
+        default: false
+        }
+    }
+    var ran: [CommandID] = []
+    editing.run = { ran.append($0) }
+    editing.open(["/a.flac"], over: window)
+    let opened = try #require(editor(editing, ["/a.flac"]))
+    // Every tab built, so each tab's buttons are there; a full turn ends on the tab it began.
+    for _ in TagEditorTab.allCases { opened.stepTab(1) }
+    func enabled(_ id: CommandID) -> [Bool] {
+        opened.commandButtons.filter { $0.id == id }.map(\.button.isEnabled)
+    }
+    #expect(
+        Set(opened.commandButtons.map(\.id)) == [.undoTagEdit, .replaceArtwork, .removeArtwork])
+    #expect(enabled(.undoTagEdit) == [true])
+    #expect(!enabled(.replaceArtwork).isEmpty && !enabled(.replaceArtwork).contains(true), "unread")
+    try await eventually { opened.isLoaded }
+    #expect(!enabled(.replaceArtwork).contains(false))
+    #expect(!enabled(.removeArtwork).isEmpty && !enabled(.removeArtwork).contains(false))
+    opened.removeArt()
+    #expect(!enabled(.removeArtwork).contains(true), "nothing left to remove")
+    #expect(!enabled(.replaceArtwork).contains(false))
+
+    for (_, button) in opened.commandButtons where button.isEnabled { click(button) }
+    #expect(Set(ran) == [.undoTagEdit, .replaceArtwork])
+    mainWindowOpen = false
+    editing.refreshCommands()
+    #expect(enabled(.undoTagEdit) == [false])
+    opened.close()
 }

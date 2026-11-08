@@ -1,12 +1,13 @@
 import AppKit
 import Artwork
+import Commands
 import DisplayText
 import Metadata
 import TagWriter
 import UniformTypeIdentifiers
 
 /// An info window: tabs of fields as `TagEditorTab` lays them out, the art with Replace and
-/// Remove, the file's format, and Cancel and Save. It opens at once, before its files are read,
+/// Remove, the file's format, and Undo Tag Edit, Cancel and Save. It opens at once, before its files are read,
 /// at the size it keeps, saying so, and fills in the fields once `load` hands it the tracks.
 /// Fields where the tracks differ show "Mixed" until typed in, and a field typed differently
 /// from what it showed has a dot by its label. It edits a `TagEditorModel` and hands back the
@@ -26,9 +27,14 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     var closed: () -> Void = {}
     /// Called with the window's top left corner when the user moves it.
     var moved: (NSPoint) -> Void = { _ in }
-    /// The art buttons, which run the registry's Replace Artwork… and Remove Artwork.
-    var replaceArtwork: () -> Void = {}
-    var removeArtwork: () -> Void = {}
+    /// Runs one of the registry's tag commands as its menu item does, for the window's Undo
+    /// Tag Edit and art buttons.
+    var run: (CommandID) -> Void = { _ in }
+    /// Whether the registry enables a tag command now, which its buttons follow.
+    var isEnabled: (CommandID) -> Bool = { _ in false }
+    /// Called when what the commands' rules read may have changed: the files were read, the
+    /// art changed, or the window became key.
+    var commandsChanged: () -> Void = {}
 
     /// A field can show on more than one tab, as the title does on Info and Sorting.
     private(set) var fields: [TagEditField: [NSTextField]] = [:]
@@ -43,8 +49,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private let largeArtView = NSImageView()
     private let artNote = NSTextField(labelWithString: "")
     private let artDetails = NSTextField(labelWithString: "")
-    private var replaceButtons: [NSButton] = []
-    private var removeButtons: [NSButton] = []
+    /// The buttons that run a registry command, each with its command.
+    private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
     /// Spins in the buttons row while the files are read; it keeps its space once stopped.
     private let spinner = NSProgressIndicator()
@@ -198,6 +204,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     public func windowWillClose(_ notification: Notification) { windowClosed() }
 
+    public func windowDidBecomeKey(_ notification: Notification) { commandsChanged() }
+
     /// Placing the window happens before it shows, so a move before then is the app's own.
     public func windowDidMove(_ notification: Notification) {
         guard window.isVisible, corner != placedAt else { return }
@@ -251,7 +259,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         saveButton.target = self
         saveButton.action = #selector(saveClicked)
         saveButton.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [spinner, problemLabel, cancel, saveButton])
+        let buttons = NSStackView(views: [
+            commandButton(.undoTagEdit, size: .regular), spinner, problemLabel, cancel, saveButton,
+        ])
 
         collapseLabel.textColor = .systemOrange
         collapseLabel.isHidden = true
@@ -449,16 +459,32 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         return scroll
     }
 
+    /// Replace and Remove, titled in full on the Artwork tab, and short beside the small art
+    /// on the Info tab, where the full titles don't fit under it.
     private func artButtons(size: NSControl.ControlSize) -> NSStackView {
-        let replace = NSButton(title: "Replace…", target: self, action: #selector(replaceClicked))
-        let remove = NSButton(title: "Remove", target: self, action: #selector(removeClicked))
-        for button in [replace, remove] {
-            button.controlSize = size
-            button.font = .systemFont(ofSize: NSFont.systemFontSize(for: size))
+        let replace = commandButton(.replaceArtwork, size: size)
+        let remove = commandButton(.removeArtwork, size: size)
+        if size == .small {
+            replace.title = "Replace…"
+            remove.title = "Remove"
         }
-        replaceButtons.append(replace)
-        removeButtons.append(remove)
         return NSStackView(views: [replace, remove])
+    }
+
+    /// A button that runs `id`, titled as its menu item.
+    private func commandButton(_ id: CommandID, size: NSControl.ControlSize) -> NSButton {
+        let button = NSButton(
+            title: AppCommands.title(of: id), target: self, action: #selector(commandClicked))
+        button.controlSize = size
+        button.font = .systemFont(ofSize: NSFont.systemFontSize(for: size))
+        button.isEnabled = false
+        commandButtons.append((id, button))
+        return button
+    }
+
+    /// Enables each command button as the registry's rule for its command says now.
+    func refreshCommands() {
+        for (id, button) in commandButtons { button.isEnabled = isEnabled(id) }
     }
 
     private func setUpArtViews() {
@@ -516,9 +542,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         for view in fields.values.joined() { view.isEditable = editable }
         for view in areas.values { view.isEditable = editable }
         compilationBox.isEnabled = editable
-        for button in replaceButtons { button.isEnabled = editable }
-        for button in removeButtons { button.isEnabled = editable && model?.canRemoveArt == true }
         saveButton.isEnabled = editable
+        commandsChanged()
     }
 
     /// Puts the model's values in the fields, and the art. A field typed in keeps what was
@@ -584,7 +609,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         artDetails.stringValue =
             art.map(imageDescription)
             ?? (artNote.stringValue.isEmpty ? "No artwork" : artNote.stringValue)
-        for button in removeButtons { button.isEnabled = model.canRemoveArt }
+        commandsChanged()
     }
 
     private func showFile() {
@@ -643,8 +668,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         problemLabel.textColor = color
     }
 
-    @objc private func replaceClicked() { replaceArtwork() }
-    @objc private func removeClicked() { removeArtwork() }
+    @objc private func commandClicked(_ sender: NSButton) {
+        guard let id = commandButtons.first(where: { $0.button === sender })?.id else { return }
+        run(id)
+    }
     @objc private func cancelClicked() { close() }
 
     @objc private func saveClicked() {

@@ -11,3 +11,4 @@ SettingsWindowController.toolbarSelectableItemIdentifiers | NSToolbarDelegate
 TagEditorWindow.controlTextDidChange | NSControlTextEditingDelegate
 TagEditorWindow.textDidChange | NSTextDelegate
 TagEditorWindow.tabView | NSTabViewDelegate
+TagEditorWindow.windowDidBecomeKey | NSWindowDelegate
