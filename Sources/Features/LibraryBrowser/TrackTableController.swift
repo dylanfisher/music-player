@@ -162,7 +162,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         for column in order {
             let tableColumn = NSTableColumn(identifier: columnIdentifier(column))
             // Now Playing is too narrow for its name, which the menu and the tooltip give.
-            tableColumn.title = column == .nowPlaying ? "" : column.title
+            tableColumn.title = column == .nowPlaying ? "" : column.headerTitle
             tableColumn.headerToolTip = column.title
             tableColumn.width =
                 layout.columns.first { $0.column == column }?.width
