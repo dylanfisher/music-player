@@ -55,7 +55,8 @@ final class GzipStream {
         self.url = url
         self.accessPointBytes = accessPointBytes
         nextAccessPoint = point.map { $0.compressedOffset } ?? 0
-        nextAccessPoint = nextAccessPoint.addingReportingOverflow(accessPointBytes).overflow
+        nextAccessPoint =
+            nextAccessPoint.addingReportingOverflow(accessPointBytes).overflow
             ? .max : nextAccessPoint + accessPointBytes
         descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC)
         // Every property is set by now, so `deinit` frees `input` after a throw.
@@ -211,8 +212,9 @@ final class GzipStream {
                 throw count < 0
                     ? .unreadable(name, String(cString: strerror(errno))) : .truncated(name)
             }
-            guard inflatePrime(&zlibStream, Int32(point.bits), Int32(byte >> (8 - point.bits)))
-                == Z_OK
+            guard
+                inflatePrime(&zlibStream, Int32(point.bits), Int32(byte >> (8 - point.bits)))
+                    == Z_OK
             else { throw .corrupt(name, "inflatePrime failed") }
         }
         if !point.window.isEmpty {

@@ -31,7 +31,7 @@ var arguments = Array(CommandLine.arguments.dropFirst())
 /// The value after `flag`, removed from the arguments with it, if it's there.
 @MainActor func take(_ flag: String) -> String? {
     guard let index = arguments.firstIndex(of: flag) else { return nil }
-    guard index + 1 < arguments.count else { fail("\(flag) needs a value") }
+    guard index + 1 < arguments.count else { fail("\(flag) takes a value") }
     defer { arguments.removeSubrange(index...(index + 1)) }
     return arguments[index + 1]
 }

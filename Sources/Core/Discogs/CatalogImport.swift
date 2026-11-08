@@ -270,7 +270,8 @@ private func read(
         while let batch = try batches.next() {
             if !dump.parse(batch.document, firstLine: batch.firstLine) {
                 throw dump.failure
-                    ?? CatalogImportError.malformed(name, line: batch.firstLine, "XMLParser stopped")
+                    ?? CatalogImportError.malformed(
+                        name, line: batch.firstLine, "XMLParser stopped")
             }
             if let point = batch.accessPoint {
                 checkpoint.records[kind.rawValue] = records

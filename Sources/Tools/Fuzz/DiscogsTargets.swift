@@ -12,7 +12,7 @@ let discogsDump = FuzzTarget(
     tokens: [
         "<release id=\"", "<master id=\"", "<track>", "</track>", "<sub_tracks>", "<duration>",
         "99999999999999999999:00", "<position>", "<anv>", "<master_id is_main_release=\"",
-        "<identifier type=\"Barcode\" value=\"", "&amp;", "<id>", "<namevariations>",
+        "<identifier type=\"Barcode\" value=\"", "<id>", "<namevariations>",
     ],
     madeSeeds: { _, _ in
         let records = [

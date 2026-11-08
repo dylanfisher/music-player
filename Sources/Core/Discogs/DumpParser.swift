@@ -318,6 +318,6 @@ private func nonEmpty(_ text: String?) -> String? {
 /// does, for the fuzzer (51.16), since Swift can't catch a trap and one 20 minutes into an
 /// import loses its work: the records it built, or nil when it refused the batch.
 package func dumpRecordCount(in document: Data, kind: DumpKind) -> Int? {
-    let parser = DumpParser(kind: kind, file: "fuzz-input") { _ in }
+    let parser = DumpParser(kind: kind, file: "the batch") { _ in }
     return parser.parse(document, firstLine: 1) ? parser.records : nil
 }
