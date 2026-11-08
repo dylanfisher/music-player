@@ -74,17 +74,6 @@ extension NotExactReason {
     }
 }
 
-/// The title of every button that opens a release's page.
-let openOnDiscogsTitle = "Open on Discogs"
-
-/// The Discogs page of release `id`, from the one builder the release URL tag uses.
-func discogsPage(_ id: Int) -> URL {
-    guard let url = URL(string: releaseURL(id)) else {
-        preconditionFailure("\(releaseURL(id)) isn't a URL")
-    }
-    return url
-}
-
 /// Open on Discogs: release `id`'s page, through `open`, the browser unless a test stands in.
 @MainActor
 func openOnDiscogs(_ id: Int, through open: (URL) -> Void = { NSWorkspace.shared.open($0) }) {

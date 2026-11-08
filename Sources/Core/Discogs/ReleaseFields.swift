@@ -146,6 +146,17 @@ struct ReleaseFields {
 /// Discogs use.
 public func releaseURL(_ id: Int) -> String { discogsURL("release", id) }
 
+/// The Discogs page of release `id`, from `releaseURL`.
+public func discogsPage(_ id: Int) -> URL {
+    guard let url = URL(string: releaseURL(id)) else {
+        preconditionFailure("\(releaseURL(id)) isn't a URL")
+    }
+    return url
+}
+
+/// The title of every button that opens a release's page.
+public let openOnDiscogsTitle = "Open on Discogs"
+
 /// A Discogs page's address, as YATE writes the `DISCOGS_*_URL` keys.
 private func discogsURL(_ kind: String, _ id: Int) -> String {
     "https://www.discogs.com/\(kind)/\(id)"
