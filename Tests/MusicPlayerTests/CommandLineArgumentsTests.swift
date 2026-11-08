@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import MusicPlayer
@@ -114,4 +115,23 @@ import Testing
             == ["--home", "/h", "--report-launch", "--rescan-confirmed", "off"])
     #expect(relaunchArguments(from: ["--rescan-confirmed"], adding: []) == [])
     #expect(relaunchArguments(from: ["-NSFoo", "YES"], adding: []) == ["-NSFoo", "YES"])
+}
+
+@Test func theRelaunchGivesUpOnAProcessThatKeepsRunning() throws {
+    let running = Process()
+    running.executableURL = URL(fileURLWithPath: "/bin/sleep", isDirectory: false)
+    running.arguments = ["10"]
+    try running.run()
+    defer { running.terminate() }
+    let relaunch = Process()
+    relaunch.executableURL = URL(fileURLWithPath: "/bin/sh", isDirectory: false)
+    // An app path that isn't one, so a relaunch that didn't give up opens nothing.
+    relaunch.arguments = [
+        "-c", relaunchScript(waitingFor: running.processIdentifier, upTo: 0.4), "relaunch",
+        "/nonexistent/Music Player.app",
+    ]
+    try relaunch.run()
+    relaunch.waitUntilExit()
+    #expect(relaunch.terminationStatus == relaunchGaveUpStatus)
+    #expect(running.isRunning)
 }
