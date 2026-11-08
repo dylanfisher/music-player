@@ -81,20 +81,27 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     #expect(!browser.canShowSelectionInAllMusic)
 }
 
-@MainActor @Test func openDiscogsReleaseReadsTheFirstSelectedTracksReleaseID() async throws {
+/// Open Discogs Release reads the first selected row's release id when it runs, and says so
+/// when that track has none.
+@MainActor @Test func openDiscogsReleaseOpensTheFirstSelectedTracksRelease() async throws {
     let (browser, index) = try await browser(selecting: [])
-    #expect(try browser.selectedDiscogsReleaseID() == nil)
+    var opened: [Int] = []
+    var beeps = 0
+    browser.beep = { beeps += 1 }
+    browser.openSelectedRelease { opened.append($0) }
+    #expect(opened.isEmpty && beeps == 0, "nothing selected, nothing to say")
     let tagged = browser.model.trackIDs[3]
     try index.database.prepare("UPDATE tracks SET discogs_release_id = '42' WHERE file_id = ?")
         .run(tagged)
-    browser.table.table.selectRowIndexes([2], byExtendingSelection: false)
-    #expect(try browser.selectedDiscogsReleaseID() == nil)
-    browser.table.table.selectRowIndexes([3, 2], byExtendingSelection: false)
-    #expect(try browser.selectedDiscogsReleaseID() == nil)
-    browser.table.table.selectRowIndexes([3], byExtendingSelection: false)
-    #expect(try browser.selectedDiscogsReleaseID() == 42)
+    browser.table.table.selectRowIndexes([2, 3], byExtendingSelection: false)
+    browser.openSelectedRelease { opened.append($0) }
+    #expect(opened.isEmpty)
+    #expect(beeps == 1)
+    #expect(browser.statusText == LibraryBrowser.noReleaseIDText)
     browser.table.table.selectRowIndexes([3, 4], byExtendingSelection: false)
-    #expect(try browser.selectedDiscogsReleaseID() == 42)
+    browser.openSelectedRelease { opened.append($0) }
+    #expect(opened == [42])
+    #expect(beeps == 1)
 }
 
 @MainActor @Test func addToPlaybackQueueSendsTheSelectedFiles() async throws {

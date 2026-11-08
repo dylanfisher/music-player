@@ -1482,11 +1482,36 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    /// The first selected track's Discogs release id, for Open Discogs Release; nil when it has
-    /// none or nothing is selected.
-    public func selectedDiscogsReleaseID() throws -> Int? {
-        guard let track = try selectedTrackIDs().first else { return nil }
-        return try index.discogsReleaseID(ofTrack: track)
+    /// What Open Discogs Release says when the first selected track has no release id.
+    static let noReleaseIDText = "The selected track has no Discogs release ID"
+
+    /// Open Discogs Release: hands `open` the first selected track's Discogs release id. Its
+    /// menu item is on for any selection, since the id is read here, not at each validation;
+    /// a track with none beeps and says so in the status bar.
+    public func openSelectedRelease(_ open: (Int) -> Void) {
+        let failure = "couldn't read the selected track's Discogs release ID"
+        let release: Int?
+        do {
+            guard let track = try firstSelectedTrackID() else { return }
+            release = try index.discogsReleaseID(ofTrack: track)
+        } catch {
+            reportCommand(failure, error)
+            return
+        }
+        guard let release else {
+            beep()
+            return show(failure: Self.noReleaseIDText)
+        }
+        open(release)
+    }
+
+    /// The track of the first selected row, reading only that row.
+    private func firstSelectedTrackID() throws -> Int64? {
+        let list = showsTimeline ? timeline.table : table.table
+        guard let first = list.selectedRowIndexes.first else { return nil }
+        let row = IndexSet(integer: first)
+        return showsTimeline
+            ? try timelineModel.trackIDs(ofRows: row).first : model.ids(ofRows: row).first
     }
 
     /// Shows the playlist `id` with the first selected track selected.
