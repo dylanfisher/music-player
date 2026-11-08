@@ -330,7 +330,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
                     area, contents, version: version, unsynchronised: frameUnsynchronised,
                     stored: tagUnsynchronised || frameUnsynchronised, &reader.warnings)
                 {
-                    pictures.append(EmbeddedPicture(art: picture.art, type: picture.type))
+                    pictures.append(picture)
                 }
                 return
             }
@@ -604,7 +604,7 @@ private func genre(_ text: String, _ version: UInt8, at offset: Int) throws(Pars
 private func picture(
     _ area: FrameArea, _ contents: Range<Int>, version: UInt8, unsynchronised: Bool, stored: Bool,
     _ warnings: inout [MetadataWarning]
-) throws(ParseFailure) -> (type: UInt32, art: EmbeddedArt)? {
+) throws(ParseFailure) -> EmbeddedPicture? {
     func header(_ length: Int) throws(ParseFailure) -> Bytes {
         let raw = try area.bytes(contents.lowerBound..<contents.lowerBound + length)
         guard unsynchronised else { return raw }
@@ -625,10 +625,10 @@ private func picture(
     let offset = bytes.fileOffset(imageStart)
     let end = area.fileOffset(contents.upperBound - 1) + 1
     guard end > offset else { return nil }
-    return (
-        type,
-        EmbeddedArt(offset: offset, byteCount: end - offset, mimeType: mime, unsynchronised: stored)
-    )
+    return EmbeddedPicture(
+        art: EmbeddedArt(
+            offset: offset, byteCount: end - offset, mimeType: mime, unsynchronised: stored),
+        type: type)
 }
 
 /// The MIME type, picture type and where the image starts, or nil when `bytes` ends first.

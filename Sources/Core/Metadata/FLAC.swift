@@ -35,9 +35,7 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         case 6:
             // The block is inside the file, so a bad picture spoils only the picture.
             reader.skippingUnreadableField(at: offset) { () throws(ParseFailure) in
-                if let picture = try flacPicture(reader, body) {
-                    pictures.append(EmbeddedPicture(art: picture.art, type: picture.type))
-                }
+                if let picture = try flacPicture(reader, body) { pictures.append(picture) }
             }
         case 127: throw .malformed(at: offset, "FLAC metadata block type 127 is invalid")
         default: break
@@ -76,7 +74,7 @@ private func streamInfo(_ block: Bytes) throws(ParseFailure) -> TrackAudio {
 /// Big-endian: picture type, MIME length and MIME, description length and description, width,
 /// height, depth, colors, then the image's length and the image, which is skipped.
 private func flacPicture(_ reader: ByteReader, _ body: Range<Int>) throws(ParseFailure)
-    -> (type: UInt32, art: EmbeddedArt)?
+    -> EmbeddedPicture?
 {
     var cursor = body.lowerBound
     func field(_ length: Int) throws(ParseFailure) -> Bytes {
@@ -98,8 +96,8 @@ private func flacPicture(_ reader: ByteReader, _ body: Range<Int>) throws(ParseF
             at: imageOffset, "FLAC picture of \(length) bytes runs past the end of its block")
     }
     if mime == linkedPictureMIMEType { return nil }
-    return (
-        type,
-        EmbeddedArt(offset: imageOffset, byteCount: length, mimeType: mime, unsynchronised: false)
-    )
+    return EmbeddedPicture(
+        art: EmbeddedArt(
+            offset: imageOffset, byteCount: length, mimeType: mime, unsynchronised: false),
+        type: type)
 }
