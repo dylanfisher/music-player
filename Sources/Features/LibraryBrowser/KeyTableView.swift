@@ -5,18 +5,6 @@ final class KeyTableView: NSTableView, ResolvedBackgroundTable {
     var takeKey: (NSEvent) -> Bool = { _ in false }
     /// What a drag of rows offers within the app: a move to reorder, a copy to a playlist.
     var dragWithinApp: NSDragOperation = []
-
-    /// What a drag of rows offers where it's over: `dragWithinApp` inside the app, and outside
-    /// it a copy only, so Finder copies the files and never moves or trashes one (ADR 0141).
-    func dragOperationMask(for context: NSDraggingContext) -> NSDragOperation {
-        context == .withinApplication ? dragWithinApp : .copy
-    }
-
-    override func draggingSession(
-        _ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext
-    ) -> NSDragOperation {
-        dragOperationMask(for: context)
-    }
     /// The column whose cells fill the column, the spacing and padding beside them included.
     var edgeToEdgeColumn: NSUserInterfaceItemIdentifier?
     /// The color the table was given, which can follow the appearance. The table holds it
@@ -84,6 +72,18 @@ final class KeyTableView: NSTableView, ResolvedBackgroundTable {
         let columnRect = rect(ofColumn: column)
         return NSRect(
             x: columnRect.minX, y: frame.minY, width: columnRect.width, height: frame.height)
+    }
+
+    /// What a drag of rows offers where it's over: `dragWithinApp` inside the app, and outside
+    /// it a copy only, so Finder copies the files and never moves or trashes one (ADR 0141).
+    func dragOperationMask(for context: NSDraggingContext) -> NSDragOperation {
+        context == .withinApplication ? dragWithinApp : .copy
+    }
+
+    override func draggingSession(
+        _ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
+        dragOperationMask(for: context)
     }
 
     override func keyDown(with event: NSEvent) {
