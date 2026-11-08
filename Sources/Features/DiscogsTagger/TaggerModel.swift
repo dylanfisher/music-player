@@ -266,6 +266,20 @@ final class TaggerModel {
 
     // MARK: - Analyze
 
+    /// Scopes the window to the library's selection, when there is one; returns whether it
+    /// did.
+    func scopeToSelection() -> Bool {
+        do {
+            guard try !selectedTracks().isEmpty else { return false }
+        } catch {
+            failed("The selected tracks couldn't be read", ["\(error)"])
+            return false
+        }
+        scope = .selection
+        changed()
+        return true
+    }
+
     /// Matches the scope's albums with the catalog, off the main thread, taking each album's
     /// remembered review; the albums shown are replaced once it finishes.
     func analyze() {

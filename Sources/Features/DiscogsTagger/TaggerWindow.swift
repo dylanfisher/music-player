@@ -34,23 +34,29 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let importButton = NSButton(title: TaggerWindow.importTitle, target: nil, action: nil)
     let progress = NSProgressIndicator()
     let statusLabel = NSTextField(labelWithString: "")
-    let catalogLabel = NSTextField(wrappingLabelWithString: "")
-    let catalogImportButton = NSButton(title: TaggerWindow.importTitle, target: nil, action: nil)
+    let catalogLabel = NSTextField(labelWithString: "")
     let revealButton = NSButton(title: "Reveal in Finder", target: nil, action: nil)
     let catalogBox = NSStackView()
-    let resumeLabel = NSTextField(wrappingLabelWithString: "")
+    let resumeLabel = NSTextField(labelWithString: "")
     let resumeButton = NSButton(title: "Resume Import", target: nil, action: nil)
     let startOverButton = NSButton(title: "Start Over", target: nil, action: nil)
     let resumeBox = NSStackView()
+    /// The rows above the tabs, each on one line.
+    private(set) var headerRows: [NSStackView] = []
     let tabs = NSSegmentedControl()
     let albumTable = NSTableView()
     let trackTable = NSTableView()
     let releaseTitle = NSTextField(labelWithString: "")
     let releaseLine = NSTextField(labelWithString: "")
+    /// Why a Likely or Incomplete album isn't Exact, under the release's lines.
+    let reasonsLine = NSTextField(labelWithString: "")
     let otherReleasesButton = NSButton(title: "Other Releases…", target: nil, action: nil)
     let changesButton = NSButton(title: "View Changes…", target: nil, action: nil)
     let rejectButton = NSButton(title: "Reject", target: nil, action: nil)
+    /// The row of buttons under the tracklists, and the one under the album list and them.
+    let reviewButtons = NSStackView()
     let applyButton = NSButton(title: "", target: nil, action: nil)
+    let bottom = NSStackView()
 
     /// Writes the confirmed edits.
     var write: ([(path: String, edit: TagEdit)], @escaping (Set<String>) -> Void) -> Void = {
@@ -103,7 +109,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         scopePopUp.action = #selector(scopeChosen)
         for (button, action) in [
             (analyzeButton, #selector(analyzeOrStop)), (mappingButton, #selector(showMapping)),
-            (importButton, #selector(chooseDumps)), (catalogImportButton, #selector(chooseDumps)),
+            (importButton, #selector(chooseDumps)),
             (revealButton, #selector(revealCatalog)), (resumeButton, #selector(resumeImport)),
             (startOverButton, #selector(startImportOver)),
             (otherReleasesButton, #selector(showOtherReleases)),
@@ -139,22 +145,27 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         statusLabel.lineBreakMode = .byTruncatingTail
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
+        // The catalog's line with its buttons, then the controls in two rows, each of which
+        // fits the window's minimum width on one line; the labels that can't truncate.
+        catalogBox.setViews([catalogLabel, revealButton], in: .leading)
+        catalogBox.setViews([importButton], in: .trailing)
+        catalogBox.spacing = 12
         let bar = NSStackView(views: [
             label("Source:"), sourcePopUp, label("Scope:"), scopePopUp, analyzeButton, progress,
-            statusLabel, NSView(), importButton,
+            statusLabel, NSView(),
         ])
         bar.spacing = 8
         let choices = NSStackView(views: [
             mappingButton, keepBox, skipVideoBox, sortArtistBox, NSView(),
         ])
         choices.spacing = 12
-
-        catalogBox.setViews([catalogLabel, catalogImportButton, revealButton], in: .leading)
-        catalogBox.spacing = 12
-        catalogLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         resumeBox.setViews([resumeLabel, resumeButton, startOverButton], in: .leading)
         resumeBox.spacing = 12
-        resumeLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        for label in [catalogLabel, resumeLabel] {
+            label.lineBreakMode = .byTruncatingTail
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+        headerRows = [catalogBox, bar, choices, resumeBox]
 
         tabs.segmentStyle = .automatic
         tabs.segmentCount = MatchTier.allCases.count
@@ -178,16 +189,19 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         releaseTitle.lineBreakMode = .byTruncatingTail
         releaseLine.textColor = .secondaryLabelColor
         releaseLine.lineBreakMode = .byTruncatingTail
-        let buttons = NSStackView(views: [otherReleasesButton, changesButton, rejectButton])
-        buttons.spacing = 8
+        reasonsLine.textColor = .systemOrange
+        reasonsLine.lineBreakMode = .byTruncatingTail
+        revealButton.isHidden = true
+        reviewButtons.setViews([otherReleasesButton, changesButton, rejectButton], in: .leading)
+        reviewButtons.spacing = 8
         let detail = NSStackView(views: [
-            releaseTitle, releaseLine, tracks, buttons,
+            releaseTitle, releaseLine, reasonsLine, tracks, reviewButtons,
         ])
         detail.orientation = .vertical
         detail.alignment = .leading
         detail.spacing = 6
         detail.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 0)
-        for view in detail.arrangedSubviews where view is NSScrollView {
+        for view in [tracks, reviewButtons] {
             view.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -8).isActive = true
         }
 
@@ -204,7 +218,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
         detail.widthAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
 
-        let bottom = NSStackView(views: [NSView(), applyButton])
+        bottom.setViews([applyButton], in: .trailing)
         let page = NSStackView(views: [bar, choices, catalogBox, resumeBox, tabs, split, bottom])
         page.orientation = .vertical
         page.alignment = .leading
@@ -213,7 +227,18 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         for view in [bar, choices, catalogBox, resumeBox, split, bottom] {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -28).isActive = true
         }
-        split.setContentHuggingPriority(.defaultLow, for: .vertical)
+        // The tables are the one view of each stack that takes the spare height, and give it
+        // up first: every other row keeps its own height.
+        for stack in [page, detail] {
+            stack.distribution = .fill
+            for view in stack.arrangedSubviews {
+                let isTables = view === split || view === tracks
+                view.setContentHuggingPriority(
+                    isTables ? .defaultLow : .defaultHigh, for: .vertical)
+                view.setContentCompressionResistancePriority(
+                    isTables ? .defaultLow : .defaultHigh, for: .vertical)
+            }
+        }
         window.contentView = page
     }
 
@@ -226,35 +251,42 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Shows the model as it is now: the catalog, the work running, the tabs, the albums and
     /// the selected album.
     func refresh() {
-        catalogBox.isHidden = model.catalog == .checking
-        catalogImportButton.isHidden = false
-        revealButton.isHidden = true
-        catalogLabel.toolTip = nil
         switch model.catalog {
         case .checking:
-            // The title the last check gave stays until this one answers.
-            break
+            // What the last check showed stays until this one answers.
+            if catalogLabel.stringValue.isEmpty {
+                catalogLabel.stringValue = "Checking the Discogs catalog…"
+            }
         case .ready(let status):
             catalogLabel.stringValue = status.shown
-            catalogLabel.toolTip = status.url.path
-            catalogImportButton.isHidden = true
+            catalogLabel.toolTip = status.detail
             revealButton.isHidden = false
             importButton.title = Self.reimportTitle
         case .missing:
             catalogLabel.stringValue =
-                "There's no Discogs catalog on this Mac, so there's nothing to match with."
-                + " Import Discogs Dump… builds one from the dumps folder."
+                "There's no Discogs catalog on this Mac; Import Discogs Dump… builds one."
+            catalogLabel.toolTip = nil
+            revealButton.isHidden = true
             importButton.title = Self.importTitle
         case .unusable(let why):
             catalogLabel.stringValue = "The Discogs catalog can't be used: \(why)."
+            catalogLabel.toolTip = catalogLabel.stringValue
+            revealButton.isHidden = true
             importButton.title = Self.importTitle
         }
-        resumeBox.isHidden = model.unfinished == nil || model.isBusy
+        let resumeHidden = model.unfinished == nil || model.isBusy
         if let unfinished = model.unfinished {
             resumeLabel.stringValue =
                 "The import of the \(unfinished.dumpDate) Discogs dump stopped at"
                 + " \(Int(unfinished.fraction * 100))%. Resume Import carries on from there; Start"
                 + " Over imports the dump from its start."
+            resumeLabel.toolTip = resumeLabel.stringValue
+        }
+        if resumeBox.isHidden != resumeHidden {
+            resumeBox.isHidden = resumeHidden
+            // The tables take the height the row leaves or gives back now, not at the next
+            // pass that happens to come.
+            window?.contentView?.layoutSubtreeIfNeeded()
         }
         sourcePopUp.selectItem(at: TaggerModel.Source.allCases.firstIndex(of: model.source)!)
         scopePopUp.selectItem(at: TaggerModel.Scope.allCases.firstIndex(of: model.scope)!)
@@ -331,6 +363,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 album == nil
                 ? "" : "Other Releases… lists what the catalog found, if anything."
         }
+        reasonsLine.stringValue = album.flatMap { reasonsText($0.match, separator: " · ") } ?? ""
         rows = album.map { $0.match.comparison(of: $0.album) } ?? []
         trackTable.reloadData()
         let reviewing = album != nil && !model.isBusy
@@ -353,8 +386,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         else { return nil }
         let cell = NSTextField(labelWithString: text(tableView, id, row))
         cell.lineBreakMode = .byTruncatingTail
-        if tableView === albumTable, shownAlbums[row].isRejected || shownAlbums[row].applied {
-            cell.textColor = .secondaryLabelColor
+        if tableView === albumTable {
+            if shownAlbums[row].isRejected || shownAlbums[row].applied {
+                cell.textColor = .secondaryLabelColor
+            }
+            cell.toolTip = reasonsText(shownAlbums[row].match, separator: "\n")
         }
         if tableView === trackTable, id == .state {
             cell.textColor =
@@ -365,6 +401,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 }
         }
         return cell
+    }
+
+    /// Why `match` isn't Exact, a reason a line or `separator` apart; nil when it says nothing.
+    private func reasonsText(_ match: AlbumMatch, separator: String) -> String? {
+        match.reasons.isEmpty ? nil : match.reasons.map(\.text).joined(separator: separator)
     }
 
     /// The text of the cell in column `id` of `row`.

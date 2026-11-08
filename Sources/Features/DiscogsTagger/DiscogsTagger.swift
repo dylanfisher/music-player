@@ -83,16 +83,23 @@ public final class DiscogsTagger {
     /// The window, once shown.
     public var window: NSWindow? { controller?.window }
 
-    /// Shows the window, checking the catalog the first time.
+    /// Shows the window, checking the catalog the first time. With tracks selected in the
+    /// library, it's scoped to their albums and, with a catalog in place, analyzes them at once.
     public func show() {
+        let opening = controller == nil
         if let controller {
             controller.showWindow(nil)
-            return
+        } else {
+            let made = makeWindow()
+            made.window?.center()
+            made.showWindow(nil)
         }
-        let made = makeWindow()
-        made.window?.center()
-        made.showWindow(nil)
-        Task { await model.checkCatalog() }
+        let scoped = model.scopeToSelection()
+        guard opening || scoped else { return }
+        Task {
+            if opening { await model.checkCatalog() }
+            if scoped, model.canAnalyze { model.analyze() }
+        }
     }
 
     func makeWindow() -> TaggerWindow {

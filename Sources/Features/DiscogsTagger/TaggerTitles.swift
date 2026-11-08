@@ -30,13 +30,48 @@ extension TaggerModel.Scope {
 }
 
 extension CatalogStatus {
-    /// The line the window shows of a catalog in place.
+    /// The line the window shows of a catalog in place: "Catalog from the 2026-11-01 dump ·
+    /// 3.1 GB".
     var shown: String {
+        "Catalog from the \(dumpDay) dump · \(fileSizeText(sizeBytes))"
+    }
+
+    /// Its tooltip: where the catalog is and when it was imported.
+    var detail: String {
         let imported = DateFormatter.localizedString(
             from: importedAt, dateStyle: .medium, timeStyle: .short)
-        return
-            "The catalog of the \(dumpDate) Discogs dump, imported \(imported):"
-            + " \(fileSizeText(sizeBytes)), at \((url.path as NSString).abbreviatingWithTildeInPath)"
+        return "\((url.path as NSString).abbreviatingWithTildeInPath)\nImported \(imported)"
+    }
+
+    /// The dump's date, which Discogs writes as 20261101, as 2026-11-01.
+    private var dumpDay: String {
+        guard dumpDate.count == 8, dumpDate.allSatisfy(\.isNumber) else { return dumpDate }
+        let digits = Array(dumpDate)
+        return "\(String(digits[0..<4]))-\(String(digits[4..<6]))-\(String(digits[6..<8]))"
+    }
+}
+
+extension NotExactReason {
+    /// "2 files have no track on the release": one of the reasons under the release's title.
+    var text: String {
+        switch self {
+        case .filesWithoutTrack(let files):
+            "\(count(files, "file")) \(files == 1 ? "has" : "have") no track on the release"
+        case .tracksWithoutFile(let count):
+            "\(tracks(count)) of the release \(count == 1 ? "has" : "have") no file"
+        case .countDiffers(let files, let tracks):
+            "\(count(files, "file")), the release has \(DisplayText.tracks(tracks))"
+        case .titlesDiffer(let titles):
+            "\(count(titles, "file title")) "
+                + (titles == 1 ? "differs from its track's" : "differ from their tracks'")
+        case .durationsDiffer(let lengths):
+            "\(count(lengths, "file length")) \(lengths == 1 ? "is" : "are") off by more than"
+                + " \(number(Int(Self.durationSeconds))) s"
+                + " or \(number(Int((Self.durationFraction * 100).rounded())))%"
+        case .releaseIDsDiffer: "its files carry different release IDs, or only some carry one"
+        case .tiedAfterTieBreak: "other releases fit as well"
+        case .foundByTitleOnly: "found by title only"
+        }
     }
 }
 

@@ -18,6 +18,11 @@ public enum NotExactReason: Equatable, Sendable {
     /// Found by artist and title only: no release id, barcode or catalog number led to it.
     case foundByTitleOnly
 
+    /// The tolerance `durationsDiffer` counts past: a file's length agrees within this many
+    /// seconds or this fraction of Discogs's, whichever is more.
+    public static var durationSeconds: Double { MatchThreshold.durationSeconds }
+    public static var durationFraction: Double { MatchThreshold.durationFraction }
+
     /// The reasons for `score`, the chosen release's, at `tier`; none for a tier other than
     /// Likely or Incomplete.
     static func reasons(
