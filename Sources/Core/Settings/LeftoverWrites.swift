@@ -3,8 +3,8 @@ import Log
 
 private let logger = moduleLogger()
 
-/// The temp files Foundation's atomic write leaves beside `file` when the process dies mid-write,
-/// named `<name>.sb-<id>`, by path.
+/// The temp files a save leaves beside `file` when the process dies mid-write, named
+/// `<name>.sb-<id>` as Foundation's atomic write and `writeConfigFile` name them, by path.
 public func leftoverAtomicWrites(beside file: URL) -> [String] {
     let folder = file.deletingLastPathComponent()
     let prefix = file.lastPathComponent + ".sb-"

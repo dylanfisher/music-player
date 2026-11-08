@@ -252,7 +252,10 @@ public final class ConfigStore<Schema: SettingsSchema> {
             setProblems([ConfigProblem(line: nil, message: "can't read the file: \(error)")])
             return
         }
-        if bytes == lastBytes, !confirmed || lastBytes != nil {
+        // A chmod that makes a withheld secret usable changes no bytes, so it's checked too.
+        if bytes == lastBytes, !confirmed || lastBytes != nil,
+            !problems.contains(where: \.isWarning) || othersCanRead(fileURL)
+        {
             // Changes made while an empty read waited for confirmation go in now.
             flush()
             return
@@ -284,7 +287,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
         do {
             let contents = try ConfigFile.parse(
                 ConfigText(bytes: bytes), settings: descriptors, check: check,
-                conflicts: schema.conflicts)
+                conflicts: schema.conflicts, othersCanRead: othersCanRead(fileURL))
             if let first = contents.skipped.first {
                 logger.notice(
                     "\(self.fileURL.path): skipped \(contents.skipped.count) unknown keys, first \(first)"
@@ -407,10 +410,11 @@ public final class ConfigStore<Schema: SettingsSchema> {
         }
     }
 
-    /// Writes through a symbolic link to the file it leads to, so the link stays a link. A file
-    /// with problems is read again, since their lines can move.
+    /// Writes through a symbolic link to the file it leads to, so the link stays a link, at
+    /// mode 0600. A file with problems is read again, since their lines can move, and a secret
+    /// withheld for its mode is used from then on.
     private func write(_ bytes: [UInt8]) throws {
-        try Data(bytes).write(to: fileURL.resolvingSymlinksInPath(), options: .atomic)
+        try writeConfigFile(bytes, to: fileURL.resolvingSymlinksInPath())
         lastBytes = bytes
         pending = []
         retrySeconds = nil
