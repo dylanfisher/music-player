@@ -944,16 +944,64 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 
 #### 54d. The window
 
-- [ ] **54.9 Model.** `Features/Downloads`: `DownloadsModel` with rows, polling (2 s with the
+- [x] **54.9 Model.** `Features/Downloads`: `DownloadsModel` with rows, polling (2 s with the
       window open and a job active, 60 s otherwise) on an injected clock, row styling and
       Approve's enabled rule as pure functions, the service-down state; `Core/Commands`
       entries. Tests against a fake client, styling and gating as tables.
-- [ ] **54.10 Coordinator.** `DownloadsCoordinator`: claims and leases, the tag loop, the outbox
+      Result: `DownloadsModel` keeps the service's jobs by epoch and revision (`DownloadJobs`,
+      so a reset drops every row) and polls on an injected sleep: 2 s while the window is open
+      and a job is moving, else 60 s. Opening the window polls at once; closing it cancels the
+      request. "Moving" counts a staged job not yet tagged, so a tag run shows, and leaves out
+      `not_found`, whose next search is hours away. A failed poll keeps the rows, dimmed, with
+      the error naming the address and the last good poll's time. `DownloadRow`'s rules are
+      static functions: dimmed through `downloading` and for a failed search or download (both
+      go back to the queue); the tagging label (Pending, Tagging, Clean, Discrepancy, Error,
+      with reasons) from `staged` on; "Being reviewed on <Mac>"; Approve only for a staged,
+      clean job this Mac has claimed; sections needs review, downloading, waiting, failed,
+      newest first; terminal jobs not listed. `downloads.show` (File > Downloads…) is in
+      `Core/Commands`, disabled until 54.14 gives it a handler, so `scripts/surface` flags it
+      until then. The job's fields the window reads are `package` in `Recommender`. 14 tests,
+      8 of them tables, against `FakeService` (the list's paging and `handoff`'s leases and
+      claims) and `FakeClock`; each rule caught by a mutation.
+- [x] **54.10 Coordinator.** `DownloadsCoordinator`: claims and leases, the tag loop, the outbox
       flush, a stale lease released at launch, the idle poll; clock and effects injected. Tests:
       a claim race, lease expiry, resume, a crash between tagging steps.
-- [ ] **54.11 Tagger entry.** `TaggerModel(stagedJob:)` with staged effects; the tagger opens
+      Result: an actor fed each poll's jobs by the model (`took`), so there is one poller, and
+      the idle poll is the model's 60 s. At launch it gives up any lease the service lists for
+      this Mac, then sends the outbox, then tags one job at a time: staged, no live lease, and
+      `none` or `running` (a run that crashed or slept past its lease, rerun from the read). It
+      takes the lease (`claimed` leaves the job alone), queues `running`, renews every 3
+      minutes, and a renewal refused stops the run before it writes or reports. A clean run goes
+      through the injected writer (`StagedWriter`), a discrepancy writes nothing, and the verdict
+      is queued and sent while the lease is held, then the lease given up. The outbox goes in
+      order: a report refused or a 400 is dropped and listed in `problems`; one unanswered stops
+      the send for the next poll to retry; `forgetImportJob` runs only once `imported` is
+      answered. `approve` and `resumeHere` (`take_over`) take the review claim, then run the
+      import, injected as a closure (App builds `ImportRun` with the trash and the watcher;
+      `ImportRun`'s own tests cover the moves), one at a time. `claimReview`, `releaseReview`,
+      `reject` and `resolved` (54.11's report) round it out. The coordinator opens its own index
+      from the database URL. `HandoffEvent` decodes from the outbox's JSON, refusing any text
+      that isn't exactly an event's encoding. 14 tests, no real sleeps: a clean run, a
+      discrepancy, no catalog, another Mac's lease taken first, a crash mid-lease at the next
+      launch, an expired lease, renewal and a lost lease, a send failing then succeeding and the
+      ledger forgotten, refusals dropped, Resume Here, the review claim, reject, a resolved
+      discrepancy; 9 mutations each caught.
+      Also fixed: AutoTag took the matcher's pick for the job's release, and when the catalog
+      lacks the release the matcher picks the best other one; it now requires the job's release.
+- [x] **54.11 Tagger entry.** `TaggerModel(stagedJob:)` with staged effects; the tagger opens
       with the release chosen, and an Apply that leaves no changes makes the job clean. Tests
       against fake effects.
+      Result: `TaggerModel(stagedJob:effects:mapping:savedMappings:choices:resolved:)`, a
+      separate initializer, with `StagedEffects` (read the staged files, match with a release,
+      summaries, the catalog's state, and `StagedWriter.write(_:)`). It opens on its one album's
+      tier with the job's release chosen; choosing another is refused. Apply writes through the
+      staged effects only, never `write`, so the main undo journal and the watcher never see
+      it; then the files are read back, and `resolved` hears clean when the mapping would change
+      nothing but what the owner unticked, else a discrepancy (`StagedWriter.verdict`, one copy
+      with the auto-tag write). A failed write reports nothing and can be applied again. The
+      confirmation and status say Edit > Undo doesn't put staged writes back. 5 tests; 7
+      mutations each caught. The live `StagedEffects` and a `DiscogsTagger` entry for App come
+      with 54.14.
 - [ ] **54.12 Window.** `DownloadsWindow`: the table (Source, Album, Format, State, Tagging,
       Added), toolbar, context menu, status messages; built on first show. A construction
       test.
