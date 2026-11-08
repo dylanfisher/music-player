@@ -7,10 +7,9 @@ extension AppDelegate {
     /// `swift run`, it only quits, and the next launch does what the relaunch was for.
     /// `adding` goes to the next launch's arguments, and to no later one's. `failure` is what
     /// the alert says when the app can't be opened again.
-    func relaunch(adding extra: [Flag] = [], failing failure: String) {
-        let arguments =
-            CommandLine.arguments.dropFirst().filter { $0 != Flag.rescanConfirmed.rawValue }
-            + extra.map(\.rawValue)
+    func relaunch(adding extra: [String] = [], failing failure: String) {
+        let arguments = relaunchArguments(
+            from: Array(CommandLine.arguments.dropFirst()), adding: extra)
         let app = Bundle.main.bundleURL
         if app.pathExtension == "app" {
             let process = Process()
@@ -31,4 +30,21 @@ extension AppDelegate {
         }
         NSApp.terminate(nil)
     }
+}
+
+/// `arguments`, without the executable, as the relaunch passes them on: without
+/// `--rescan-confirmed` and its value, which is for one launch, and with `extra`.
+func relaunchArguments(from arguments: [String], adding extra: [String]) -> [String] {
+    var kept: [String] = []
+    var index = arguments.startIndex
+    while index < arguments.endIndex {
+        if arguments[index] == Flag.rescanConfirmed.rawValue {
+            index += 1
+            if index < arguments.endIndex, !arguments[index].hasPrefix("--") { index += 1 }
+        } else {
+            kept.append(arguments[index])
+            index += 1
+        }
+    }
+    return kept + extra
 }

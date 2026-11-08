@@ -23,6 +23,12 @@ public struct RescanNotice: Equatable, Sendable {
         separateReleases = on
     }
 
+    /// Whether Separate Releases changing to `on` is the only reason for the rebuild, so an
+    /// answer given for that change before a relaunch covers it (ADR 0143).
+    public func onlySeparatesReleases(_ on: Bool) -> Bool {
+        parts.isEmpty && separateReleases == on
+    }
+
     public var title: String { "Rescan the Library?" }
 
     public var text: String {

@@ -43,7 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let reportingLaunch: Bool
     private let snapshotURL: URL?
     private let snapshotOf: SnapshotTarget
-    private let rescanConfirmed: Bool
+    /// The Separate Releases value a rescan was confirmed for before a relaunch.
+    private let rescanConfirmed: Bool?
     /// Whether the index makes an album of each Discogs release, as the window's first open
     /// built it (ADR 0143). The setting differs from it after a change, until a relaunch.
     private(set) var separatesReleases: Bool?
@@ -170,10 +171,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
     /// `reportingLaunch` prints a line once the first scan of each watched folder has ended.
     /// `snapshotURL` gets a PNG of the window a few seconds after that. `rescanConfirmed`
-    /// rebuilds the index at launch without asking.
+    /// rebuilds the index at launch without asking, when Separate Releases changing to it is
+    /// the only reason.
     init(
         paths: AppPaths, measuring: MeasurementKind?, reportingLaunch: Bool, snapshotURL: URL?,
-        snapshotOf: SnapshotTarget, rescanConfirmed: Bool = false
+        snapshotOf: SnapshotTarget, rescanConfirmed: Bool? = nil
     ) {
         self.rescanConfirmed = rescanConfirmed
         self.snapshotOf = snapshotOf
@@ -264,7 +266,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // It alone passes Separate Releases; every other connection keeps what it built.
         let index = try LibraryIndex(
             at: databaseURL, movingAsideIfUnreadable: true,
-            confirmRescan: rescanConfirmed ? { _ in true } : askToRescan,
+            confirmRescan: { [rescanConfirmed] notice in
+                rescanConfirmed.map(notice.onlySeparatesReleases) == true || askToRescan(notice)
+            },
             separateReleases: settings[\.separateReleases])
         separatesReleases = index.separateReleases
         snapshotScheduler = SnapshotScheduler(databaseURL: databaseURL)

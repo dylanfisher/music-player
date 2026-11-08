@@ -62,7 +62,7 @@ extension AppDelegate {
             guard let self else { return }
             if rescan {
                 relaunch(
-                    adding: [.rescanConfirmed],
+                    adding: rescanConfirmedArguments(on),
                     failing: "The app couldn't open again; open it to rescan the library")
             } else {
                 do {

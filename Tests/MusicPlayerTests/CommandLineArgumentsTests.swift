@@ -93,8 +93,25 @@ import Testing
 }
 
 @Test func theRelaunchsRescanFlagIsTheWindows() {
-    #expect(argumentProblem(["--rescan-confirmed"]) == nil)
+    #expect(argumentProblem(["--rescan-confirmed", "on"]) == nil)
+    #expect(argumentProblem(["--rescan-confirmed", "off"]) == nil)
+    #expect(argumentProblem(["--rescan-confirmed"]) == "--rescan-confirmed needs off, on")
     #expect(
-        argumentProblem(["--scan", "/m", "--rescan-confirmed"])
+        argumentProblem(["--rescan-confirmed", "yes"])
+            == "--rescan-confirmed needs one of off, on, not yes")
+    #expect(
+        argumentProblem(["--scan", "/m", "--rescan-confirmed", "on"])
             == "--rescan-confirmed is for the window, so it can't go with --scan")
+    #expect(rescanConfirmed("on") == true && rescanConfirmed("off") == false)
+    #expect(rescanConfirmedArguments(false) == ["--rescan-confirmed", "off"])
+}
+
+@Test func theRelaunchDropsTheRescanFlagAndItsValue() {
+    #expect(
+        relaunchArguments(
+            from: ["--home", "/h", "--rescan-confirmed", "on", "--report-launch"],
+            adding: rescanConfirmedArguments(false))
+            == ["--home", "/h", "--report-launch", "--rescan-confirmed", "off"])
+    #expect(relaunchArguments(from: ["--rescan-confirmed"], adding: []) == [])
+    #expect(relaunchArguments(from: ["-NSFoo", "YES"], adding: []) == ["-NSFoo", "YES"])
 }

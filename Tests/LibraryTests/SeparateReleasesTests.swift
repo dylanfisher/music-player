@@ -171,6 +171,7 @@ private func tablePaths(_ index: LibraryIndex, groupByAlbumArtist: Bool) throws 
     }
     #expect(asked.map(\.parts) == [[.index]])
     #expect(asked.map(\.separateReleases) == [true])
+    #expect(asked.map { $0.onlySeparatesReleases(true) } == [false], "a relaunch's flag asks")
 }
 
 @Test func theNoticeSaysWhichWayAlbumsAreMade() throws {
@@ -187,4 +188,26 @@ private func tablePaths(_ index: LibraryIndex, groupByAlbumArtist: Bool) throws 
     #expect(both.hasPrefix("Albums are made of each Discogs release"))
     #expect(both.contains(why))
     #expect(RescanNotice(parts: [], separateReleases: nil) == nil)
+}
+
+@Test func onlyTheOptionsOwnChangeToTheConfirmedValueIsWaived() throws {
+    #expect(RescanNotice(separatingReleases: true).onlySeparatesReleases(true))
+    #expect(RescanNotice(separatingReleases: false).onlySeparatesReleases(false))
+    #expect(!RescanNotice(separatingReleases: true).onlySeparatesReleases(false))
+    let shape = try #require(RescanNotice(parts: [.index]))
+    #expect(!shape.onlySeparatesReleases(true) && !shape.onlySeparatesReleases(false))
+    let both = try #require(RescanNotice(parts: [.index], separateReleases: true))
+    #expect(!both.onlySeparatesReleases(true))
+
+    // As an open asks it: a change of the option alone, to the value confirmed.
+    let url = libraryURL()
+    try LibraryIndex(at: url).store(releases.map(\.scanned))
+    var waived: [Bool] = []
+    _ = try LibraryIndex(
+        at: url,
+        confirmRescan: {
+            waived.append($0.onlySeparatesReleases(true))
+            return true
+        }, separateReleases: true)
+    #expect(waived == [true])
 }

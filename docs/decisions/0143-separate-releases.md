@@ -44,9 +44,11 @@ two apart (53.13).
   from the File menu or the config file, with Rescan Now and Cancel. Cancel sets the setting
   back. Rescan Now relaunches through the relaunch 0142 added for restores, now in
   `Relaunch.swift`, since every connection has to close before the index is rebuilt. It passes
-  `--rescan-confirmed`, which the next launch's open takes as the answer, so the question isn't
-  asked twice; the relaunch drops that flag from the arguments it forwards, so a later
-  relaunch doesn't carry it.
+  `--rescan-confirmed on` (or `off`), the value the answer was for. The next launch's open
+  takes that as the answer only when Separate Releases changing to that value is the whole
+  notice (`RescanNotice.onlySeparatesReleases`); a new shape, a restore waiting with an older
+  index, or a config edited to the other value still asks. The relaunch drops the flag and its
+  value from the arguments it forwards, so a later relaunch doesn't carry them.
 - **A launch with the setting changed** (edited while the app was closed, or after a restore
   of an index built the other way) asks 0136's Rescan Now / Quit. Quit leaves the file as it
   was, so the next launch asks again until the owner rescans or sets the option back.
