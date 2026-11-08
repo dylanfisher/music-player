@@ -39,7 +39,8 @@ private func mode(_ url: URL) throws -> Int {
         .values
     #expect((values["recommender.address"] as? IPAddressSetting)?.address != nil)
     for text in [
-        #"{"recommender.address": "mbp2021.local"}"#, #"{"recommender.address": "192.0.2.20:7878"}"#,
+        #"{"recommender.address": "mbp2021.local"}"#,
+        #"{"recommender.address": "192.0.2.20:7878"}"#,
         #"{"recommender.port": 0}"#, #"{"recommender.port": 65536}"#,
     ] {
         #expect(throws: ConfigErrorList.self, "\(text)") { try parsed(text) }
@@ -131,7 +132,8 @@ private func config(
         config(
             staging: #""path": "/Volumes/music""#,
             folders: [#""path": "/Volumes/music/library""#]),
-        config(staging: #""path": "/Volumes/music/library/new""#, library: "/Volumes/music/library"),
+        config(
+            staging: #""path": "/Volumes/music/library/new""#, library: "/Volumes/music/library"),
         config(staging: #""path": "/Volumes/music""#, library: "/Volumes/music/library"),
         config(
             staging: #""share": "smb://nas/music", "path": "music-player/staging""#,
@@ -172,9 +174,13 @@ private func config(
     try settings.set(
         \.watchedFolders, to: [WatchedFolder(path: "/Volumes/music/library", kind: .network)])
     #expect(throws: ConfigError.self) {
-        try settings.set(\.watchedFolders, to: [WatchedFolder(path: "/Volumes/music", kind: .network)])
+        try settings.set(
+            \.watchedFolders, to: [WatchedFolder(path: "/Volumes/music", kind: .network)])
     }
-    #expect(settings[\.watchedFolders] == [WatchedFolder(path: "/Volumes/music/library", kind: .network)])
+    #expect(
+        settings[\.watchedFolders] == [
+            WatchedFolder(path: "/Volumes/music/library", kind: .network)
+        ])
     #expect(throws: ConfigError.self) {
         try settings.set(\.libraryFolder, to: "/Volumes/music/staging/library")
     }

@@ -434,7 +434,8 @@ public final class GeneralModel {
             // at the end, writes nothing.
             guard trimmed != self.text(key) else { return }
             try set(key, trimmed)
-        case .checkbox, .popUp, .folders, .syncFolder, .stagingFolder, .output, .renderer, .barLayout, .color,
+        case .checkbox, .popUp, .folders, .syncFolder, .stagingFolder, .output, .renderer,
+            .barLayout, .color,
             .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }

@@ -1000,7 +1000,9 @@ private func visibleLabels(in view: NSView) -> [String] {
         model: model, configPath: "/tmp/config.json",
         actions: actions(chooseStagingFolder: { chosen += 1 }), sections: [.downloads])
     func field(_ view: NSView) -> NSTextField? {
-        if let field = view as? NSTextField, view.identifier?.rawValue == schema.recommenderToken.key {
+        if let field = view as? NSTextField,
+            view.identifier?.rawValue == schema.recommenderToken.key
+        {
             return field
         }
         return view.subviews.lazy.compactMap(field).first
