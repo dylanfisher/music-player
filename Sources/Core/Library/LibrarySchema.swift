@@ -50,6 +50,9 @@ enum SchemaPart: String, CaseIterable {
     /// others (ADR 0133), keyed by path ID, so a second session doesn't redo it. A part of its
     /// own for the same reason as `loved`.
     case discogsReviews
+    /// Releases and masters the Discogs API returned, by kind and id, as JSON (ADR 0138). A
+    /// cache: rebuilding it discards nothing a fetch can't get again.
+    case discogsCache
 
     var sql: String {
         switch self {
@@ -67,6 +70,7 @@ enum SchemaPart: String, CaseIterable {
         case .measures: measuresSchema
         case .analysisRun: analysisRunSchema
         case .discogsReviews: discogsReviewsSchema
+        case .discogsCache: discogsCacheSchema
         }
     }
 
@@ -105,6 +109,7 @@ enum SchemaPart: String, CaseIterable {
         case .measures: [measuresTable]
         case .analysisRun: [analysisRunTable, measuredAtTable, analysisFailuresTable]
         case .discogsReviews: [discogsReviewsTable]
+        case .discogsCache: [discogsCacheTable]
         }
     }
 }
@@ -132,6 +137,7 @@ let analysisRunTable = "analysis_run"
 let measuredAtTable = "measured_at"
 let analysisFailuresTable = "analysis_failures"
 let discogsReviewsTable = "discogs_reviews"
+let discogsCacheTable = "discogs_cache"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
@@ -371,6 +377,18 @@ private let discogsReviewsSchema = """
         path_id INTEGER PRIMARY KEY REFERENCES paths (id),
         release_id INTEGER
     );
+    """
+
+private let discogsCacheSchema = """
+    -- A row for each release or master fetched from the Discogs API: its kind, "release" or
+    -- "master", its id, when it was fetched in seconds since 1970, and what was kept of it.
+    CREATE TABLE \(discogsCacheTable) (
+        kind TEXT NOT NULL,
+        id INTEGER NOT NULL,
+        fetched_at REAL NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (kind, id)
+    ) WITHOUT ROWID;
     """
 
 private let measuresSchema = """

@@ -1,4 +1,5 @@
 import Foundation
+import Library
 
 /// Where `DiscogsAPI` keeps what it fetched by id, as JSON text: the index's `discogs_cache`
 /// table in the app, a dictionary in tests (ADR 0138). Searches aren't kept, since their
@@ -22,8 +23,15 @@ public struct DiscogsCache: Sendable {
         self.store = store
     }
 
-    /// Keeps nothing, for a caller with no index.
-    public static let none = DiscogsCache(read: { _, _ in nil }, store: { _, _, _ in })
+    /// The index's cache, through `reader`'s connection.
+    public static func index(_ reader: LibraryReader) -> DiscogsCache {
+        DiscogsCache(
+            read: { kind, id in try await reader.discogsCached(kind: kind.rawValue, id: id) },
+            store: { kind, id, entry in
+                try await reader.storeDiscogs(
+                    kind: kind.rawValue, id: id, fetchedAt: entry.fetchedAt, json: entry.json)
+            })
+    }
 }
 
 /// A fetched release as the cache keeps it: the catalog's columns and lists, with their

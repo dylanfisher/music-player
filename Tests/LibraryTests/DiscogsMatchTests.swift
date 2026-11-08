@@ -121,3 +121,25 @@ private func track(_ path: String, album: String, release: String?, master: Stri
             after["Rejected"]!: .rejected, after["Chosen"]!: .chosen(releaseID: 42),
         ])
 }
+
+@Test func theDiscogsCacheKeepsAnEntryByKindAndIdThroughAnIndexRebuild() throws {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("discogs-cache-\(UUID().uuidString)/library.sqlite")
+    let index = try LibraryIndex(at: url)
+    #expect(try index.discogsCached(kind: "release", id: 1) == nil)
+    try index.storeDiscogs(kind: "release", id: 1, fetchedAt: 10, json: "{\"a\": 1}")
+    try index.storeDiscogs(kind: "master", id: 1, fetchedAt: 11, json: "{}")
+    try index.storeDiscogs(kind: "release", id: 1, fetchedAt: 12, json: "{\"a\": 2}")
+    #expect(try index.discogsCached(kind: "release", id: 1)?.fetchedAt == 12)
+    #expect(try index.discogsCached(kind: "release", id: 1)?.json == "{\"a\": 2}")
+    #expect(try index.discogsCached(kind: "master", id: 1)?.json == "{}")
+    try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
+    let rebuilt = try LibraryIndex(at: url)
+    #expect(try rebuilt.discogsCached(kind: "release", id: 1)?.fetchedAt == 12)
+    // A cache of its own: rebuilding it drops its rows and reports nothing discarded.
+    try rebuilt.database.execute(
+        "UPDATE schema_identity SET sql = 'older' WHERE part = 'discogsCache'")
+    let again = try LibraryIndex(at: url)
+    #expect(try again.discogsCached(kind: "release", id: 1) == nil)
+    #expect(try again.discards().isEmpty)
+}
