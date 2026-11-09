@@ -293,10 +293,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let sections = model.sections
     #expect(
         sections.map(\.section) == [
-            .output, .playCounts, .library, .sync, .receiver, .downloads, .folderChanges,
-            .libraryFolder,
-            .networkFolders,
-            .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
+            .output, .playCounts, .sync, .receiver, .downloads, .folderChanges, .networkFolders,
+            .libraryFolder, .library, .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
         ])
     #expect(
         sections.first { $0.section == .networkFolders }?.rows.map(\.key) == [
@@ -824,7 +822,7 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(kept.minX == saved.minX + 30 && kept.maxY == saved.maxY - 20)
 }
 
-@MainActor @Test func thePaletteOpensTheWatchedFoldersPaneOrTheConfigFile() throws {
+@MainActor @Test func thePaletteOpensTheLibraryPaneOrTheConfigFile() throws {
     let schema = AppSettings()
     var opened = 0
     let model = GeneralModel(
@@ -837,19 +835,81 @@ private func waitFor(_ condition: () -> Bool) async throws {
         configPath: "/tmp/config.json", actions: actions(openConfigFile: { opened += 1 }),
         value: { _ in nil }, set: { _, _ in })
     controller.show(setting: schema.rescanNetworkFoldersAtLaunch.key)
-    #expect(controller.window.title == schema.watchedFolders.title)
+    #expect(controller.window.title == "Library")
     let folders = try #require(controller.window.contentViewController?.view)
     #expect(view(schema.rescanNetworkFoldersAtLaunch.key, in: folders) != nil)
     // Swinsian's two options for what changes in the folders do, as checkboxes.
     for key in [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key] {
         #expect(view(key, in: folders) is NSButton, "\(key)")
     }
-    controller.show(setting: schema.rescanModifiedFiles.key)
-    #expect(controller.window.title == schema.watchedFolders.title)
+    for key in [
+        schema.watchedFolders.key, schema.rescanModifiedFiles.key, schema.groupByAlbumArtist.key,
+        schema.snapshotFolder.key,
+    ] {
+        controller.show(.general)
+        controller.show(setting: key)
+        #expect(controller.window.title == "Library", "\(key)")
+    }
     controller.show(setting: schema.networkScanReaders.key)
     controller.show(setting: schema.fileViewer.key)
     #expect(opened == 2)
     controller.window.close()
+}
+
+/// Settings ▸ Library has the watched folders, the folders' boxes and the Library section,
+/// with Show Library Health, the database and its snapshots; General has none of them.
+@MainActor @Test func theLibraryPaneHoldsTheFoldersAndTheLibrarySettings() async throws {
+    let schema = AppSettings()
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil },
+        set: { _, _ in }, isBlocked: { false })
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
+    let controller = SettingsWindowController(
+        general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
+        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        set: { _, _ in })
+    defer { controller.window.close() }
+    let libraryKeys = [
+        schema.removeMissingTracks.key, schema.rescanModifiedFiles.key,
+        schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key,
+        schema.copyAddedFiles.key, schema.keepFilesOrganized.key, schema.libraryFolder.key,
+        schema.groupByAlbumArtist.key, schema.separateReleases.key, schema.fileViewer.key,
+        schema.snapshotFolder.key,
+    ]
+    let extras = [AppCommands.title(of: .checkHealth), "Back Up Now", SnapshotList.title, "Add…"]
+    func tables(_ view: NSView) -> [NSTableView] {
+        ((view as? NSTableView).map { [$0] } ?? []) + view.subviews.flatMap(tables)
+    }
+    func titles(_ view: NSView) -> [String] {
+        labels(in: view)
+            + (((view as? NSButton)?.title).map { [$0] } ?? []) + view.subviews.flatMap(titles)
+    }
+
+    controller.show(.library)
+    #expect(controller.window.title == "Library")
+    #expect(controller.window.toolbar?.selectedItemIdentifier?.rawValue == "library")
+    let library = try #require(controller.window.contentViewController?.view)
+    for key in libraryKeys { #expect(view(key, in: library) != nil, "\(key)") }
+    #expect(
+        tables(library).contains { $0.accessibilityLabel() == schema.watchedFolders.title })
+    for title in extras { #expect(titles(library).contains(title), "\(title)") }
+    let boxes: [GeneralModel.Section] = [.folderChanges, .networkFolders, .libraryFolder, .library]
+    #expect(
+        labels(in: library).filter { label in boxes.contains { $0.title == label } }
+            == boxes.map(\.title))
+    // The database is read as the pane shows, though its rows are in a pane within it.
+    let deadline = Date().addingTimeInterval(5)
+    while !labels(in: library).contains("None yet"), Date() < deadline {
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+    #expect(labels(in: library).contains("None yet"))
+
+    controller.show(.general)
+    let general = try #require(controller.window.contentViewController?.view)
+    for key in libraryKeys { #expect(view(key, in: general) == nil, "\(key)") }
+    #expect(tables(general).isEmpty)
+    for title in extras { #expect(!titles(general).contains(title), "\(title)") }
 }
 
 /// The view with `key` as its identifier, under `view`.

@@ -474,7 +474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .palette: { [weak self] in self?.palette?.window }
             case .playlist: { [weak self] in self?.ruleEditor?.window }
             case .tags: { [weak self] in self?.tagEditing.editors.last?.window }
-            case .settings, .playback, .appearance, .toolbar, .folders, .tagging, .shortcuts:
+            case .settings, .playback, .appearance, .toolbar, .library, .tagging, .shortcuts:
                 { [weak self] in self?.settingsWindow?.window }
             case .statusBar:
                 { [weak self] in
@@ -505,7 +505,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .playback: settingsWindowController()?.show(.playback)
         case .appearance: settingsWindowController()?.show(.appearance)
         case .toolbar: settingsWindowController()?.show(.toolbar)
-        case .folders: settingsWindowController()?.show(.folders)
+        case .library: settingsWindowController()?.show(.library)
         case .tagging: settingsWindowController()?.show(.tagging)
         case .shortcuts: settingsWindowController()?.show(.shortcuts)
         case .statusBar:
@@ -1139,7 +1139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Rescans the folders at `positions` in the setting, as the Watched Folders table lists them.
+    /// Rescans the folders at `positions` in the setting, as Settings ▸ Library's table lists them.
     func rescanFolders(at positions: [Int]) {
         guard let settings, let watcher else { return NSSound.beep() }
         let folders = settings[\.watchedFolders]

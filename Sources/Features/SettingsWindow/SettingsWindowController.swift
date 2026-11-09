@@ -4,11 +4,11 @@ import Settings
 import WindowPlacement
 
 /// The Settings window: one window with a toolbar of panes, General, Playback, Appearance,
-/// Toolbar, Watched Folders, Tagging and Shortcuts. Made on first use and kept.
+/// Toolbar, Library, Tagging and Shortcuts. Made on first use and kept.
 @MainActor
 public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     public enum Pane: String, CaseIterable {
-        case general, playback, appearance, toolbar, folders, tagging, shortcuts
+        case general, playback, appearance, toolbar, library, tagging, shortcuts
 
         var title: String {
             switch self {
@@ -16,7 +16,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .playback: "Playback"
             case .appearance: AppSettings().appearance.title
             case .toolbar: "Toolbar"
-            case .folders: AppSettings().watchedFolders.title
+            case .library: GeneralModel.Section.library.title
             case .tagging: "Tagging"
             case .shortcuts: "Shortcuts"
             }
@@ -29,7 +29,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .playback: [.output, .playCounts]
             case .appearance: [.theme, .trackTable]
             case .toolbar: [.titles, .toolbarStatus, .statusBar]
-            case .folders: [.folderChanges, .libraryFolder, .networkFolders]
+            case .library: [.folderChanges, .networkFolders, .libraryFolder, .library]
             }
         }
 
@@ -39,7 +39,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .playback: "speaker.wave.2"
             case .appearance: "paintbrush"
             case .toolbar: "menubar.rectangle"
-            case .folders: "folder"
+            case .library: "books.vertical"
             case .tagging: "tag"
             case .shortcuts: "keyboard"
             }
@@ -56,7 +56,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private let playback: GeneralPane
     private let appearance: GeneralPane
     private let toolbarPane: GeneralPane
-    private let folders: LibraryPane
+    private let library: LibraryPane
     /// Made as it's first shown, since its model reads the mapping then.
     private(set) var tagging: TaggingPane?
     private let shortcuts: ShortcutsPane
@@ -87,7 +87,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             model: general, configPath: nil, actions: actions, sections: Pane.appearance.sections)
         toolbarPane = GeneralPane(
             model: general, configPath: nil, actions: actions, sections: Pane.toolbar.sections)
-        folders = LibraryPane(model: general, actions: actions)
+        library = LibraryPane(model: general, actions: actions)
         self.shortcuts = ShortcutsPane(model: shortcuts)
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: GeneralPane.width, height: 400),
@@ -114,7 +114,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     /// Opens the pane with one setting's row at that row, as the palette asks, or the config
     /// file for a setting the window doesn't show.
     public func show(setting key: String) {
-        guard key != folders.key else { return show(.folders) }
+        guard key != library.key else { return show(.library) }
         guard key != TaggingModel.setting.key else { return show(.tagging) }
         guard model.rows.contains(where: { $0.key == key }) else {
             return actions.openConfigFile()
@@ -122,8 +122,8 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         let section = GeneralModel.Section(key: key)
         let pane = Pane.allCases.first { $0.sections.contains(section) } ?? .general
         show(pane)
-        if pane == .folders {
-            folders.focus(key)
+        if pane == .library {
+            library.focus(key)
         } else {
             (controller(pane) as? GeneralPane)?.focus(key)
         }
@@ -143,7 +143,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         playback.reload()
         appearance.reload()
         toolbarPane.reload()
-        if folders.isViewLoaded { folders.reload() }
+        if library.isViewLoaded { library.reload() }
         if let tagging, tagging.isViewLoaded { tagging.reload() }
         shortcuts.model.update(bindings)
         if shortcuts.isViewLoaded { shortcuts.reload() }
@@ -155,7 +155,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         case .playback: playback
         case .appearance: appearance
         case .toolbar: toolbarPane
-        case .folders: folders
+        case .library: library
         case .tagging: taggingPane()
         case .shortcuts: shortcuts
         }

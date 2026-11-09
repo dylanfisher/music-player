@@ -25,7 +25,7 @@ extension AppDelegate {
             self?.addFolder(over: window)
         }
         dispatcher.handle(.showWatchedFolders) { [weak self] in
-            self?.settingsWindowController()?.show(.folders)
+            self?.settingsWindowController()?.show(.library)
         }
         dispatcher.handle(
             .checkHealth, enabled: hasWindow,

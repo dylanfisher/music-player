@@ -39,7 +39,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
 - **Import from Swinsian…** and **Import iTunes Library…** bring play counts, last played,
   date added, ratings, loved tracks and playlists across, matched by path, after a preview of
   what each would change. Running one again adds only the plays since.
-- **Watched folders** are listed in Settings ▸ Watched Folders, which adds and removes them;
+- **Watched folders** are listed in Settings ▸ Library, which adds and removes them;
   ⌘O adds one too. A folder on a network share is stored by the share, so the library follows it when
   macOS mounts it somewhere else, such as `/Volumes/music-1`. A network folder already in the
   library isn't rescanned at launch: it's checked every `pollIntervalMinutes` (60 by default,
@@ -51,7 +51,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   with stats that left without a match, which **Resolve Lost Stats…** gives to a track or
   dismisses. **Import Moves…** applies a list of moved files' old and new paths, a tab
   between them, one file a line, so a conversion script's moves keep their stats exactly.
-  **Show Library Health** (File menu, or the button in Settings ▸ General ▸ Library)
+  **Show Library Health** (File menu, or the button in Settings ▸ Library)
   shows a tile per check with its count over the track table, in the browser columns' place;
   a tile lists its tracks below. It runs after a scan and on Show Library Health. ⌘R reveals the selected tracks
   in Searcher, or in Finder when Searcher isn't installed or the File Viewer setting says so.
@@ -73,7 +73,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 |---|---|
 | Install / bootstrap | `./scripts/setup` |
 | Run the app | `./scripts/dev` (`--home <folder>` keeps the config file, library and state in one folder; `--settings <file>` names another config file) |
-| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|toolbar\|folders\|shortcuts\|statusBar\|headerStatus\|toolbarSheet\|downloads]` |
+| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|toolbar\|library\|shortcuts\|statusBar\|headerStatus\|toolbarSheet\|downloads]` |
 | Run tests: only the targets edited since the last pass (`--fresh` for all), or those changed since a commit | `./scripts/test [--fresh]`, `./scripts/test --changed [ref]` |
 | Build the `.app`, signed ad hoc with the hardened runtime (debug also lets lldb attach) | `./scripts/bundle [debug\|release]` |
 | Check a release bundle's signature and entitlements, and that it launches hardened (not in `check`) | `./scripts/check-signature "<Music Player.app>" [--launch]` |

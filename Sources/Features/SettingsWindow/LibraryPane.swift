@@ -5,10 +5,11 @@ import Settings
 
 private let logger = moduleLogger()
 
-/// Settings ▸ Watched Folders: each folder with its kind and how often it's rescanned, which a
+/// Settings ▸ Library: each watched folder with its kind and how often it's rescanned, which a
 /// network folder's popup changes, buttons to add and remove one, and Rescan for the selected
-/// folders or Rescan All, from buttons or the table's context menu. Under them, the network
-/// folders' settings in a box, as Swinsian has its watched folders' settings.
+/// folders or Rescan All, from buttons or the table's context menu. Under them, the folders'
+/// settings in boxes, as Swinsian has its watched folders' settings, then the Library section
+/// with Show Library Health, the database and its snapshots.
 @MainActor
 final class LibraryPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuItemValidation
@@ -40,7 +41,7 @@ final class LibraryPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     let removeButton = NSButton()
     let rescanButton = NSButton()
     private(set) var folders: [GeneralModel.Folder] = []
-    /// The Folder Changes and Network Folders sections' settings.
+    /// The settings under the list, in the pane's sections.
     private let settings: GeneralPane
 
     init(model: GeneralModel, actions: SettingsActions) {
@@ -52,7 +53,7 @@ final class LibraryPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         self.actions = actions
         settings = GeneralPane(
             model: model, configPath: nil, actions: actions,
-            sections: SettingsWindowController.Pane.folders.sections)
+            sections: SettingsWindowController.Pane.library.sections)
         super.init(nibName: nil, bundle: nil)
     }
 

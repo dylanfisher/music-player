@@ -15,7 +15,7 @@ public final class GeneralModel {
         case text(optional: Bool)
         /// A text field for a template, beside a help button that lists its tokens.
         case template([SettingKind.Token])
-        /// Watched folders, which the Watched Folders pane lists, adds and removes.
+        /// Watched folders, which the Library pane lists, adds and removes.
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
         case syncFolder
@@ -79,9 +79,9 @@ public final class GeneralModel {
     enum Section: CaseIterable {
         /// The Playback pane's.
         case output, playCounts
-        case library, sync, receiver, downloads
-        /// Shown under the Watched Folders pane's list, as Swinsian has them.
-        case folderChanges, libraryFolder, networkFolders
+        case sync, receiver, downloads
+        /// The Library pane's, under its watched folders list, as Swinsian has them.
+        case folderChanges, networkFolders, libraryFolder, library
         /// The Appearance pane's.
         case theme, trackTable
         /// The Toolbar pane's, in the window's order from its top.
@@ -170,8 +170,8 @@ public final class GeneralModel {
 
     /// A row for each setting the window shows; the rest are edited in the config file.
     public let rows: [Row]
-    /// The sections in order, each with its rows in schema order; the watched
-    /// folders have a pane of their own.
+    /// The sections in order, each with its rows in schema order; the Library pane shows the
+    /// watched folders in a list of their own.
     var sections: [(section: Section, rows: [Row])] {
         Section.allCases.compactMap { section in
             let shown = rows.filter {
@@ -180,7 +180,7 @@ public final class GeneralModel {
             return shown.isEmpty ? nil : (section, shown)
         }
     }
-    /// The watched folders' row, which the Watched Folders pane shows.
+    /// The watched folders' row, which the Library pane shows.
     var foldersRow: Row? { rows.first { $0.control == .folders } }
     private let value: (String) -> Any?
     private let set: (String, Any) throws -> Void
@@ -312,7 +312,7 @@ public final class GeneralModel {
         }
     }
 
-    /// A watched folder as the Watched Folders pane lists it.
+    /// A watched folder as the Library pane lists it.
     struct Folder: Equatable {
         /// The path, and for a folder on a share, the share it's in (ADR 0028).
         var location: String
