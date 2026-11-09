@@ -51,7 +51,10 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 2. Phase 54 runs on its own branch (set on 2026-11-08), and waits there for the owner's review.
 3. Phases 55 to 61, the owner's feedback of 2026-11-09, run next: 55 and 58 (done) first, then 56,
    57 and 59, then 60 and 61. All seven are done. Each merges to `main` when its gate passes.
-4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+4. Phases 62 to 66, the owner's feedback of 2026-11-09 (second list): 62, 63, 64 and 65 in
+   parallel, each on its own branch and worktree, then 66. Each merges to `main` when its gate
+   passes.
+5. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -643,6 +646,93 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
+
+### 62. Small fixes: palette, saving status, quit guard
+
+Asked by the owner on 2026-11-09.
+
+- [ ] **Palette kinds:** short prefixes beside the full names: `a:` album, `ar:` artist,
+      `t:` track, `p:` playlist, `g:` genre. `song:` goes; the word is "track" everywhere,
+      placeholder included (ADR 0161 amended).
+- [ ] **Saving status:** the status bar's "Saving tags: N of M" counts every queued and running
+      batch, as the tagger window does (`TagWriteProgress.combined`), so a second batch queued
+      mid-run raises M at once instead of after the first ends. One count, read by both.
+- [ ] **Quit guard:** `applicationShouldTerminate` while tag writes are running or queued asks
+      "N tag writes haven't finished." with Wait and Quit (default), Quit Anyway and Cancel.
+      Wait and Quit terminates when the queue drains; the play state save still runs.
+- [ ] **Status bar:** the downloads item moves from the right end to the left side, after the
+      scan and saving labels.
+
+### 63. A Library pane in Settings
+
+Asked by the owner on 2026-11-09; the owner chose one merged pane.
+
+- [ ] **Library pane:** a new toolbar pane, Library, holds the watched folders list, Folder
+      Changes, Network Folders, Library Folder, the `library.*` settings (health, database)
+      and Snapshots, with the Snapshot Folder row. The Watched Folders pane goes; General keeps
+      the rest. ADR 0042's pane list amended.
+- [ ] **Snapshots gap:** opening then closing the Snapshots disclosure leaves no empty space at
+      the top. The pane's scroll origin returns to the top when `fit()` shrinks the window, and
+      a test opens and closes it and checks the document's top is at the clip's top.
+
+### 64. Downloads: approve, upgrades, Open in Tagger, window
+
+Asked by the owner on 2026-11-09.
+
+- [ ] **Approve opens at once:** pressing Approve presents the sheet straight away, saying what
+      it's preparing (claiming, planning the moves). The track list shows as soon as the plan
+      has it; the lossy-origin check runs after, with a spinner in each checked row, and
+      Approve stays disabled until it finishes.
+- [ ] **Manual downloads as upgrades:** a job queued without `upgrade` (Library Selection, Paste
+      a Discogs Release) that matches an album in the index, by its Discogs release id, falling
+      back to the same album artist and album title, is planned as an upgrade of that album.
+      The sheet says "Replaces N files in the library" and has a Keep Both choice that imports
+      it as a new album. The replaced files go to the Trash as Add > Upgrades' do (ADR 0147).
+- [ ] **Open in Tagger:** opens the staged tagger with the job's album analyzed and its tab
+      selected, so a discrepancy can be fixed there. A job it can't open (no staged folder, no
+      format, release not in the catalog) says why instead of doing nothing.
+- [ ] **Window:** the Downloads window's column widths are saved and restored (`ColumnLayout`
+      or the table's own autosave, whichever the track table pattern fits), and a saved frame
+      on no current screen, or mostly off one, is placed back on the main window's screen.
+
+### 65. Tagger: confidence and the safe set
+
+Asked by the owner on 2026-11-09.
+
+- [ ] **Confidence:** each album's match carries a confidence, 0 to 100%, from the chosen
+      release's `ReleaseScore` (title fit, durations, count, how it was found, ties), shown as
+      a column between Files and Review. Every title the same (above `sameTitle`) scores high
+      even when found by title only; one title differing slightly lowers it a little. The
+      formula and its thresholds are in an ADR.
+- [ ] **Safe to apply:** a filter, or a tab after Likely, listing the albums whose every title
+      matches, with the counts and durations fitting, whose only reason is "found by title
+      only". Select All and Apply work on it as on the other tabs.
+- [ ] **No extra API requests:** choosing a release in Other Releases loads that release
+      (`release(id:)`, cached) and scores it, instead of rerunning the album's searches. Other
+      Releases and View Changes already send none beyond the cover the apply would fetch; a
+      test with a counting stand-in transport holds both to that.
+
+### 66. Artwork
+
+Asked by the owner on 2026-11-09. Bulk art is the front cover only, by the owner's choice.
+
+- [ ] **Art viewer:** never scales an image past its own pixel size. An album with several
+      images shows a strip of thumbnails along the bottom; the selected image's height shrinks
+      to make room, and a click on a thumbnail shows it.
+- [ ] **Get Info Artwork tab:** lists every embedded image with its type, and adds (open panel,
+      drag, paste) and removes any number. `TagEdit.art` becomes a list of pictures with types,
+      written by `TagWriter` for ID3, FLAC and MP4 (MP4 `covr` has no types); the round trip is
+      tested on generated fixtures. Mixed art across the selected tracks shows as mixed and is
+      left alone unless changed.
+- [ ] **Get Info File tab:** stays aligned left when tabs are switched. The tab's container gets
+      its frame before its content is pinned, and the File grid's value column takes the spare
+      width.
+- [ ] **Bulk Discogs cover:** "Get Artwork for N Albums…" in the tagger window, over every
+      album with a Discogs release id, and "Get Discogs Artwork" in the library's track menu
+      for the selection. Both confirm with the count, fetch the front cover through
+      `DiscogsAPI.cover(release:)` (one image request per release, rate-limited), fill albums
+      with no art or smaller art, or replace with the Replace choice, and write through
+      `TagWriter` with progress in the status bar. Needs the token.
 
 ### 10. Web remote
 
