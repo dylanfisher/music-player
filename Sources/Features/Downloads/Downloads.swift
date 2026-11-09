@@ -254,16 +254,42 @@ package final class Downloads {
 
     // MARK: - The window
 
-    /// Shows the window, making it the first time, where it was left (ADR 0158).
-    package func show() {
+    /// Shows the window, making it the first time, where it was left (ADR 0158). With
+    /// `offeringSelection`, File > Downloads…, library tracks selected open From Library
+    /// Selection for them once the window can queue.
+    package func show(offeringSelection: Bool = false) {
         let controller = self.controller ?? makeWindow()
         if self.controller == nil {
             self.controller = controller
             controller.window?.keepsFrame(as: DownloadsWindow.title)
         }
+        offersSelection = offeringSelection && hasSelection()
         refresh()
         controller.showWindow(nil)
         session?.model.setWindowOpen(true)
+        offerSelection()
+    }
+
+    /// Whether File > Downloads… found tracks selected, whose From Library Selection opens
+    /// once the window can queue: after the catalog check and the first answer.
+    private(set) var offersSelection = false
+
+    private func hasSelection() -> Bool {
+        do {
+            return !(try selectedTracks()).isEmpty
+        } catch {
+            logger.notice("the library's selection couldn't be read: \(error)")
+            return false
+        }
+    }
+
+    /// Opens From Library Selection when it was offered and the window can queue now.
+    private func offerSelection() {
+        guard offersSelection, let session, session.canTag, sheet == nil,
+            session.model.connection == .answering, controller?.window?.isVisible == true
+        else { return }
+        offersSelection = false
+        add(.fromSelection, asked: false)
     }
 
     func makeWindow() -> DownloadsWindow {
@@ -272,7 +298,10 @@ package final class Downloads {
         made.act = { [weak self] action, row in self?.act(action, row) }
         made.add = { [weak self] addition in self?.add(addition) }
         made.visibilityChanged = { [weak self] open in
-            if !open { self?.cancelReview() }
+            if !open {
+                self?.cancelReview()
+                self?.offersSelection = false
+            }
             self?.session?.model.setWindowOpen(open)
         }
         controller = made
@@ -282,6 +311,7 @@ package final class Downloads {
     private func refresh() {
         showStatus()
         guard let controller else { return }
+        defer { offerSelection() }
         guard let session else {
             return controller.show([], status: Self.notSet, canAdd: false)
         }
@@ -483,7 +513,9 @@ package final class Downloads {
 
     // MARK: - Adding
 
-    private func add(_ addition: DownloadAddition) {
+    /// Queues by `addition`. `asked` is false for the From Library Selection that opening the
+    /// window offers, which shows nothing unless the selection has an album to queue.
+    private func add(_ addition: DownloadAddition, asked: Bool = true) {
         guard let session, session.canTag else { return }
         let setup = session.setup
         switch addition {
@@ -520,6 +552,7 @@ package final class Downloads {
                 return alert("The selection couldn't be read", ["\(error)"])
             }
             guard !selected.isEmpty else {
+                guard asked else { return }
                 return alert(
                     "No tracks are selected", ["Select an album's tracks in the library first."])
             }
@@ -533,11 +566,12 @@ package final class Downloads {
                 } catch {
                     return alert("The library couldn't be read", ["\(error)"])
                 }
+                let choices = QueueChoice.selection(selected, albums: albums)
+                guard asked || choices.contains(where: { $0.refusal == nil }) else { return }
                 chooseAndQueue(
                     heading: "From Library Selection",
                     note: "The albums of the selected tracks, each downloaded as its release.",
-                    QueueChoice.selection(selected, albums: albums), upgrade: false,
-                    tickingAll: true)
+                    choices, upgrade: false, tickingAll: true)
             }
         case .pasteRelease: askForRelease()
         }

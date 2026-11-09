@@ -157,3 +157,36 @@ private func rows() -> [DownloadRow] {
     }
     window.window?.close()
 }
+
+@MainActor
+@Test func openingWithASelectionOffersFromLibrarySelectionOnceItCanQueue() async throws {
+    let service = FakeService([job(1)])
+    let (downloads, session) = try await started(service.service) { throw CancellationError() }
+    var selection: [Int64] = []
+    downloads.selectedTracks = { selection }
+    downloads.show(offeringSelection: true)
+    #expect(!downloads.offersSelection, "nothing selected")
+    downloads.window?.close()
+
+    selection = [7]
+    downloads.show()
+    #expect(!downloads.offersSelection, "only File > Downloads… offers it")
+    downloads.window?.close()
+
+    // No catalog on this Mac: it can't queue, so the offer waits, until the window closes.
+    downloads.show(offeringSelection: true)
+    #expect(downloads.offersSelection)
+    downloads.window?.close()
+    #expect(!downloads.offersSelection)
+
+    session.canTag = true
+    await session.model.poll()
+    #expect(session.model.connection == .answering)
+    downloads.show(offeringSelection: true)
+    #expect(!downloads.offersSelection, "taken at once")
+    // The selection's track is in no album of the library, so nothing is shown for it.
+    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(downloads.window?.attachedSheet == nil)
+    downloads.window?.close()
+    downloads.stop()
+}

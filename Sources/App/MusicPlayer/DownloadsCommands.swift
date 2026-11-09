@@ -17,7 +17,7 @@ extension AppDelegate {
     func registerDownloadsCommands(_ dispatcher: CommandDispatcher) {
         dispatcher.handle(
             .showDownloads, enabled: { [weak self] in self?.window != nil },
-            run: { [weak self] in self?.downloads.show() })
+            run: { [weak self] in self?.downloads.show(offeringSelection: true) })
     }
 
     /// The settings the downloads are made from; a change to any restarts them.
