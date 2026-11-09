@@ -351,10 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         browser.currentPlayback = { [weak self] in await self?.engine?.spot() }
         browser.restorePlayback = { [weak self] spot in await self?.engine?.restore(spot) }
-        browser.addToQueue = { [weak self] urls in
-            guard let engine = self?.engine else { return }
-            Task { await engine.addToQueue(urls) }
-        }
+        browser.addToQueue = { [weak self] urls in self?.addToQueue(urls) }
         window.browserStateChanged = { [weak self] in self?.resumeSaver?.changed() }
         browser.groupingsChosen = { [weak self] groupings in
             do {

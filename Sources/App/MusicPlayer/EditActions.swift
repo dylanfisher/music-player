@@ -51,7 +51,7 @@ extension AppDelegate: NSMenuItemValidation {
             return
         }
         switch currentEditList {
-        case .queue: queue?.paste(paths)
+        case .queue: addToQueue(paths.map { URL(fileURLWithPath: $0, isDirectory: false) })
         case .tracks where browser?.canPaste == true: browser?.paste(paths)
         case .tracks, nil: NSSound.beep()
         }

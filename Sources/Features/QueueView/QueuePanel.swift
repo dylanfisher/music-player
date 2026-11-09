@@ -208,14 +208,6 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         table.selectedRowIndexes.filter { $0 < model.count }.map(model.copy(ofRow:))
     }
 
-    /// Edit ▸ Paste: queues the files after the tracks already queued, as Add to Playback
-    /// Queue does.
-    public func paste(_ paths: [String]) {
-        guard let engine else { return }
-        let urls = paths.map { URL(fileURLWithPath: $0, isDirectory: false) }
-        Task { await engine.addToQueue(urls) }
-    }
-
     /// Moves the selection, as the browser's lists do.
     public func move(_ move: RowMove, extending: Bool) {
         let rows = table.selectedRowIndexes

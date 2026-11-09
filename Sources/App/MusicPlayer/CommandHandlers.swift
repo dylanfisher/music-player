@@ -346,6 +346,13 @@ extension AppDelegate {
         reveal(paths, in: settings[\.fileViewer])
     }
 
+    /// Queues `urls` after the tracks already queued: Add to Playback Queue, and Edit ▸ Paste
+    /// in the queue.
+    func addToQueue(_ urls: [URL]) {
+        guard let engine else { return }
+        Task { await engine.addToQueue(urls) }
+    }
+
     func withSelectedPaths(_ use: @escaping ([String]) -> Void) {
         guard let browser else { return }
         Task {
