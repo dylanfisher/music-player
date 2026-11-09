@@ -99,6 +99,9 @@ public struct AppState: SettingsSchema {
     public let taggerSheets = Setting(
         "discogsTagger.sheets", title: "Discogs Tagger Sheets", default: TaggerSheetLayouts(),
         "The size, column widths and sort each of the Discogs tagger's sheets was left at.")
+    public let downloadsColumns = Setting(
+        "downloads.columns", title: "Downloads Columns", default: ColumnWidths(),
+        "The Downloads window's column widths, by column. A column not listed has its own.")
     public let taggerSource = Setting<DiscogsSource?>(
         "discogsTagger.source", title: "Discogs Tagger Source", default: nil,
         "Where the Discogs tagger last looked releases up on this Mac. Null asks the catalog"

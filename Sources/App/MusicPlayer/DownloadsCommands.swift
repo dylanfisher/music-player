@@ -60,6 +60,8 @@ extension AppDelegate {
     func makeDownloads() -> Downloads {
         let downloads = Downloads()
         downloads.selectedTracks = { [weak self] in try self?.browser?.selectedTrackIDs() ?? [] }
+        if let state { downloads.columnWidths = state[\.downloadsColumns] }
+        downloads.columnWidthsChanged = { [weak self] in self?.saver?.set(\.downloadsColumns, $0) }
         downloads.openInTagger = { [weak self] job, stagingRoot, resolved in
             guard let self, let settings else { return }
             stagedTagger?.window?.close()

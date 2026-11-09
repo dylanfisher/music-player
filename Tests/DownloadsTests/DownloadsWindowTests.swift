@@ -5,6 +5,8 @@ import Testing
 @testable import Downloads
 @testable import Fixtures
 @testable import Recommender
+@testable import Settings
+@testable import WindowPlacement
 
 // The window built and filled, its buttons and context menu, the façade without a service, and
 // the model's calls that change a job.

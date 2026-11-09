@@ -65,6 +65,9 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     var openSlskd: () -> Void = {}
     /// Hears the window open and close, for the polling's pace.
     var visibilityChanged: (Bool) -> Void = { _ in }
+    /// Hears the columns' widths after one changes, once `keepWidths` has set them.
+    var columnsResized: (ColumnWidths) -> Void = { _ in }
+    private var keepsWidths = false
 
     private static let added: DateFormatter = {
         let formatter = DateFormatter()
@@ -304,6 +307,32 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) { enableButtons() }
+
+    /// Gives the columns `widths`, a column not listed keeping its own, and reports each
+    /// change after. Called once the window has its frame: laid out at that size first, so the
+    /// table's resizing to fit it doesn't spread the widths set after.
+    func keepWidths(_ widths: ColumnWidths) {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        for column in table.tableColumns {
+            if let width = widths.widths[column.identifier.rawValue] {
+                column.width = CGFloat(width)
+            }
+        }
+        keepsWidths = true
+    }
+
+    /// The columns' widths as they are now.
+    var columnWidths: ColumnWidths {
+        ColumnWidths(
+            Dictionary(
+                uniqueKeysWithValues: table.tableColumns.map {
+                    ($0.identifier.rawValue, Double($0.width))
+                }))
+    }
+
+    func tableViewColumnDidResize(_ notification: Notification) {
+        if keepsWidths { columnsResized(columnWidths) }
+    }
 
     // MARK: - The window
 

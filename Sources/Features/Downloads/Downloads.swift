@@ -118,6 +118,11 @@ package final class Downloads {
             _, _, _ in
         }
 
+    /// The window's column widths as they were left, set before it first shows, and what
+    /// saves them as a column is resized.
+    package var columnWidths = ColumnWidths()
+    package var columnWidthsChanged: (ColumnWidths) -> Void = { _ in }
+
     /// Shows files in the Finder, and opens a web page; tests stand in for both.
     var showInFinder: ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
     var openPage: (URL) -> Void = { url in
@@ -268,10 +273,11 @@ package final class Downloads {
     /// Library Selection for them once the window can queue. Without it, an offer waiting
     /// stays.
     package func show(offeringSelection: Bool = false) {
+        let making = self.controller == nil
         let controller = self.controller ?? makeWindow()
-        if self.controller == nil {
-            self.controller = controller
+        if making {
             controller.window?.keepsFrame(as: DownloadsWindow.title)
+            controller.keepWidths(columnWidths)
         }
         if offeringSelection { offeredTracks = currentSelection() }
         refresh(opening: true)
@@ -340,6 +346,10 @@ package final class Downloads {
         made.act = { [weak self] action, row in self?.act(action, row) }
         made.add = { [weak self] addition in self?.add(addition) }
         made.openSlskd = { [weak self] in self?.openSlskd() }
+        made.columnsResized = { [weak self] widths in
+            self?.columnWidths = widths
+            self?.columnWidthsChanged(widths)
+        }
         made.visibilityChanged = { [weak self] open in
             if !open {
                 self?.cancelReview()
