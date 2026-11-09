@@ -678,6 +678,41 @@ Asked by the owner on 2026-11-09. Bulk art is the front cover only, by the owner
       with no art or smaller art, or replace with the Replace choice, and write through
       `TagWriter` with progress in the status bar. Needs the token.
 
+Implementation plan, phase 66 (ADR 0171):
+
+What exists, found by search (map.md recipes): the reader lists every picture in
+`TrackMetadata.pictures` (`EmbeddedPicture`, its type internal) when asked; `TrackMetadata.art`
+is the front cover or the first. `TagEdit.art` (`ArtChange`) replaces the picture the reader
+shows, as a front cover, or removes them all; the writer checks the shown art after each
+write. The viewer's `ArtViewer.frame(of:in:)` fits with no cap. Get Info's Artwork tab shows
+`TagEditorModel.shownArt`, one image. The tagger fetches covers through
+`DiscogsAPI.cover(release:)`, paced by `RateLimiter` in `DiscogsAPI.get`, and writes through
+`TagEditing.write(_:over:progress:completion:)`, which the status bar counts (ADR 0167).
+
+- 66.1 Picture types (`Core/Metadata`): `PictureType`, ID3's and FLAC's numbers with the five
+  the editor offers by name; `EmbeddedPicture.type` takes it.
+- 66.2 Several pictures written (`Core/TagWriter`): `ArtChange.pictures([ArtPicture])` puts
+  the list in place of every picture: ID3 `APIC` frames, each with a description of its own,
+  where the first old one was; FLAC `PICTURE` blocks; MP4 `covr` data atoms, front covers
+  first, no types. `.replace` stays the front cover alone, for Discogs. The write is checked
+  by reading every picture back. Round trip and undo on every generated sample.
+- 66.3 Editor model: `EditableTrack.pictures`, read whole; `TagEditorModel` lists the shared
+  pictures, mixed when the tracks differ, and adds, removes and retypes them into
+  `.pictures`; Replace and Remove keep their edits.
+- 66.4 Artwork tab: a table of every picture (thumbnail, type pop-up, size), + (open panel),
+  − for the selection, drops of image files and Paste.
+- 66.5 File tab: the cause found in a test, then fixed (container frame, value column width).
+- 66.6 Art viewer: no scale past the image's pixels; with several pictures, a strip of
+  thumbnails along the bottom, the image's height less the strip, a click shows one.
+- 66.7 Bulk cover (`Core/Discogs/BulkCover.swift`): albums by tagged release id, one
+  cover per release through `cover(release:)`, Fill Missing (no art, or fewer pixels than the
+  cover) or Replace, giving the edits and the problems. Stand-in transport only.
+- 66.8 Tagger: "Get Artwork for N Albums…" over the albums listed with a tagged release id,
+  confirming with the count and Fill Missing, Replace or Cancel, then `write`.
+- 66.9 Library: "Get Discogs Artwork" (`track.getDiscogsArtwork`) in the track menu, the same
+  flow for the selection, through the tagger's public entry, which needs the token.
+- 66.10 ADR 0171, see-also lines in 0020 and 0140, and AGENTS.md's clause if it needs one.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
