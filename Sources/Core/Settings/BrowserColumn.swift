@@ -4,9 +4,7 @@ public struct BrowserColumn: SettingValue {
     public var grouping: BrowserGrouping
     public var selection: String?
 
-    /// How many columns the browser may have. Three by default, as Swinsian's; six at most,
-    /// which on a 13-inch screen beside the sidebar still leaves each about 150 points
-    /// (ADR 0161).
+    /// How many columns the browser may have; ADR 0161 has why six at most.
     public static let counts = 1...6
     /// Genres, Artists and Albums, nothing selected.
     public static let defaults = [BrowserGrouping.genres, .artists, .albums].map {

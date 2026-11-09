@@ -89,7 +89,7 @@ public struct AppState: SettingsSchema {
         "The text in the search field, which narrows the track table. Empty for none.")
     public let browserColumns = Setting(
         "browser.columns", title: "Browser Columns", columns: BrowserColumn.defaults,
-        "The browser's three columns, left to right: what each grouped by, and the entry"
+        "The browser's columns, left to right: what each grouped by, and the entry"
             + " selected in it by name. A null selection is All. The config's"
             + " browser.columnGroupings, when it names them, says what the columns group by,"
             + " and a selection in a column it groups otherwise is dropped.")

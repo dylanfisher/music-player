@@ -48,11 +48,12 @@ track, and that Paste and Delete work in playlists and the queue only. Each left
 - **Delete** is a new Edit item without a chord, which runs Remove from Queue or Playlist. ⌫
   stays Remove…. Copy, Paste and Delete stay standard items, which the app delegate answers,
   so a text field's editor takes ⌘C and ⌘V first.
-- **Browser columns:** one to six. Six beside the sidebar on the 2015 MacBook Pro's 1440-point
-  screen leave each column about 150 points, about the narrowest an album title reads in. A
-  column's header menu adds one to its right, grouping by the first grouping no column shows,
-  and removes the column. Both go through `browser.columnGroupings`, so the count is in the
-  config file, and the config file's count wins over the state file's at launch.
+- **Browser columns:** one to six, three by default. Six beside the sidebar on the 2015
+  MacBook Pro's 1440-point-wide screen leave each column about 150 points, about the narrowest
+  an album title reads in. A column's header menu adds one to its right, grouping by the first
+  grouping no column shows, and removes the column. Both write `browser.columnGroupings`, as a
+  grouping chosen there does (`groupingsChosen`), so the count is in the config file, and the
+  config file's count wins over the state file's at launch.
 
 ## Alternatives considered
 
