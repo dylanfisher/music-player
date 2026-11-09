@@ -659,6 +659,7 @@ final class TaggerModel {
     /// shown.
     func changeSet(for albumID: Int64) async throws -> (AlbumChangeSet, problems: [String])? {
         guard let album = albums.first(where: { $0.id == albumID }) else { return nil }
+        let generation = countGeneration
         let (files, read) = try await effects.read(album.matched.tracks.map(\.fileID)) { _ in }
         var problems = read
         // A file moved or removed since the scan is in neither list; Apply refuses such an album.
@@ -667,7 +668,10 @@ final class TaggerModel {
             problems.append("\(missing) file\(missing == 1 ? "" : "s") no longer in the library")
         }
         let changes = changeSet(files, album)
-        if problems.isEmpty { changeCounts[albumID] = keptChanges(changes, album) }
+        // The album, the mapping or the choices can have changed during the read.
+        if problems.isEmpty, generation == countGeneration {
+            changeCounts[albumID] = keptChanges(changes, album)
+        }
         let (set, problem) = await covered(changes, album)
         return (set, problems + (problem.map { [$0] } ?? []))
     }

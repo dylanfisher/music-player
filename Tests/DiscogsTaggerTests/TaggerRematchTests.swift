@@ -6,7 +6,44 @@ import Testing
 @testable import DiscogsTagger
 @testable import Settings
 
-// Matching an album again: choosing a release, and leaving a file out or putting it back.
+// Matching an album again: choosing a release, and leaving a file out or putting it back;
+// and the count of changes that goes with each match.
+
+/// Set once from any thread, read from the test.
+private final class Flag: @unchecked Sendable {
+    // `value` is guarded by `lock`.
+    private let lock = NSLock()
+    private var value = false
+
+    func set() { lock.withLock { value = true } }
+    var isSet: Bool { lock.withLock { value } }
+}
+
+/// View Changes' read doesn't keep a count the mapping changed under.
+@MainActor
+@Test func aCountReadBeforeTheMappingChangedIsntKept() async throws {
+    let one = album(1, "Stockholm", titles: stockholm)
+    let entered = Flag()
+    let release = Gate()
+    let tagger = await model(
+        Seen(), albums: [one],
+        matches: { album, _ in
+            match(album, DiscogsTaggerTests.release(10, "Stockholm", titles: stockholm), tier: .exact)
+        },
+        files: { ids in
+            entered.set()
+            release.wait()
+            return one.tracks.indices.map { file(one, $0) }.filter { ids.contains($0.id) }
+        })
+    tagger.analyze()
+    await tagger.finished()
+    let reading = Task { try await tagger.changeSet(for: 1) }
+    try await eventually { entered.isSet }
+    tagger.mapping = DiscogsPreset.oneToOne.mapping
+    release.open()
+    _ = try await reading.value
+    #expect(tagger.changeCounts[1] == nil, "counted with the old mapping")
+}
 
 private let stockholm = ["Östermalm", "Gamla Stan", "Kungsholmen"]
 
@@ -57,10 +94,13 @@ private let stockholm = ["Östermalm", "Gamla Stan", "Kungsholmen"]
 
     let leaving = Task { await tagger.setLeftOut(true, 801, of: 8) }
     try await eventually { tagger.rematchingID == 8 }
-    await tagger.choose(82, for: 8)
+    let ignored = Task { await tagger.choose(82, for: 8) }
+    try await Task.sleep(nanoseconds: 100_000_000)
     #expect(seen.matched.count == 2, "the choice wasn't matched while the rematch ran")
-    gate.open()
+    // One for the rematch, and one more for each match that shouldn't have started.
+    for _ in 1..<seen.matched.count { gate.open() }
     await leaving.value
+    await ignored.value
 
     let choosing = Task { await tagger.choose(82, for: 8) }
     try await eventually { tagger.rematchingID == 8 }
