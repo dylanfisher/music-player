@@ -15,20 +15,31 @@ private let secondary = CGRect(x: 1440, y: 0, width: 1920, height: 1055)
             screens: [primary, secondary], anchorScreen: primary) == saved)
 }
 
-/// A frame a screen shows only a sliver of, here a pixel, moves onto that screen, title bar and
-/// all, rather than opening where it can't be dragged back.
-@Test func aFrameBarelyOnAScreenMovesOntoIt() {
+/// A frame the screens show less than half of, here a pixel, is centered on the anchor's
+/// screen at its size, rather than opening where it can't be dragged back.
+@Test func aFrameMostlyOffTheScreensIsCenteredOnTheAnchorsScreen() {
     let saved = CGRect(x: 3359, y: 600, width: 900, height: 500)
     #expect(
         placedFrame(
-            saved: saved, size: saved.size, resizable: true, screens: [primary, secondary],
-            anchorScreen: primary) == CGRect(x: 2460, y: 555, width: 900, height: 500))
-    // Above the screen's top by a pixel's overlap, its title bar comes down onto it.
+            saved: saved, size: CGSize(width: 400, height: 300), resizable: true,
+            screens: [primary, secondary], anchorScreen: primary)
+            == CGRect(x: 270, y: 188, width: 900, height: 500))
+    // Above the screen's top by a pixel's overlap, it comes down onto it, at its content's size.
     let above = CGRect(x: 100, y: 874, width: 600, height: 400)
     #expect(
         placedFrame(
-            saved: above, size: above.size, resizable: false, screens: [primary],
-            anchorScreen: primary) == CGRect(x: 100, y: 475, width: 600, height: 400))
+            saved: above, size: CGSize(width: 600, height: 300), resizable: false,
+            screens: [primary], anchorScreen: primary)
+            == CGRect(x: 420, y: 288, width: 600, height: 300))
+}
+
+/// Half on a screen or more, it moves onto that screen, title bar and all.
+@Test func aFrameHalfOnAScreenMovesOntoIt() {
+    let saved = CGRect(x: 2910, y: 500, width: 900, height: 500)
+    #expect(
+        placedFrame(
+            saved: saved, size: saved.size, resizable: true, screens: [primary, secondary],
+            anchorScreen: primary) == CGRect(x: 2460, y: 500, width: 900, height: 500))
 }
 
 /// A resizable window larger than the screen it's on shrinks to fit it.
