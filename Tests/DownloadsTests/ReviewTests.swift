@@ -15,7 +15,7 @@ private struct NoFolder: Error {}
 /// Downloads started on `service`, with its first poll taken, and a staging folder that is
 /// there only if `places` says so.
 @MainActor
-private func started(
+func started(
     _ service: DownloadsService, places: @escaping @Sendable () async throws -> ImportPlaces
 ) async throws -> (Downloads, Downloads.Session) {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(

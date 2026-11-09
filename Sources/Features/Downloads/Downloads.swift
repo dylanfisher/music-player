@@ -116,7 +116,34 @@ package final class Downloads {
             _, _, _ in
         }
 
-    package init() {}
+    /// The status bar's item, which App puts at the bar's right end.
+    let statusItem = DownloadsStatusItem()
+    /// How the status item shows the downloads, `appearance.downloadsStatusStyle`.
+    package var statusStyle = DownloadsStatusStyle.progress {
+        didSet { showStatus() }
+    }
+    /// Hears a style picked from the status item's menu, to save it.
+    package var styleChosen: (DownloadsStatusStyle) -> Void = { _ in }
+    /// Whether the status bar is in view, which sets the polling's pace.
+    private var statusBarShown = false
+
+    package init() {
+        statusItem.clicked = { [weak self] in self?.show() }
+        statusItem.styleChosen = { [weak self] in self?.styleChosen($0) }
+    }
+
+    package var statusView: NSView { statusItem }
+
+    /// Tells the polling whether the status bar, and so the item, is in view.
+    package func setStatusBarShown(_ shown: Bool) {
+        statusBarShown = shown
+        session?.model.setStatusShown(shown)
+    }
+
+    private func showStatus() {
+        statusItem.show(
+            session.flatMap { DownloadsStatus($0.model.jobs.rows.values) }, style: statusStyle)
+    }
 
     /// The window, once shown.
     package var window: NSWindow? { controller?.window }
@@ -157,6 +184,7 @@ package final class Downloads {
             }
             model.start()
             if controller?.window?.isVisible == true { model.setWindowOpen(true) }
+            model.setStatusShown(statusBarShown)
             refresh()
         }
         refresh()
@@ -252,6 +280,7 @@ package final class Downloads {
     }
 
     private func refresh() {
+        showStatus()
         guard let controller else { return }
         guard let session else {
             return controller.show([], status: Self.notSet, canAdd: false)

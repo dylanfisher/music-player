@@ -394,7 +394,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browser.keyCommand = keyCommand
         queue.keyCommand = keyCommand
         applyStatusBar(layout.statusBar)
+        browser.setStatusAccessory(downloads.statusView)
         if !layout.statusBarVisible { browser.toggleStatusBar() }
+        downloads.setStatusBarShown(browser.isStatusBarVisible)
+        window.statusBarToggled = { [weak self] in self?.downloads.setStatusBarShown($0) }
+        downloads.statusStyle = settings[\.downloadsStatusStyle]
+        downloads.styleChosen = { [weak self] style in
+            do {
+                try settings.set(\.downloadsStatusStyle, to: style)
+            } catch {
+                self?.fail("Couldn't change how the downloads show", error)
+            }
+        }
         browser.statusTotals = layout.statusTotals
         browser.statusTotalsChanged = { saver.set(\.statusTotals, $0) }
         if !layout.browserVisible { browser.toggleBrowser() }

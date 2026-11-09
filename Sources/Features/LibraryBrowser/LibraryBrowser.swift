@@ -2102,6 +2102,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showStatus()
     }
 
+    /// Puts `view` at the status bar's right end, after the problems button, where another
+    /// feature shows what it's doing; it hides itself when it has nothing to show.
+    public func setStatusAccessory(_ view: NSView) {
+        guard !statusTrailing.arrangedSubviews.contains(view) else { return }
+        statusTrailing.addArrangedSubview(view)
+    }
+
     /// The status bar's column at `place`, for tests.
     func statusColumn(at place: BarPlace) -> StatusColumn? { statusColumns.column(at: place) }
 

@@ -138,6 +138,9 @@ extension AppDelegate {
             discogsTagger = nil
         }
         if !keys.isDisjoint(with: Self.downloadsKeys(schema)) { applyDownloadsSettings() }
+        if keys.contains(schema.downloadsStatusStyle.key) {
+            downloads.statusStyle = settings[\.downloadsStatusStyle]
+        }
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
             schema.pausePollingDuringPlayback.key, schema.syncFolder.key,

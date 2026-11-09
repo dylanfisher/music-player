@@ -329,7 +329,12 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(
         keys(.toolbarStatus)
             == [schema.headerStatusLayout.key] + schema.customStatusLayouts.map(\.key))
-    #expect(keys(.statusBar) == [schema.statusBarStyle.key, schema.statusBarLayout.key])
+    #expect(
+        keys(.statusBar)
+            == [
+                schema.statusBarStyle.key, schema.statusBarLayout.key,
+                schema.downloadsStatusStyle.key,
+            ])
     let titleFormat = model.rows.first { $0.key == schema.headerTitleFormat.key }
     // It's a template like the window's title, with the same tokens.
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }

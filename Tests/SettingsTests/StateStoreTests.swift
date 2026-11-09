@@ -264,7 +264,7 @@ private func problems(_ json: String) -> [SettingProblem] {
             "appearance.customStatus2Layout", "appearance.customStatus3Layout",
             "appearance.headerTitleFormat",
             "appearance.statusBarStyle",
-            "appearance.statusBarLayout",
+            "appearance.statusBarLayout", "appearance.downloadsStatusStyle",
         ])
 }
 

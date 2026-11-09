@@ -181,6 +181,10 @@ public struct AppSettings: SettingsSchema {
         "appearance.statusBarLayout", title: "Status Bar Layout",
         default: BarLayout.defaultStatusBar,
         "What the status bar shows, around its centered middle.")
+    public let downloadsStatusStyle = Setting(
+        "appearance.downloadsStatusStyle", title: "Download Status",
+        default: DownloadsStatusStyle.progress,
+        "While albums download, the status bar's right end shows them.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         let folders = values[watchedFolders.key] as? [WatchedFolder] ?? []

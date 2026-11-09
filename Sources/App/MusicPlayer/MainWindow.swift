@@ -35,6 +35,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
     private var glass: WindowGlass?
     /// Called after the browser's source, columns, sort or search changed, once they're saved.
     var browserStateChanged: () -> Void = {}
+    /// Called with whether the status bar shows, after it's shown or hidden.
+    var statusBarToggled: (Bool) -> Void = { _ in }
 
     init(
         settings: WindowSettings, banner: NSView, browser: LibraryBrowser, toolbar: MainToolbar,
@@ -188,6 +190,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
     func toggleStatusBar() {
         browser.toggleStatusBar()
         saver.set(\.statusBarVisible, browser.isStatusBarVisible)
+        statusBarToggled(browser.isStatusBarVisible)
     }
 
     /// Whether the toolbar, the sidebar and the status bar are all hidden.

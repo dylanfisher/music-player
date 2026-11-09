@@ -136,7 +136,11 @@ public final class GeneralModel {
             case .titles: [schema.windowTitle.key, schema.headerTitleFormat.key]
             case .toolbarStatus:
                 [schema.headerStatusLayout.key] + schema.customStatusLayouts.map(\.key)
-            case .statusBar: [schema.statusBarStyle.key, schema.statusBarLayout.key]
+            case .statusBar:
+                [
+                    schema.statusBarStyle.key, schema.statusBarLayout.key,
+                    schema.downloadsStatusStyle.key,
+                ]
             case .other: []
             }
         }
