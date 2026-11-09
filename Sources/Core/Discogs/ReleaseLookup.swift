@@ -7,10 +7,12 @@ public struct ReleaseQuery: Equatable, Sendable {
     public var artist: String
     public var title: String
     public var catalogNumber: String
-    /// A release id as typed: "1001", "r1001", "[r1001]", or a release page's address.
+    /// A release id as typed: "1001", "r1001", or a release page's address.
     public var release: String
 
-    public init(artist: String = "", title: String = "", catalogNumber: String = "", release: String = "") {
+    public init(
+        artist: String = "", title: String = "", catalogNumber: String = "", release: String = ""
+    ) {
         self.artist = artist
         self.title = title
         self.catalogNumber = catalogNumber
@@ -18,15 +20,7 @@ public struct ReleaseQuery: Equatable, Sendable {
     }
 
     /// The id `release` holds; nil when it holds none.
-    public var releaseID: Int? {
-        let text = release.trimmingCharacters(in: .whitespaces)
-        if let range = text.range(of: #"/release/\d+"#, options: .regularExpression) {
-            return Int(text[range].dropFirst("/release/".count))
-        }
-        guard let range = text.range(of: #"^\[?[rR]?\d+\]?$"#, options: .regularExpression)
-        else { return nil }
-        return Int(text[range].filter(\.isNumber))
-    }
+    public var releaseID: Int? { pastedReleaseID(release) }
 
     /// Whether there's nothing to search for.
     public var isEmpty: Bool {
@@ -148,7 +142,9 @@ private func holds(_ query: ReleaseQuery, _ release: CatalogRelease) -> Bool {
         return false
     }
     if let number = CatalogKey.catalogNumber(query.catalogNumber) {
-        let numbers = release.labels.compactMap { $0.catalogNumber.flatMap(CatalogKey.catalogNumber) }
+        let numbers = release.labels.compactMap {
+            $0.catalogNumber.flatMap(CatalogKey.catalogNumber)
+        }
         guard numbers.contains(number) else { return false }
     }
     return true
@@ -161,7 +157,10 @@ private func scored(
     let titles = TitleSimilarity(album.tracks.map(\.title))
     let seconds = album.tracks.map(\.seconds)
     let fits = releases.enumerated().map { index, release in
-        (index, release.summary, ReleaseScore.best(release, seconds: seconds, titles: titles).tracklist)
+        (
+            index, release.summary,
+            ReleaseScore.best(release, seconds: seconds, titles: titles).tracklist
+        )
     }
     let sorted = fits.sorted { $0.2 != $1.2 ? $0.2 > $1.2 : $0.0 < $1.0 }
     return ReleaseLookup(

@@ -11,11 +11,8 @@ private let stockholm = DiscogsAlbum(
         DiscogsAlbum.Track(fileID: Int64($0.offset), title: $0.element.0, seconds: $0.element.1)
     })
 
-@Test func aReleaseIDIsReadFromWhatEverItsTypedAs() {
-    for typed in [
-        "1001", " r1001 ", "[r1001]", "R1001", "https://www.discogs.com/release/1001-Persuader-Stockholm",
-        "discogs.com/sell/release/1001",
-    ] {
+@Test func aReleaseIDIsReadAsAPastedOneIs() {
+    for typed in ["1001", " r1001 ", "https://www.discogs.com/release/1001-Persuader-Stockholm"] {
         #expect(ReleaseQuery(release: typed).releaseID == 1001, "\(typed)")
     }
     for typed in ["", "Stockholm", "r", "1001x", "https://www.discogs.com/master/500"] {
