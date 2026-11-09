@@ -45,7 +45,7 @@ struct MappingDraft: Equatable {
         mapping[field].targets.map { target in
             switch target {
             case .field(let tag): tag.rawValue
-            case .key(let names, nil) where isOneSpelling(names): names.vorbis
+            case .key(let names, nil) where names.isUniform: names.vorbis
             case .key(let names, let numbered):
                 names.vorbis + (numbered == nil ? " (spelled per format)" : " (numbered)")
             }
@@ -57,7 +57,7 @@ struct MappingDraft: Equatable {
     func targetsEditable(_ field: DiscogsField) -> Bool {
         mapping[field].targets.allSatisfy { target in
             if case .key(let names, let numbered) = target {
-                numbered == nil && isOneSpelling(names)
+                numbered == nil && names.isUniform
             } else {
                 true
             }
@@ -137,9 +137,4 @@ struct MappingDraft: Equatable {
         if self.name == name { self.name = nil }
         note = "Removed “\(name)”; OK keeps the change"
     }
-}
-
-/// Whether every format spells the key the same.
-private func isOneSpelling(_ names: PerTagFormat<String>) -> Bool {
-    names.vorbis == names.mp4 && names.mp4 == names.id3
 }

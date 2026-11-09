@@ -16,7 +16,7 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
     /// The target `names` and `numbered` spell, as the config file reads a target: a field
     /// when every format spells one field's name and it isn't numbered, else a custom key.
     public init(names: PerTagFormat<String>, numbered: PerTagFormat<String>? = nil) {
-        if numbered == nil, names == PerTagFormat(names.vorbis),
+        if numbered == nil, names.isUniform,
             let field = TagEditField(rawValue: names.vorbis)
         {
             self = .field(field)
@@ -92,7 +92,7 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
         case .field(let field):
             var container = encoder.singleValueContainer()
             try container.encode(field.rawValue)
-        case .key(let names, nil) where names == PerTagFormat(names.vorbis):
+        case .key(let names, nil) where names.isUniform:
             var container = encoder.singleValueContainer()
             try container.encode(names.vorbis)
         case .key(let names, let numbered):

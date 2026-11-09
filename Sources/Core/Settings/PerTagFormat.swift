@@ -17,6 +17,9 @@ public struct PerTagFormat<Value: Codable & Equatable & Sendable>: Codable, Equa
     /// The same value in every format.
     public init(_ value: Value) { self.init(vorbis: value, mp4: value, id3: value) }
 
+    /// Whether every format has the same value, which JSON writes as the value alone.
+    public var isUniform: Bool { vorbis == mp4 && mp4 == id3 }
+
     subscript(format: TagFormat) -> Value {
         switch format {
         case .vorbis: vorbis
@@ -43,7 +46,7 @@ public struct PerTagFormat<Value: Codable & Equatable & Sendable>: Codable, Equa
     }
 
     public func encode(to encoder: any Encoder) throws {
-        if vorbis == mp4, mp4 == id3 {
+        if isUniform {
             var container = encoder.singleValueContainer()
             try container.encode(vorbis)
             return

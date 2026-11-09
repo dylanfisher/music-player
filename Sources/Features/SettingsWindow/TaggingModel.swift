@@ -126,7 +126,7 @@ final class TaggingModel {
     static func tagText(_ target: DiscogsTarget) -> String {
         let names = target.names
         let spelled =
-            names == PerTagFormat(names.vorbis)
+            names.isUniform
             ? names.vorbis : Spelling.allCases.map { $0.name(in: names) }.joined(separator: " / ")
         return spelled + (target.isNumbered ? " (each value numbered)" : "")
     }
@@ -201,7 +201,7 @@ final class TaggingModel {
         let old = target.names
         let name = text.trimmingCharacters(in: .whitespaces)
         var names = old
-        if spelling == .vorbis, old == PerTagFormat(old.vorbis) {
+        if spelling == .vorbis, old.isUniform {
             names = PerTagFormat(name)
         } else {
             spelling.set(name, in: &names)
