@@ -10,6 +10,22 @@ private func databaseURL(_ index: LibraryIndex) -> URL {
     index.fileURL
 }
 
+/// Stands in for the tag writes' queue, which the organizer and the carry share.
+private final class WriteQueue: Sendable {
+    let queue = DispatchQueue(label: "layout-move-ledger-tests")
+
+    @Sendable func run(_ work: @escaping @Sendable () -> Void) async {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                work()
+                continuation.resume()
+            }
+        }
+    }
+}
+
+private let writes = WriteQueue()
+
 private struct CarryFailed: Error, CustomStringConvertible {
     var description: String { "the index is locked" }
 }
@@ -43,7 +59,9 @@ private struct CarryFailed: Error, CustomStringConvertible {
     let moved = folders.organize([old]).moved
     let url = databaseURL(folders.index)
 
-    let failed = await carryLayoutMoves(databaseURL: url) { _ in throw CarryFailed() }
+    let failed = await carryLayoutMoves(databaseURL: url, serially: writes.run) { _ in
+        throw CarryFailed()
+    }
     let move = try #require(moved.first)
     #expect(
         failed.problems == [
@@ -53,7 +71,7 @@ private struct CarryFailed: Error, CustomStringConvertible {
     #expect(try folders.index.layoutMoves() == moved)
 
     let lines = LinesSeen()
-    let again = await carryLayoutMoves(databaseURL: url) { carried in
+    let again = await carryLayoutMoves(databaseURL: url, serially: writes.run) { carried in
         lines.add(carried.map { TrackMove(from: $0.from, to: $0.to) })
         return MoveListImport(moved: carried.count)
     }
@@ -69,7 +87,9 @@ private struct CarryFailed: Error, CustomStringConvertible {
     let two = try folders.file("library/b.flac", title: "Two", track: 2)
     let moved = folders.organize([one, two]).moved
     #expect(moved.count == 2)
-    let result = await carryLayoutMoves(databaseURL: databaseURL(folders.index)) { lines in
+    let result = await carryLayoutMoves(
+        databaseURL: databaseURL(folders.index), serially: writes.run
+    ) { lines in
         MoveListImport(
             moved: lines.count - 1,
             problems: [MoveListProblem(line: 2, reason: "the old path isn't in the library")])
@@ -93,7 +113,9 @@ private struct CarryFailed: Error, CustomStringConvertible {
         TrackMove(from: folders.library + "/renamed.flac", to: renamed),
     ])
     let lines = LinesSeen()
-    let result = await carryLayoutMoves(databaseURL: databaseURL(folders.index)) { carried in
+    let result = await carryLayoutMoves(
+        databaseURL: databaseURL(folders.index), serially: writes.run
+    ) { carried in
         lines.add(carried.map { TrackMove(from: $0.from, to: $0.to) })
         return MoveListImport(moved: carried.count)
     }
@@ -110,7 +132,7 @@ private struct CarryFailed: Error, CustomStringConvertible {
     try folders.index.recordPlay(old, at: 1_700_000_000)
     let moved = folders.organize([old]).moved
     let url = databaseURL(folders.index)
-    let result = await carryLayoutMoves(databaseURL: url) { lines in
+    let result = await carryLayoutMoves(databaseURL: url, serially: writes.run) { lines in
         try LibraryIndex(at: url).importMoves(MoveList(moves: lines))
     }
     #expect(result.carried == moved)
@@ -124,4 +146,50 @@ private final class LinesSeen: @unchecked Sendable {
     private var lines: [TrackMove] = []
     func add(_ more: [TrackMove]) { lock.withLock { lines += more } }
     var all: [TrackMove] { lock.withLock { lines } }
+}
+
+/// Holds a rename until the test lets it go.
+private final class Gate: @unchecked Sendable {
+    private let semaphore = DispatchSemaphore(value: 0)
+    func wait() { semaphore.wait() }
+    func open() { semaphore.signal() }
+}
+
+@Test func aCarryDuringAnOrganizeWaitsForItsRenames() async throws {
+    let folders = try OrganizeFolders()
+    let old = try folders.file("library/song.flac", title: "Song")
+    let plan = layoutMoves([old], libraryFolder: folders.library)
+    let url = folders.index.fileURL
+    let library = folders.library
+    let recorded = Gate()
+    let renaming = Gate()
+    var calls = MoveCalls()
+    calls.renameExclusive = { from, to in
+        // The moves are recorded; the carry starts here, and the rename waits for it to try.
+        recorded.open()
+        renaming.wait()
+        return Darwin.rename(from, to) == 0 ? 0 : errno
+    }
+    let renames = calls
+    let organized = Task {
+        await writes.run {
+            _ = moveToLayout(
+                plan, libraryFolder: library, ledger: { try LibraryIndex(at: url) },
+                calls: renames)
+        }
+    }
+    recorded.wait()
+    let carrying = Task {
+        await carryLayoutMoves(databaseURL: url, serially: writes.run) { lines in
+            MoveListImport(moved: lines.count)
+        }
+    }
+    // Long enough for a carry that doesn't wait to read the ledger and drop the move.
+    try await Task.sleep(nanoseconds: 200_000_000)
+    renaming.open()
+    await organized.value
+    let result = await carrying.value
+    #expect(result.carried == plan.moved)
+    #expect(result.problems.isEmpty)
+    #expect(try folders.index.layoutMoves().isEmpty)
 }

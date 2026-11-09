@@ -54,7 +54,13 @@ extension AppDelegate {
     func carry(_ organized: FilesOrganized?, then report: TagWriteReport?) {
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
         Task { [weak self] in
-            let carry = await carryLayoutMoves(databaseURL: databaseURL) {
+            let serially: @Sendable (@escaping @Sendable () -> Void) async -> Void = {
+                @MainActor [weak self] work in
+                // Without the app there are no tag writes to wait for.
+                guard let self else { return work() }
+                await self.tagEditing.onWriteQueue(work)
+            }
+            let carry = await carryLayoutMoves(databaseURL: databaseURL, serially: serially) {
                 @MainActor [weak self] lines in
                 guard let watcher = self?.watcher else {
                     throw LibraryNotWatched()

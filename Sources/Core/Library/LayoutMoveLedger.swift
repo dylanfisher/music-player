@@ -48,12 +48,17 @@ public struct LayoutCarry: Equatable, Sendable {
 /// is still at its old path and not at its new one never happened, and is dropped. A carry
 /// that fails keeps every move it was given, which the next carry, at the next organize or
 /// launch, tries again; a carry that runs drops them all, and lists those it couldn't move.
+/// The ledger is read and written through `serially`, which runs its work on the queue that
+/// `moveToLayout` runs on, the tag writes': run anywhere else, a read between an organize's
+/// record of its moves and its renames would find the files at their old paths and drop the
+/// moves as never made.
 public func carryLayoutMoves(
     databaseURL: URL,
+    serially: @Sendable (@escaping @Sendable () -> Void) async -> Void,
     carry: @Sendable ([(from: String, to: String)]) async throws -> MoveListImport
 ) async -> LayoutCarry {
     var result = LayoutCarry()
-    let found = await blockingFileWork {
+    let found = await run(serially) {
         () -> Result<(lines: [TrackMove], undone: [String], lost: [TrackMove]), any Error> in
         Result {
             let index = try LibraryIndex(at: databaseURL)
@@ -103,13 +108,35 @@ public func carryLayoutMoves(
             result.carried.append(move)
         }
     }
-    let forgotten = await blockingFileWork {
+    let forgotten = await run(serially) {
         Result { try LibraryIndex(at: databaseURL).forgetLayoutMoves(lines.map(\.from)) }
     }
     if case .failure(let error) = forgotten {
         result.problems.append("couldn't drop the carried moves, which are carried again: \(error)")
     }
     return result
+}
+
+/// What `work` returns, run through `serially`.
+private func run<T: Sendable>(
+    _ serially: @Sendable (@escaping @Sendable () -> Void) async -> Void,
+    _ work: @escaping @Sendable () -> T
+) async -> T {
+    let box = Box<T>()
+    await serially { box.value = work() }
+    guard let value = box.value else { preconditionFailure("serially returned without running") }
+    return value
+}
+
+/// One value handed from the queue `serially` runs on.
+private final class Box<T: Sendable>: @unchecked Sendable {
+    // `stored` is guarded by `lock`.
+    private let lock = NSLock()
+    private var stored: T?
+    var value: T? {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
 }
 
 private func notFollowed(_ move: TrackMove, _ reason: String) -> String {

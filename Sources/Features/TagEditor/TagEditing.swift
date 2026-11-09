@@ -410,6 +410,18 @@ public final class TagEditing {
         enqueue("write the tags", over: window) { write(files, .discogsTagger, $0) }
     }
 
+    /// Runs `work` on the write queue, after the writes, undos and renames queued before it and
+    /// before any queued after: the carry's reads and writes of the moves those renames record
+    /// (ADR 0164).
+    public func onWriteQueue(_ work: @escaping @Sendable () -> Void) async {
+        await withCheckedContinuation { continuation in
+            writes.async {
+                work()
+                continuation.resume()
+            }
+        }
+    }
+
     /// Organize Selected Files: renames the files of `plan`, which the user confirmed, in the
     /// library folder `folder`, after the writes queued before it. A file that no longer goes
     /// where the plan said is skipped and listed (ADR 0164).
