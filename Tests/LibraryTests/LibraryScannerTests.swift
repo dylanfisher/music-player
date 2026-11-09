@@ -194,6 +194,26 @@ import Testing
     #expect(stopped.removed == 0)
 }
 
+@Test func aWholeScanRecordsWhenItStartedOnlyOnceItFinishes() throws {
+    let library = try TestLibrary()
+    let before = Date()
+    _ = try library.scan()
+    let started = try #require(try library.index().finishedWholeScan(of: library.root))
+    #expect(started >= before.addingTimeInterval(-1) && started <= Date())
+
+    // A scan of a subtree isn't a whole scan.
+    let directory = (library.manifest.files[0].path as NSString).deletingLastPathComponent
+    let subtree = library.root + "/" + directory
+    _ = try library.scan(only: [subtree])
+    #expect(try library.index().finishedWholeScan(of: library.root) == started)
+
+    // One cut short records no start of its own, and leaves the folder to be scanned at launch.
+    let cancelled = ScanControl()
+    cancelled.cancel()
+    #expect(try library.scan(control: cancelled).cancelled)
+    #expect(try library.index().finishedWholeScan(of: library.root) == nil)
+}
+
 /// Reads fail with an I/O error, as on a NAS that went away.
 private struct FailingReads: ScanFileAccess {
     func volumeIsLocal(_ path: String) throws -> Bool? { true }

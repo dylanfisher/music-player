@@ -5,7 +5,8 @@
 - **Amended by:** [0023](0023-failure-table.md): the failure table, and the failures phase 14a
   changed how this reports. [0040](0040-gentle-network-rescans.md): network folders aren't
   rescanned at launch. [0124](0124-drop-files-and-the-library-folder.md): files dropped on the
-  window are rescanned, or their folders watched.
+  window are rescanned, or their folders watched. [0149](0149-polls-from-the-last-whole-scan.md):
+  a network folder is polled an interval after its last whole scan started, across launches.
 
 ## Context
 
@@ -39,9 +40,10 @@ because the file on disk is what's broken.
 
 **Watching.** Local folders are scanned whole at launch, then by the subtrees FSEvents reports,
 collected for 2 s; dropped events or a moved root rescan the whole folder. Network folders are
-polled `pollIntervalMinutes` after launch, or at launch when the index holds nothing for them
-(ADR 0040), and then `pollIntervalMinutes` after each scan ends, by one one-shot timer for
-the earliest due poll. Files outside every watched folder are removed at launch. The playback
+polled `pollIntervalMinutes` after their last whole scan started, by the wall clock and across
+launches, 2 minutes after launch when that fell due while the app was quit, or at launch when
+the index holds nothing for them (ADRs 0040, 0149), by one one-shot timer for the earliest due
+poll. Files outside every watched folder are removed at launch. The playback
 hook keeps network scans from starting, and pauses a running one, while a track starts, and
 while playing if `library.pausePollingDuringPlayback` is on.
 

@@ -404,21 +404,25 @@ public final class LibraryIndex {
         return Dictionary(rows) { first, _ in first }
     }
 
-    /// Whether the last whole scan of the folder at `root` finished, so the index holds all of
-    /// it as of then.
-    func finishedWholeScan(of root: String) throws -> Bool {
+    /// When the last whole scan of the folder at `root` started, if it finished, so the index
+    /// holds all of it as of then; nil when it didn't finish.
+    func finishedWholeScan(of root: String) throws -> Date? {
         try database.prepare(
-            "SELECT EXISTS (SELECT 1 FROM \(scannedFoldersTable) WHERE root = ?)"
-        ).map(canonicalPath(root)) { try $0.int(0) == 1 }[0]
+            "SELECT started_seconds FROM \(scannedFoldersTable) WHERE root = ?"
+        ).map(canonicalPath(root)) { Date(timeIntervalSince1970: try $0.double(0)) }.first
     }
 
-    /// Records whether the whole scan of the folder at `root` finished: false as one starts.
-    func setFinishedWholeScan(of root: String, _ finished: Bool) throws {
-        try statement(
-            finished
-                ? "INSERT OR IGNORE INTO \(scannedFoldersTable) (root) VALUES (?)"
-                : "DELETE FROM \(scannedFoldersTable) WHERE root = ?"
-        ).run(canonicalPath(root))
+    /// Records that the whole scan of the folder at `root` that started at `started` finished,
+    /// or, with nil, that one is starting, so none has finished since.
+    func setFinishedWholeScan(of root: String, startedAt started: Date?) throws {
+        if let started {
+            try statement(
+                "INSERT OR REPLACE INTO \(scannedFoldersTable) (root, started_seconds) VALUES (?, ?)"
+            ).run(canonicalPath(root), started.timeIntervalSince1970)
+        } else {
+            try statement("DELETE FROM \(scannedFoldersTable) WHERE root = ?").run(
+                canonicalPath(root))
+        }
     }
 
     /// Stores a batch of read results in one transaction.
@@ -635,7 +639,7 @@ public final class LibraryIndex {
             try $0.text(0)
         }
         for root in finished where !watched.contains(root) {
-            try setFinishedWholeScan(of: root, false)
+            try setFinishedWholeScan(of: root, startedAt: nil)
         }
         return outside.count
     }

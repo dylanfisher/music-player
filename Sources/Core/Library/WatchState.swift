@@ -19,9 +19,9 @@ struct WatchJob: Equatable, Sendable {
 /// it with a fake clock and a fake playback engine. One scan runs at a time.
 ///
 /// Local folders are scanned whole at start, then by the subtrees FSEvents reports. Network
-/// folders are polled `pollIntervalMinutes` after start and after each scan ends, and never
-/// while playback holds polls back; one set to never isn't polled. One whose last whole scan
-/// didn't finish is polled at start.
+/// folders are polled `pollIntervalMinutes` after their last whole scan started, by the wall
+/// clock, so time asleep or quit counts, and never while playback holds polls back; one set to
+/// never isn't polled. One whose last whole scan didn't finish is polled at start.
 struct WatchState {
     /// How long after a failed scan of a local folder it's first scanned again, whole. FSEvents
     /// reports a change once, so a failed scan would otherwise lose it until the next launch;
@@ -29,9 +29,14 @@ struct WatchState {
     /// row doubles it, up to `longestRetrySeconds`.
     static let failedScanRetrySeconds = 60.0
     static let longestRetrySeconds = 15.0 * 60
+    /// How long after start a network folder whose poll fell due while the app was quit is
+    /// polled, so walking the share doesn't slow the first track's read (ADR 0082).
+    static let overduePollDelaySeconds = 2.0 * 60
 
     private(set) var folders: [WatchedFolder]
     private(set) var running: WatchJob?
+    /// When the running scan started.
+    private var runningSince: Date?
     private var activity = PlaybackActivity.stopped
     private var pausePollingDuringPlayback: Bool
     /// What the settings say scans do with changed and gone files (ADR 0094).
@@ -60,12 +65,14 @@ struct WatchState {
     /// whatever playback does.
     private(set) var pausedByUser = false
 
-    /// `indexed` is the network folders, by path, whose last whole scan finished. Unless
-    /// `rescanNetworkFoldersAtLaunch`, those show what the index holds until their first poll,
-    /// since walking a share at launch keeps the NAS busy when the first track is read. One set
-    /// to never rescan isn't rescanned at launch either (ADR 0082).
+    /// `indexed` is when the last whole scan of each network folder started, by path, for those
+    /// whose last whole scan finished. Unless `rescanNetworkFoldersAtLaunch`, those show what
+    /// the index holds until their next poll, an interval after that scan started, since walking
+    /// a share at launch keeps the NAS busy when the first track is read. One already due, or
+    /// dated ahead of `now` by a clock set back, is polled `overduePollDelaySeconds` after start.
+    /// One set to never rescan isn't rescanned at launch either (ADR 0082).
     init(
-        folders: [WatchedFolder], indexed: Set<String>, rescanNetworkFoldersAtLaunch: Bool,
+        folders: [WatchedFolder], indexed: [String: Date], rescanNetworkFoldersAtLaunch: Bool,
         pausePollingDuringPlayback: Bool, options: ScanOptions = ScanOptions(), now: Date
     ) {
         self.folders = folders
@@ -73,14 +80,18 @@ struct WatchState {
         self.options = options
         wholeScans = folders.filter { $0.kind == .local }.map(\.path)
         for folder in folders where folder.kind == .network {
-            if indexed.contains(folder.path)
-                && (!rescanNetworkFoldersAtLaunch || folder.pollIntervalMinutes == nil)
-            {
-                pollDue[folder.path] = Self.nextPoll(of: folder, after: now)
-                leftToTheIndex.append(folder.path)
-            } else {
+            guard let scanned = indexed[folder.path],
+                !rescanNetworkFoldersAtLaunch || folder.pollIntervalMinutes == nil
+            else {
                 pollDue[folder.path] = now
+                continue
             }
+            if let due = Self.nextPoll(of: folder, after: scanned), due <= now || scanned > now {
+                pollDue[folder.path] = now.addingTimeInterval(Self.overduePollDelaySeconds)
+            } else {
+                pollDue[folder.path] = Self.nextPoll(of: folder, after: scanned)
+            }
+            leftToTheIndex.append(folder.path)
         }
         launchPending = Set(folders.map(\.path)).subtracting(leftToTheIndex)
     }
@@ -247,24 +258,30 @@ struct WatchState {
         // Each of these scans covers what the folder's tag edits changed.
         if asked.remove(job.folder.path) != nil { job.options.rescansModifiedFiles = true }
         running = job
+        runningSince = now
         return job
     }
 
-    /// The running scan ended at `now`. A polled folder is next due an interval later.
+    /// The running scan ended at `now`. A network folder scanned whole is next due an interval
+    /// after the scan started; a scan of its subtrees leaves its poll where it was.
     mutating func finished(now: Date) {
-        guard let job = running else { preconditionFailure("no scan is running") }
+        guard let job = running, let since = runningSince else {
+            preconditionFailure("no scan is running")
+        }
         running = nil
+        runningSince = nil
         pausedByUser = false
         if job.subtrees.isEmpty { launchPending.remove(job.folder.path) }
         failuresInARow[job.folder.path] = nil
-        if job.folder.kind == .network {
-            pollDue[job.folder.path] = Self.nextPoll(of: job.folder, after: now)
+        if job.folder.kind == .network, job.subtrees.isEmpty {
+            pollDue[job.folder.path] = Self.nextPoll(of: job.folder, after: since)
         }
     }
 
-    /// When a network folder is next polled after `now`; nil when it's set to never.
-    private static func nextPoll(of folder: WatchedFolder, after now: Date) -> Date? {
-        folder.pollIntervalMinutes.map { now.addingTimeInterval(TimeInterval($0 * 60)) }
+    /// When a network folder whose whole scan started at `scanned` is next polled; nil when it's
+    /// set to never.
+    private static func nextPoll(of folder: WatchedFolder, after scanned: Date) -> Date? {
+        folder.pollIntervalMinutes.map { scanned.addingTimeInterval(TimeInterval($0 * 60)) }
     }
 
     /// The running scan failed at `now`, as on a full disk. A polled folder waits for its next
@@ -276,6 +293,7 @@ struct WatchState {
         let failures = (failuresInARow[path] ?? 0) + 1
         if job.folder.kind == .local {
             running = nil
+            runningSince = nil
             pausedByUser = false
             if job.subtrees.isEmpty { launchPending.remove(path) }
             let wait = min(

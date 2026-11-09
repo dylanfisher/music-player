@@ -366,10 +366,12 @@ private let statsSchema = """
     """
 
 private let scansSchema = """
-    -- Each watched folder whose last whole scan finished, by its root in canonicalPath's form.
-    -- A whole scan deletes its folder's row as it starts, so one cut short leaves none.
+    -- Each watched folder whose last whole scan finished, by its root in canonicalPath's form,
+    -- and when that scan started, in seconds since 1970 by the wall clock. A whole scan deletes
+    -- its folder's row as it starts, so one cut short leaves none.
     CREATE TABLE \(scannedFoldersTable) (
-        root TEXT PRIMARY KEY
+        root TEXT PRIMARY KEY,
+        started_seconds REAL NOT NULL
     );
     """
 

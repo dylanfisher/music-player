@@ -100,7 +100,8 @@ public struct LibraryScanner: Sendable {
         }
 
         let index = try LibraryIndex(at: databaseURL)
-        if subtrees.isEmpty { try index.setFinishedWholeScan(of: root, false) }
+        let started = Date()
+        if subtrees.isEmpty { try index.setFinishedWholeScan(of: root, startedAt: nil) }
         let filter = FolderFilter(include: folder.include, exclude: folder.exclude)
         let starts = subtrees.isEmpty ? [root] : coalesced(subtrees, in: root)
         var known: [String: KnownFile] = [:]
@@ -182,7 +183,7 @@ public struct LibraryScanner: Sendable {
         for move in moves { logger.notice("moved the stats of \(move.from) to \(move.to)") }
         summary.moved = moves.count
         try index.deleteOrphans()
-        if subtrees.isEmpty { try index.setFinishedWholeScan(of: root, true) }
+        if subtrees.isEmpty { try index.setFinishedWholeScan(of: root, startedAt: started) }
         try index.checkpoint()
         logger.info(
             "scanned \(root): \(summary.read) read, \(summary.unchanged) unchanged, \(summary.removed) removed, \(summary.moved) moved, \(summary.issues.count) issues"

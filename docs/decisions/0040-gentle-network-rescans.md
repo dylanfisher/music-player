@@ -5,6 +5,8 @@
 - **Amends:** [0009](0009-scanning-and-watching.md) (Watching)
 - **Amended by:** [0062](0062-rescan-chosen-folders.md): Rescan Now is
   named Rescan All, and Rescan scans the chosen folders the same way.
+  [0149](0149-polls-from-the-last-whole-scan.md): the first poll comes an interval after the
+  last whole scan started, not after launch, and the start time is stored.
 
 ## Context
 

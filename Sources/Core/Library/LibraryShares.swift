@@ -93,8 +93,8 @@ extension LibraryIndex {
             "SELECT EXISTS (SELECT 1 FROM files WHERE path >= ? AND path < ?)"
         ).map(newFiles.lowerBound, newFiles.upperBound) { try $0.int(0) == 1 }[0]
         let finished = try finishedWholeScan(of: old)
-        try setFinishedWholeScan(of: old, false)
-        try setFinishedWholeScan(of: new, finished && !droppedAny)
+        try setFinishedWholeScan(of: old, startedAt: nil)
+        try setFinishedWholeScan(of: new, startedAt: droppedAny ? nil : finished)
         try statement(
             "DELETE FROM track_search WHERE rowid IN (SELECT id FROM files WHERE path >= ? AND path < ?)"
         ).run(newFiles.lowerBound, newFiles.upperBound)

@@ -21,7 +21,7 @@ private struct FakeEngine {
 
 @Test func scansEveryFolderAtStartLocalFirst() {
     var state = WatchState(
-        folders: [nas, local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas, local], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
     #expect(state.start(now: start) == nil, "one scan at a time")
@@ -34,8 +34,8 @@ private struct FakeEngine {
 @Test func aNetworkFolderTheIndexHoldsWaitsAnIntervalForItsFirstPoll() {
     let added = WatchedFolder(path: "/Volumes/Added", kind: .network)
     var state = WatchState(
-        folders: [nas, added, local], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
-        pausePollingDuringPlayback: false, now: start)
+        folders: [nas, added, local], indexed: [nas.path: start],
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: false, now: start)
     #expect(state.leftToTheIndex == [nas.path])
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
     state.finished(now: start)
@@ -49,27 +49,73 @@ private struct FakeEngine {
 
 @Test func theSettingBringsBackTheLaunchRescan() {
     var state = WatchState(
-        folders: [nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: true,
+        folders: [nas], indexed: [nas.path: start], rescanNetworkFoldersAtLaunch: true,
         pausePollingDuringPlayback: false, now: start)
     #expect(state.leftToTheIndex.isEmpty)
     #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: []))
 }
 
-@Test func pollsNoSoonerThanTheInterval() {
+@Test func pollsAnIntervalAfterTheLastScanStarted() {
     var state = WatchState(
-        folders: [nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     _ = state.start(now: start)
     state.finished(now: minutes(2))
-    #expect(state.nextPoll(after: minutes(2)) == minutes(17))
-    #expect(state.start(now: minutes(16.9)) == nil)
-    #expect(state.start(now: minutes(17)) == WatchJob(folder: nas, subtrees: []))
-    #expect(state.nextPoll(after: minutes(17)) == nil, "nothing to wake for while it runs")
+    #expect(state.nextPoll(after: minutes(2)) == minutes(15))
+    #expect(state.start(now: minutes(14.9)) == nil)
+    #expect(state.start(now: minutes(15)) == WatchJob(folder: nas, subtrees: []))
+    #expect(state.nextPoll(after: minutes(15)) == nil, "nothing to wake for while it runs")
+}
+
+@Test func aRelaunchBeforeTheIntervalKeepsThePollWhereItWas() {
+    // Scanned whole at `start`, then relaunched 10 minutes later and again at 14.
+    for launch in [minutes(10), minutes(14)] {
+        var state = WatchState(
+            folders: [nas], indexed: [nas.path: start], rescanNetworkFoldersAtLaunch: false,
+            pausePollingDuringPlayback: false, now: launch)
+        #expect(state.leftToTheIndex == [nas.path])
+        #expect(state.start(now: launch) == nil)
+        #expect(state.nextPoll(after: launch) == minutes(15))
+        #expect(state.start(now: minutes(15)) == WatchJob(folder: nas, subtrees: []))
+    }
+}
+
+@Test func aLaunchAfterThePollFellDuePollsShortlyAfter() {
+    let launch = minutes(60)
+    let delay = WatchState.overduePollDelaySeconds
+    var state = WatchState(
+        folders: [nas], indexed: [nas.path: start], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: launch)
+    #expect(state.leftToTheIndex == [nas.path])
+    #expect(!state.launchScansPending, "it gates nothing")
+    #expect(state.start(now: launch) == nil, "not while the first track is read")
+    #expect(state.nextPoll(after: launch) == launch.addingTimeInterval(delay))
+    #expect(
+        state.start(now: launch.addingTimeInterval(delay)) == WatchJob(folder: nas, subtrees: []))
+}
+
+@Test func aScanDatedAheadOfTheClockCountsAsDue() {
+    let state = WatchState(
+        folders: [nas], indexed: [nas.path: minutes(30)], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: start)
+    #expect(
+        state.nextPoll(after: start)
+            == start.addingTimeInterval(WatchState.overduePollDelaySeconds))
+}
+
+@Test func aTagEditsScanOfANetworkFolderLeavesItsPollWhereItWas() {
+    var state = WatchState(
+        folders: [nas], indexed: [nas.path: start], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: start)
+    state.directoriesEdited([nas.path + "/Album"])
+    #expect(state.start(now: minutes(5))?.subtrees == [nas.path + "/Album"])
+    state.finished(now: minutes(6))
+    #expect(state.nextPoll(after: minutes(6)) == minutes(15))
 }
 
 @Test func noPollStartsWhilePlaybackIsStarting() {
     var state = WatchState(
-        folders: [nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     let engine = FakeEngine()
     engine.report(.starting, to: &state)
@@ -87,7 +133,7 @@ private struct FakeEngine {
 
 @Test func pollsWaitForPlaybackToStopWhenTheSettingSaysSo() {
     var state = WatchState(
-        folders: [nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: true, now: start)
     let engine = FakeEngine(pausePollingDuringPlayback: true)
     engine.report(.playing, to: &state)
@@ -100,7 +146,7 @@ private struct FakeEngine {
 
 @Test func playbackNeverHoldsLocalScans() {
     var state = WatchState(
-        folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: true, now: start)
     FakeEngine(pausePollingDuringPlayback: true).report(.starting, to: &state)
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
@@ -109,7 +155,7 @@ private struct FakeEngine {
 
 @Test func localChangesBecomeSubtreeScans() {
     var state = WatchState(
-        folders: [local, nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local, nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     _ = state.start(now: start)
     state.directoriesChanged([
@@ -128,7 +174,7 @@ private struct FakeEngine {
 
 @Test func editedDirectoriesAreRescannedInNetworkFoldersToo() {
     var state = WatchState(
-        folders: [local, nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local, nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: true, now: start)
     _ = state.start(now: start)
     state.finished(now: start)
@@ -150,7 +196,7 @@ private struct FakeEngine {
     let off = ScanOptions(removesMissingTracks: false, rescansModifiedFiles: false)
     let reads = ScanOptions(removesMissingTracks: false, rescansModifiedFiles: true)
     var state = WatchState(
-        folders: [local, nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local, nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, options: off, now: start)
     #expect(state.start(now: start)?.options == off, "the launch scan")
     state.finished(now: start)
@@ -184,7 +230,7 @@ private struct FakeEngine {
 @Test func aRescanDuringAScanThatLeavesModifiedFilesComesAfterIt() {
     let off = ScanOptions(rescansModifiedFiles: false)
     var state = WatchState(
-        folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, options: off, now: start)
     #expect(state.start(now: start)?.options == off)
     state.rescan(wholeFolders: [local.path])
@@ -194,7 +240,7 @@ private struct FakeEngine {
 
 @Test func aFailedLocalScanIsRetriedWholeWithABackoff() {
     var state = WatchState(
-        folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     _ = state.start(now: start)
     state.finished(now: start)
@@ -237,7 +283,7 @@ private struct FakeEngine {
 
 @Test func aFailedPollWaitsForTheNextPollAndIsReportedOnce() {
     var state = WatchState(
-        folders: [nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     _ = state.start(now: start)
     let first = state.failed(now: start)
@@ -251,7 +297,7 @@ private struct FakeEngine {
 
 @Test func aRelocatedFolderKeepsItsPlaceAndIsPolledAtItsNewPath() {
     var state = WatchState(
-        folders: [nas, local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas, local], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
     state.finished(now: start)
@@ -264,12 +310,12 @@ private struct FakeEngine {
     // The edit under the old path is dropped; the whole folder is polled at once instead.
     #expect(state.start(now: minutes(2)) == WatchJob(folder: moved, subtrees: []))
     state.finished(now: minutes(3))
-    #expect(state.nextPoll(after: minutes(3)) == minutes(18))
+    #expect(state.nextPoll(after: minutes(3)) == minutes(17))
 }
 
 @Test func rescanNowScansEveryFolderWhilePollsArePausedButNotWhileATrackStarts() {
     var state = WatchState(
-        folders: [local, nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
+        folders: [local, nas], indexed: [nas.path: start], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: true, now: start)
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
     state.finished(now: start)
@@ -289,12 +335,12 @@ private struct FakeEngine {
     state.finished(now: minutes(2))
     #expect(state.start(now: minutes(2)) == nil, "each folder once")
     engine.report(.stopped, to: &state)
-    #expect(state.nextPoll(after: minutes(2)) == minutes(17))
+    #expect(state.nextPoll(after: minutes(2)) == minutes(16))
 }
 
 @Test func rescanScansOnlyTheChosenFoldersWhilePollsArePaused() {
     var state = WatchState(
-        folders: [local, nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
+        folders: [local, nas], indexed: [nas.path: start], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: true, now: start)
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
     state.finished(now: start)
@@ -308,7 +354,7 @@ private struct FakeEngine {
 
 @Test func rescanNowLetsAPollPausedForPlaybackGoOn() {
     var state = WatchState(
-        folders: [nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: true, now: start)
     #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: []))
     FakeEngine(pausePollingDuringPlayback: true).report(.playing, to: &state)
@@ -321,7 +367,7 @@ private struct FakeEngine {
 
 @Test func theLaunchScansEndWithEachFolderWholeNotWithASubtreeScan() {
     var state = WatchState(
-        folders: [local, nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local, nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     state.directoriesChanged([local.path + "/Album"])
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: [local.path + "/Album"]))
@@ -335,14 +381,14 @@ private struct FakeEngine {
     #expect(!state.launchScansPending)
 
     let kept = WatchState(
-        folders: [nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas], indexed: [nas.path: start], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     #expect(!kept.launchScansPending)
 }
 
 @Test func onlyALocalFoldersLaunchScanHoldsTheFirstSyncBack() {
     var state = WatchState(
-        folders: [nas, local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas, local], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     #expect(state.localLaunchScansPending)
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
@@ -357,7 +403,7 @@ private struct FakeEngine {
 
 @Test func aFailedLocalLaunchScanLiftsTheSyncGate() {
     var state = WatchState(
-        folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
     let first = state.failed(now: start)
@@ -367,7 +413,7 @@ private struct FakeEngine {
 
 @Test func aNetworkFolderKeptToTheIndexGatesNothing() {
     let state = WatchState(
-        folders: [nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
+        folders: [nas], indexed: [nas.path: start], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     #expect(!state.localLaunchScansPending)
 }
@@ -375,7 +421,7 @@ private struct FakeEngine {
 @Test func aRelocatedLocalFolderGatesUntilItsScanEnds() {
     let moved = WatchedFolder(path: "/Users/me/Moved", kind: .local)
     var state = WatchState(
-        folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: false, now: start)
     state.relocated([moved], now: start)
     #expect(state.localLaunchScansPending)
@@ -390,8 +436,8 @@ private struct FakeEngine {
         path: "/Volumes/Unfinished", kind: .network, pollIntervalMinutes: nil)
     // Not even with the launch rescan on, unless its last whole scan didn't finish.
     var state = WatchState(
-        folders: [never, unfinished], indexed: [never.path], rescanNetworkFoldersAtLaunch: true,
-        pausePollingDuringPlayback: false, now: start)
+        folders: [never, unfinished], indexed: [never.path: start],
+        rescanNetworkFoldersAtLaunch: true, pausePollingDuringPlayback: false, now: start)
     #expect(state.leftToTheIndex == [never.path])
     #expect(state.start(now: start) == WatchJob(folder: unfinished, subtrees: []))
     state.finished(now: start)
@@ -409,7 +455,7 @@ private struct FakeEngine {
 /// end; other scans wait behind it, and the next scan starts unpaused.
 @Test func aScanPausedByTheUserWaitsUntilResumedWhateverPlaybackDoes() {
     var state = WatchState(
-        folders: [local, nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        folders: [local, nas], indexed: [:], rescanNetworkFoldersAtLaunch: false,
         pausePollingDuringPlayback: true, now: start)
     #expect(state.pauseRunningScan() == nil, "no scan runs")
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))

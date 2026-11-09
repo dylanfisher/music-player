@@ -309,18 +309,22 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
-    /// The network folders among `folders` whose last whole scan finished, by path. When the
-    /// index can't say, they're all scanned.
-    private func indexed(_ folders: [WatchedFolder]) -> Set<String> {
+    /// When the last whole scan of each network folder among `folders` that finished started,
+    /// by path. When the index can't say, they're all scanned.
+    private func indexed(_ folders: [WatchedFolder]) -> [String: Date] {
         let network = folders.filter { $0.kind == .network }
-        guard !network.isEmpty else { return [] }
+        guard !network.isEmpty else { return [:] }
         do {
             let index = try LibraryIndex(at: scanner.databaseURL)
-            return Set(try network.filter { try index.finishedWholeScan(of: $0.path) }.map(\.path))
+            var started: [String: Date] = [:]
+            for folder in network {
+                started[folder.path] = try index.finishedWholeScan(of: folder.path)
+            }
+            return started
         } catch {
             logger.error(
                 "couldn't tell which network folders were scanned whole; scanning them: \(error)")
-            return []
+            return [:]
         }
     }
 
