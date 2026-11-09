@@ -22,6 +22,14 @@ public struct ReleaseQuery: Equatable, Sendable {
     /// The id `release` holds; nil when it holds none.
     public var releaseID: Int? { pastedReleaseID(release) }
 
+    /// Whether a release id is given beside other fields, which it's looked up without.
+    public var ignoresOtherFields: Bool {
+        releaseID != nil
+            && [artist, title, catalogNumber].contains {
+                !$0.trimmingCharacters(in: .whitespaces).isEmpty
+            }
+    }
+
     /// Whether there's nothing to search for.
     public var isEmpty: Bool {
         releaseID == nil
@@ -40,8 +48,11 @@ public struct ReleaseLookup: Sendable {
     public var isCut: Bool
 }
 
-/// The most releases Look Up Release reads from the catalog; a master can have hundreds.
+/// The most releases Look Up lists from the catalog; a master can have hundreds.
 let lookedUpCatalogReleases = 200
+/// The most releases Look Up reads from the catalog for one search, before the fields given
+/// filter them: each is a row read and decoded.
+let lookedUpCatalogReads = 5_000
 
 /// Looks `query` up in the catalog at `catalog`, and in `api` only when the catalog finds
 /// nothing or there's no catalog to read (ADR 0157). The catalog finds a release by its id,
@@ -84,15 +95,16 @@ public func lookUpReleases(
     return scored(releases, album, origin: .api, isCut: isCut)
 }
 
-/// The catalog's releases for `query`, at most `lookedUpCatalogReleases`, each holding every
-/// field given.
+/// The catalog's releases for `query`, each holding every field given, at most
+/// `lookedUpCatalogReleases` of the first `lookedUpCatalogReads` found. A release id is
+/// looked up alone, whatever else is typed.
 private func catalogReleases(_ query: ReleaseQuery, in catalog: Catalog) throws -> (
     releases: [CatalogRelease], isCut: Bool
 ) {
     if let id = query.releaseID {
         return (try catalog.release(id: id).map { [$0] } ?? [], false)
     }
-    let limit = lookedUpCatalogReleases
+    let limit = lookedUpCatalogReads
     let artist = query.artist.trimmingCharacters(in: .whitespaces)
     let title = query.title.trimmingCharacters(in: .whitespaces)
     var ids: [Int] = []
@@ -124,8 +136,18 @@ private func catalogReleases(_ query: ReleaseQuery, in catalog: Catalog) throws 
             }
         }
     }
-    let releases = try ids.prefix(limit).compactMap { try catalog.release(id: $0) }
-    return (releases.filter { holds(query, $0) }, ids.count > limit)
+    // Filtered before they're cut, so the release wanted isn't dropped for others the fields
+    // rule out.
+    var kept: [CatalogRelease] = []
+    for id in ids.prefix(limit) where kept.count <= lookedUpCatalogReleases {
+        if let release = try catalog.release(id: id), holds(query, release) {
+            kept.append(release)
+        }
+    }
+    return (
+        Array(kept.prefix(lookedUpCatalogReleases)),
+        kept.count > lookedUpCatalogReleases || ids.count > limit
+    )
 }
 
 /// Whether `release` holds every field of `query` given: the artist and title within its own,

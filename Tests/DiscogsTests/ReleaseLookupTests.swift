@@ -56,6 +56,34 @@ private let stockholm = DiscogsAlbum(
     #expect(found.releases.map(\.score) == found.releases.map(\.score).sorted(by: >))
 }
 
+/// The fields given filter the releases before the list is cut, so the one wanted isn't
+/// dropped behind hundreds the fields rule out; a release id is looked up alone.
+@Test func theFieldsFilterBeforeTheListIsCut() async throws {
+    let release = { (id: Int, artist: String) in
+        #"<release id="\#(id)"><artists><artist><id>9</id><name>\#(artist)</name></artist></artists><title>Same Number</title><labels><label name="Svek" catno="SK 1" id="5"/></labels></release>"#
+    }
+    let others = (1...300).map { release($0, "Somebody Else") }
+    let folder = try DumpFolder()
+    try folder.write(
+        "20261101", releases: (others + [release(400, "Persuader")]).joined(separator: "\n") + "\n")
+    try folder.importCatalog()
+    let found = try await lookUpReleases(
+        ReleaseQuery(artist: "Persuader", catalogNumber: "SK 1"), for: stockholm,
+        catalogAt: folder.catalog, api: nil)
+    #expect(found.releases.map(\.summary.id) == [400])
+    #expect(!found.isCut)
+    let all = try await lookUpReleases(
+        ReleaseQuery(catalogNumber: "SK 1"), for: stockholm, catalogAt: folder.catalog, api: nil)
+    #expect(all.releases.count == 200 && all.isCut)
+
+    let byID = ReleaseQuery(artist: "Somebody Else", release: "r400")
+    #expect(byID.ignoresOtherFields)
+    #expect(!ReleaseQuery(release: "r400").ignoresOtherFields)
+    let alone = try await lookUpReleases(
+        byID, for: stockholm, catalogAt: folder.catalog, api: nil)
+    #expect(alone.releases.map(\.summary.id) == [400], "the artist typed beside it is ignored")
+}
+
 @Test func theAPIIsAskedWhenTheCatalogHasNoMatchOrIsntThere() async throws {
     let folder = try DumpFolder()
     try folder.write("20261101", masters: apiDumpMasters, releases: apiDumpReleases)

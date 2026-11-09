@@ -157,6 +157,7 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
             field.lineBreakMode = .byTruncatingTail
             field.cell?.isScrollable = true
         }
+        releaseField.toolTip = "A release ID or URL is looked up alone; the other fields are ignored"
         searchButton.target = self
         searchButton.action = #selector(startSearch)
         searchButton.keyEquivalent = "\r"
@@ -211,7 +212,9 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
         guard !Task.isCancelled else { return }
         origin = found.origin
         candidates = found.releases.map { (summary: $0.summary, score: Optional($0.score)) }
-        heading.stringValue = Self.foundText(found)
+        heading.stringValue =
+            Self.foundText(found)
+            + (query.ignoresOtherFields ? " by the release ID alone; the other fields aren't searched" : "")
         showCandidates()
     }
 
