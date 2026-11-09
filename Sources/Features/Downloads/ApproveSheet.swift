@@ -1,6 +1,7 @@
 import Analysis
 import AppKit
 import Library
+import Settings
 
 /// Approve… (54.13, ADR 0147), laid out as the tagger's sheets are: a heading and a line under
 /// it, a table of the staged files with where each goes and what the lossy-origin check found,
@@ -146,7 +147,7 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
 
         // A resumed import's files may be in the library by now, so it lists them alone.
         addColumn(
-            to: filesTable, Column.name.rawValue, title: "File", width: 220,
+            to: filesTable, Column.name.rawValue, title: TrackColumn.fileName.title, width: 220,
             stretches: plan.resuming)
         if !plan.resuming {
             addColumn(
@@ -167,9 +168,11 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
                 views.append(warning(Self.deleteWarning))
                 addColumn(to: oldTable, Column.tick.rawValue, title: "", width: 24)
                 addColumn(
-                    to: oldTable, Column.old.rawValue, title: "File", width: 360,
+                    to: oldTable, Column.old.rawValue, title: TrackColumn.path.title, width: 360,
                     stretches: true)
-                addColumn(to: oldTable, Column.position.rawValue, title: "Track", width: 50)
+                addColumn(
+                    to: oldTable, Column.position.rawValue, title: TrackColumn.trackNumber.title,
+                    width: 50)
                 addColumn(to: oldTable, Column.note.rawValue, title: "", width: 320)
                 let oldScroll = listTable(oldTable, source: self)
                 views.append(oldScroll)
@@ -211,7 +214,7 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
     /// "Discogs release 4242 · FLAC 16/44.1, 12 files · Replaces MP3 320".
     static func subtitle(_ plan: ApprovalPlan) -> String {
         ([DownloadRow.releaseName(plan.job.release.releaseID), DownloadRow.format(plan.job)]
-            + [plan.job.upgrade.map { "Replaces \($0.currentQuality)" }].compactMap { $0 })
+            + [DownloadRow.replaces(plan.job)].compactMap { $0 })
             .joined(separator: " · ")
     }
 

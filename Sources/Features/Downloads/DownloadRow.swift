@@ -75,7 +75,7 @@ struct DownloadRow: Equatable, Sendable {
         releaseID = job.release.releaseID
         format = Self.format(job)
         candidate = Self.candidate(job)
-        replaces = job.upgrade.map { "Replaces \($0.currentQuality)" }
+        replaces = Self.replaces(job)
         state = Self.state(job, formatted: formatted)
         if Self.isTransferring(job.state), let rate { state += " · " + rate.text }
         stateDetail = Self.stateDetail(job)
@@ -258,6 +258,11 @@ struct DownloadRow: Equatable, Sendable {
         case .mp3320: "MP3 320"
         case .any: "Any format"
         }
+    }
+
+    /// "Replaces MP3 320" for an upgrade; nil for any other job.
+    static func replaces(_ job: DownloadJob) -> String? {
+        job.upgrade.map { "Replaces \($0.currentQuality)" }
     }
 
     /// "Discogs release 4242", as the window and its sheets name a release.

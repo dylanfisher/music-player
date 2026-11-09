@@ -24,7 +24,7 @@ final class DownloadsStatusItem: NSView {
         stack = NSStackView(views: [image, bar, label])
         super.init(frame: .zero)
         image.image = NSImage(
-            systemSymbolName: Self.symbol, accessibilityDescription: "Downloads")
+            systemSymbolName: Self.symbol, accessibilityDescription: DownloadsWindow.title)
         image.contentTintColor = .secondaryLabelColor
         image.setContentHuggingPriority(.required, for: .horizontal)
         bar.style = .bar

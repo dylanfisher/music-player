@@ -139,14 +139,16 @@ private let lossy = StagedOrigin(
             == "Discogs release 4242 · FLAC 16/44.1, 2 files · Replaces MP3 320 kbps")
     let sheet = ApproveSheet(plan: plan, album: "A - B")
     #expect(
-        sheet.filesTable.tableColumns.map(\.title) == ["File", "Moves To", "Lossy-Origin Check"])
+        sheet.filesTable.tableColumns.map(\.title) == [
+            "File Name", "Moves To", "Lossy-Origin Check",
+        ])
     #expect(sheet.filesTable.numberOfRows == 2 && sheet.oldTable.numberOfRows == 3)
 }
 
 @MainActor
 @Test func aResumeListsTheFilesAlone() throws {
     let sheet = ApproveSheet(plan: plan(resuming: true), album: "A - B")
-    #expect(sheet.filesTable.tableColumns.map(\.title) == ["File"])
+    #expect(sheet.filesTable.tableColumns.map(\.title) == ["File Name"])
     #expect(sheet.approveButton.title == DownloadAction.resumeHere.title)
     #expect(sheet.approveButton.isEnabled)
 }
