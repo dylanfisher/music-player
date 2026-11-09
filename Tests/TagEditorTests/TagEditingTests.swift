@@ -79,7 +79,7 @@ private func makeEditing(
         return report
     },
     undo: @escaping @Sendable () -> TagWriteReport = { TagWriteReport() },
-    newestEdit: JournaledEdit? = nil,
+    newestEdit: @escaping @Sendable () throws(TagWriteError) -> JournaledEdit? = { nil },
     confirm: Bool = true,
     progress: [TagWriteProgress] = []
 ) -> TagEditing {
@@ -102,7 +102,7 @@ private func makeEditing(
                 seen.ran(expected.map { "undo \($0.sequence)" } ?? "undo")
                 return undo()
             },
-            newestEdit: { newestEdit },
+            newestEdit: newestEdit,
             present: { editor, _, place, _ in seen.present(editor.paths, at: place) },
             confirm: { message, _, answer in
                 seen.confirm(message.message)
@@ -473,8 +473,8 @@ private final class Titles: @unchecked Sendable {
     }
     for (answer, ran) in [(false, [String]()), (true, ["undo 7"])] {
         let seen = Seen()
-        let editing = makeEditing(
-            seen, newestEdit: edit(.discogsTagger, 22), confirm: answer)
+        let newest = edit(.discogsTagger, 22)
+        let editing = makeEditing(seen, newestEdit: { newest }, confirm: answer)
         editing.undo(over: window, from: .tagEditor)
         try await eventually { !editing.isWriting && !seen.confirmations.isEmpty }
         #expect(seen.confirmations == ["Undo the Discogs tagger's edit of 22 files?"])
@@ -490,11 +490,82 @@ private final class Titles: @unchecked Sendable {
         (edit(nil, 3), .tagEditor, "undo 7"), (nil, .tagEditor, "undo"),
     ] {
         let seen = Seen()
-        let editing = makeEditing(seen, newestEdit: newest)
+        let editing = makeEditing(seen, newestEdit: { newest })
         editing.undo(over: window, from: origin)
         try await eventually { seen.work == [ran] }
         #expect(seen.confirmations.isEmpty)
     }
+}
+
+/// A journal of edits the fakes write and undo, from any thread, which can fail to be read.
+private final class FakeJournal: @unchecked Sendable {
+    // Every field is guarded by `lock`.
+    private let lock = NSLock()
+    private var edits: [JournaledEdit] = []
+    private var _unreadable = false
+
+    var unreadable: Bool {
+        get { lock.withLock { _unreadable } }
+        set { lock.withLock { _unreadable = newValue } }
+    }
+
+    func add(_ fileCount: Int) {
+        lock.withLock {
+            edits.append(
+                JournaledEdit(sequence: edits.count + 1, origin: .tagEditor, fileCount: fileCount))
+        }
+    }
+    func undoNewest() { lock.withLock { _ = edits.popLast() } }
+    func newest() throws(TagWriteError) -> JournaledEdit? {
+        let (unreadable, newest) = lock.withLock { (_unreadable, edits.last) }
+        guard !unreadable else {
+            throw TagWriteError(path: "/journal", kind: .journal, detail: "unreadable")
+        }
+        return newest
+    }
+}
+
+/// Undo Tag Edit is on only while the journal holds an edit: off with none, on after a write,
+/// the Discogs tagger's too, off again once the only edit is undone. A journal that can't be
+/// read leaves it on, so a click shows why. The info window's button follows.
+@MainActor
+@Test func undoTagEditIsOnOnlyWithAnEditToUndo() async throws {
+    let seen = Seen()
+    let journal = FakeJournal()
+    let editing = makeEditing(
+        seen,
+        write: { _, paths in
+            journal.add(paths.count)
+            var report = TagWriteReport()
+            report.changed = paths
+            return report
+        },
+        undo: {
+            journal.undoNewest()
+            return TagWriteReport()
+        },
+        newestEdit: { () throws(TagWriteError) in try journal.newest() })
+    editing.isEnabled = { [weak editing] in $0 == .undoTagEdit && editing?.canUndo == true }
+    editing.open(["/a.flac"], over: window)
+    let opened = try #require(editor(editing, ["/a.flac"]))
+    let button = try #require(opened.commandButtons.first { $0.id == .undoTagEdit }?.button)
+    try await eventually { !editing.canUndo }
+    #expect(!button.isEnabled)
+
+    editing.write([("/b.flac", TagEdit(values: [.title: "New"]))], over: window)
+    try await eventually { editing.canUndo }
+    #expect(button.isEnabled)
+
+    editing.undo(over: window, from: .tagEditor)
+    try await eventually { !editing.canUndo }
+    #expect(seen.work == ["write /b.flac", "undo 1"])
+    #expect(!button.isEnabled)
+
+    journal.unreadable = true
+    editing.write([("/b.flac", TagEdit(values: [.title: "Again"]))], over: window)
+    try await eventually { editing.canUndo }
+    #expect(button.isEnabled)
+    opened.close()
 }
 
 /// An info window's Undo Tag Edit, Replace Artwork… and Remove Artwork buttons ask the

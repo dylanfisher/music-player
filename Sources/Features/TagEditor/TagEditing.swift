@@ -28,6 +28,11 @@ public final class TagEditing {
     /// Whether the registry enables a tag command now, for one that isn't about an info window:
     /// Undo Tag Edit. Its button follows it, as the menu item does.
     public var isEnabled: (CommandID) -> Bool = { _ in false }
+    /// Whether the journal holds an edit to undo, which Undo Tag Edit's rule reads, so a menu
+    /// validation never reads the journal folder. It's read again off the main thread at
+    /// launch and after every write and undo finishes, from any window. Until the first read,
+    /// and after a read that failed, it's true: Undo Tag Edit stays on and a click shows why.
+    public private(set) var canUndo = true
     /// The top left corner the user last moved an info window to, where the next one opens;
     /// nil opens it near the main window's top left.
     public var place: NSPoint?
@@ -126,10 +131,33 @@ public final class TagEditing {
                 MainActor.assumeIsolated { self?.written(report) }
             }
         }
+        readCanUndo()
     }
 
     init(effects: Effects) {
         self.effects = effects
+        readCanUndo()
+    }
+
+    /// Reads `canUndo` from the journal after the writes queued before it, then refreshes the
+    /// info windows' buttons; the menu item asks when it's shown.
+    private func readCanUndo() {
+        let newestEdit = effects.newestEdit
+        writes.async { [weak self] in
+            let newest = Result { () throws(TagWriteError) in try newestEdit() }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    switch newest {
+                    case .success(let edit): self.canUndo = edit != nil
+                    case .failure(let error):
+                        logger.error("couldn't read the tag edit journal: \(error)")
+                        self.canUndo = true
+                    }
+                    self.refreshCommands()
+                }
+            }
+        }
     }
 
     var isOpen: Bool { !editors.isEmpty }
@@ -393,6 +421,7 @@ public final class TagEditing {
     private func finished(_ number: Int, _ report: TagWriteReport) {
         pendingWrites -= 1
         if pendingWrites == 0 { saving(nil) }
+        readCanUndo()
         completions.removeValue(forKey: number)?(
             Set(report.failures.map(\.path) + report.notWritten))
         guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }
