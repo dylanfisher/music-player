@@ -201,3 +201,19 @@ private func ignoresCase(_ folder: String) -> Bool { pathconf(folder, _PC_CASE_S
     #expect(plan.moved.map(\.from) == [one])
     #expect(plan.problems.count == 1)
 }
+
+@Test func aFailedRenameRemovesTheFoldersItMadeForTheFile() throws {
+    let folders = try OrganizeFolders()
+    let old = try folders.file("library/song.flac", title: "Song")
+    try FileManager.default.createDirectory(
+        atPath: folders.library + "/Artist", withIntermediateDirectories: true)
+    try Data().write(to: URL(fileURLWithPath: folders.library + "/Artist/kept.txt"))
+    var calls = MoveCalls()
+    calls.renameExclusive = { _, _ in EIO }
+    let result = folders.organize([old], calls)
+    #expect(result.moved.isEmpty)
+    #expect(result.problems.count == 1)
+    #expect(!exists(folders.library + "/Artist/Album"))
+    #expect(exists(folders.library + "/Artist/kept.txt"))
+    #expect(exists(old))
+}

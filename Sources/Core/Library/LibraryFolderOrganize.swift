@@ -158,7 +158,8 @@ private func place(_ path: String, libraryFolder: String, resolvedLibrary librar
     return nfc(destination) == nfc(path) ? .inPlace : .move(destination)
 }
 
-/// Renames `path` to `destination`, making its folders; nil when it moved, else why not.
+/// Renames `path` to `destination`, making its folders; nil when it moved, else why not. The
+/// folders it made for a file that didn't move are removed while they're empty.
 private func rename(
     _ path: String, to destination: String, _ library: String, _ calls: MoveCalls
 ) -> String? {
@@ -167,6 +168,24 @@ private func rename(
         return notMoved(path, .outsideLibrary(parent))
     }
     if pathExists(destination) { return taken(path, destination) }
+    var made: [String] = []
+    var missing = parent
+    while !pathExists(missing), missing != "/" {
+        made.append(missing)
+        missing = parentOf(missing)
+    }
+    let problem = renameMaking(path, to: destination, library, calls)
+    if problem != nil {
+        // The deepest first; `rmdir` refuses one another move has put a file in since.
+        for folder in made where rmdir(folder) != 0 { break }
+    }
+    return problem
+}
+
+private func renameMaking(
+    _ path: String, to destination: String, _ library: String, _ calls: MoveCalls
+) -> String? {
+    let parent = parentOf(destination)
     do {
         try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
     } catch {
