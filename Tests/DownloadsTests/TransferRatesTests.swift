@@ -60,6 +60,19 @@ private func downloading(_ bytes: Int, of total: Int = 100 * mb, _ state: JobSta
     #expect(rates.rate(1, at: start + 131) == nil)
 }
 
+@Test func aReadingAfterASearchStallKeepsTheTrueSpeed() throws {
+    // slskd goes on downloading at 2 MB/s while the service's search holds its progress still
+    // for 70 s; the first reading after it has every byte slskd got meanwhile.
+    var rates = TransferRates()
+    for second in stride(from: 0, through: 10, by: 5) {
+        rates.take(
+            [downloading(second * 2 * mb, of: 1000 * mb)], at: start + TimeInterval(second))
+    }
+    rates.take([downloading(160 * mb, of: 1000 * mb)], at: start + 80)
+    let rate = try #require(rates.rate(1, at: start + 80))
+    #expect(rate.bytesPerSecond == 2 * Double(mb), "160 MB over 80 s")
+}
+
 @Test func theCopyIntoStagingStartsItsOwnReadings() throws {
     var rates = TransferRates()
     rates.take([downloading(0)], at: start)
