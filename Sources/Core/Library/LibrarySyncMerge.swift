@@ -363,18 +363,14 @@ extension LibraryIndex {
     /// it.
     private func absorbPlayCount(_ gone: Int64, into kept: Int64) throws {
         let offset = try statement(playCountOffsetSQL)
-        guard let goneOffset = try offset.map(gone, row: { try $0.int(0) }).first else {
-            return try deleteStamp(.playCount, gone)
+        let offsets: [Int?] = try [gone, kept].map { id in try offset.map(id) { try $0.int(0) }.first }
+        if let goneOffset = offsets[0] {
+            try statement(deletePlayCountOffsetSQL).run(gone)
+            try statement(setPlayCountOffsetSQL).run(kept, (offsets[1] ?? 0) + goneOffset)
         }
-        let keptOffset = try offset.map(kept, row: { try $0.int(0) }).first ?? 0
-        try statement(deletePlayCountOffsetSQL).run(gone)
-        try statement(setPlayCountOffsetSQL).run(kept, keptOffset + goneOffset)
-        if let goneStamp = try stamp(.playCount, gone),
-            try stamp(.playCount, kept).map({ goneStamp > $0 }) ?? true
-        {
-            try setStamp(.playCount, kept, goneStamp)
-        }
-        try deleteStamp(.playCount, gone)
+        // The offsets add rather than one winning, so only the clock is taken.
+        _ = try takesGone(
+            .playCount, gone, kept, goneHas: offsets[0] != nil, keptHas: offsets[1] != nil)
     }
 
     /// Whether `kept` takes `gone`'s value of `field`: the later change, or with no clock on
