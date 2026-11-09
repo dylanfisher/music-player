@@ -140,10 +140,15 @@ private func request(_ offset: Int) -> ArtRequest {
     #expect(RowArt.pixels(columnWidth: 2000) == RowArt.largestPixels)
 }
 
+/// The viewer fits art as large as the screen allows, centered, but never past its own size,
+/// except the art it opened with until the decode arrives.
 @MainActor @Test func theViewerFitsArtAsLargeAsTheScreenAllowsCentered() {
     let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
     #expect(
         ArtViewer.frame(of: CGSize(width: 300, height: 300), in: screen)
+            == CGRect(x: 570, y: 287.5, width: 300, height: 300))
+    #expect(
+        ArtViewer.frame(of: CGSize(width: 300, height: 300), in: screen, enlarging: true)
             == CGRect(x: 282.5, y: 0, width: 875, height: 875))
     #expect(
         ArtViewer.frame(of: CGSize(width: 4000, height: 1000), in: screen)

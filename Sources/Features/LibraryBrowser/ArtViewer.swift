@@ -3,11 +3,12 @@ import Artwork
 import KeyChord
 import Metadata
 
-/// An album's art opened over the whole screen, centered and as large as the screen allows,
-/// over a dimmed backdrop. It shows the art it opened with at once and replaces it with the art
-/// decoded off the main thread at the screen's pixels. When the file holds more than one
-/// picture, ← and → and the buttons at the sides step through them, stopping at either end,
-/// under a line saying which, "2 of 3 · Back Cover". A click anywhere else or Esc closes it, and
+/// An album's art opened over the whole screen, centered and as large as the screen allows but
+/// never past its own pixels, over a dimmed backdrop. It shows the art it opened with at once
+/// and replaces it with the art decoded off the main thread at the screen's pixels. When the
+/// file holds more than one picture, a strip of their thumbnails runs along the bottom, and a
+/// click on one, ← and → and the buttons at the sides step through them, stopping at either
+/// end, under a line saying which, "2 of 3 · Back Cover". A click anywhere else or Esc closes it, and
 /// so does the window it opened from closing or the app going to the background, since it
 /// floats above every window.
 @MainActor
@@ -40,6 +41,7 @@ final class ArtViewer {
         window.setFrame(screen.frame, display: false)
         view.close = { [weak self] in self?.close() }
         view.step = { [weak self] in self?.step(by: $0) }
+        view.choose = { [weak self] in self?.showPicture($0) }
         let center = NotificationCenter.default
         let closeOnMain: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
@@ -76,7 +78,9 @@ final class ArtViewer {
             let result = await loader.load(art, path: path)
             guard opening == session, window.isVisible else { return }
             switch result {
-            case .success(let image): view.image = NSImage(cgImage: image, size: .zero)
+            case .success(let image):
+                view.image = NSImage(cgImage: image, size: .zero)
+                view.isDecoded = true
             case .failure(let error): failed("couldn't open the art of \(path): \(error)")
             }
         }
@@ -122,8 +126,44 @@ final class ArtViewer {
             session += 1
             load(first.art, path: path, failed: failed)
         }
+        view.thumbnails = Array(repeating: nil, count: pictures.count > 1 ? pictures.count : 0)
         showPlace()
+        if pictures.count > 1 { loadThumbnails(path: path, failed: failed) }
     }
+
+    /// Decodes each picture for the strip off the main thread, one at a time.
+    @discardableResult
+    func loadThumbnails(path: String, failed: @escaping (String) -> Void) -> Task<Void, Never> {
+        let pixels = Int((ArtViewerView.thumbnailPoints * window.backingScaleFactor).rounded(.up))
+        let loader = ArtworkLoader(maxPixelSize: pixels, capacity: pictures.count)
+        let opening = session
+        let arts = pictures.map(\.art)
+        return Task {
+            for (index, art) in arts.enumerated() {
+                let result = await loader.load(art, path: path)
+                // A step changes the session; the strip is the file's, so only a close drops it.
+                guard window.isVisible, opening <= session, index < view.thumbnails.count else {
+                    return
+                }
+                switch result {
+                case .success(let image):
+                    view.thumbnails[index] = NSImage(cgImage: image, size: .zero)
+                case .failure(let error):
+                    failed("couldn't open picture \(index + 1) of \(path): \(error)")
+                }
+            }
+        }
+    }
+
+    /// Shows the picture at `index`, as a click on its thumbnail does.
+    func showPicture(_ index: Int) { step(by: index - shown) }
+
+    /// The strip's thumbnails as loaded, nil for one not yet; empty for one picture.
+    var thumbnails: [NSImage?] { view.thumbnails }
+    /// The strip's buttons, for tests.
+    var thumbnailButtons: [NSButton] { view.thumbnailButtons }
+    /// Where the art is drawn, for tests.
+    var imageFrame: CGRect { view.imageFrame }
 
     /// The image shown, for tests.
     var image: NSImage? { view.image }
@@ -149,6 +189,7 @@ final class ArtViewer {
         view.place = placeText
         view.canStepBack = shown > 0
         view.canStepForward = shown < pictures.count - 1
+        view.chosen = shown
     }
 
     func close() {
@@ -160,10 +201,13 @@ final class ArtViewer {
         closed()
     }
 
-    /// `image` scaled to the largest size that fits in `bounds`, centered in it.
-    static func frame(of image: CGSize, in bounds: CGRect) -> CGRect {
+    /// `image` scaled to the largest size that fits in `bounds`, centered in it. Unless
+    /// `enlarging`, as the art it opened with is until its decode arrives, never past its own
+    /// size: a point a pixel.
+    static func frame(of image: CGSize, in bounds: CGRect, enlarging: Bool = false) -> CGRect {
         guard image.width > 0, image.height > 0 else { return .zero }
-        let scale = min(bounds.width / image.width, bounds.height / image.height)
+        let fit = min(bounds.width / image.width, bounds.height / image.height)
+        let scale = enlarging ? fit : min(fit, 1)
         let size = CGSize(width: image.width * scale, height: image.height * scale)
         return CGRect(
             x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
@@ -177,23 +221,49 @@ private final class ArtViewerWindow: NSWindow {
 }
 
 /// Draws the art over a dimmed backdrop, inside the screen's visible area, and closes on a
-/// click or Esc. With several pictures, ← and → and the side buttons step, and a line under the
-/// art says which is shown.
+/// click or Esc. With several pictures, ← and → and the side buttons step, a strip of their
+/// thumbnails along the bottom shows one clicked, and a line between the art and the strip says
+/// which is shown.
 private final class ArtViewerView: NSView {
+    static let thumbnailPoints = 72.0
+    private static let inset = 24.0
+    /// The height the strip and the line take from the art, with their gaps.
+    private static let stripReserve = inset + thumbnailPoints + 12 + 22 + 12
+
     var image: NSImage? {
         didSet { needsDisplay = true }
     }
+    /// Whether `image` is the decode at the screen's pixels, which is never enlarged; the art
+    /// the viewer opened with is, until then.
+    var isDecoded = false
     var close: () -> Void = {}
     var step: (Int) -> Void = { _ in }
+    /// Called with the picture whose thumbnail was clicked.
+    var choose: (Int) -> Void = { _ in }
     var place: String {
         get { placeLabel.stringValue }
         set { placeLabel.stringValue = newValue }
     }
     var showsSteps = false {
         didSet {
-            for view in [placeLabel, backButton, forwardButton] { view.isHidden = !showsSteps }
+            for view in [placeLabel, backButton, forwardButton, strip] {
+                view.isHidden = !showsSteps
+            }
+            needsDisplay = true
         }
     }
+    /// The strip's images, nil until decoded; a button each.
+    var thumbnails: [NSImage?] = [] {
+        didSet { showThumbnails() }
+    }
+    /// The picture shown, whose thumbnail is marked.
+    var chosen = 0 {
+        didSet { showThumbnails() }
+    }
+    private let strip = NSStackView()
+    private var stripBottom: NSLayoutConstraint?
+    /// The strip's buttons, in the pictures' order.
+    private(set) var thumbnailButtons: [NSButton] = []
     var canStepBack: Bool {
         get { backButton.isEnabled }
         set { backButton.isEnabled = newValue }
@@ -210,15 +280,20 @@ private final class ArtViewerView: NSView {
         super.init(frame: frame)
         placeLabel.textColor = .white
         placeLabel.font = .systemFont(ofSize: NSFont.systemFontSize + 2, weight: .medium)
-        for view in [placeLabel, backButton, forwardButton] {
+        strip.spacing = 10
+        for view in [placeLabel, backButton, forwardButton, strip] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.isHidden = true
             addSubview(view)
         }
-        let inset = 24.0
+        let inset = Self.inset
+        let stripBottom = strip.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset)
+        self.stripBottom = stripBottom
         NSLayoutConstraint.activate([
+            strip.centerXAnchor.constraint(equalTo: centerXAnchor), stripBottom,
+            strip.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: inset),
             placeLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            placeLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
+            placeLabel.bottomAnchor.constraint(equalTo: strip.topAnchor, constant: -12),
             backButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
             backButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             forwardButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
@@ -245,19 +320,69 @@ private final class ArtViewerView: NSView {
 
     @objc private func stepClicked(_ sender: NSButton) { step(sender.tag) }
 
+    /// A button a thumbnail, the one shown marked by a white border; its click doesn't reach
+    /// the view's, which closes the viewer.
+    private func showThumbnails() {
+        while thumbnailButtons.count < thumbnails.count {
+            let button = NSButton(
+                title: "Picture \(thumbnailButtons.count + 1)", target: self,
+                action: #selector(thumbnailClicked))
+            button.tag = thumbnailButtons.count
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleProportionallyUpOrDown
+            button.wantsLayer = true
+            button.layer?.borderColor = NSColor.white.cgColor
+            button.widthAnchor.constraint(equalToConstant: Self.thumbnailPoints).isActive = true
+            button.heightAnchor.constraint(equalToConstant: Self.thumbnailPoints).isActive = true
+            thumbnailButtons.append(button)
+            strip.addArrangedSubview(button)
+        }
+        while thumbnailButtons.count > thumbnails.count {
+            thumbnailButtons.removeLast().removeFromSuperview()
+        }
+        for (index, button) in thumbnailButtons.enumerated() {
+            button.image = thumbnails[index]
+            button.layer?.borderWidth = index == chosen ? 2 : 0
+        }
+    }
+
+    @objc private func thumbnailClicked(_ sender: NSButton) { choose(sender.tag) }
+
     override var acceptsFirstResponder: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.black.withAlphaComponent(0.6).setFill()
         bounds.fill()
         guard let image else { return }
-        let visible = window?.screen.map { screen in
-            convert(window?.convertFromScreen(screen.visibleFrame) ?? bounds, from: nil)
-        }
         image.draw(
-            in: ArtViewer.frame(of: image.size, in: visible ?? bounds), from: .zero,
-            operation: .sourceOver, fraction: 1, respectFlipped: true,
-            hints: [.interpolation: NSImageInterpolation.high.rawValue])
+            in: imageFrame, from: .zero, operation: .sourceOver, fraction: 1,
+            respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+    }
+
+    /// The screen's visible area, which leaves out the menu bar and the Dock.
+    private var visibleArea: CGRect {
+        window?.screen.map { screen in
+            convert(window?.convertFromScreen(screen.visibleFrame) ?? bounds, from: nil)
+        } ?? bounds
+    }
+
+    /// Where the art is drawn: in the visible area, above the strip and its line when they
+    /// show.
+    var imageFrame: CGRect {
+        guard let image else { return .zero }
+        var area = visibleArea
+        if showsSteps {
+            area.origin.y += Self.stripReserve
+            area.size.height = max(0, area.height - Self.stripReserve)
+        }
+        return ArtViewer.frame(of: image.size, in: area, enlarging: !isDecoded)
+    }
+
+    override func layout() {
+        // The strip sits above the Dock, as the art does.
+        stripBottom?.constant = -(Self.inset + visibleArea.minY - bounds.minY)
+        super.layout()
     }
 
     override func mouseDown(with event: NSEvent) { close() }

@@ -133,3 +133,55 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     }
     if viewer.window.isVisible { #expect(viewer.image?.size.width == 10) }
 }
+
+/// A file of several pictures shows a thumbnail of each along the bottom, the art above them,
+/// and a click on one shows it; one picture has no strip (phase 66).
+@MainActor @Test func severalPicturesShowAStripOfThumbnails() async throws {
+    let url = try flacWithPictures([3, 4, 6])
+    let metadata = try readMetadata(at: url, pictures: true).metadata
+    let viewer = ArtViewer(
+        image: NSImage(size: NSSize(width: 10, height: 10)), screen: try #require(NSScreen.main),
+        owner: nil)
+    viewer.show()
+    defer { viewer.close() }
+    viewer.show(metadata.pictures, current: try #require(metadata.art), path: url.path) {
+        Issue.record("\($0)")
+    }
+    #expect(viewer.thumbnailButtons.count == 3)
+    let strip = try #require(viewer.thumbnailButtons.first?.superview)
+    viewer.window.contentView?.layoutSubtreeIfNeeded()
+    #expect(viewer.imageFrame.minY >= strip.frame.maxY, "the art is above the strip")
+    // Another test's posting that the app resigned active closes the viewer and drops the
+    // decodes, so they're waited for only while it's open.
+    try await waitFor("the thumbnails") {
+        !viewer.window.isVisible || viewer.thumbnails.allSatisfy { $0 != nil }
+    }
+    guard viewer.window.isVisible else { return }
+    #expect(viewer.thumbnails.map { $0?.size.width } == [10, 20, 30])
+    let button = viewer.thumbnailButtons[2]
+    button.sendAction(button.action, to: button.target)
+    #expect(viewer.placeText == "3 of 3 · Disc Label")
+
+    let single = try flacWithPictures([3])
+    let one = try readMetadata(at: single, pictures: true).metadata
+    viewer.show(one.pictures, current: try #require(one.art), path: single.path) {
+        Issue.record("\($0)")
+    }
+    #expect(viewer.thumbnailButtons.isEmpty)
+}
+
+/// The decoded art is drawn at most a point a pixel: a picture 10 pixels square stays 10
+/// points, though the art it opened with filled the screen.
+@MainActor @Test func theViewerDoesntEnlargeArtPastItsPixels() async throws {
+    let url = try flacWithPictures([3])
+    let art = try #require(try readMetadata(at: url, pictures: true).metadata.art)
+    let viewer = ArtViewer(
+        image: NSImage(size: NSSize(width: 4, height: 4)), screen: try #require(NSScreen.main),
+        owner: nil)
+    viewer.show()
+    defer { viewer.close() }
+    #expect(viewer.imageFrame.width > 4, "the opening art fills the screen until the decode")
+    await viewer.load(art, path: url.path) { Issue.record("\($0)") }.value
+    guard viewer.window.isVisible else { return }
+    #expect(viewer.imageFrame.size == CGSize(width: 10, height: 10))
+}
