@@ -136,15 +136,15 @@ package struct LibraryFolderMove: Sendable {
             guard size == file.sizeBytes else {
                 throw MoveRefusal.wrongSize(source, found: size, expected: file.sizeBytes)
             }
-            let tags: TrackTags
-            do {
-                tags = try readMetadata(at: URL(fileURLWithPath: source, isDirectory: false))
-                    .metadata.tags
+            let destination: String
+            do throws(LayoutProblem) {
+                destination = try layoutDestination(of: source, in: libraryFolder)
             } catch {
-                throw MoveRefusal.unreadable(source, "\(error)")
+                switch error {
+                case .unreadable(let detail): throw MoveRefusal.unreadable(source, detail)
+                case .unlisted(let detail): throw MoveRefusal.failed(source, libraryFolder, detail)
+                }
             }
-            let destination = try listedPath(
-                libraryFolderPath(for: tags, of: source), in: libraryFolder)
             let key = nfc(destination)
             if (pathExists(destination) && !replacing.contains(key)) || seen.contains(key) {
                 taken.append(destination)

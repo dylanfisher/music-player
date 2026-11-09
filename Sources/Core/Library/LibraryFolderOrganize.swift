@@ -112,18 +112,16 @@ private func place(_ path: String, libraryFolder: String, resolvedLibrary librar
     -> Place
 {
     guard let real = resolved(path), isPath(real, under: library) else { return .outside }
-    let tags: TrackTags
-    do {
-        tags = try readMetadata(at: URL(fileURLWithPath: path, isDirectory: false)).metadata.tags
-    } catch {
-        return .problem("\(path): not moved, its tags don't read: \(error)")
-    }
     let destination: String
-    do {
-        destination = try listedPath(
-            libraryFolderPath(for: tags, of: path), in: libraryFolder)
+    do throws(LayoutProblem) {
+        destination = try layoutDestination(of: path, in: libraryFolder)
     } catch {
-        return .problem("\(path): not moved, its folder can't be listed: \(error)")
+        switch error {
+        case .unreadable(let detail):
+            return .problem("\(path): not moved, its tags don't read: \(detail)")
+        case .unlisted(let detail):
+            return .problem("\(path): not moved, its folder can't be listed: \(detail)")
+        }
     }
     return nfc(destination) == nfc(path) ? .inPlace : .move(destination)
 }

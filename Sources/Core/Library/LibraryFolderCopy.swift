@@ -10,13 +10,15 @@ import Metadata
 public func copyIntoLibraryFolder(_ source: String, libraryFolder: String)
     throws(CopyError) -> String
 {
-    let tags: TrackTags
-    do {
-        tags = try readMetadata(at: URL(fileURLWithPath: source, isDirectory: false)).metadata.tags
+    let destination: String
+    do throws(LayoutProblem) {
+        destination = try layoutDestination(of: source, in: libraryFolder)
     } catch {
-        throw .unreadable(source, "\(error)")
+        switch error {
+        case .unreadable(let detail): throw .unreadable(source, detail)
+        case .unlisted(let detail): throw .failed(source, libraryFolder, detail)
+        }
     }
-    let destination = libraryFolder + "/" + libraryFolderPath(for: tags, of: source)
     do {
         try FileManager.default.createDirectory(
             atPath: (destination as NSString).deletingLastPathComponent,

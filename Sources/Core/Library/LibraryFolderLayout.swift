@@ -20,6 +20,33 @@ func libraryFolderPath(for tags: TrackTags, of source: String) -> String {
     return artist + "/" + album + "/" + fileName(stem: (number ?? "") + title, extension: ext)
 }
 
+/// Why a file has no place in the library folder.
+enum LayoutProblem: Error {
+    /// Its tags don't read.
+    case unreadable(String)
+    /// A folder on the way to its place can't be listed.
+    case unlisted(String)
+}
+
+/// Where the file at `source` goes in `libraryFolder` by its tags: `libraryFolderPath`, with
+/// each part already there named as its folder lists it (`listedPath`). Reads the file and
+/// lists folders, so call it off the main thread.
+func layoutDestination(of source: String, in libraryFolder: String) throws(LayoutProblem)
+    -> String
+{
+    let tags: TrackTags
+    do {
+        tags = try readMetadata(at: URL(fileURLWithPath: source, isDirectory: false)).metadata.tags
+    } catch {
+        throw .unreadable("\(error)")
+    }
+    do {
+        return try listedPath(libraryFolderPath(for: tags, of: source), in: libraryFolder)
+    } catch {
+        throw .unlisted("\(error)")
+    }
+}
+
 /// The most bytes a name may have: APFS and HFS+ take 255 in UTF-8.
 private let maxNameBytes = 255
 
