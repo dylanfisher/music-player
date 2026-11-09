@@ -8,8 +8,8 @@ private let logger = moduleLogger()
 /// Settings ▸ Library: each watched folder with its kind and how often it's rescanned, which a
 /// network folder's popup changes, buttons to add and remove one, and Rescan for the selected
 /// folders or Rescan All, from buttons or the table's context menu. Under them, the folders'
-/// settings in boxes, as Swinsian has its watched folders' settings, then the Library section
-/// with Show Library Health, the database and its snapshots.
+/// settings in boxes, as Swinsian has its watched folders' settings, then the Browsing and
+/// Database sections: Show Library Health, the database and its snapshots.
 @MainActor
 final class LibraryPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuItemValidation

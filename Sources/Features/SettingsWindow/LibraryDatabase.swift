@@ -1,7 +1,7 @@
 import DisplayText
 import Foundation
 
-/// The library index and its snapshots as the Library section shows them (ADR 0142), which the
+/// The library index and its snapshots as the Database section shows them (ADR 0142), which the
 /// app reads off the main actor each time the pane shows.
 public struct LibraryDatabase: Sendable, Equatable {
     /// One snapshot in the snapshot folder.

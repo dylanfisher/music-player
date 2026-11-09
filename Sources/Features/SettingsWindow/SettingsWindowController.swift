@@ -16,7 +16,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .playback: "Playback"
             case .appearance: AppSettings().appearance.title
             case .toolbar: "Toolbar"
-            case .library: GeneralModel.Section.library.title
+            case .library: "Library"
             case .tagging: "Tagging"
             case .shortcuts: "Shortcuts"
             }
@@ -29,7 +29,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .playback: [.output, .playCounts]
             case .appearance: [.theme, .trackTable]
             case .toolbar: [.titles, .toolbarStatus, .statusBar]
-            case .library: [.folderChanges, .networkFolders, .libraryFolder, .library]
+            case .library: [.folderChanges, .networkFolders, .libraryFolder, .browsing, .database]
             }
         }
 

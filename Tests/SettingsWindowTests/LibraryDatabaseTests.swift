@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import Fixtures
 import Foundation
 import Testing
@@ -51,7 +52,7 @@ private func settingsPane(
             revealIndex: revealIndex, backUpNow: backUpNow, restoreSnapshot: restore))
 }
 
-@MainActor @Test func theLibrarySectionShowsTheIndexAndItsSnapshots() async throws {
+@MainActor @Test func theDatabaseSectionShowsTheIndexAndItsSnapshots() async throws {
     var revealed = 0
     var restored: [LibraryDatabase.Snapshot] = []
     var backedUp = 0
@@ -89,7 +90,7 @@ private func settingsPane(
     #expect(pane.backUpButton?.isEnabled == true)
 }
 
-/// The snapshot list waits under a disclosure, closed at first, so the Library section stays
+/// The snapshot list waits under a disclosure, closed at first, so the Database section stays
 /// short; Last Snapshot and Back Up Now stay in view.
 @MainActor @Test func theSnapshotListIsUnderADisclosure() async throws {
     let pane = settingsPane()
@@ -113,6 +114,32 @@ private func settingsPane(
         ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(labels)
     }
     #expect(labels(pane.view).contains("Backups, beside the library"))
+}
+
+/// The pane ends with two boxes: Browsing, then Database, which has the index above the
+/// Snapshot Folder row and that above the snapshots.
+@MainActor @Test func theBrowsingBoxComesBeforeTheDatabaseBoxWithItsRowsInOrder() throws {
+    let pane = settingsPane()
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 700, height: 2000), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    window.contentViewController = pane
+    window.layoutIfNeeded()
+    let schema = AppSettings()
+    let expected = [
+        "Browsing", schema.groupByAlbumArtist.title, schema.separateReleases.title,
+        schema.fileViewer.title + ":", AppCommands.title(of: .checkHealth), "Database",
+        "Database:", schema.snapshotFolder.title + ":", "Last Snapshot:", "Snapshots:",
+    ]
+    func texts(_ view: NSView) -> [(String, CGFloat)] {
+        let own = (view as? NSTextField).map { [($0.stringValue, view.convert(view.bounds, to: nil).maxY)] }
+        let button = (view as? NSButton).map { [($0.title, view.convert(view.bounds, to: nil).maxY)] }
+        return (own ?? []) + (button ?? []) + view.subviews.flatMap(texts)
+    }
+    let found = texts(pane.view).filter { expected.contains($0.0) }.sorted { $0.1 > $1.1 }
+    #expect(found.map { $0.0 } == expected)
 }
 
 @Test func aSnapshotBeforeARestoreSaysSo() {

@@ -12,7 +12,7 @@
   sections, and the longest key prefix wins. [0067](0067-settings-layout-and-played-share.md):
   titled boxes, Sync and Network Folders sections, the longest prefix wins.
   [0168](0168-a-library-pane-in-settings.md): the Watched Folders pane becomes Settings ▸
-  Library, which takes the Library section from General too.
+  Library, which takes the Library section from General too, as Browsing and Database boxes.
 
 ## Context
 

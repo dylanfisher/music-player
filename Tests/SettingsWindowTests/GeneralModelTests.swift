@@ -294,7 +294,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(
         sections.map(\.section) == [
             .output, .playCounts, .sync, .receiver, .downloads, .folderChanges, .networkFolders,
-            .libraryFolder, .library, .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
+            .libraryFolder, .browsing, .database, .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
         ])
     #expect(
         sections.first { $0.section == .networkFolders }?.rows.map(\.key) == [
@@ -311,8 +311,13 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(
         sections.first { $0.section == .playCounts }?.rows.map(\.key) == [schema.playedPercent.key])
     #expect(
-        sections.first { $0.section == .library }?.rows.map(\.key).contains(
-            schema.separateReleases.key) == true)
+        sections.first { $0.section == .browsing }?.rows.map(\.key) == [
+            schema.groupByAlbumArtist.key, schema.separateReleases.key, schema.fileViewer.key,
+        ])
+    #expect(
+        sections.first { $0.section == .database }?.rows.map(\.key) == [
+            schema.snapshotFolder.key
+        ])
     func keys(_ section: GeneralModel.Section) -> [String] {
         sections.first { $0.section == section }?.rows.map(\.key) ?? []
     }
@@ -856,8 +861,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
     controller.window.close()
 }
 
-/// Settings ▸ Library has the watched folders, the folders' boxes and the Library section,
-/// with Show Library Health, the database and its snapshots; General has none of them.
+/// Settings ▸ Library has the watched folders, the folders' boxes, Browsing with Show Library
+/// Health, and Database with its snapshots; General has none of them.
 @MainActor @Test func theLibraryPaneHoldsTheFoldersAndTheLibrarySettings() async throws {
     let schema = AppSettings()
     let model = GeneralModel(
@@ -894,7 +899,7 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(
         tables(library).contains { $0.accessibilityLabel() == schema.watchedFolders.title })
     for title in extras { #expect(titles(library).contains(title), "\(title)") }
-    let boxes: [GeneralModel.Section] = [.folderChanges, .networkFolders, .libraryFolder, .library]
+    let boxes = GeneralModel.Section.allCases.filter(SettingsWindowController.Pane.library.sections.contains)
     #expect(
         labels(in: library).filter { label in boxes.contains { $0.title == label } }
             == boxes.map(\.title))
@@ -1084,7 +1089,7 @@ private func visibleLabels(in view: NSView) -> [String] {
     #expect(Set(buttons.map { $0.superview.map(ObjectIdentifier.init) }).count == 1)
 }
 
-@MainActor @Test func theLibrarySectionHasShowLibraryHealth() throws {
+@MainActor @Test func theBrowsingSectionHasShowLibraryHealth() throws {
     let schema = AppSettings()
     var stored: [String: Any] = [:]
     let model = GeneralModel(
@@ -1098,7 +1103,7 @@ private func visibleLabels(in view: NSView) -> [String] {
     #expect(button.title == AppCommands.title(of: .checkHealth))
     _ = button.target?.perform(button.action, with: button)
     #expect(shown == 1)
-    // Only the pane with the Library section has it.
+    // Only the pane with the Browsing section has it.
     let playback = GeneralPane(
         model: model, configPath: nil, actions: actions(),
         sections: SettingsWindowController.Pane.playback.sections)

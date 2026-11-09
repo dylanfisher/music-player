@@ -24,9 +24,9 @@ public struct SettingsActions {
     /// Starts a search for renderers, as the output picker opens; `reload` shows what it finds.
     public var searchOutputs: () -> Void
     public var chooseOutput: (OutputChoice) -> Void
-    /// Shows Library Health in the main window, from the Library section's button.
+    /// Shows Library Health in the main window, from the Browsing section's button.
     public var showHealth: () -> Void
-    /// The index's place and size and the snapshots, which the Library section shows.
+    /// The index's place and size and the snapshots, which the Database section shows.
     public var libraryDatabase: () async throws -> LibraryDatabase
     /// Shows the index's file in Finder.
     public var revealIndex: () -> Void

@@ -1,10 +1,10 @@
 import AppKit
 import DisplayText
 
-/// The Library section's list of snapshots: when each was written and its size, newest first.
+/// The Database section's list of snapshots: when each was written and its size, newest first.
 @MainActor
 final class SnapshotList: NSObject, NSTableViewDataSource, NSTableViewDelegate {
-    /// The list's name, which its disclosure in the Library section shows too.
+    /// The list's name, which its disclosure in the Database section shows too.
     static let title = "Snapshots"
     private static let writtenColumn = NSUserInterfaceItemIdentifier("snapshotTaken")
     private static let rowsShown = 5.0

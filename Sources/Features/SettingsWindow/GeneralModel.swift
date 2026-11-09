@@ -81,7 +81,7 @@ public final class GeneralModel {
         case output, playCounts
         case sync, receiver, downloads
         /// The Library pane's, under its watched folders list, as Swinsian has them.
-        case folderChanges, networkFolders, libraryFolder, library
+        case folderChanges, networkFolders, libraryFolder, browsing, database
         /// The Appearance pane's.
         case theme, trackTable
         /// The Toolbar pane's, in the window's order from its top.
@@ -93,7 +93,8 @@ public final class GeneralModel {
             switch self {
             case .output: "Audio Output"
             case .playCounts: "Play Counts"
-            case .library: "Library"
+            case .browsing: "Browsing"
+            case .database: "Database"
             case .sync: "Sync"
             case .receiver: "Receiver"
             case .downloads: "Downloads"
@@ -115,7 +116,10 @@ public final class GeneralModel {
             return switch self {
             case .output: ["output."]
             case .playCounts: ["playback."]
-            case .library: ["library."]
+            // `library.` is every library key's prefix, so a new one shows here until it's
+            // given a section.
+            case .browsing: ["library."]
+            case .database: [schema.snapshotFolder.key]
             case .sync: ["sync."]
             case .receiver: ["receiver."]
             case .downloads: ["recommender.", "import."]

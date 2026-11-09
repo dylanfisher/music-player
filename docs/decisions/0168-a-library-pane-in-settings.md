@@ -16,11 +16,16 @@ closing the Snapshots disclosure left an empty strip at the top of the window.
 
 - **Settings ▸ Library** takes the Watched Folders pane's place in the toolbar, with the
   `books.vertical` symbol. From the top: the watched folders list and its buttons, then Folder
-  Changes, Network Folders, Library Folder and Library, the box with the other `library.`
-  settings, Show Library Health, the database and the snapshots. The Watched Folders pane is
-  gone, and General keeps Sync, Receiver, Downloads and Other. The palette, the Watched
-  Folders… command and `--snapshot-of library` open it.
-- **The pane's title is the Library section's**, so the box and the pane share one name.
+  Changes, Network Folders and Library Folder, and two boxes at the bottom, Browsing and
+  Database. The Watched Folders pane is gone, and General keeps Sync, Receiver, Downloads and
+  Other. The palette, the Watched Folders… command and `--snapshot-of library` open it.
+- **Browsing and Database are two boxes**, where General's one Library box mixed browsing with
+  storage and put Snapshot Folder, a setting, away from the snapshot rows. Browsing has Group
+  by Album Artist, Separate Releases, File Viewer and Show Library Health. Database has the
+  database's path, size and Reveal, then Snapshot Folder, Last Snapshot with Back Up Now and the
+  Snapshots disclosure. Browsing claims the `library.` prefix, so a new `library.` setting shows
+  there until it's given a section; Database claims Snapshot Folder's key.
+- **The pane is titled Library**, as the toolbar and the window say it; no box has that name.
 - **A pane's window is resized after the layout pass**, on the next turn of the main queue.
   The pane's frame-change notice, which resizes the window, is posted from inside the window's
   layout pass; a window resized there ends with its scroll view at the old height plus the

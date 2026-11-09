@@ -681,7 +681,8 @@ disclosure) are added by any `GeneralPane` that shows `.library`; Snapshot Folde
 - 63.2 Rename (refactor): `FoldersPane` becomes `LibraryPane`, the file with it.
 - 63.3 The pane (feat): `Pane.folders` becomes `.library`, titled Library, symbol
   `books.vertical`, in the same toolbar place, with the sections Folder Changes, Network
-  Folders, Library Folder and Library, in that order (`Section` cases reordered to match).
+  Folders, Library Folder, Browsing and Database, in that order (`Section` cases reordered to
+  match; the owner split the Library box in two, ADR 0168).
   The palette's watched folders and Watched Folders… open it. `--snapshot-of folders` becomes
   `library` (`SnapshotTarget`, `AppDelegate`, README, main.swift's comment).
 - 63.4 Docs: ADR 0168, the amended-by lines of 0042 and 0017, README's two pane names.

@@ -56,13 +56,13 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     private var copiedGeneration = 0
     private var syncFolderLabel: NSTextField?
-    /// Show Library Health, in the Library section; nil in a pane without that section.
+    /// Show Library Health, in the Browsing section; nil in a pane without that section.
     private(set) var healthButton: NSButton?
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
     /// The folder rows' paths and buttons, by key.
     private var folderLabels: [String: NSTextField] = [:]
     private var folderButtons: [String: (change: NSButton, clear: NSButton)] = [:]
-    /// The Library section's database rows (ADR 0142), nil in a pane without that section.
+    /// The Database section's rows (ADR 0142), nil in a pane without that section.
     private(set) var indexPathLabel: NSTextField?
     private(set) var indexSizeLabel: NSTextField?
     private(set) var lastSnapshotLabel: NSTextField?
@@ -111,12 +111,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
 
     override func loadView() {
         let shown = model.sections.filter { sections.contains($0.section) }
-        let grids = shown.map { grid($0.rows) }
-        if let library = shown.firstIndex(where: { $0.section == .library }) {
-            addHealthRow(to: grids[library])
-            addIndexRow(to: grids[library])
-            addSnapshotRows(to: grids[library])
-        }
+        let grids = shown.map { grid($0.section, $0.rows) }
         // One label column width for every box, so the controls of all of them line up.
         let labelWidth =
             grids.flatMap { grid in
@@ -144,12 +139,16 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         reload()
     }
 
-    /// A section's rows, in a grid of a label column and a control column.
-    private func grid(_ rows: [GeneralModel.Row]) -> NSGridView {
+    /// A section's rows, in a grid of a label column and a control column. Browsing ends with
+    /// Show Library Health; Database starts with the index and ends with the snapshots.
+    private func grid(_ section: GeneralModel.Section, _ rows: [GeneralModel.Row]) -> NSGridView {
         let grid = NSGridView(numberOfColumns: 2, rows: 0)
         grid.rowSpacing = 10
         grid.columnSpacing = 8
+        if section == .database { addIndexRow(to: grid) }
         for row in rows { addRow(row, to: grid) }
+        if section == .browsing { addHealthRow(to: grid) }
+        if section == .database { addSnapshotRows(to: grid) }
         grid.column(at: 0).xPlacement = .trailing
         grid.rowAlignment = .firstBaseline
         return grid
@@ -263,7 +262,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         grid.addRow(with: [label, cell])
     }
 
-    /// Show Library Health's button, the last row of the Library section, with what it shows
+    /// Show Library Health's button, the last row of the Browsing section, with what it shows
     /// under it as a setting's summary is.
     private func addHealthRow(to grid: NSGridView) {
         let open = button(AppCommands.title(of: .checkHealth), #selector(showHealth))
@@ -284,7 +283,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
 
     @objc private func showHealth() { actions.showHealth() }
 
-    /// The index's path and size, and a button to show it in Finder, after Show Library Health.
+    /// The index's path and size, and a button to show it in Finder, at the top of the Database section.
     private func addIndexRow(to grid: NSGridView) {
         let path = NSTextField(labelWithString: "")
         path.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
@@ -303,7 +302,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let snapshotsKey = "library.snapshots"
 
     /// The last snapshot's time with Back Up Now, then a disclosure, closed at first, over the
-    /// snapshots with Restore…, which would make the Library section the pane's tallest.
+    /// snapshots with Restore…, which would make the Database section the pane's tallest.
     private func addSnapshotRows(to grid: NSGridView) {
         let last = NSTextField(wrappingLabelWithString: "")
         last.preferredMaxLayoutWidth = Self.summaryWidth
@@ -343,7 +342,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     /// Reads the index's size and the snapshots off the main actor and shows them; a pane
-    /// without the Library section reads nothing.
+    /// without the Database section reads nothing.
     func showDatabase() async {
         guard indexPathLabel != nil else { return }
         databaseReads += 1
