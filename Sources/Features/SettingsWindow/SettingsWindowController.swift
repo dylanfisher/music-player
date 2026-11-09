@@ -44,8 +44,8 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         }
     }
 
-    /// The name the window keeps its frame under.
-    static let frameName = "Settings"
+    /// The name the window keeps its frame under; its title is the pane's.
+    static let frameName = "Settings Window"
 
     public let window: NSWindow
     private let model: GeneralModel
