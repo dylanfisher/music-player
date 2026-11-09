@@ -90,7 +90,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     init(model: TaggerModel) {
         self.model = model
-        // The frame saved last, when there is one, replaces this size.
+        // The frame saved last, when there is one, replaces this size (ADR 0158).
         let window = NSWindow(
             contentRect: NSRect(
                 origin: .zero, size: Self.openingSize(within: NSScreen.main?.visibleFrame)),
@@ -98,7 +98,6 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         window.title = Self.title
         window.minSize = NSSize(width: 760, height: 460)
         window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName(Self.title)
         super.init(window: window)
         build(in: window)
         model.changed = { [weak self] in self?.refresh() }

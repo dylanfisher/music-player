@@ -1,6 +1,7 @@
 import AppKit
 import Library
 import Settings
+import WindowPlacement
 
 /// Listening Stats in the browser (ADR 0102): reading a period's report when Stats shows, and
 /// what its rows, bars and buttons do.
@@ -126,6 +127,7 @@ extension LibraryBrowser {
                     yearReview = window
                 }
                 window.show(report, year: year, ranking: statsModel.ranking)
+                window.window?.keepsFrame(as: YearReviewWindow.title)
                 window.showWindow(nil)
             } catch {
                 self.report("couldn't read the year in review: \(error)")

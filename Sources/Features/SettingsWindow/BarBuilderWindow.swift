@@ -2,6 +2,7 @@ import AppKit
 import DisplayText
 import Log
 import Settings
+import WindowPlacement
 
 private let logger = moduleLogger()
 
@@ -109,7 +110,7 @@ final class BarBuilderWindow: NSObject {
     }
 
     func showWindow() {
-        if !window.isVisible { window.center() }
+        window.keepsFrame(as: "Bar Builder: \(model.key)")
         window.makeKeyAndOrderFront(nil)
     }
 

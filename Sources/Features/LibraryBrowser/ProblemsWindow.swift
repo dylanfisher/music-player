@@ -1,4 +1,5 @@
 import AppKit
+import WindowPlacement
 
 /// Every folder the watcher couldn't scan, every file with a stored warning or failure, and
 /// what the health check shown and the last import found, a row each, with buttons for what
@@ -56,12 +57,12 @@ final class ProblemsWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate
         window.isReleasedWhenClosed = false
         // A panel hides with the app by default; the list stays up while the owner checks Finder.
         window.hidesOnDeactivate = false
-        window.center()
     }
 
     /// Lists `problems` and brings the window forward.
     func show(_ problems: [Problem]) {
         update(problems)
+        window.keepsFrame(as: window.title)
         window.makeKeyAndOrderFront(nil)
     }
 

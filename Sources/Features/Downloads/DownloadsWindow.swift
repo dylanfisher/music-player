@@ -75,7 +75,6 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         window.title = Self.title
         window.minSize = NSSize(width: 720, height: 300)
         window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName(Self.title)
         super.init(window: window)
         window.delegate = self
         build(in: window)

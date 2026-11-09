@@ -3,6 +3,7 @@ import Commands
 import Fixtures
 import Foundation
 import Testing
+import WindowPlacement
 
 @testable import Settings
 @testable import SettingsWindow
@@ -744,6 +745,29 @@ private func waitFor(_ condition: () -> Bool) async throws {
     let playback = try #require(controller.window.contentViewController?.view)
     #expect(keys(playback).isSuperset(of: [schema.hogMode.key, schema.playedPercent.key]))
     controller.window.close()
+}
+
+/// Settings opens with its top left where it was left at the last launch, at the height of the
+/// pane it shows (ADR 0158), and keeps the place it's moved to.
+@MainActor @Test func theSettingsWindowOpensWhereItWasLeft() throws {
+    let screen = try #require(NSScreen.main?.visibleFrame)
+    let saved = CGRect(x: screen.minX + 40, y: screen.maxY - 540, width: 640, height: 500)
+    PlacedWindows.shared.frames[SettingsWindowController.frameName] = saved
+    let model = GeneralModel(
+        settings: AppSettings().settings, searcherInstalled: true, value: { _ in nil },
+        set: { _, _ in }, isBlocked: { false })
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
+    let controller = SettingsWindowController(
+        general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
+        configPath: "/tmp/config.json", actions: actions())
+    controller.show(.shortcuts)
+    defer { controller.window.close() }
+    #expect(controller.window.frame.minX == saved.minX)
+    #expect(controller.window.frame.maxY == saved.maxY)
+    controller.window.setFrameTopLeftPoint(NSPoint(x: saved.minX + 30, y: saved.maxY - 20))
+    let kept = try #require(PlacedWindows.shared.frames[SettingsWindowController.frameName])
+    #expect(kept.minX == saved.minX + 30 && kept.maxY == saved.maxY - 20)
 }
 
 @MainActor @Test func thePaletteOpensTheWatchedFoldersPaneOrTheConfigFile() throws {

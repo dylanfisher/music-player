@@ -1,4 +1,4 @@
-/// Where the main window sits on screen, in AppKit screen coordinates (origin bottom left).
+/// Where a window sits on screen, in AppKit screen coordinates (origin bottom left).
 public struct WindowFrame: SettingValue {
     public var x: Double
     public var y: Double

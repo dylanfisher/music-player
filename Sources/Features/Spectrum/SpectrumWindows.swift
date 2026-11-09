@@ -1,6 +1,7 @@
 import Analysis
 import AppKit
 import Library
+import WindowPlacement
 
 /// The open Spectrum windows: Show Spectrum opens one for the files it's given, each analyzed
 /// through `analyze`, and the window's closing cancels what it hasn't finished.
@@ -26,7 +27,8 @@ public final class SpectrumWindows {
         if let last = open.last?.window {
             window.setFrameTopLeftPoint(window.cascadeTopLeft(from: last.frame.topLeft))
         } else {
-            window.center()
+            // The first keeps its frame (ADR 0158); the rest cascade from the last one open.
+            window.keepsFrame(as: SpectrumWindow.title)
         }
         open.append(controller)
         controller.showWindow(nil)

@@ -6,6 +6,7 @@ import Log
 import Metadata
 import Recommender
 import Settings
+import WindowPlacement
 
 private let logger = moduleLogger()
 
@@ -225,12 +226,12 @@ package final class Downloads {
 
     // MARK: - The window
 
-    /// Shows the window, making it the first time.
+    /// Shows the window, making it the first time, where it was left (ADR 0158).
     package func show() {
         let controller = self.controller ?? makeWindow()
         if self.controller == nil {
             self.controller = controller
-            controller.window?.center()
+            controller.window?.keepsFrame(as: DownloadsWindow.title)
         }
         refresh()
         controller.showWindow(nil)

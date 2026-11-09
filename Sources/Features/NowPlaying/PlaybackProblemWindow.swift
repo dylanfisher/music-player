@@ -3,6 +3,7 @@ import DisplayText
 import Foundation
 import Log
 import Playback
+import WindowPlacement
 
 private let logger = moduleLogger()
 
@@ -67,12 +68,12 @@ public final class PlaybackProblemWindow: NSObject {
         window.isReleasedWhenClosed = false
         // A panel hides with the app by default; the details stay up while the owner files a report.
         window.hidesOnDeactivate = false
-        window.center()
     }
 
     /// Shows `report` and brings the window forward, then reads the log lines into it.
     public func show(_ report: ProblemReport) {
         show(report, logLines: nil)
+        window.keepsFrame(as: window.title)
         window.makeKeyAndOrderFront(nil)
         let read = readLog
         Task {

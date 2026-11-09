@@ -32,7 +32,6 @@ final class YearReviewWindow: NSWindowController {
             defer: false)
         window.minSize = NSSize(width: 420, height: 400)
         window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName(Self.title)
         super.init(window: window)
         build(in: window)
     }

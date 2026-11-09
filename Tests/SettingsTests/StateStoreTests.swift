@@ -268,6 +268,27 @@ private func problems(_ json: String) -> [SettingProblem] {
         ])
 }
 
+/// The other windows' frames are an object by window name in the state file (ADR 0158).
+@Test func eachWindowsFrameSurvivesAReload() throws {
+    let url = temporaryFile()
+    let settings = try StateStore(AppState(), fileURL: url)
+    #expect(settings[\.windowFrames] == WindowFrames())
+    let frames = WindowFrames([
+        "Settings": WindowFrame(x: 1600, y: 300, width: 640, height: 500),
+        "Downloads": WindowFrame(x: 1700, y: 100, width: 1100, height: 480),
+    ])
+    try settings.set(\.windowFrames, to: frames)
+    #expect(try StateStore(AppState(), fileURL: url)[\.windowFrames] == frames)
+    let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+    let saved = (json?["window.frames"] as? [String: Any])?["Settings"] as? [String: Double]
+    #expect(saved == ["x": 1600, "y": 300, "width": 640, "height": 500])
+    #expect(throws: SettingsError.self) {
+        try settings.set(
+            \.windowFrames,
+            to: WindowFrames(["Tagger": WindowFrame(x: 0, y: 0, width: 0, height: 5)]))
+    }
+}
+
 @Test func windowLayoutSurvivesAReloadAndRejectsBadValues() throws {
     let url = temporaryFile()
     let settings = try StateStore(AppState(), fileURL: url)

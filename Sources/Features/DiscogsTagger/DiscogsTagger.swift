@@ -6,6 +6,7 @@ import Metadata
 import Recommender
 import Settings
 import TagWriter
+import WindowPlacement
 
 /// The Discogs tagger (phase 51): a window, opened like Year in Review, that matches library
 /// albums to releases in the local catalog and writes their tags once the user has reviewed
@@ -175,7 +176,7 @@ public final class DiscogsTagger {
             controller.showWindow(nil)
         } else {
             let made = makeWindow()
-            made.window?.center()
+            made.window?.keepsFrame(as: TaggerWindow.title)
             made.showWindow(nil)
         }
         let scoped = model.scopeToSelection()

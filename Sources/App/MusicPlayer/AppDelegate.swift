@@ -26,6 +26,7 @@ import Snapshot
 import TagEditor
 import TagWriter
 import UPnPOutput
+import WindowPlacement
 
 private let logger = moduleLogger()
 
@@ -246,6 +247,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Every other window opens where it was left, or centered on the main window's screen,
+    /// and its frame goes to the state file as it changes (ADR 0158).
+    private func keepWindowFrames(_ state: StateStore<AppState>, _ saver: LayoutSaver) {
+        let placed = PlacedWindows.shared
+        placed.frames = state[\.windowFrames].frames.mapValues {
+            CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
+        }
+        placed.framesChanged = { frames in
+            saver.set(
+                \.windowFrames,
+                WindowFrames(
+                    frames.mapValues {
+                        WindowFrame(
+                            x: $0.minX, y: $0.minY, width: $0.width, height: $0.height)
+                    }))
+        }
+        placed.anchor = { [weak self] in self?.window?.window }
+    }
+
     /// The file of the track the engine has loaded.
     var currentTrackPath: String? {
         playback.currentIndex.map { playback.queue[$0].path }
@@ -258,6 +278,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.state = state
         let saver = LayoutSaver(state)
         self.saver = saver
+        keepWindowFrames(state, saver)
         let layout = WindowSettings(settings, state: state)
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
         // Before any connection opens the index, which a restore replaces (ADR 0142).

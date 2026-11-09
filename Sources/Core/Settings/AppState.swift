@@ -7,6 +7,10 @@ public struct AppState: SettingsSchema {
     public let windowFrame = Setting<WindowFrame?>(
         "window.frame", title: "Window Frame", default: nil,
         "Where the main window was. Null centers it.")
+    public let windowFrames = Setting(
+        "window.frames", title: "Window Frames", default: WindowFrames(),
+        "Where each other window was, by name. A window not listed opens centered on the main"
+            + " window's screen.")
     /// What the window's sizes accept, in points, so the window never saves one that won't load.
     public static let sidebarWidthRange = 100...600
     public static let browserHeightRange = 0...2000

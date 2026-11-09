@@ -1,6 +1,7 @@
 import AppKit
 import Commands
 import Settings
+import WindowPlacement
 
 /// The Settings window: one window with a toolbar of panes, General, Playback, Appearance,
 /// Toolbar, Watched Folders and Shortcuts. Made on first use and kept.
@@ -43,6 +44,9 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         }
     }
 
+    /// The name the window keeps its frame under.
+    static let frameName = "Settings"
+
     public let window: NSWindow
     private let model: GeneralModel
     private let actions: SettingsActions
@@ -52,7 +56,6 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private let toolbarPane: GeneralPane
     private let folders: FoldersPane
     private let shortcuts: ShortcutsPane
-    private var centered = false
 
     public init(
         general: GeneralModel, shortcuts: ShortcutsModel, configPath: String,
@@ -85,13 +88,10 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         select(.general)
     }
 
-    /// Brings the window forward at `pane`, centered the first time.
+    /// Brings the window forward at `pane`, where it was left the first time (ADR 0158).
     public func show(_ pane: Pane = .general) {
         select(pane)
-        if !centered {
-            window.center()
-            centered = true
-        }
+        window.keepsFrame(as: Self.frameName)
         window.makeKeyAndOrderFront(nil)
     }
 
