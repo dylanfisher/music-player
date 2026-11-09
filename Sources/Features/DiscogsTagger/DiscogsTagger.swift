@@ -180,7 +180,9 @@ public final class DiscogsTagger {
 
     /// Shows the window, checking the catalog the first time. With tracks selected in the
     /// library, it's scoped to their albums and, with a catalog in place and Local Catalog the
-    /// source, analyzes them at once. The API is never asked without a click on Analyze.
+    /// source, analyzes them at once. The API is never asked without a click on Analyze. A
+    /// staged job's tagger analyzes its one album when it first opens, so it opens on the
+    /// album's tier, or says why it can't.
     public func show() {
         let opening = controller == nil
         if let controller {
@@ -190,12 +192,16 @@ public final class DiscogsTagger {
             made.window?.keepsFrame(as: TaggerWindow.title)
             made.showWindow(nil)
         }
-        let scoped = model.scopeToSelection()
+        let scoped = model.isStaged ? opening : model.scopeToSelection()
         guard opening || scoped else { return }
         Task {
             if opening { await model.checkCatalog() }
-            if scoped, model.source == .catalog, model.canAnalyze { model.analyze() }
-
+            guard scoped, model.source == .catalog else { return }
+            if model.canAnalyze {
+                model.analyze()
+            } else if model.isStaged {
+                model.failed("The staged album wasn't analyzed", [model.catalogProblem])
+            }
         }
     }
 

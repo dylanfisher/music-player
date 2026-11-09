@@ -85,6 +85,15 @@ extension TaggerModel {
 
     var isStaged: Bool { staged != nil }
 
+    /// Why Analyze can't start, for a staged job's tagger that opens unable to.
+    var catalogProblem: String {
+        switch catalog {
+        case .missing: "there's no Discogs catalog on this Mac"
+        case .unusable(let why): "the Discogs catalog can't be used: \(why)"
+        case .checking, .ready: "the tagger is busy"
+        }
+    }
+
     /// Writes the plan through the staged writer, then reads the files back: clean when the
     /// mapping would change nothing but what the owner unticked, else a discrepancy. A write
     /// that fails reports nothing, and Apply can try again.

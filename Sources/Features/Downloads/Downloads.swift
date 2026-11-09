@@ -434,8 +434,15 @@ package final class Downloads {
         case .revealInFinder: reveal(job, session)
         case .openInTagger:
             guard let coordinator = session.coordinator else { return }
+            let heading = "\(row.album) can't open in the tagger"
+            let catalog = session.canTag ? session.setup.catalog : nil
             Task {
-                guard let staged = await coordinator.stagedJob(job) else { return }
+                if let refusal = await Self.taggerRefusal(job, catalog: catalog) {
+                    return alert(heading, [refusal])
+                }
+                guard let staged = await coordinator.stagedJob(job) else {
+                    return alert(heading, ["music-recommender hasn't staged its files"])
+                }
                 let root: String
                 do {
                     root = try await session.setup.places().stagingRoot
@@ -452,6 +459,31 @@ package final class Downloads {
                         await session.model.poll()
                     }
                 }
+            }
+        }
+    }
+
+    /// Why `job` can't open in the tagger, or nil when it can: it needs one staged folder, the
+    /// format the service downloaded, and its release in the catalog at `catalog`, nil on a Mac
+    /// without one. Reads the catalog off the main thread.
+    nonisolated static func taggerRefusal(_ job: DownloadJob, catalog: URL?) async -> String? {
+        guard let path = job.stagedPath else {
+            return "music-recommender hasn't said where it staged the files"
+        }
+        guard job.stagedFolder != nil else { return DownloadJob.notOneFolder(path) }
+        guard job.candidate != nil else {
+            return "music-recommender hasn't said what format it downloaded"
+        }
+        guard let catalog else { return "this Mac has no Discogs catalog to tag with" }
+        let release = job.release.releaseID
+        return await blockingFileWork { () -> String? in
+            do {
+                guard try Catalog(at: catalog).release(id: release) != nil else {
+                    return ReleaseSnapshot.Problem.notInCatalog(releaseID: release).description
+                }
+                return nil
+            } catch {
+                return "the Discogs catalog couldn't be read: \(error)"
             }
         }
     }

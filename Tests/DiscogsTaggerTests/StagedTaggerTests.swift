@@ -213,3 +213,26 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     tagger.chooseSource(.api)
     #expect(tagger.source == .catalog)
 }
+
+/// Open in Tagger shows the staged album analyzed, on its tier's tab, so a discrepancy can be
+/// fixed at once; a catalog that can't be used is said, not left as an empty window.
+@MainActor @Test func aStagedTaggerAnalyzesItsAlbumWhenItOpens() async throws {
+    let tagger = DiscogsTagger(model: await stagedTagger(StagedFiles(bonusAlbum)) { _ in })
+    tagger.show()
+    try await eventually { tagger.model.albums.count == 1 && !tagger.model.isBusy }
+    #expect(tagger.model.tab == .likely)
+    #expect(tagger.model.selectedID == -1)
+    tagger.window?.close()
+
+    let missing = DiscogsTagger(
+        model: await stagedTagger(StagedFiles(bonusAlbum), catalog: .missing) { _ in })
+    var failures: [[String]] = []
+    missing.show()
+    // After the window, which sets its own, and before the check the show starts answers.
+    missing.model.failed = { message, details in failures.append([message] + details) }
+    try await eventually { !failures.isEmpty }
+    #expect(
+        failures == [["The staged album wasn't analyzed", "there's no Discogs catalog on this Mac"]])
+    #expect(missing.model.albums.isEmpty)
+    missing.window?.close()
+}
