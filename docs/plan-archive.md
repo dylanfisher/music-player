@@ -1,65 +1,99 @@
 
 
-### 61. Tagging preferences in Settings
+### 59. Downloads
 
-- [x] **Editor:** the tagging preferences now set only in `config.json` (suffixes to drop,
-      formats, the mappings) get an editor in Settings. Secrets stay out of it (AGENTS.md).
+Some items change the service (`~/projects/music-recommender`, edited on mbp2021, where it
+runs; restart it after) and its `docs/api.md` with it.
 
-Implementation plan, phase 61 (ADR 0165):
+- [x] **Copy into staging:** a downloaded job shows "Copying to staging, 5 of 14 files" from
+      the `progress` the service already sends with `downloaded`, and "Copying to staging…"
+      before the copy starts.
+- [x] **Speed and ETA** for downloading and copying jobs, from successive `progress` bytes.
+      Computed only while the window or the status item shows it.
+- [x] **Search state over time:** a long search says more than "Searching": the attempt, when
+      the next search runs, and whatever else the service can report (a service change if
+      needed).
+- [x] **Open with a selection:** opening Downloads with library rows selected opens the From
+      Library sheet for them.
+- [x] **Reveal in Finder** for a staged or approved job.
+- [x] **Open in slskd:** a command that opens slskd's web page, at an address the service
+      reports (a service change).
+- [x] **Status bar item:** while a download is in progress, an item at the bottom right of the
+      status bar; a click opens Downloads, a right-click picks its style (count, label,
+      progress bar).
+- [x] **Approve sheet:** redone calmer, with the same views the app uses elsewhere for the
+      same data (DRY).
 
-What exists, found by search (map.md recipes): the tagger reads `discogs.mapping`,
-`discogs.savedMappings`, `discogs.keepExistingValues`, `discogs.skipVideo`,
-`discogs.fillSortArtist`, `discogs.artwork`, `discogs.dumpsFolder`, `discogs.catalogPath` and
-`discogs.token` (`AppSettings`). All but the mapping's parts are shown somewhere: the tagger's
-window and its Field Mapping sheet (`MappingSheet`, `MappingDraft`) show the four choices, each
-field's mode, tags, join and template, and save and remove named mappings; the Discogs window
-picks the dumps folder. What only `config.json` sets is each rule's `format` (`names`,
-`suffixes`, `repeats`, `date`, `credits` per tag format) and a tag spelled per format or
-numbered. The tie-break's preferred formats, edition and later-pressing words
-(`Core/Discogs/TieBreak.swift`) are constants, not settings. `ConfigStore.set(key:json:)`
-decodes and checks a value as the file's is, then patches only that key's text, written at mode
-0600; an edit in the file reaches `SettingsWindowController.reload` through `changed`.
+Implementation plan, phase 59 (ADR 0163). The service's half shipped first (its ADR 0014):
+`downloads/config` sends `slskd_url`, a job sends `search` while `searching`, and a
+`not_found` job's `reason` stays through its next search.
 
-- 61.1 Core (`Settings`, `Discogs`): the modes' titles move from `TaggerTitles` to
-  `DiscogsFieldRule.Mode`; `DiscogsFieldFormat` names what a part left out writes, which
-  `MappedValue` and the date's render read; the format's choices are `CaseIterable`;
-  `DiscogsTarget(names:numbered:)` reads a target's spellings as the file reads its string, and
-  `MappingDraft` and the decoder use it.
-- 61.2 `TaggingModel` (`Features/SettingsWindow`, no AppKit): the mapping in use as a draft, each
-  field a key with its rule as the value; edits to the mode, the tags (add, remove, edit each
-  format's spelling, numbered), join, template and each format part; the problem from
-  `discogs.mapping`'s own `value(fromText:)`; Save through the model's `set`, Revert, and a
-  reload that takes the file's value unless the draft is edited.
-- 61.3 `TaggingPane` and `Pane.tagging`: a table of each field, by its title (`Discogs`'s
-  `DiscogsField.title`) with its key as the tooltip, and its rule, the selected rule's form
-  under it, the problem line, Revert and Save; `show(setting:)` opens it for the mapping;
-  `--snapshot-of tagging`.
-- 61.4 Tests: the model's edits and problems; the pane's table, form and Save; over a real
-  `ConfigStore`, both secrets byte for byte after a save at mode 0600, and an edit in the file
-  shown.
+What exists, found by search (map.md recipes):
 
-Order: 61.1, 61.2, 61.3, 61.4 with each, then the ADR.
+- `Recommender.DownloadJob` decodes the job strictly, every key required; it has no `search`.
+  The client has no `config` route. `DownloadsService` holds the calls as closures.
+- `DownloadsModel` polls every 2 s while the window is open and a job moves, else every
+  60 s from launch to quit (the coordinator tags and imports off those polls). Nothing in the
+  status bar hears it.
+- `DownloadRow.state` words a state; `downloaded` is a bare "Downloaded", and `progress` is
+  read only while `downloading`.
+- The status bar is `LibraryBrowser`'s: its trailing stack ends with the problems button.
+- The tagger's tables (`taggerTable`), Library Problems and the Downloads window and Queue
+  sheet use one table look: alternating rows, full width, a bezeled scroll view. The Approve
+  sheet alone shows its data as monospaced text views.
+- File > Downloads… runs `showDownloads`, which calls `Downloads.show()`.
 
-Result, phase 61: shipped (ADR 0165). Settings has a Tagging pane, after Watched Folders, for
-`discogs.mapping`, the mapping in use: each field by its title with its config.json key as the
-tooltip, and the selected rule's mode, tags (one column per format's spelling, numbered or
-not), join, template, and each format part (names, number suffixes, repeats, date, credits per
-format) that before only config.json could set. A draft is checked by the setting's own reader
-and saved through `ConfigStore.set(key:json:)`, which patches only the mapping at mode 0600; a
-test keeps both fake tokens byte for byte. A blocked file keeps the draft and says so. The
-tie-break's formats and edition words stay constants (ADR 0131), not settings. The Field
-Mapping sheet and the pane share the rule edits, `PerTagFormat.isUniform` and
-`DiscogsTarget.text`. Gate: one correctness and one simplify review, no correctness defects,
-5 findings fixed in 7 commits; `theGlassHeadersAreFrosted` fails as in every agent session, and
-`importColumnLayoutShowsAndSavesSwinsiansColumns` took 11 s under load and passed alone in
-0.4 s. Cost: implementer about 330k tokens, 162 tool calls, 43 min; reviewers 151k tokens, 27
-calls, 3 min.
+Parts, each its own commit or two, with a test that fails without it:
 
-Owner steps: Settings > Tagging, titles with the key as tooltip; on "artist" set Number Suffixes
-to drop "(2)" and Save, then check config.json changed only in `discogs.mapping` and `stat -f
-%Lp config.json` prints 600; clear Genres' join, see why Save is off, Revert; edit the mapping
-in an editor with the pane open, then again over an edited draft and see the note; break
-config.json and see the pane keep its draft; save with the tagger open and see it pick up the
-change; the pane on mbp2015.
+1. **Contract.** `DownloadJob.Search` (strict, as the rest), the fixture updated;
+   `DownloadsConfig` and `RecommenderClient.downloadsConfig()`, whose `slskdURL` puts the
+   service's own host in place of a loopback one, keeping scheme and port.
+2. **State words** in `DownloadRow.state`: the query, its number of the count, peers and
+   files while searching; the attempt and the last miss when searching again; when a
+   `not_found` job searches next, or that only Retry starts one; "Copying to staging…" and
+   "Copying to staging, 5 of 14 files" for `downloaded`, with its progress bar.
+3. **Speed and ETA:** `TransferRates`, pure, fed by the model with its own receive times
+   while the window is open only; a reading is kept when its bytes change, the speed is the
+   bytes over the time across the last 6, a stalled reading holds its last speed for 120 s
+   and then shows none, never 0 B/s. Tests with an injected clock.
+4. **Polling pace:** 2 s while the window is open and a job moves; 5 s while the status
+   bar shows and a job is on its way; 60 s otherwise, as before.
+5. **Status bar item:** `DownloadsStatusItem` in Downloads, put after the problems button
+   by a new `LibraryBrowser.setStatusAccessory`; shown while a job is queued, searching or
+   downloading; a click opens Downloads; a right-click picks its style, the setting
+   `appearance.downloadsStatusStyle` (count, text, progress bar), declared in `Settings`.
+6. **Open with a selection:** File > Downloads… with library rows selected opens From
+   Library Selection once the window can queue; a selection with no Discogs album opens
+   nothing.
+7. **Reveal in Finder** (staged through importing, and failed after staging) and **Open
+   in slskd** (the window's bar, from the config route, fetched when the window opens).
+8. **Approve sheet:** a table of the files (file, where it goes, the lossy-origin check)
+   and for an upgrade a table of the old files with a box for each with no new file, in the
+   tables' shared look (`NSTableView.inListScrollView`, the tagger's too), a single
+   line of warnings and blockers above the buttons.
+
+Result, phase 59: shipped all eight items (ADR 0163, 0145 amended), on the service's new
+`search` object and `slskd_url` (music-recommender 3478991 and 5e624ae, its ADR 0014, deployed
+on mbp2021). States read "Searching, query 1 of 2: 14 peers, 389 files", "Not found: …;
+searching again …", "Copying to staging…" and "Copying to staging, 5 of 14 files"; the window
+adds "· 2.4 MB/s, about 3 min left", averaged over six readings by this Mac's receive time,
+held through a stall for 120 s and never 0 B/s, and only while the window is open. Polling is
+2 s with the window open, 5 s with the status item showing, 60 s otherwise. The status item
+(count, text or progress bar, `appearance.downloadsStatusStyle`) opens the window; a
+right-click picks the style. File > Downloads… with a selection offers it in From Library
+Selection. Reveal in Finder takes only a single folder name under staging, as Approve and
+tagging now do. Open slskd strips credentials and query and puts the service's host for a
+loopback one. The Approve sheet and the tagger share one table helper in DisplayText. Gate:
+one correctness and one simplify review; 4 of 6 correctness findings real and fixed, 2 shown
+not real with tests; `theGlassHeadersAreFrosted` fails as in every agent session. Cost:
+implementer about 440k tokens, 392 tool calls, 72 min; reviewers 153k tokens, 24 calls, 2 min;
+the service half 160k tokens, 57 calls, 9 min. The service's deploy wiped its job history
+(three finished jobs).
+
+Owner steps: a real download end to end, watching the State words, the speed through another
+job's search, and the copy; the status item, its click and its three styles over a relaunch,
+and polling back to 60 s with the status bar hidden; File > Downloads… with tracks selected;
+Reveal in Finder on a staged job; Open slskd opens mbp2021's address; Approve… on a new album
+and an upgrade; the toolbar at 960 points; anything left under `staging/job-2`.
 
 
