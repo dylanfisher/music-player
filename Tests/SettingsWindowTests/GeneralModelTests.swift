@@ -294,7 +294,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(
         sections.map(\.section) == [
             .output, .playCounts, .sync, .receiver, .downloads, .folderChanges, .networkFolders,
-            .libraryFolder, .browsing, .database, .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
+            .libraryFolder, .browsing, .database, .theme, .trackTable, .titles, .toolbarStatus,
+            .statusBar,
         ])
     #expect(
         sections.first { $0.section == .networkFolders }?.rows.map(\.key) == [
@@ -899,7 +900,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(
         tables(library).contains { $0.accessibilityLabel() == schema.watchedFolders.title })
     for title in extras { #expect(titles(library).contains(title), "\(title)") }
-    let boxes = GeneralModel.Section.allCases.filter(SettingsWindowController.Pane.library.sections.contains)
+    let boxes = GeneralModel.Section.allCases.filter(
+        SettingsWindowController.Pane.library.sections.contains)
     #expect(
         labels(in: library).filter { label in boxes.contains { $0.title == label } }
             == boxes.map(\.title))

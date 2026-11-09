@@ -134,8 +134,12 @@ private func settingsPane(
         "Database:", schema.snapshotFolder.title + ":", "Last Snapshot:", "Snapshots:",
     ]
     func texts(_ view: NSView) -> [(String, CGFloat)] {
-        let own = (view as? NSTextField).map { [($0.stringValue, view.convert(view.bounds, to: nil).maxY)] }
-        let button = (view as? NSButton).map { [($0.title, view.convert(view.bounds, to: nil).maxY)] }
+        let own = (view as? NSTextField).map {
+            [($0.stringValue, view.convert(view.bounds, to: nil).maxY)]
+        }
+        let button = (view as? NSButton).map {
+            [($0.title, view.convert(view.bounds, to: nil).maxY)]
+        }
         return (own ?? []) + (button ?? []) + view.subviews.flatMap(texts)
     }
     let found = texts(pane.view).filter { expected.contains($0.0) }.sorted { $0.1 > $1.1 }
