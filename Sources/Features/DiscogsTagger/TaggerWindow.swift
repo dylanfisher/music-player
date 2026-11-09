@@ -90,10 +90,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     init(model: TaggerModel) {
         self.model = model
+        // The frame saved last, when there is one, replaces this size.
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1060, height: 700),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
-            defer: false)
+            contentRect: NSRect(
+                origin: .zero, size: Self.openingSize(within: NSScreen.main?.visibleFrame)),
+            styleMask: Self.styleMask, backing: .buffered, defer: false)
         window.title = Self.title
         window.minSize = NSSize(width: 760, height: 460)
         window.isReleasedWhenClosed = false
@@ -108,6 +109,19 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+
+    /// The content size the window first opens at: wide enough for the tabs' labels with
+    /// five-figure counts and both tables, and no larger than the screen's `visible` frame.
+    static func openingSize(within visible: NSRect?) -> NSSize {
+        let wanted = NSSize(width: 1400, height: 760)
+        guard let visible else { return wanted }
+        let room = NSWindow.contentRect(forFrameRect: visible, styleMask: styleMask).size
+        return NSSize(width: min(wanted.width, room.width), height: min(wanted.height, room.height))
+    }
+
+    private static let styleMask: NSWindow.StyleMask = [
+        .titled, .closable, .miniaturizable, .resizable,
+    ]
 
     // MARK: - Layout
 
@@ -204,6 +218,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         releaseLine.lineBreakMode = .byTruncatingTail
         reasonsLine.textColor = .systemOrange
         reasonsLine.lineBreakMode = .byTruncatingTail
+        // A long release or list of reasons truncates; at the default resistance it would widen
+        // the window past the screen and hold it there against a drag.
+        for label in [releaseTitle, releaseLine, reasonsLine] {
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
         revealButton.isHidden = true
         reviewButtons.setViews([otherReleasesButton, changesButton, rejectButton], in: .leading)
         reviewButtons.setViews([discogsButton], in: .trailing)

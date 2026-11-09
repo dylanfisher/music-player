@@ -825,3 +825,39 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     #expect(tagger.applicable(.matched).map(\.id) == [1])
     controller.window?.close()
 }
+
+@MainActor
+@Test func aLongReleaseLineTruncatesSoTheWindowStillResizes() async throws {
+    let controller = TaggerWindow(model: await analyzed())
+    let window = try #require(controller.window)
+    let long = String(repeating: "A long reason · ", count: 40)
+    for label in [controller.releaseTitle, controller.releaseLine, controller.reasonsLine] {
+        label.stringValue = long
+    }
+    window.layoutIfNeeded()
+    // As a drag leaves it: Auto Layout puts the frame back when the content can't fit it.
+    for size in [NSSize(width: 900, height: 500), NSSize(width: 1700, height: 950)] {
+        window.setFrame(NSRect(origin: .zero, size: size), display: false)
+        window.layoutIfNeeded()
+        #expect(window.frame.size == size)
+        #expect(window.contentView?.frame.width == size.width)
+    }
+    window.close()
+}
+
+@MainActor
+@Test func theWindowOpensWideEnoughForTheTabsWhereTheScreenHasRoom() async throws {
+    let wide = TaggerWindow.openingSize(within: NSRect(x: 0, y: 0, width: 2560, height: 1415))
+    #expect(wide == NSSize(width: 1400, height: 760))
+    let small = NSRect(x: 0, y: 25, width: 1280, height: 695)
+    let fitted = TaggerWindow.openingSize(within: small)
+    #expect(fitted.width == 1280)
+    #expect(fitted.height < small.height)
+
+    let controller = TaggerWindow(model: await analyzed())
+    for index in MatchTier.allCases.indices {
+        controller.tabs.setLabel("\(MatchTier.allCases[index].title) (12,345)", forSegment: index)
+    }
+    #expect(controller.tabs.fittingSize.width < wide.width - 28, "the page's margins")
+    controller.window?.close()
+}
