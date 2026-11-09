@@ -8,7 +8,7 @@ import Testing
 @testable import TagWriter
 
 private func track(_ path: String, plays: Int?, readOnly: String? = nil) -> EditableTrack {
-    EditableTrack(path: path, tags: TrackTags(), art: nil, readOnly: readOnly, playCount: plays)
+    EditableTrack(path: path, tags: TrackTags(), pictures: [], readOnly: readOnly, playCount: plays)
 }
 
 /// The Plays field shows the count the tracks share, "Mixed" where they differ, and goes to
@@ -86,7 +86,7 @@ private func makeEditing(_ seen: Seen, confirm: Bool = true) -> TagEditing {
     let editing = TagEditing(
         effects: .init(
             read: { paths, _ in
-                (paths.map { EditableTrack(path: $0, tags: TrackTags(), art: nil) }, [])
+                (paths.map { EditableTrack(path: $0, tags: TrackTags(), pictures: []) }, [])
             },
             write: { files, _, _ in
                 var report = TagWriteReport()

@@ -10,7 +10,7 @@ import Testing
 private func track(_ name: String, release: String?) -> EditableTrack {
     var tags = TrackTags()
     tags.custom[DiscogsKey.releaseID] = release
-    return EditableTrack(path: "/music/\(name).flac", tags: tags, art: nil)
+    return EditableTrack(path: "/music/\(name).flac", tags: tags, pictures: [])
 }
 
 private let stockholm = ReleaseDetail(

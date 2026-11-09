@@ -26,7 +26,7 @@ private func track(_ name: String, _ change: (inout TrackTags) -> Void) -> Edita
     var tags = TrackTags()
     tags.title = name
     change(&tags)
-    return EditableTrack(path: "/music/\(name).flac", tags: tags, art: nil)
+    return EditableTrack(path: "/music/\(name).flac", tags: tags, pictures: [])
 }
 
 @Test func theNewFieldsShowSharedOrMixedAndOnlyEditedOnesAreSaved() throws {
@@ -68,7 +68,7 @@ private func track(_ name: String, _ change: (inout TrackTags) -> Void) -> Edita
     let file = FileFacts(
         audio: audio, sizeBytes: 1_250_000, tagScheme: "Vorbis comment",
         modified: Date(timeIntervalSince1970: 0), created: Date(timeIntervalSince1970: 0))
-    let one = EditableTrack(path: "/music/a.flac", tags: TrackTags(), art: nil, file: file)
+    let one = EditableTrack(path: "/music/a.flac", tags: TrackTags(), pictures: [], file: file)
     #expect(FileRow.format.text(one) == "FLAC")
     #expect(FileRow.sampleRate.text(one) == "96 kHz")
     #expect(FileRow.bitDepth.text(one) == "24-bit")

@@ -11,7 +11,7 @@ private func track(_ name: String, album: String?, number: Int?, art: Data? = ni
     tags.title = name
     tags.album = album
     tags.trackNumber = number
-    return EditableTrack(path: "/music/\(name).flac", tags: tags, art: art)
+    return EditableTrack(path: "/music/\(name).flac", tags: tags, pictures: frontCovers(art))
 }
 
 @Test func sharedValuesShowAndDifferingOnesAreMixed() {

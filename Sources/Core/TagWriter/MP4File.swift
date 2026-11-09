@@ -231,7 +231,8 @@ struct MP4File {
             }
             let item = MP4Box(type: mp4CoverItemType, body: body)
             ilst.children!.removeAll { $0.type == mp4CoverItemType }
-            ilst.children!.insert(item, at: min(index ?? ilst.children!.count, ilst.children!.count))
+            ilst.children!.insert(
+                item, at: min(index ?? ilst.children!.count, ilst.children!.count))
         case .replace(let image, let mimeType):
             let data = dataAtom(mimeType == pngMIMEType ? 14 : 13, Array(image))
             guard let index else {

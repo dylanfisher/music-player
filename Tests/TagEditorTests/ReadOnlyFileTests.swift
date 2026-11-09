@@ -54,7 +54,7 @@ private func track(_ path: String, title: String, readOnly: String? = nil, art: 
 {
     var tags = TrackTags()
     tags.title = title
-    return EditableTrack(path: path, tags: tags, art: art, readOnly: readOnly)
+    return EditableTrack(path: path, tags: tags, pictures: frontCovers(art), readOnly: readOnly)
 }
 
 private let dsfRefusal = "Tags in DSF files can't be written yet"

@@ -20,7 +20,7 @@ private let fixtureLibrary = Result { () throws -> (URL, FixtureManifest) in
 
 /// A copy, in a folder of its own, of the library's first well-formed tagged file in
 /// `container` with tags in `format`.
-private func fixture(_ container: FixtureFile.Container, _ format: FixtureFile.TagFormat) throws
+func fixture(_ container: FixtureFile.Container, _ format: FixtureFile.TagFormat) throws
     -> URL
 {
     let (root, manifest) = try fixtureLibrary.get()
@@ -78,7 +78,7 @@ private func track(
             created: Date(timeIntervalSince1970: 0))
     }
     return EditableTrack(
-        path: "/music/\(name).flac", tags: tags, art: nil, file: file, readOnly: readOnly)
+        path: "/music/\(name).flac", tags: tags, pictures: [], file: file, readOnly: readOnly)
 }
 
 /// A key shows its value only where every file has it and they agree.

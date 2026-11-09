@@ -49,9 +49,17 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         checkboxWithTitle: TagEditField.compilation.title, target: nil, action: nil)
     let tabs = NSTabView()
     private let artView = NSImageView()
-    private let largeArtView = NSImageView()
+    let largeArtView = NSImageView()
     private let artNote = NSTextField(labelWithString: "")
-    private let artDetails = NSTextField(labelWithString: "")
+    let artDetails = NSTextField(labelWithString: "")
+    /// The Artwork tab's pictures, with + and − under them.
+    let artworkList = ArtworkList()
+    let addPictureButton = NSButton()
+    let removePictureButton = NSButton()
+    /// Asks for images to add to the Artwork tab, then calls back with them and the files that
+    /// couldn't be read; not called when the user cancels.
+    var choosePictures: (@escaping ([(data: Data, mimeType: String)], [String]) -> Void) -> Void =
+        { _ in }
     /// The buttons that run a registry command, each with its command.
     private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
@@ -113,6 +121,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             defer: false)
         super.init()
         askExtraKey = { [weak self] in self?.askForExtraKey($0) }
+        choosePictures = { [weak self] in self?.askForPictures($0) }
         window.isReleasedWhenClosed = false
         window.title = heading
         window.delegate = self
@@ -241,6 +250,38 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     func removeArt() {
         model?.removeArt()
+        showArt()
+        clearSaveError()
+    }
+
+    /// Adds images to the Artwork tab's list, and says on the window's line which files
+    /// couldn't be.
+    func addPictures(_ images: [(data: Data, mimeType: String)], problems: [String] = []) {
+        guard model?.canSave == true else { return }
+        if !images.isEmpty {
+            model?.addPictures(images)
+            showArt()
+            clearSaveError()
+        }
+        if !problems.isEmpty {
+            showNote(problems.joined(separator: "; "), color: .systemRed)
+            showsSaveError = true
+            NSSound.beep()
+        }
+    }
+
+    /// − on the Artwork tab: takes the selected pictures out of the list.
+    @objc func removeSelectedPictures() {
+        let selected = artworkList.table.selectedRowIndexes
+        guard model?.canSave == true, !selected.isEmpty else { return }
+        model?.removePictures(at: selected)
+        artworkList.table.deselectAll(nil)
+        showArt()
+        clearSaveError()
+    }
+
+    func setPictureType(_ type: PictureType, at index: Int) {
+        model?.setPictureType(type, at: index)
         showArt()
         clearSaveError()
     }
@@ -547,14 +588,71 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         }
     }
 
+    /// Every picture in a list, with + and − under it, beside the selected one, or the front
+    /// cover, large, and Replace and Remove.
     private func artworkView() -> NSView {
         artDetails.textColor = .secondaryLabelColor
         artDetails.isSelectable = true
-        let stack = NSStackView(views: [largeArtView, artDetails, artButtons(size: .regular)])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 10
+        artDetails.lineBreakMode = .byTruncatingTail
+        let shown = NSStackView(views: [largeArtView, artDetails, artButtons(size: .regular)])
+        shown.orientation = .vertical
+        shown.alignment = .centerX
+        shown.spacing = 10
+
+        let list = artworkList
+        list.added = { [weak self] in self?.addPictures($0, problems: $1) }
+        list.typeChosen = { [weak self] in self?.setPictureType($0, at: $1) }
+        list.selectionChanged = { [weak self] in self?.showArt() }
+        let scroll = NSScrollView()
+        scroll.borderType = .bezelBorder
+        scroll.hasVerticalScroller = true
+        scroll.documentView = list.table
+        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
+        scroll.heightAnchor.constraint(equalToConstant: Self.largeArtPoints).isActive = true
+        for (button, image, action) in [
+            (addPictureButton, NSImage.addTemplateName, #selector(addPicturesClicked)),
+            (removePictureButton, NSImage.removeTemplateName, #selector(removeSelectedPictures)),
+        ] {
+            button.bezelStyle = .smallSquare
+            button.image = NSImage(named: image)
+            button.target = self
+            button.action = action
+            button.isEnabled = false
+        }
+        addPictureButton.toolTip = "Add images to every file; you can also drop or paste them"
+        removePictureButton.toolTip = "Remove the selected pictures from every file"
+        let pictures = NSStackView(views: [
+            scroll, NSStackView(views: [addPictureButton, removePictureButton]),
+        ])
+        pictures.orientation = .vertical
+        pictures.alignment = .leading
+        pictures.spacing = 0
+        scroll.widthAnchor.constraint(equalTo: pictures.widthAnchor).isActive = true
+
+        let stack = NSStackView(views: [pictures, shown])
+        stack.alignment = .top
+        stack.spacing = 16
         return stack
+    }
+
+    @objc private func addPicturesClicked() {
+        choosePictures { [weak self] in self?.addPictures($0, problems: $1) }
+    }
+
+    /// The open panel + shows, for images of any kind; a JPEG or PNG is added as it is and any
+    /// other is converted to PNG.
+    private func askForPictures(
+        _ answer: @escaping ([(data: Data, mimeType: String)], [String]) -> Void
+    ) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose images to add to every file's artwork."
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK else { return }
+            let (images, problems) = pictureImages(at: panel.urls)
+            answer(images, problems)
+        }
     }
 
     /// The release id over the release's text, and Open on Discogs.
@@ -836,23 +934,33 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private func showArt() {
         guard let model else { return }
         let art = model.shownArt
+        artworkList.isEditable = model.canSave
+        artworkList.show(model.shownPictures)
+        // The Artwork tab shows the picture selected in its list, else the one players show.
+        let large = artworkList.selected.map { artworkList.pictures[$0].image } ?? art
         // A Retina screen draws two pixels a point.
-        for (view, points) in [(artView, Self.artPoints), (largeArtView, Self.largeArtPoints)] {
+        for (view, image, points) in [
+            (artView, art, Self.artPoints), (largeArtView, large, Self.largeArtPoints),
+        ] {
             view.image =
-                art
+                image
                 .flatMap { thumbnail(of: $0, maxPixelSize: Int(points) * 2) }
                 .map { NSImage(cgImage: $0, size: .zero) }
         }
         artNote.stringValue =
             switch model.art {
             case .replaced: "New artwork"
+            case .pictures: "Artwork edited"
             case .removed: "Artwork removed"
             case .unchanged:
                 model.isArtMixed ? mixedPlaceholder : art == nil ? "No artwork" : ""
             }
         artDetails.stringValue =
-            art.map(imageDescription)
+            large.map(imageDescription)
             ?? (artNote.stringValue.isEmpty ? "No artwork" : artNote.stringValue)
+        addPictureButton.isEnabled = model.canSave
+        removePictureButton.isEnabled =
+            model.canSave && !artworkList.table.selectedRowIndexes.isEmpty
         commandsChanged()
     }
 
@@ -1008,7 +1116,7 @@ private func readOnlyText() -> NSTextView {
 }
 
 /// "JPEG, 700 × 700, 126 KB": the image's type, pixels and size.
-private func imageDescription(_ data: Data) -> String {
+func imageDescription(_ data: Data) -> String {
     guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
         return fileSizeText(data.count)
     }

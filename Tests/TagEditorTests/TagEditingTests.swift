@@ -62,7 +62,7 @@ private final class Seen: @unchecked Sendable {
 private func editable(_ path: String, title: String? = nil) -> EditableTrack {
     var tags = TrackTags()
     tags.title = title
-    return EditableTrack(path: path, tags: tags, art: nil)
+    return EditableTrack(path: path, tags: tags, pictures: [])
 }
 
 private typealias Read =
@@ -715,7 +715,7 @@ private final class FakeJournal: @unchecked Sendable {
     let editing = makeEditing(
         seen,
         read: { paths, _ in
-            (paths.map { EditableTrack(path: $0, tags: TrackTags(), art: Data([1, 2, 3])) }, [])
+            (paths.map { EditableTrack(path: $0, tags: TrackTags(), pictures: frontCovers(Data([1, 2, 3]))) }, [])
         })
     // The registry's rule for Undo Tag Edit, with the main window open or closed; the art
     // commands' rules are the editor's own.
@@ -760,7 +760,7 @@ private final class FakeJournal: @unchecked Sendable {
             (
                 paths.map {
                     EditableTrack(
-                        path: $0, tags: TrackTags(), art: $0 == "/art.flac" ? Data([1]) : nil)
+                        path: $0, tags: TrackTags(), pictures: frontCovers($0 == "/art.flac" ? Data([1]) : nil))
                 }, []
             )
         })
@@ -812,7 +812,7 @@ private final class FileTitles: @unchecked Sendable {
                     var tags = TrackTags()
                     tags.title = titles.current
                     tags.artist = "Artist"
-                    return EditableTrack(path: $0, tags: tags, art: nil)
+                    return EditableTrack(path: $0, tags: tags, pictures: [])
                 }, []
             )
         },

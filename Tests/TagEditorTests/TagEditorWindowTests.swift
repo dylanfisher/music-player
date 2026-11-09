@@ -11,7 +11,7 @@ private func track(_ path: String, title: String? = nil, release: String? = nil)
     var tags = TrackTags()
     tags.title = title
     tags.custom[DiscogsKey.releaseID] = release
-    return EditableTrack(path: path, tags: tags, art: nil)
+    return EditableTrack(path: path, tags: tags, pictures: [])
 }
 
 /// The window opens laid out as it stays: every tab's label fits, and filling in the fields,

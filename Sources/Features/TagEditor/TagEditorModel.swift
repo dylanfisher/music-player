@@ -9,7 +9,9 @@ import TagWriter
 package struct EditableTrack: Equatable, Sendable {
     var path: String
     var tags: TrackTags
-    var art: Data?
+    /// Every picture it embeds, in its order. MP4's have no types, so its first reads as the
+    /// front cover and the rest as Other.
+    var pictures: [ArtPicture]
     /// Fields whose frame or item holds several values, of which the editor shows the first.
     var multiValued: Set<TagEditField>
     /// What the File tab shows; nil when not read, as in tests.
@@ -22,12 +24,13 @@ package struct EditableTrack: Equatable, Sendable {
     var playCount: Int?
 
     init(
-        path: String, tags: TrackTags, art: Data?, multiValued: Set<TagEditField> = [],
-        file: FileFacts? = nil, readOnly: String? = nil, playCount: Int? = nil
+        path: String, tags: TrackTags, pictures: [ArtPicture],
+        multiValued: Set<TagEditField> = [], file: FileFacts? = nil, readOnly: String? = nil,
+        playCount: Int? = nil
     ) {
         self.path = path
         self.tags = tags
-        self.art = art
+        self.pictures = pictures
         self.multiValued = multiValued
         self.file = file
         self.readOnly = readOnly
@@ -51,8 +54,11 @@ struct FileFacts: Equatable, Sendable {
 public struct TagEditorModel: Equatable, Sendable {
     public enum Art: Equatable, Sendable {
         case unchanged
+        /// Replace Artwork…: the front cover, the files' other pictures kept.
         case replaced(Data, mimeType: String)
         case removed
+        /// The Artwork tab's list, edited: every picture each file is to hold.
+        case pictures([ArtPicture])
     }
 
     private(set) var tracks: [EditableTrack]
@@ -181,25 +187,46 @@ public struct TagEditorModel: Equatable, Sendable {
             + " file\(files == 1 ? "" : "s"). Saving keeps only the value shown."
     }
 
-    /// The art to show: the new art, none once removed, or the tracks' art when they share it.
-    var shownArt: Data? {
+    /// The pictures every track holds, or nil when they differ.
+    private var sharedPictures: [ArtPicture]? {
+        let first = tracks[0].pictures
+        return tracks.dropFirst().allSatisfy { $0.pictures == first } ? first : nil
+    }
+
+    /// The pictures the Artwork tab lists: the tracks' when they share them, none when mixed,
+    /// and as edited once they are. A replaced front cover takes the place of the picture
+    /// shown, as the writer puts it.
+    var shownPictures: [ArtPicture] {
         switch art {
-        case .replaced(let image, _): image
-        case .removed: nil
-        case .unchanged: isArtMixed ? nil : tracks[0].art
+        case .unchanged: return sharedPictures ?? []
+        case .removed: return []
+        case .pictures(let pictures): return pictures
+        case .replaced(let image, let mimeType):
+            let front = ArtPicture(image: image, mimeType: mimeType, type: .frontCover)
+            var pictures = sharedPictures ?? []
+            guard let index = shownIndex(pictures) else { return [front] }
+            pictures[index] = front
+            return pictures
         }
     }
 
-    var isArtMixed: Bool {
-        art == .unchanged && tracks.dropFirst().contains { $0.art != tracks[0].art }
+    /// The art to show: the front cover, else the first picture; nil for none or mixed.
+    var shownArt: Data? { shownIndex(shownPictures).map { shownPictures[$0].image } }
+
+    /// Where the picture players show is in `pictures`: the front cover, else the first.
+    private func shownIndex(_ pictures: [ArtPicture]) -> Int? {
+        pictures.firstIndex { $0.type == .frontCover } ?? (pictures.isEmpty ? nil : 0)
     }
+
+    var isArtMixed: Bool { art == .unchanged && sharedPictures == nil }
 
     /// Whether Remove Artwork would change anything.
     public var canRemoveArt: Bool {
         switch art {
         case .replaced: true
         case .removed: false
-        case .unchanged: writable.contains { $0.art != nil }
+        case .pictures(let pictures): !pictures.isEmpty
+        case .unchanged: writable.contains { !$0.pictures.isEmpty }
         }
     }
 
@@ -208,6 +235,38 @@ public struct TagEditorModel: Equatable, Sendable {
     }
 
     public mutating func removeArt() { art = .removed }
+
+    /// Adds images after the pictures listed, the first a front cover when none is listed,
+    /// the rest Other until a type is chosen. Added to mixed art, they become every file's
+    /// only pictures.
+    mutating func addPictures(_ images: [(data: Data, mimeType: String)]) {
+        var pictures = shownPictures
+        for image in images {
+            let type: PictureType =
+                pictures.contains { $0.type == .frontCover } ? .other : .frontCover
+            pictures.append(ArtPicture(image: image.data, mimeType: image.mimeType, type: type))
+        }
+        setPictures(pictures)
+    }
+
+    mutating func removePictures(at indices: IndexSet) {
+        let pictures = shownPictures.enumerated().filter { !indices.contains($0.offset) }
+        setPictures(pictures.map(\.element))
+    }
+
+    mutating func setPictureType(_ type: PictureType, at index: Int) {
+        var pictures = shownPictures
+        guard pictures.indices.contains(index), pictures[index].type != type else { return }
+        pictures[index].type = type
+        setPictures(pictures)
+    }
+
+    /// The list edited to `pictures`: no edit when the tracks hold just those already.
+    private mutating func setPictures(_ pictures: [ArtPicture]) {
+        art =
+            pictures == sharedPictures
+            ? .unchanged : pictures.isEmpty ? .removed : .pictures(pictures)
+    }
 
     /// The edit to write: every field and Extras key typed differently from what it showed, the
     /// Extras keys deleted, and the art. Throws for a value some writable track can't take,
@@ -236,6 +295,7 @@ public struct TagEditorModel: Equatable, Sendable {
             case .unchanged: nil
             case .replaced(let image, let mimeType): .replace(image, mimeType: mimeType)
             case .removed: .remove
+            case .pictures(let pictures): .pictures(pictures)
             }
         let edit = TagEdit(values: values, custom: custom, art: artChange)
         for track in writable { _ = try edit.applied(to: track.tags) }
@@ -427,10 +487,15 @@ private final class ReadResults: @unchecked Sendable {
 package func readEditableTrack(_ path: String) throws -> EditableTrack {
     do throws(ParseFailure) {
         let source = try FileSource(path: path)
-        let reader = ByteReader(source)
+        let reader = ByteReader(source, keepsPictures: true)
         let parsed = try parse(reader)
-        let art = try parsed.metadata.art.map { art throws(ParseFailure) in
-            try readArt(art, from: source)
+        var pictures: [ArtPicture] = []
+        for picture in parsed.metadata.pictures {
+            let type = picture.type ?? (pictures.isEmpty ? .frontCover : .other)
+            pictures.append(
+                ArtPicture(
+                    image: try readArt(picture.art, from: source),
+                    mimeType: picture.art.mimeType, type: type))
         }
         let facts = try editorTagFacts(
             in: reader, hasTags: !parsed.metadata.tags.isEmpty || parsed.metadata.art != nil)
@@ -439,7 +504,8 @@ package func readEditableTrack(_ path: String) throws -> EditableTrack {
             audio: parsed.metadata.audio, sizeBytes: reader.size, tagScheme: facts.tagScheme,
             modified: source.modified, created: source.created)
         return EditableTrack(
-            path: path, tags: parsed.metadata.tags, art: art, multiValued: facts.multiValued,
+            path: path, tags: parsed.metadata.tags, pictures: pictures,
+            multiValued: facts.multiValued,
             file: file, readOnly: facts.readOnly)
     } catch {
         throw error.error(path: path)
