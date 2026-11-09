@@ -655,6 +655,50 @@ in the AGENTS.md boundary".
 - [ ] **Organize Selected Files:** the same for selected tracks already in the library folder.
 - [ ] **ADR and AGENTS.md boundary** for the new move.
 
+Implementation plan, phase 60 (ADR 0160):
+
+What exists, found by search (map.md recipes): the layout is `libraryFolderPath` in
+`Core/Library/LibraryFolderLayout.swift`; Approve's renames are `LibraryFolderMove` (private
+`rename` with the `RENAME_EXCL` fallback, `asListed`, `checkDestination`, over `MoveCalls`);
+the move list is `LibraryIndex.importMoves(_:)`, reached through
+`LibraryWatcher.importMoves(lines:)`. Tag writes and undos run one at a time on
+`TagEditing`'s write queue and report through `written`; the undo journal
+(`TagUndoJournal`) keys each file's record by its path, with the edited file's size, mtime and
+inode. Problems rows come from `LibraryStatus`'s reports, filled by `LibraryBrowser.finish`.
+
+- 60.1 Shared rename (refactor): `LibraryFolderMove`'s exclusive rename, its case-preserving
+  path and its library check become file-level functions in `LibraryFolderMove.swift`, which
+  Approve and the organizer both call. Approve's behavior and tests don't change.
+- 60.2 The organizer (`Core/Library/LibraryFolderOrganize.swift`): `planOrganizing` and
+  `organizeFiles` take paths and the library folder. A file outside it (links followed) is
+  skipped and listed; one already at its path is left; one whose path is taken, or on another
+  volume (`EXDEV`), is skipped and listed, never copied. Folders a move leaves empty are
+  removed with `rmdir`, up to but never the library folder itself; a folder still holding
+  other files (cover art) stays, and is listed when no audio is left in it. Returns
+  `FilesOrganized` with the moves as `TrackMove`s (made public).
+- 60.3 The journal follows (`TagWriter.follow(_:)`, `TagUndoJournal`): every record of a
+  moved path takes the new path, and the one whose edited size and mtime match the file takes
+  its identity there, since an SMB rename may renumber the inode. Undo Tag Edit then finds it.
+- 60.4 Setting `library.keepFilesOrganized` (`AppSettings`), in the Library Folder box; the
+  box's folder row is on while either checkbox is (`switchKeys`).
+- 60.5 `TagEditing` hook: with a folder from `organizingFolder`, each write or undo the user
+  asked for is followed on the write queue by the organizer and the journal's follow, so no
+  later write or undo comes between; `written` gets the report at the new paths and what was
+  organized. Recovery at launch isn't organized.
+- 60.6 Organize Selected Files… (`track.organize`, in File > Moved and Removed Files):
+  `LibraryBrowser.organizeSelection` plans off the main thread, asks "Organize N Files?" with
+  the count that will move and the skipped, then runs through `TagEditing.organize`.
+  `finishOrganizing` says what moved in the status bar and lists the rest in Problems.
+- 60.7 App wiring: the organized moves go to `importMoves(lines:)`, so stats, ratings and
+  playlists follow, and the new paths are rescanned.
+- 60.8 ADR 0160, the AGENTS.md clause, ADR 0124's and 0147's amended-by lines, and the
+  "Later" item's organize part removed.
+
+Tests: a taken name skipped, a move to another album folder, a file outside the library
+folder, `ENOTSUP` and `EXDEV` through `MoveCalls`, empty-folder cleanup and a folder with art
+kept, stats and a playlist entry carried through `importMoves`, undo after a move, and the
+hook's ordering in `TagEditorTests`. All in temporary folders.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
