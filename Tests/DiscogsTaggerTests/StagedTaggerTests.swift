@@ -135,7 +135,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     var verdicts: [AutoTagRun.Verdict] = []
     let tagger = await stagedTagger(files) { verdicts.append($0) }
     var mainWrites = 0
-    tagger.write = { _, _ in mainWrites += 1 }
+    tagger.write = { _, _, _ in mainWrites += 1 }
     tagger.analyze()
     await tagger.finished()
     let plan = try #require(await tagger.plan([-1]))

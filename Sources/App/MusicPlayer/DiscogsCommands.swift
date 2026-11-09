@@ -52,8 +52,8 @@ extension AppDelegate {
         if let state { tagger.sheetLayouts = state[\.taggerSheets] }
         tagger.sheetLayoutsChosen = { [weak self] in self?.saver?.set(\.taggerSheets, $0) }
         tagger.sourceChosen = { [weak self] in self?.saver?.set(\.taggerSource, $0) }
-        tagger.write = { [weak self] files, window, completion in
-            self?.tagEditing.write(files, over: window, completion: completion)
+        tagger.write = { [weak self] files, window, progress, completion in
+            self?.tagEditing.write(files, over: window, progress: progress, completion: completion)
         }
         tagger.mappingChosen = { [weak self] mapping, saved in
             do {

@@ -163,8 +163,10 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
         })
     var written: [[(path: String, edit: TagEdit)]] = []
     var completion: (Set<String>) -> Void = { _ in }
-    tagger.write = { files, done in
+    var report: (TagWriteProgress) -> Void = { _ in }
+    tagger.write = { files, progress, done in
         written.append(files)
+        report = progress
         completion = done
     }
     tagger.analyze()
@@ -195,11 +197,20 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(written.count == 1)
     #expect(written[0].count == 6)
     #expect(tagger.applicable(.exact).isEmpty, "each album is written once a session")
+    #expect(tagger.writeProgress?.tags == 23 && tagger.writeProgress?.files == 6)
+    #expect(tagger.writeProgress?.written == nil, "no report yet")
+    var progress = TagWriteProgress(total: 6)
+    progress.read = 6
+    progress.written = 3
+    report(progress)
+    #expect(tagger.writeProgress?.written == 3)
+    #expect(tagger.writeProgress?.fraction == 0.75)
 
     // A file of album 4 that wasn't written puts that album back, and only that one.
     completion([try #require(plan.files.first { $0.path.hasSuffix("/400.flac") }).path])
     #expect(tagger.applicable(.exact).map(\.id) == [4], "a failed write can be applied again")
     #expect(tagger.status == "1 album not fully written; Apply can try again")
+    #expect(tagger.writeProgress == nil, "the write has finished")
 }
 
 @MainActor

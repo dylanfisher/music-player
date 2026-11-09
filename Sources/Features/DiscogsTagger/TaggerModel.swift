@@ -195,8 +195,24 @@ final class TaggerModel {
     var selectedTracks: () throws -> [Int64] = { [] }
     /// Writes the files' edits as one undoable batch; called only after the user confirmed.
     /// The completion hears the paths that weren't written.
-    var write: ([(path: String, edit: TagEdit)], @escaping (Set<String>) -> Void) -> Void = {
-        _, _ in
+    /// It tells its second argument how far it has got, and its last the paths not written.
+    var write: Write = { _, _, _ in }
+    typealias Write =
+        (
+            [(path: String, edit: TagEdit)], @escaping (TagWriteProgress) -> Void,
+            @escaping (Set<String>) -> Void
+        ) -> Void
+    /// The writes handed over and not yet finished, by number, which the window shows the
+    /// progress of.
+    private(set) var writing: [Int: Writing] = [:]
+    private var writes = 0
+
+    /// A write handed over and not yet finished: how many tags and files it writes, and how
+    /// far it has got; nil before its first report, and for a staged write, which has none.
+    struct Writing: Equatable {
+        var tags: Int
+        var files: Int
+        var progress: TagWriteProgress?
     }
 
     private var work: Task<Void, Never>?
@@ -859,19 +875,63 @@ final class TaggerModel {
     /// Hands the plan's edits to the writer: the user has confirmed them.
     func apply(_ plan: ApplyPlan) {
         guard !plan.files.isEmpty else { return }
+        writes += 1
+        let number = writes
+        writing[number] = Writing(tags: plan.fieldCount, files: plan.files.count)
         if let staged {
-            applyStaged(plan, staged)
+            applyStaged(plan, staged) { [weak self] in self?.wrote(number) }
         } else {
-            write(plan.files) { [weak self] unwritten in self?.reopen(plan, unwritten: unwritten) }
+            write(
+                plan.files,
+                { [weak self] progress in
+                    guard let self, writing[number] != nil else { return }
+                    writing[number]?.progress = progress
+                    changed()
+                },
+                { [weak self] unwritten in
+                    guard let self else { return }
+                    status = Self.wroteText(plan)
+                    wrote(number)
+                    reopen(plan, unwritten: unwritten)
+                })
         }
         let applied = Set(plan.albumIDs)
         for index in albums.indices where applied.contains(albums[index].id) {
             albums[index].applied = true
         }
         status =
-            "Writing \(number(plan.fieldCount)) tags to \(number(plan.files.count)) files;"
+            "Writing \(DisplayText.number(plan.fieldCount)) tags to"
+            + " \(DisplayText.number(plan.files.count)) files;"
             + (staged == nil ? " Undo Tag Edit puts them back" : Self.stagedWrite)
         changed()
+    }
+
+    /// The status line once the library's writer has finished a plan.
+    static func wroteText(_ plan: ApplyPlan) -> String {
+        "Wrote \(number(plan.fieldCount)) tags to \(number(plan.files.count)) files;"
+            + " Undo Tag Edit puts them back"
+    }
+
+    /// The write `number` has finished, whatever it wrote.
+    private func wrote(_ number: Int) {
+        writing[number] = nil
+        changed()
+    }
+
+    /// What the window shows of the writes running: the tags and files in all, and how many
+    /// files are written and how far along, from 0 to 1, as `TagWriteProgress` counts it, nil
+    /// until a write reports; nil when nothing is being written.
+    var writeProgress: (tags: Int, files: Int, written: Int?, fraction: Double?)? {
+        guard !writing.isEmpty else { return nil }
+        let values = Array(writing.values)
+        let files = values.map(\.files).reduce(0, +)
+        let reports = values.compactMap(\.progress)
+        guard !reports.isEmpty else { return (values.map(\.tags).reduce(0, +), files, nil, nil) }
+        let steps = reports.map { $0.read + $0.written }.reduce(0, +)
+        return (
+            values.map(\.tags).reduce(0, +), files, reports.map(\.written).reduce(0, +),
+            files == 0 ? 1 : Double(steps) / Double(2 * files)
+        )
     }
 }
 

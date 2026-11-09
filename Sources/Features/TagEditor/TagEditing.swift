@@ -110,6 +110,8 @@ public final class TagEditing {
     private var alertWindows: [Int: (action: String, window: NSWindow)] = [:]
     /// What to tell a Discogs write's caller, by write number.
     private var completions: [Int: (Set<String>) -> Void] = [:]
+    /// What to tell a Discogs write's caller of its progress, by write number.
+    private var progresses: [Int: (TagWriteProgress) -> Void] = [:]
     private var lastWrite = 0
     /// Each open window's latest read, so an earlier read that comes back late is dropped.
     private var reads: [ObjectIdentifier: ReadStop] = [:]
@@ -373,14 +375,18 @@ public final class TagEditing {
     /// Writes each file its own edit as one undoable edit, after the writes queued before it,
     /// with a save's progress and its alert over `window` for what failed. The caller has
     /// asked the user: the Discogs tagger's Apply, after its confirmation (ADR 0133).
-    /// `completion` hears the paths that weren't written, once the write has run.
+    /// `progress` hears how far it has got, on the main thread, as the status bar does, so the
+    /// tagger's window can show it too; `completion` hears the paths that weren't written,
+    /// once the write has run.
     public func write(
         _ files: [(path: String, edit: TagEdit)], over window: NSWindow,
+        progress: @escaping (TagWriteProgress) -> Void = { _ in },
         completion: @escaping (Set<String>) -> Void = { _ in }
     ) {
         guard !files.isEmpty else { return }
         let write = effects.write
         completions[lastWrite + 1] = completion
+        progresses[lastWrite + 1] = progress
         enqueue("write the tags", over: window) { write(files, .discogsTagger, $0) }
     }
 
@@ -398,7 +404,10 @@ public final class TagEditing {
         writes.async {
             let report = work { progress in
                 DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self.saving(Self.savingStatus(progress)) }
+                    MainActor.assumeIsolated {
+                        self.saving(Self.savingStatus(progress))
+                        self.progresses[number]?(progress)
+                    }
                 }
             }
             DispatchQueue.main.async {
@@ -422,6 +431,7 @@ public final class TagEditing {
         pendingWrites -= 1
         if pendingWrites == 0 { saving(nil) }
         readCanUndo()
+        progresses.removeValue(forKey: number)
         completions.removeValue(forKey: number)?(
             Set(report.failures.map(\.path) + report.notWritten))
         guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }

@@ -87,14 +87,17 @@ extension TaggerModel {
     /// Writes the plan through the staged writer, then reads the files back: clean when the
     /// mapping would change nothing but what the owner unticked, else a discrepancy. A write
     /// that fails reports nothing, and Apply can try again.
-    func applyStaged(_ plan: ApplyPlan, _ staged: Staged) {
+    /// `wrote` hears that the write has finished, before the read back.
+    func applyStaged(_ plan: ApplyPlan, _ staged: Staged, wrote: @escaping () -> Void) {
         let read = staged.effects.read
         let write = staged.effects.write
         Task {
             let report: TagWriteReport
             do {
                 report = try await write(plan.files)
+                wrote()
             } catch {
+                wrote()
                 reopen(plan, unwritten: Set(plan.files.map(\.path)))
                 failed("The staged files weren't written", ["\(error)"])
                 return

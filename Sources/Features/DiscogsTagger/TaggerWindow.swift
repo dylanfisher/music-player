@@ -78,9 +78,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let bottom = NSStackView()
 
     /// Writes the confirmed edits.
-    var write: ([(path: String, edit: TagEdit)], @escaping (Set<String>) -> Void) -> Void = {
-        _, _ in
-    }
+    var write: TaggerModel.Write = { _, _, _ in }
     var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
     var choicesChosen: (TaggerChoices) -> Void = { _ in }
     var dumpsFolder: () -> URL? = { nil }
@@ -115,7 +113,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         build(in: window)
         model.changed = { [weak self] in self?.refresh() }
         model.failed = { [weak self] message, details in self?.alert(message, details) }
-        model.write = { [weak self] files, completion in self?.write(files, completion) }
+        model.write = { [weak self] files, progress, completion in
+            self?.write(files, progress, completion)
+        }
         refresh()
     }
 
@@ -409,8 +409,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         switch model.activity {
         case .idle:
             stoppable = false
-            progress.isHidden = true
-            statusLabel.stringValue = model.status
+            if let writing = model.writeProgress {
+                showWriting(writing)
+            } else {
+                progress.isHidden = true
+                progress.isIndeterminate = false
+                statusLabel.stringValue = model.status
+            }
         case .analyzing(let done, let total):
             stoppable = true
             let api = model.matchProgress.flatMap { progress in
@@ -434,6 +439,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         case .importing(let step):
             // Building the indexes is one statement that a stop can't interrupt.
             stoppable = !model.activity.isIndexing
+            progress.isIndeterminate = false
             progress.isHidden = false
             progress.doubleValue = step?.fraction ?? 0
             statusLabel.stringValue = step?.text ?? "Starting the import"
@@ -461,7 +467,25 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         showSelected()
     }
 
+    /// The writes running, beside the status bar's line: "Writing 120 tags to 20 files: 3 of
+    /// 20 written", or a moving bar alone until a write reports, as a staged write never does.
+    private func showWriting(_ writing: (tags: Int, files: Int, written: Int?, fraction: Double?))
+    {
+        let what =
+            "Writing \(number(writing.tags)) tags to \(count(writing.files, "file"))"
+        if let written = writing.written, let fraction = writing.fraction {
+            show(0, of: 0, "\(what): \(number(written)) of \(number(writing.files)) written")
+            progress.doubleValue = fraction
+        } else {
+            progress.isHidden = false
+            progress.isIndeterminate = true
+            progress.startAnimation(nil)
+            statusLabel.stringValue = "\(what)…"
+        }
+    }
+
     private func show(_ done: Int, of total: Int, _ text: String) {
+        progress.isIndeterminate = false
         progress.isHidden = false
         progress.doubleValue = total == 0 ? 0 : Double(done) / Double(total)
         statusLabel.stringValue = text

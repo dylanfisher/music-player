@@ -27,12 +27,14 @@ public final class DiscogsTagger {
         get { model.selectedTracks }
         set { model.selectedTracks = newValue }
     }
-    /// Writes the confirmed edits as one undoable batch, over the window given.
-    /// The completion hears the paths that weren't written.
+    /// Writes the confirmed edits as one undoable batch, over the window given. The first
+    /// closure hears how far it has got, for the window to show; the completion hears the
+    /// paths that weren't written.
     public var write:
-        ([(path: String, edit: TagEdit)], NSWindow, @escaping (Set<String>) -> Void) -> Void = {
-            _, _, _ in
-        }
+        (
+            [(path: String, edit: TagEdit)], NSWindow, @escaping (TagWriteProgress) -> Void,
+            @escaping (Set<String>) -> Void
+        ) -> Void = { _, _, _, _ in }
     /// Saves the mapping chosen in the Field Mapping sheet, and the user's saved ones.
     public var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
     /// Saves the choices the window's checkboxes set.
@@ -193,9 +195,9 @@ public final class DiscogsTagger {
 
     func makeWindow() -> TaggerWindow {
         let made = TaggerWindow(model: model)
-        made.write = { [weak self, weak made] files, completion in
+        made.write = { [weak self, weak made] files, progress, completion in
             guard let self, let window = made?.window else { return }
-            write(files, window, completion)
+            write(files, window, progress, completion)
         }
         // The model takes the mapping from `mappingChanged`, once the settings have saved it.
         made.mappingChosen = { [weak self] mapping, saved in self?.mappingChosen(mapping, saved) }

@@ -890,6 +890,43 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     #expect(empty.otherReleasesButton.title == "No Other Releases")
 }
 
+/// The window shows a write's progress as the status bar does: a moving bar until the writer
+/// reports, then the files written, then the status line once it's done.
+@MainActor
+@Test func theWindowShowsAWritesProgress() async throws {
+    let one = album(1, "Stockholm", titles: stockholm)
+    let tagger = await model(
+        Seen(), albums: [one],
+        matches: { album, _ in
+            match(album, release(10, "Stockholm", titles: stockholm), tier: .exact)
+        },
+        files: { ids in one.tracks.indices.map { file(one, $0) }.filter { ids.contains($0.id) } })
+    tagger.analyze()
+    await tagger.finished()
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    var report: (TagWriteProgress) -> Void = { _ in }
+    var completion: (Set<String>) -> Void = { _ in }
+    controller.write = { _, progress, done in
+        report = progress
+        completion = done
+    }
+    let plan = try #require(await tagger.plan([1]))
+    tagger.apply(plan)
+    #expect(!controller.progress.isHidden && controller.progress.isIndeterminate)
+    #expect(controller.statusLabel.stringValue == "Writing 12 tags to 3 files…")
+    var progress = TagWriteProgress(total: 3)
+    progress.read = 3
+    progress.written = 1
+    report(progress)
+    #expect(!controller.progress.isIndeterminate)
+    #expect(controller.progress.doubleValue == 4.0 / 6)
+    #expect(controller.statusLabel.stringValue == "Writing 12 tags to 3 files: 1 of 3 written")
+    completion([])
+    #expect(controller.progress.isHidden)
+    #expect(controller.statusLabel.stringValue == "Wrote 12 tags to 3 files; Undo Tag Edit puts them back")
+}
+
 /// What the stand-in Look Up Release search was asked.
 private final class Queries: @unchecked Sendable {
     // `asked` is guarded by `lock`.

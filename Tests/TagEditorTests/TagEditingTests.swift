@@ -354,6 +354,26 @@ private final class Titles: @unchecked Sendable {
     #expect(fractions == [0.25, 0.5, 0.75, 1])
 }
 
+/// The Discogs tagger's write tells its caller how far it's got, as it tells the status bar,
+/// so the tagger's window can show it too.
+@MainActor
+@Test func aTaggerWriteTellsItsCallerItsProgress() async throws {
+    var step = TagWriteProgress(total: 1)
+    var progress: [TagWriteProgress] = []
+    for stage in [\TagWriteProgress.read, \.written] {
+        step[keyPath: stage] += 1
+        progress.append(step)
+    }
+    let editing = makeEditing(Seen(), progress: progress)
+    var heard: [TagWriteProgress] = []
+    var unwritten: Set<String>?
+    editing.write(
+        [("/b.flac", TagEdit(values: [.title: "New"]))], over: window,
+        progress: { heard.append($0) }, completion: { unwritten = $0 })
+    try await eventually { unwritten != nil }
+    #expect(heard == progress)
+}
+
 /// Back and Forward step the key info window's tabs, wrapping at the ends, and leave anything
 /// else to the main window.
 @MainActor
