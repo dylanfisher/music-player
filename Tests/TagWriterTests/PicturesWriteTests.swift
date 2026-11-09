@@ -62,10 +62,24 @@ func id3PicturesHaveADescriptionEach(_ sample: Sample) throws {
     #expect(bytes.range(of: Data("Front Cover".utf8)) == nil, "the first has none")
 }
 
-/// A picture of a type no format labels is refused before anything is written.
-@Test func aPictureThatIsNeitherJPEGNorPNGIsRefused() throws {
-    let gif = ArtPicture(image: Data([1]), mimeType: "image/gif", type: .other)
+/// A picture that isn't a JPEG or PNG, as one kept from the file, is written back with its own
+/// bytes and MIME type; only a replacement front cover is limited to those two (ADR 0172).
+@Test(arguments: Sample.allCases)
+func aKeptPictureOfAnotherTypeIsWrittenBackAsItWas(_ sample: Sample) throws {
+    let url = try sample.copy()
+    let writer = scratchWriter()
+    let gif = ArtPicture(
+        image: Data("GIF89a".utf8) + Data(repeating: 1, count: 20), mimeType: gifMIMEType,
+        type: .backCover)
+    expectChanged(writer.write(TagEdit(art: .pictures([front, gif])), to: [url.path]), [url])
+    let mime = try readMetadata(at: url, pictures: true).metadata.pictures.map(\.art.mimeType)
+    #expect(mime == [pngMIMEType, gifMIMEType])
+    #expect(try pictures(url).map(\.image) == [front.image, gif.image])
+}
+
+/// A replacement front cover of a type no format labels is refused before anything is written.
+@Test func aReplacementThatIsNeitherJPEGNorPNGIsRefused() throws {
     #expect(throws: TagValueError.self) {
-        try TagEdit(art: .pictures([front, gif])).applied(to: TrackTags())
+        try TagEdit(art: .replace(Data([1]), mimeType: gifMIMEType)).applied(to: TrackTags())
     }
 }

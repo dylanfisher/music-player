@@ -47,12 +47,14 @@ public enum ArtChange: Equatable, Sendable {
     /// the file's other pictures stay.
     case replace(Data, mimeType: String)
     /// Every picture the file is to hold, in order, in place of all it holds; none removes
-    /// them. MP4 keeps no types, so it gets the front covers first (ADR 0172).
+    /// them. A picture kept from the file keeps its bytes and MIME type, whatever the image;
+    /// the caller limits the images it adds. MP4 keeps no types, so it gets the front covers
+    /// first (ADR 0172).
     case pictures([ArtPicture])
     case remove
 }
 
-/// One picture an edit writes: a JPEG or PNG image and what it shows.
+/// One picture an edit writes, and what it shows.
 public struct ArtPicture: Equatable, Sendable {
     public var image: Data
     public var mimeType: String
@@ -124,13 +126,7 @@ public struct TagEdit: Equatable, Sendable {
             }
             result.custom[name.uppercased()] = text.nilIfEmpty
         }
-        let mimeTypes: [String] =
-            switch art {
-            case .replace(_, let mimeType): [mimeType]
-            case .pictures(let pictures): pictures.map(\.mimeType)
-            case .remove, nil: []
-            }
-        if let mimeType = mimeTypes.first(where: { !artMIMETypes.contains($0) }) {
+        if case .replace(_, let mimeType) = art, !artMIMETypes.contains(mimeType) {
             throw TagValueError(
                 field: nil, text: mimeType, detail: "art must be a JPEG or PNG image")
         }

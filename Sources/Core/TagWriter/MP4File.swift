@@ -227,14 +227,14 @@ struct MP4File {
             ilst.children!.removeAll { $0.type == mp4CoverItemType }
         case .pictures(let pictures):
             let body = mp4CoverOrder(pictures).flatMap { picture in
-                dataAtom(picture.mimeType == pngMIMEType ? 14 : 13, Array(picture.image))
+                dataAtom(mp4ArtType(picture.mimeType), Array(picture.image))
             }
             let item = MP4Box(type: mp4CoverItemType, body: body)
             ilst.children!.removeAll { $0.type == mp4CoverItemType }
             ilst.children!.insert(
                 item, at: min(index ?? ilst.children!.count, ilst.children!.count))
         case .replace(let image, let mimeType):
-            let data = dataAtom(mimeType == pngMIMEType ? 14 : 13, Array(image))
+            let data = dataAtom(mp4ArtType(mimeType), Array(image))
             guard let index else {
                 ilst.children!.append(MP4Box(type: mp4CoverItemType, body: data))
                 return
@@ -339,4 +339,10 @@ func zeros(_ count: Int) -> [UInt8] { [UInt8](repeating: 0, count: max(0, count)
 /// `covr` keeps no types and players show its first.
 func mp4CoverOrder(_ pictures: [ArtPicture]) -> [ArtPicture] {
     pictures.filter { $0.type == .frontCover } + pictures.filter { $0.type != .frontCover }
+}
+
+/// The `data` atom type code of an image the reader shows (JPEG, PNG, GIF, BMP); a picture kept
+/// from the file keeps its own, and 0, "implicit", leaves any other to be sniffed.
+private func mp4ArtType(_ mimeType: String) -> UInt32 {
+    mp4ArtTypes.first { $0.value == mimeType }?.key ?? 0
 }

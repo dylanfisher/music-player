@@ -138,7 +138,7 @@ package let mp4CoverItemType = itemKinds.first {
 private let bmpMIMEType = "image/bmp"
 
 /// `data` atom type codes for cover art. Type 0 is "implicit", so the image is sniffed.
-private let artTypes: [UInt32: String] = [
+package let mp4ArtTypes: [UInt32: String] = [
     12: gifMIMEType, 13: jpegMIMEType, 14: pngMIMEType, 27: bmpMIMEType,
 ]
 
@@ -216,7 +216,7 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
             let (type, valueRange) = try dataValue(data, of: item, reader)
             let offset = valueRange.lowerBound
             let head = try reader.bytes(offset..<min(valueRange.upperBound, offset + 8))
-            guard let mime = artTypes[type] ?? (type == 0 ? sniffedMIMEType(head.array) : nil)
+            guard let mime = mp4ArtTypes[type] ?? (type == 0 ? sniffedMIMEType(head.array) : nil)
             else {
                 skipped =
                     skipped ?? .unsupported(at: data.start, "MP4 cover art with data type \(type)")

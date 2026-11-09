@@ -56,8 +56,10 @@ get one.
 
 ## Consequences
 
-- A kept picture whose type is neither JPEG nor PNG, as a GIF, makes an edited list fail to
-  save with "art must be a JPEG or PNG image"; it isn't converted.
+- A picture kept from the file is written back with its own bytes and MIME type, a GIF or a
+  BMP as much as a JPEG or PNG, so one in the file doesn't block saving an edited list; only
+  an image the editor adds is limited to JPEG and PNG, and converted as said above. MP4 labels
+  it with its own `data` type code, and any MIME type it has no code for as implicit.
 - Fill Missing reads each file's shown art to size it, one file at a time off the main
   thread: on a NAS, an album costs a read a file before its cover is written.
 - Every reader of more than one picture sees them in the written order, with the types; a
