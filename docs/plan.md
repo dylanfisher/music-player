@@ -663,6 +663,37 @@ Asked by the owner on 2026-11-09.
 - [ ] **Status bar:** the downloads item moves from the right end to the left side, after the
       scan and saving labels.
 
+Implementation plan, phase 62 (ADR 0161 amended, ADR 0167):
+
+What exists, found by search (map.md recipes): the kind words are `PaletteItem.Kind`'s case
+names, read by `PaletteQuery` through `queryNames`, with `songName` the one alias; the Go to
+Item placeholder is in `PaletteController.show`. `TagEditing.enqueue` reports each batch's own
+`TagWriteProgress` to `saving`, and `pendingWrites` counts what is queued; the tagger sums its
+writes with `TagWriteProgress.combined` (`TaggerModel.writeProgress`).
+`AppDelegate.applicationShouldTerminate` saves the play state with a 1 s bound. The downloads
+item goes in through `LibraryBrowser.setStatusAccessory`, into `statusTrailing`.
+
+- 62.1 Palette kinds: `PaletteItem.Kind.shortName` (`a`, `ar`, `t`, `p`, `g`; none for
+  command, setting and output) joins the name in `queryNames`; `songName` goes. The
+  placeholder names `album:`, `a:`, `track:` and `t:`. ADR 0161's typed-search bullet amended.
+- 62.2 Saving status: `enqueue` takes the batch's file count; the write batches queued and
+  running are kept by number with their last report, and `saving` gets `combined` over all of
+  them, at each report and when a batch is queued while one shows, so M rises at once. Undos
+  and organizes have no count and report nothing, as now.
+- 62.3 Quit guard: `TagEditing.holdQuit(_:)` returns false with nothing queued; otherwise it
+  asks through a new effect, "N tag writes haven't finished." (Wait and Quit, Quit Anyway,
+  Cancel), and calls back: Cancel at once with false, Quit Anyway with true, Wait and Quit with
+  true when `pendingWrites` reaches 0. The app returns `.terminateLater` while it holds, then
+  runs the play state save as now. ADR 0167.
+- 62.4 Status bar: `setStatusAccessory` inserts the view into `statusLeading` after the
+  analysis label, before the leading columns, whichever is laid out first; ADR 0163's bullet
+  amended.
+
+Tests: `PaletteTests` (each short prefix, `song:` now plain text), `TagEditingTests` (a second
+batch queued mid-run raises M at once; each quit answer, nothing asked with nothing queued),
+`StatusBarLayoutTests` (the item after the labels and before a leading column, set before or
+after the layout).
+
 ### 63. A Library pane in Settings
 
 Asked by the owner on 2026-11-09; the owner chose one merged pane.
