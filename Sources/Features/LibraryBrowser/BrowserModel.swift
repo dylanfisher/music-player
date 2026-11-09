@@ -429,11 +429,13 @@ public final class BrowserModel {
     }
 
     /// Moves the tracks with `ids` to just before table row `row`, or to the end of the
-    /// playlist past the last row. Only while `canReorder`.
-    public func move(_ ids: [Int64], toRow row: Int) async throws {
+    /// playlist past the last row. Only while `canReorder`. A drag keeps the rows' order; a
+    /// paste, `inOrderGiven`, the order they were copied in.
+    public func move(_ ids: [Int64], toRow row: Int, inOrderGiven: Bool = false) async throws {
         guard canReorder, let playlist = shownPlaylist else { return }
         let target = trackIDs.indices.contains(row) ? trackIDs[row] : nil
-        try await reader.movePlaylistEntries(playlist.id, trackIDs: ids, before: target)
+        try await reader.movePlaylistEntries(
+            playlist.id, trackIDs: ids, before: target, inOrderGiven: inOrderGiven)
         await refresh()
     }
 

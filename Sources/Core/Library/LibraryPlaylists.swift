@@ -160,16 +160,20 @@ extension LibraryIndex {
         return added
     }
 
-    /// Moves the tracks `ids` of a manual playlist, in their current order, to just before
-    /// `target`, or to the end when `target` is nil. A target among the moved tracks keeps them
-    /// where they are, before the next track that isn't moving.
-    public func movePlaylistEntries(_ id: Int64, trackIDs ids: [Int64], before target: Int64?)
-        throws
-    {
+    /// Moves the tracks `ids` of a manual playlist, in their current order or with
+    /// `inOrderGiven` in the order of `ids`, to just before `target`, or to the end when
+    /// `target` is nil. A target among the moved tracks keeps them where they are, before the
+    /// next track that isn't moving.
+    public func movePlaylistEntries(
+        _ id: Int64, trackIDs ids: [Int64], before target: Int64?, inOrderGiven: Bool = false
+    ) throws {
         try database.transaction {
             let order = try playlistTrackIDs(id)
             let moving = Set(ids)
-            let moved = order.filter { moving.contains($0) }
+            var listed = Set(order)
+            let moved =
+                inOrderGiven
+                ? ids.filter { listed.remove($0) != nil } : order.filter { moving.contains($0) }
             var kept = order.filter { !moving.contains($0) }
             // A target among the moved rows means the first row after it that stays.
             let anchor = target.flatMap { target in

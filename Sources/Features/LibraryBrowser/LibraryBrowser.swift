@@ -1581,7 +1581,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             if !ids.isEmpty {
                 _ = try await self.model.add(ids, to: playlist.id)
                 if let below, self.model.canReorder {
-                    try await self.model.move(ids, toRow: below)
+                    try await self.model.move(ids, toRow: below, inOrderGiven: true)
                 }
             }
             // After the refreshes, whose totals would take the status line's place.

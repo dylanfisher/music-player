@@ -158,10 +158,13 @@ public actor LibraryReader {
         try index.addToPlaylist(id, trackIDs: trackIDs)
     }
 
-    public func movePlaylistEntries(_ id: Int64, trackIDs: [Int64], before target: Int64?)
+    public func movePlaylistEntries(
+        _ id: Int64, trackIDs: [Int64], before target: Int64?, inOrderGiven: Bool = false
+    )
         throws
     {
-        try index.movePlaylistEntries(id, trackIDs: trackIDs, before: target)
+        try index.movePlaylistEntries(
+            id, trackIDs: trackIDs, before: target, inOrderGiven: inOrderGiven)
     }
 
     public func removeFromPlaylist(_ id: Int64, trackIDs: [Int64]) throws {

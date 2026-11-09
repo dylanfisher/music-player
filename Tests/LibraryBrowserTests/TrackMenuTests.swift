@@ -267,3 +267,24 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
         browser.statusText.contains("aren't in the library") == true
     }
 }
+
+/// A paste keeps the order the tracks were copied in, one the playlist had included.
+@MainActor @Test func pastedTracksKeepTheirCopiedOrder() async throws {
+    let (browser, index) = try await browser(selecting: [])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    let new = browser.model.trackIDs[30]
+    let kept = Array(browser.model.trackIDs[20..<23])
+    let paths = try index.paths(ids: [new, kept[2]])
+    let mix = try index.createPlaylist(named: "Mix")
+    _ = try index.addToPlaylist(mix, trackIDs: kept)
+    try await browser.model.reloadPlaylists()
+    await browser.model.setSource(.playlist(mix))
+    window.makeFirstResponder(browser.table.table)
+    browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
+    browser.paste([try #require(paths[new]), try #require(paths[kept[2]])])
+    let pasted = [kept[0], new, kept[2], kept[1]]
+    try await waitFor("the pasted tracks") { browser.model.trackIDs == pasted }
+}
