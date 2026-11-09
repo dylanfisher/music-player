@@ -21,6 +21,8 @@ public enum MatchTier: String, CaseIterable, Sendable {
 public struct MatchCandidate: Equatable, Sendable {
     public var releaseID: Int
     var score: ReleaseScore
+    /// How the matcher found it; nil for a release only the user's choice brought in.
+    var foundBy: CandidateKey? = nil
 
     /// How well its tracklist fits the album's, from 0 to 1 (ADR 0131).
     public var tracklistScore: Double { score.tracklist }
@@ -43,6 +45,11 @@ public struct AlbumMatch: Sendable {
     public internal(set) var reasons: [NotExactReason] = []
     /// Where the chosen release came from.
     public internal(set) var origin: MatchOrigin = .catalog
+    /// How sure the match is of the chosen release, from 0 to 100 (ADR 0170); nil with no
+    /// release scored.
+    public internal(set) var confidence: Int? = nil
+    /// How the chosen release was found, which choosing it again keeps.
+    var foundBy: CandidateKey? = nil
 
     public var releaseID: Int? { release?.id }
 

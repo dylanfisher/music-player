@@ -815,3 +815,48 @@ private final class Heard: @unchecked Sendable {
         return reports
     }
 }
+
+/// Each match's confidence reads the chosen release's score (ADR 0170): every title the same
+/// is high even when found by title only, a title a little off lowers it a little, and
+/// lengths, another count and a tie lower it more.
+@Test func aMatchsConfidenceComesFromItsScore() throws {
+    let byBarcode = try match(
+        album(stockholmTitles, barcode: "123"),
+        releases: release(10, barcode: "123", tracks: stockholm))
+    #expect(byBarcode.tier == .exact)
+    #expect(byBarcode.confidence == 100)
+
+    let byTitle = try match(album(stockholmTitles), releases: release(10, tracks: stockholm))
+    #expect(byTitle.confidence == 95, "found by title only")
+
+    let tied = try match(
+        album(stockholmTitles), masters: master(100, main: 12),
+        releases: release(10, master: 100, tracks: stockholm)
+            + release(11, master: 100, tracks: stockholm)
+            + release(12, master: 100, main: true, format: "Vinyl", tracks: stockholm))
+    #expect(tied.reasons == [.tiedAfterTieBreak, .foundByTitleOnly])
+    #expect(tied.confidence == 90)
+
+    // 0.82 alike, below `sameTitle`: two titles in full and one at its similarity.
+    let oneOff = try match(
+        album(["Östermalm", "Gamla Stan", "Kungshlmn"]), releases: release(10, tracks: stockholm))
+    #expect(oneOff.reasons == [.titlesDiffer(1), .foundByTitleOnly])
+    #expect(oneOff.confidence == 89)
+
+    let lengths = try match(
+        album(stockholmTitles, seconds: [200, 200, 300], barcode: "123"),
+        releases: release(10, barcode: "123", tracks: stockholm))
+    #expect(lengths.confidence == 80, "two of three lengths off")
+
+    let bonus = try match(
+        album(
+            ["Östermalm", "Bonus Beat", "Other Bonus", "Gamla Stan", "Kungsholmen"],
+            seconds: [285, 100, 100, 370, 300]),
+        releases: release(10, tracks: stockholm))
+    #expect(bonus.confidence == 45, "three of five files, another count, by title")
+
+    let none = try match(
+        album(["Nothing Here"], title: "Unfindable"), releases: release(10, tracks: stockholm))
+    #expect(none.tier == .noCandidate)
+    #expect(none.confidence == nil)
+}

@@ -173,9 +173,7 @@ final class AlbumMatcher {
         _ album: DiscogsAlbum, choosing choice: Int? = nil,
         found extra: [(id: Int, foundBy: CandidateKey)] = [], fetched: [Int: CatalogRelease] = [:]
     ) throws -> AlbumMatch {
-        let ids = album.tracks.map(\.releaseID)
-        let tagged = Set(ids.compactMap { $0 })
-        let isMatched = tagged.count == 1 && !ids.contains(nil)
+        let (tagged, isMatched) = Self.taggedIDs(album)
         let titles = TitleSimilarity(album.tracks.map(\.title))
         let seconds = album.tracks.map(\.seconds)
         var releases: [Int: CatalogRelease] = [:]
@@ -200,15 +198,7 @@ final class AlbumMatcher {
         var tied = false
         if let choice, let score = scores.first(where: { $0.releaseID == choice }) {
             chosen = score
-            if isMatched, tagged.first == String(choice) {
-                tier = .matched
-            } else if !tagged.isEmpty, !isMatched {
-                tier = .incomplete
-            } else if score.fitsTracklist {
-                tier = score.durationsAgree ? .exact : .likely
-            } else {
-                tier = score.isLikely ? .likely : .incomplete
-            }
+            tier = Self.chosenTier(score, album: album)
         } else if isMatched {
             tier = .matched
             chosen = scores.first { String($0.releaseID) == tagged.first }
@@ -227,6 +217,42 @@ final class AlbumMatcher {
             }
         }
 
+        let others = scores.filter { $0.releaseID != chosen?.releaseID }
+            .map { MatchCandidate(releaseID: $0.releaseID, score: $0, foundBy: foundBy[$0.releaseID]) }
+        return Self.made(
+            album, tier: tier, chosen: chosen, release: chosen.flatMap { releases[$0.releaseID] },
+            others: others, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
+            titles: titles,
+            origin: chosen.map { fetched[$0.releaseID] != nil } == true ? .api : .catalog)
+    }
+
+    /// The release ids `album`'s tracks carry, and whether every track carries one, the same.
+    private static func taggedIDs(_ album: DiscogsAlbum) -> (Set<String>, isMatched: Bool) {
+        let ids = album.tracks.map(\.releaseID)
+        let tagged = Set(ids.compactMap { $0 })
+        return (tagged, tagged.count == 1 && !ids.contains(nil))
+    }
+
+    /// The tier of `score`, a release the user chose, by its own score alone.
+    private static func chosenTier(_ score: ReleaseScore, album: DiscogsAlbum) -> MatchTier {
+        let (tagged, isMatched) = taggedIDs(album)
+        if isMatched, tagged.first == String(score.releaseID) { return .matched }
+        if !tagged.isEmpty, !isMatched { return .incomplete }
+        if score.fitsTracklist { return score.durationsAgree ? .exact : .likely }
+        return score.isLikely ? .likely : .incomplete
+    }
+
+    /// The match of `album` at `tier` with `chosen`, the chosen release's score, and `others`,
+    /// the other candidates in the order found, which it lists best first: its files paired
+    /// with the release's tracks, and why it isn't Exact, and how sure it is.
+    private static func made(
+        _ album: DiscogsAlbum, tier: MatchTier, chosen: ReleaseScore?, release: CatalogRelease?,
+        others: [MatchCandidate], tied: Bool, foundBy: CandidateKey?, titles: TitleSimilarity,
+        origin: MatchOrigin
+    ) -> AlbumMatch {
+        let (tagged, isMatched) = taggedIDs(album)
+        let mixedIDs = !tagged.isEmpty && !isMatched
+        let seconds = album.tracks.map(\.seconds)
         let shown = chosen.map { $0.paired(titles: titles, seconds: seconds) }
         var mapping: [Int64: Int] = [:]
         if let chosen = shown {
@@ -234,19 +260,21 @@ final class AlbumMatcher {
                 if let index { mapping[track.fileID] = index }
             }
         }
-        let others = scores.filter { $0.releaseID != chosen?.releaseID }
-            .enumerated().sorted { a, b in
-                a.element.order != b.element.order
-                    ? a.element.order > b.element.order : a.offset < b.offset
-            }
-            .map { MatchCandidate(releaseID: $0.element.releaseID, score: $0.element) }
+        let sorted = others.enumerated().sorted { a, b in
+            a.element.score.order != b.element.score.order
+                ? a.element.score.order > b.element.score.order : a.offset < b.offset
+        }
         return AlbumMatch(
-            albumID: album.id, tier: tier, release: chosen.flatMap { releases[$0.releaseID] },
-            tracks: chosen?.tracks ?? [], mapping: mapping, candidates: others,
+            albumID: album.id, tier: tier, release: release, tracks: chosen?.tracks ?? [],
+            mapping: mapping, candidates: sorted.map(\.element),
             reasons: NotExactReason.reasons(
-                tier, shown, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
-                mixedIDs: !tagged.isEmpty && !isMatched),
-            origin: chosen.map { fetched[$0.releaseID] != nil } == true ? .api : .catalog)
+                tier, shown, tied: tied, foundBy: foundBy, mixedIDs: mixedIDs),
+            origin: origin,
+            confidence: shown.map {
+                MatchConfidence.percent(
+                    $0, titles: titles, tied: tied, foundBy: foundBy, mixedIDs: mixedIDs)
+            },
+            foundBy: foundBy)
     }
 
     /// The best of `scores`, and whether others were as good after the tie-break. The best are
