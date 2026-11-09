@@ -165,10 +165,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// The slot's height as last placed or dragged, so a change of panel moves the divider
     /// only when the heights differ; nil once a window resize moved it.
     private var placedHeight: Int?
-    /// The scan progress and the leading columns, the center column centered on the window,
-    /// and the trailing columns and the problems button, each edge in a stack so what's hidden
-    /// takes no width.
-    private let statusLeading = NSStackView()
+    /// The scan progress, another feature's item and the leading columns, the center column
+    /// centered on the window, and the trailing columns and the problems button, each edge in a
+    /// stack so what's hidden takes no width.
+    let statusLeading = NSStackView()
     private let statusColumns = BarColumns()
     private let statusTrailing = NSStackView()
     private lazy var statusBar = CenteredRow(
@@ -193,7 +193,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Pause Scan or Resume Scan, after the scans' text, and Pause Library Analysis or Analyze
     /// Library after Analyze Library's (ADR 0119).
     let scanPauseButton = NSButton()
-    private let analysisLabel = NSTextField(labelWithString: "")
+    let analysisLabel = NSTextField(labelWithString: "")
     let analysisPauseButton = NSButton()
     /// Where Analyze Library is, while it runs or is paused.
     private var analysisProgress: LibraryAnalysis.Progress?
@@ -2105,10 +2105,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showStatus()
     }
 
-    /// Puts `view` at the status bar's right end, after the problems button, where another
-    /// feature shows what it's doing; it hides itself when it has nothing to show.
+    /// Puts `view` on the status bar's left, after the scan, saving and analysis text and
+    /// before the leading columns, where another feature shows what it's doing; it hides
+    /// itself when it has nothing to show (ADR 0163).
     public func setStatusAccessory(_ view: NSView) {
-        statusTrailing.addArrangedSubview(view)
+        // The init puts the label in the stack, so it's always there.
+        guard let after = statusLeading.arrangedSubviews.firstIndex(of: analysisLabel) else {
+            preconditionFailure("the status bar has no analysis label")
+        }
+        statusLeading.insertArrangedSubview(view, at: after + 1)
     }
 
     /// The status bar's column at `place`, for tests.

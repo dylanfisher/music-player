@@ -147,3 +147,36 @@ private func column(
     browser.setStatusBar(StatusBarLayout(columns: layout, style: .tall), views: [.art: art])
     #expect(clicks().count == 1)
 }
+
+/// Another feature's item, the downloads', sits on the left after the scan and analysis
+/// labels and before the leading columns, whether it's set before or after the layout.
+@MainActor @Test func theAccessoryFollowsTheActivityLabels() throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    for accessoryFirst in [true, false] {
+        let browser = LibraryBrowser(
+            reader: try LibraryReader(databaseURL: databaseURL),
+            index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+            browserHeight: 100, groupByAlbumArtist: false,
+            thumbnails: nil)
+        _ = browser.content.view
+        let accessory = NSView()
+        let layOut = {
+            browser.setStatusBar(
+                StatusBarLayout(
+                    columns: BarLayout(leading: [column([.art])], center: column([.totals])),
+                    style: .minimal),
+                views: [.art: NSView()])
+        }
+        if accessoryFirst {
+            browser.setStatusAccessory(accessory)
+            layOut()
+        } else {
+            layOut()
+            browser.setStatusAccessory(accessory)
+        }
+        let leading = browser.statusLeading.arrangedSubviews
+        let index = try #require(leading.firstIndex(of: accessory))
+        #expect(leading[index - 1] === browser.analysisLabel)
+        #expect(leading[index + 1] === browser.statusColumn(at: .leading(0)))
+    }
+}

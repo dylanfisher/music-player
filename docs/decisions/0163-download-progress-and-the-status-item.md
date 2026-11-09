@@ -3,6 +3,7 @@
 - **Date:** 2026-11-09
 - **Status:** accepted
 - **Amends:** [0145](0145-the-recommender-client.md) (the client reads `downloads/config` too)
+- **Amended:** 2026-11-09, phase 62: the status bar item moves to the left.
 - **See also:** [0147](0147-moving-downloads-into-the-library.md) (Approve),
   music-recommender's ADR 0014 (the search's progress and the last miss)
 
@@ -43,8 +44,10 @@ thread.
   pace the service writes progress at; 60 s otherwise, as before. The 60 s poll never stops: the
   background tagging and import run from it, and a job queued on another Mac appears through
   it. Hiding the status bar returns to it after the wait running.
-- **The status bar item** is at the bar's right end, after the problems button, put there by
-  `LibraryBrowser.setStatusAccessory` and drawn by the Downloads feature. While the window is
+- **The status bar item** is on the bar's left, after the scan, saving and analysis text and
+  before the leading columns, put there by `LibraryBrowser.setStatusAccessory` and drawn by
+  the Downloads feature. Phase 59 put it at the right end, after the problems button; the
+  owner moved it in phase 62. While the window is
   closed, a poll updates the item alone, not the window's table. It shows while a job
   is on its way, in one of three styles, the setting `appearance.downloadsStatusStyle`: a
   symbol and the count, text ("Downloading 3 albums, 50%"), or a 48 pt bar and the count (the

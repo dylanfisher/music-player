@@ -124,7 +124,7 @@ package final class Downloads {
         if !NSWorkspace.shared.open(url) { logger.error("couldn't open \(url)") }
     }
 
-    /// The status bar's item, which App puts at the bar's right end.
+    /// The status bar's item, which App puts on the bar's left, after the activity text.
     let statusItem = DownloadsStatusItem()
     /// How the status item shows the downloads, `appearance.downloadsStatusStyle`.
     package var statusStyle = DownloadsStatusStyle.progress {

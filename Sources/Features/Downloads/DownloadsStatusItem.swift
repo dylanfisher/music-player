@@ -1,7 +1,7 @@
 import AppKit
 import Settings
 
-/// The downloads' item at the status bar's right end, shown while an album is on its way to
+/// The downloads' item on the status bar's left, shown while an album is on its way to
 /// the staging folder: a symbol and the count, a line of words, or a small bar and the count,
 /// as `style` says. A click opens Downloads; a right-click picks the style.
 @MainActor
