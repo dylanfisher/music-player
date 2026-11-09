@@ -63,6 +63,10 @@ enum SchemaPart: String, CaseIterable {
     /// Releases and masters the Discogs API returned, by kind and id, as JSON (ADR 0138). A
     /// cache: rebuilding it discards nothing a fetch can't get again.
     case discogsCache
+    /// The files Keep Files Organized renamed whose stats haven't followed them yet
+    /// (ADR 0164), by absolute path, so a carry that failed runs again. A hint: every move can
+    /// be told again from the files.
+    case layoutMoves
 
     /// The part's SQL, the index's built with Separate Releases as given (ADR 0143); the other
     /// parts don't depend on it.
@@ -85,6 +89,7 @@ enum SchemaPart: String, CaseIterable {
         case .discogsReviews: discogsReviewsSchema
         case .importJobs: importJobsSchema
         case .discogsCache: discogsCacheSchema
+        case .layoutMoves: layoutMovesSchema
         }
     }
 
@@ -130,6 +135,7 @@ enum SchemaPart: String, CaseIterable {
         case .discogsReviews: [discogsReviewsTable]
         case .importJobs: [importOutboxTable, importStepsTable]
         case .discogsCache: [discogsCacheTable]
+        case .layoutMoves: [layoutMovesTable]
         }
     }
 }
@@ -160,6 +166,7 @@ let discogsReviewsTable = "discogs_reviews"
 let importOutboxTable = "import_outbox"
 let importStepsTable = "import_steps"
 let discogsCacheTable = "discogs_cache"
+let layoutMovesTable = "layout_moves"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
@@ -478,6 +485,15 @@ private let importJobsSchema = """
         destination TEXT,
         size_bytes INTEGER,
         PRIMARY KEY (job_id, kind, path)
+    ) WITHOUT ROWID;
+    """
+
+private let layoutMovesSchema = """
+    -- A file Keep Files Organized is renaming or renamed, from its old path to its new one,
+    -- until the move list has carried its stats.
+    CREATE TABLE \(layoutMovesTable) (
+        old_path TEXT PRIMARY KEY,
+        new_path TEXT NOT NULL
     ) WITHOUT ROWID;
     """
 

@@ -1,7 +1,10 @@
 import Darwin
 import DisplayText
 import Foundation
+import Log
 import Metadata
+
+private let logger = moduleLogger()
 
 /// What Keep Files Organized, or Organize Selected Files, would do or did to some files in
 /// the library folder (ADR 0164).
@@ -75,22 +78,36 @@ public func layoutMoves(_ paths: [String], libraryFolder: String) -> FilesOrgani
 /// (ADR 0164). A file whose path is taken by then is left where it is and listed. With
 /// `checkingAgain`, for a plan the user confirmed a while ago, a file is first read again and
 /// skipped and listed unless it's still where the plan found it and still goes where the plan
-/// says. Blocks on the volume, so call it off the main thread, and from one queue at a time:
-/// the tag writes'.
-public func moveToLayout(_ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool)
-    -> FilesOrganized
-{
+/// says. Every move is recorded in the index at `ledger` before the first rename, and those
+/// that didn't happen are dropped after, so `carryLayoutMoves` carries the stats of those that
+/// did, now or after a failure. Blocks on the volume, so call it off the main thread, and from
+/// one queue at a time: the tag writes'.
+public func moveToLayout(
+    _ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool, ledger: URL
+) -> FilesOrganized {
     moveToLayout(
-        plan, libraryFolder: libraryFolder, checkingAgain: checkingAgain, calls: MoveCalls())
+        plan, libraryFolder: libraryFolder, checkingAgain: checkingAgain,
+        ledger: { try LibraryIndex(at: ledger) }, calls: MoveCalls())
 }
 
 func moveToLayout(
-    _ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool = false, calls: MoveCalls
+    _ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool = false,
+    ledger: () throws -> LibraryIndex, calls: MoveCalls
 ) -> FilesOrganized {
     var result = plan
     result.moved = []
     guard let library = resolved(libraryFolder) else {
         result.problems += plan.moved.map { _ in MoveRefusal.notFound(libraryFolder).description }
+        return result
+    }
+    let index: LibraryIndex
+    do {
+        index = try ledger()
+        try index.recordLayoutMoves(plan.moved)
+    } catch {
+        result.problems += plan.moved.map {
+            notMoved($0.from, .failed($0.from, $0.to, "its move couldn't be recorded: \(error)"))
+        }
         return result
     }
     let spelling = Spelling(libraryFolder)
@@ -106,6 +123,13 @@ func moveToLayout(
         }
     }
     result.keptFolders = removeEmptied(left, library)
+    let moved = Set(result.moved.map(\.from))
+    do {
+        try index.forgetLayoutMoves(plan.moved.map(\.from).filter { !moved.contains($0) })
+    } catch {
+        // `carryLayoutMoves` drops a move whose file is still at its old path.
+        logger.error("couldn't drop the moves that didn't happen: \(error)")
+    }
     return result
 }
 

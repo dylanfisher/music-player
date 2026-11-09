@@ -130,7 +130,9 @@ public final class TagEditing {
     /// Each open window's latest read, so an earlier read that comes back late is dropped.
     private var reads: [ObjectIdentifier: ReadStop] = [:]
 
-    public init(writer: TagWriter) {
+    /// `ledger` is the library's index, where the files' moves are recorded until their stats
+    /// follow them (ADR 0164).
+    public init(writer: TagWriter, ledger: URL) {
         effects = Effects(
             read: { readEditableTracks($0, isStopped: $1) },
             write: { writer.write($0, origin: $1, progress: $2) },
@@ -139,7 +141,7 @@ public final class TagEditing {
             present: { $0.show(after: $1) }, confirm: ask,
             alert: showProblems,
             layout: { layoutMoves($0, libraryFolder: $1) },
-            move: { moveToLayout($0, libraryFolder: $1, checkingAgain: $2) },
+            move: { moveToLayout($0, libraryFolder: $1, checkingAgain: $2, ledger: ledger) },
             follow: { writer.follow($0.map { ($0.from, $0.to) }) })
         // A write in place a crash cut short is finished before anything reads the file
         // again; the writer logs what it found (ADR 0107).

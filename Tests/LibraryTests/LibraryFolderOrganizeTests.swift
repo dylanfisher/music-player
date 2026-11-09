@@ -7,10 +7,13 @@ import Testing
 
 /// A temporary folder holding a `library` folder, and a file outside it, for Keep Files
 /// Organized to rename in.
-private final class OrganizeFolders {
+final class OrganizeFolders {
     let root: String
+    /// The ledger of moves, an index of its own.
+    let index: LibraryIndex
 
     init() throws {
+        index = try craftedIndex([])
         root =
             FileManager.default.temporaryDirectory
             .appendingPathComponent("organize-\(UUID().uuidString)").path
@@ -40,7 +43,8 @@ private final class OrganizeFolders {
 
     func organize(_ paths: [String], _ calls: MoveCalls = MoveCalls()) -> FilesOrganized {
         moveToLayout(
-            layoutMoves(paths, libraryFolder: library), libraryFolder: library, calls: calls)
+            layoutMoves(paths, libraryFolder: library), libraryFolder: library,
+            ledger: { self.index }, calls: calls)
     }
 }
 
@@ -225,7 +229,8 @@ private func ignoresCase(_ folder: String) -> Bool { pathconf(folder, _PC_CASE_S
     try FileManager.default.createSymbolicLink(
         atPath: linked, withDestinationPath: folders.library)
     let result = moveToLayout(
-        layoutMoves([path], libraryFolder: linked), libraryFolder: linked, checkingAgain: false)
+        layoutMoves([path], libraryFolder: linked), libraryFolder: linked,
+        ledger: { folders.index }, calls: MoveCalls())
     #expect(result.inPlace == 1)
     #expect(result.problems.isEmpty)
     #expect(exists(path))
@@ -247,7 +252,8 @@ private func ignoresCase(_ folder: String) -> Bool { pathconf(folder, _PC_CASE_S
     try folders.file("library/song.flac", title: "Retitled")
     try FileManager.default.removeItem(atPath: gone)
     let result = moveToLayout(
-        plan, libraryFolder: folders.library, checkingAgain: true, calls: MoveCalls())
+        plan, libraryFolder: folders.library, checkingAgain: true, ledger: { folders.index },
+        calls: MoveCalls())
     #expect(result.moved.isEmpty)
     #expect(
         result.problems == [

@@ -33,7 +33,7 @@ extension LibraryBrowser {
         // The tags are read from the volume, which may be a share that has stopped answering.
         let plan = await blockingFileWork { layoutMoves(paths, libraryFolder: folder) }
         guard !plan.moved.isEmpty else {
-            return finishOrganizing(plan, carried: nil, failure: nil)
+            return finishOrganizing(plan, carry: LayoutCarry())
         }
         let agreed = await withCheckedContinuation { continuation in
             confirmOrganizing(plan, window) { continuation.resume(returning: $0) }
@@ -42,17 +42,15 @@ extension LibraryBrowser {
     }
 
     /// Says what Keep Files Organized or Organize Selected Files moved, and lists the files it
-    /// didn't move, and the move list's lines that carried nothing, in the Problems window.
-    public func finishOrganizing(
-        _ organized: FilesOrganized, carried: MoveListImport?, failure: String?
-    ) {
-        var rows = organized.problemLines
-        rows += carried?.problems.map { "the stats didn't follow a moved file: \($0.reason)" } ?? []
-        if let failure { rows.append("the stats didn't follow the moved files: \(failure)") }
+    /// didn't move, and the moves whose stats didn't follow, in the Problems window. With
+    /// `organized` nil, the carry at launch of moves recorded before.
+    public func finishOrganizing(_ organized: FilesOrganized?, carry: LayoutCarry) {
+        let rows = (organized?.problemLines ?? []) + carry.problems
         let summary =
-            organized.moved.isEmpty && rows.isEmpty ? "No files to organize" : organized.summary
+            organized.map { $0.moved.isEmpty && rows.isEmpty ? "No files to organize" : $0.summary }
+            ?? "The stats of \(files(carry.problems.count)) didn't follow them"
         finish(summary, rows.map { Problem(terminalSafe($0)) }, as: \.organizedReport)
-        if !organized.moved.isEmpty {
+        if organized?.moved.isEmpty == false || !carry.carried.isEmpty {
             refreshNow()
             edited()
         }

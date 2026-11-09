@@ -680,7 +680,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makeTagEditing() -> TagEditing {
         let editing = TagEditing(
-            writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)))
+            writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)),
+            ledger: libraryFileURL(in: paths.dataDirectory))
         editing.written = { [weak self] report, organized in
             guard let organized else {
                 self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
@@ -944,6 +945,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 activity, pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback])
         }
         self.watcher = watcher
+        // Organized files whose stats a carry before couldn't move.
+        carry(nil, then: nil)
     }
 
     /// `events`, and a "launched" line on standard output once the watcher's scans at start

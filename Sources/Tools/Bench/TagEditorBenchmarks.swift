@@ -122,7 +122,10 @@ private func getInfoRuns(_ count: Int) throws -> [GetInfoRun] {
     let paths = try fixturePaths(count)
     let journal = try emptyCacheDirectory("bench-get-info")
     return try onMainActor {
-        let editing = TagEditing(writer: TagWriter(journal: TagUndoJournal(dataDirectory: journal)))
+        // Get Info organizes nothing, so the ledger is never opened.
+        let editing = TagEditing(
+            writer: TagWriter(journal: TagUndoJournal(dataDirectory: journal)),
+            ledger: libraryFileURL(in: journal))
         let parent = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled],
             backing: .buffered, defer: false)

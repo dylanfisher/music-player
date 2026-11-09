@@ -92,11 +92,13 @@ private final class Asked {
     var organized = FilesOrganized()
     organized.moved = [TrackMove(from: "/l/a.flac", to: "/l/A/a.flac")]
     organized.problems = ["/l/b.flac: not moved, /l/A/b.flac is already there"]
-    browser.finishOrganizing(organized, carried: nil, failure: "the index is locked")
+    let carry = LayoutCarry(
+        carried: [], problems: ["the stats of /l/a.flac didn't follow it to /l/A/a.flac: locked"])
+    browser.finishOrganizing(organized, carry: carry)
     #expect(
         browser.status.organizedReport.map(\.line) == [
             "/l/b.flac: not moved, /l/A/b.flac is already there",
-            "the stats didn't follow the moved files: the index is locked",
+            "the stats of /l/a.flac didn't follow it to /l/A/a.flac: locked",
         ])
     #expect(browser.status.problemLines.contains(browser.status.organizedReport[0].line))
 }

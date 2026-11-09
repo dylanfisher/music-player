@@ -47,31 +47,34 @@ extension AppDelegate {
 }
 
 extension AppDelegate {
-    /// After Keep Files Organized or Organize Selected Files renamed files: their stats,
-    /// ratings and playlist entries follow them through the move list, then the files the
-    /// write changed are read at their paths now (ADR 0164).
-    func carry(_ organized: FilesOrganized, then report: TagWriteReport) {
+    /// After Keep Files Organized or Organize Selected Files renamed files, or with `organized`
+    /// nil at launch: the stats, ratings and playlist entries of every renamed file the index
+    /// recorded follow it through the move list, then the files the write changed are read at
+    /// their paths now (ADR 0164).
+    func carry(_ organized: FilesOrganized?, then report: TagWriteReport?) {
+        let databaseURL = libraryFileURL(in: paths.dataDirectory)
         Task { [weak self] in
-            var carried: MoveListImport?
-            var failure: String?
-            if !organized.moved.isEmpty {
-                if let watcher = self?.watcher {
-                    do {
-                        carried = try await watcher.importMoves(
-                            lines: organized.moved.map { ($0.from, $0.to) })
-                    } catch {
-                        failure = "\(error)"
-                    }
-                } else {
-                    failure = "the library isn't being watched"
+            let carry = await carryLayoutMoves(databaseURL: databaseURL) {
+                @MainActor [weak self] lines in
+                guard let watcher = self?.watcher else {
+                    throw LibraryNotWatched()
                 }
+                return try await watcher.importMoves(lines: lines)
             }
-            if !report.changed.isEmpty {
+            if let report, !report.changed.isEmpty {
                 self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
             }
-            // A write whose files were all in place has nothing to say.
-            guard !organized.moved.isEmpty || !organized.problemLines.isEmpty else { return }
-            self?.browser?.finishOrganizing(organized, carried: carried, failure: failure)
+            // A write whose files were all in place, or a launch with nothing left to carry,
+            // has nothing to say.
+            guard
+                organized?.moved.isEmpty == false || organized?.problemLines.isEmpty == false
+                    || !carry.problems.isEmpty
+            else { return }
+            self?.browser?.finishOrganizing(organized, carry: carry)
         }
     }
+}
+
+private struct LibraryNotWatched: Error, CustomStringConvertible {
+    var description: String { "the library isn't being watched" }
 }
