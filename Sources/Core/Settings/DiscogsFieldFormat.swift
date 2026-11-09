@@ -17,6 +17,12 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
         case keep, drop
     }
 
+    /// Whether a label Discogs lists more than once, once for each of its catalog numbers, is
+    /// written each time, as YATE writes "Columbia & Columbia" (ADR 0128).
+    public enum Repeats: String, Codable, Sendable {
+        case keep, drop
+    }
+
     public enum DateForm: String, Codable, Sendable {
         /// As Discogs writes it: "1999", "1999-03-00" or "1999-03-15".
         case full
@@ -38,6 +44,8 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
     public var join: String?
     public var names: Names?
     public var suffixes: Suffixes?
+    /// Nil drops them.
+    public var repeats: Repeats?
     public var date: DateForm?
     /// Text with fields' tokens in braces, each replaced by that field's value in this format:
     /// the owner's `GENRE` is "{genre} - {styles}". Nil writes the field's own value.
@@ -47,11 +55,13 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
 
     public init(
         join: String? = nil, names: Names? = nil, suffixes: Suffixes? = nil,
-        date: DateForm? = nil, template: String? = nil, credits: PerTagFormat<CreditStyle>? = nil
+        repeats: Repeats? = nil, date: DateForm? = nil, template: String? = nil,
+        credits: PerTagFormat<CreditStyle>? = nil
     ) {
         self.join = join
         self.names = names
         self.suffixes = suffixes
+        self.repeats = repeats
         self.date = date
         self.template = template
         self.credits = credits
@@ -63,7 +73,7 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
-        case join, names, suffixes, date, template, credits
+        case join, names, suffixes, repeats, date, template, credits
     }
 
     public init(from decoder: any Decoder) throws {
@@ -72,6 +82,7 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
         join = try container.decodeIfPresent(String.self, forKey: .join)
         names = try container.decodeIfPresent(Names.self, forKey: .names)
         suffixes = try container.decodeIfPresent(Suffixes.self, forKey: .suffixes)
+        repeats = try container.decodeIfPresent(Repeats.self, forKey: .repeats)
         date = try container.decodeIfPresent(DateForm.self, forKey: .date)
         template = try container.decodeIfPresent(String.self, forKey: .template)
         credits = try container.decodeIfPresent(

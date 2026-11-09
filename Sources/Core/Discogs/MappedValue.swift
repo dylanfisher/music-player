@@ -6,7 +6,8 @@ import Settings
 enum MappedValue: Equatable {
     case text(String)
     case list([String])
-    /// Labels' names, which can carry Discogs's "(2)" as artists' do.
+    /// Labels' names, which can carry Discogs's "(2)" as artists' do, and repeat where a label
+    /// has several catalog numbers.
     case names([String])
     /// Names with Discogs's join words between them.
     case artists([CatalogArtistCredit])
@@ -24,7 +25,9 @@ enum MappedValue: Equatable {
         switch self {
         case .text(let text): [text]
         case .list(let values): values
-        case .names(let names): names.map { name($0, nil, format) }
+        case .names(let names):
+            names.map { name($0, nil, format) }.filter(
+                format.repeats == .keep ? { _ in true } : once())
         case .artists(let artists):
             artists.map { name($0.name, $0.nameVariation, format) }
         case .people(let people):
@@ -51,6 +54,12 @@ enum MappedValue: Equatable {
         let values = values(format, tagFormat: tagFormat)
         return values.isEmpty ? nil : values.joined(separator: format.join ?? "")
     }
+}
+
+/// A filter that keeps each value the first time it sees it.
+private func once() -> (String) -> Bool {
+    var seen = Set<String>()
+    return { seen.insert($0).inserted }
 }
 
 /// An artist's name as `format` writes it: the canonical one or the release's variation, and

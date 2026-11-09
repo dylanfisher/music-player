@@ -156,7 +156,8 @@ private let yateRules: [DiscogsField: DiscogsFieldRule] = [
     .albumArtist: DiscogsFieldRule(.replace, [.field(.albumArtist)], format: artistFormat),
     .albumArtistURL: DiscogsFieldRule(
         .replace, [url(DiscogsKey.albumArtistURL, numbered: true)]),
-    .label: DiscogsFieldRule(.replace, [.field(.publisher)], format: labelFormat),
+    .label: DiscogsFieldRule(
+        .replace, [.field(.publisher)], format: DiscogsFieldFormat(join: " & ", repeats: .keep)),
     .labelURL: DiscogsFieldRule(.replace, [url(DiscogsKey.labelURL, numbered: true)]),
     .catalogNumber: DiscogsFieldRule(.replace, [.field(.catalogNumber)]),
     .labelCatalogNumbers: DiscogsFieldRule(

@@ -126,6 +126,24 @@ private func changed(
     #expect(all[1]?["publisher"] == "Label & Other")
 }
 
+/// A label Discogs lists once for each of its catalog numbers is written once, unless the
+/// format keeps repeats, as YATE's does; its catalog numbers are each written either way.
+@Test func aLabelListedForEachOfItsCatalogNumbersIsNamedOnceUnlessRepeatsAreKept() {
+    var twice = twoDiscs
+    twice.labels = [
+        label(5, "Giegling", "GIEGLING LP 01 TEIL 2*"), label(5, "Giegling", "glg lp 01.2 extra"),
+    ]
+    let first = changed(twice)[1]!
+    #expect(first["publisher"] == "Giegling")
+    let values = first.values.compactMap { $0 }
+    #expect(values.contains("Giegling: GIEGLING LP 01 TEIL 2*"))
+    #expect(values.contains("Giegling: glg lp 01.2 extra"))
+
+    var mapping = oneToOne
+    mapping[.label].format.repeats = .keep
+    #expect(changed(twice, mapping)[1]?["publisher"] == "Giegling & Giegling")
+}
+
 @Test func creditsGoToTheirFieldsAndTheRestToTheInvolvedPeople() {
     let all = changed()
     // A release credit without tracks covers every track; one with tracks covers those.

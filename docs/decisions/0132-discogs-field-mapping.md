@@ -62,10 +62,14 @@ Each field has a rule: a mode, targets and a format.
   and "-2", "-3", as YATE writes several labels' catalog numbers (FLAC's further ones are
   `DISCOGS CATALOG NUMBER-2`, with spaces).
 - **Format,** each part optional: the join between values; canonical names or the release's
-  ANVs; Discogs's "(2)" kept or dropped, for artists and labels; the date in full or as its year;
-  a template, whose tokens are the fields' names in braces plus `{genre}` for the first genre;
-  and the credit style per format, `Name (Role)` or `Role;;;Name,Name`. Artists without a join
-  get Discogs's join words with a space each side, as YATE writes `Benedek , Tom Noble`.
+  ANVs; Discogs's "(2)" kept or dropped, for artists and labels; a label's repeats kept or
+  dropped (amended 2026-11-08: Discogs lists a label once for each of its catalog numbers, so
+  `Giegling & Giegling`; Discogs's label names are unique, so a repeated name is the same label.
+  Dropped unless `repeats` is `keep`, which only YATE's preset sets); the date in full or as
+  its year; a template, whose tokens are the fields' names in braces plus `{genre}` for the
+  first genre; and the credit style per format, `Name (Role)` or `Role;;;Name,Name`. Artists
+  without a join get Discogs's join words with a space each side, as YATE writes `Benedek ,
+  Tom Noble`.
 
 A date Discogs knows only in part (`1965-01-00`) is written as its year: no reader takes a day
 or month of 00, and ID3v2.3 can't hold a month alone, so the full date would fail the writer's
@@ -99,7 +103,7 @@ all three tag formats, so other apps read it, and the index keeps it (51.19). No
 a `STYLE` key.
 
 - **One to one**, the default: each field to its own tag, replaced. Genres to `GENRE` and
-  styles to `MOOD`, each joined with ", ", label to `LABEL` (" & " between labels), and YATE's
+  styles to `MOOD`, each joined with ", ", label to `LABEL` (" & " between labels, each once), and YATE's
   key names for the rest.
 - **Minimal**: the release id, the label, the catalog number and the year; the rest off.
 - **YATE**: YATE's keys and spellings per format (ADR 0128), every field replaced. `GENRE` the
