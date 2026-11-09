@@ -163,6 +163,20 @@ public actor DiscogsAPI {
         try await search(["artist": artist, "release_title": title])
     }
 
+    /// The releases Look Up Release's fields find, best first: each field given is searched
+    /// as Discogs's own search box would, its words matched loosely.
+    func search(artist: String, title: String, catalogNumber: String) async throws(DiscogsAPIError)
+        -> [Int]
+    {
+        let fields = ["artist": artist, "release_title": title, "catno": catalogNumber]
+            .compactMapValues { value -> String? in
+                let trimmed = value.trimmingCharacters(in: .whitespaces)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        guard !fields.isEmpty else { return [] }
+        return try await search(fields)
+    }
+
     /// The release ids a `/database/search` of releases with `fields` finds on its first page.
     /// Throws `.tokenRequired`, sending nothing, without a token.
     private func search(_ fields: [String: String]) async throws(DiscogsAPIError) -> [Int] {

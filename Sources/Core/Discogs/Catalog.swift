@@ -108,6 +108,40 @@ public final class Catalog {
         ).map(name, number) { try $0.int(0) }
     }
 
+    /// The releases with `catalogNumber` on any label, at most `limit`, in id order. The keys
+    /// are indexed by label first, so this reads all of them: Look Up Release's search by a
+    /// number alone, which the user asks for, not the matcher.
+    func releaseIDs(catalogNumber: String, limit: Int) throws -> [Int] {
+        guard let number = CatalogKey.catalogNumber(catalogNumber) else { return [] }
+        return try database.prepare(
+            "SELECT DISTINCT release_id FROM catno_keys WHERE catno_key = ? ORDER BY release_id"
+                + " LIMIT ?"
+        ).map(number, limit) { try $0.int(0) }
+    }
+
+    /// The masters, and the releases with no master, whose artist folds as `artist`'s, or
+    /// with `artist` nil, whose title folds as `title`'s, at most `limit`, masters first. By
+    /// title alone this reads every key, as Look Up Release asks for.
+    func titleMatches(artist: String?, title: String?, limit: Int) throws -> [TitleMatch] {
+        let column: String
+        let key: String
+        if let artist {
+            (column, key) = ("artist_key", CatalogKey.fold(artist))
+        } else {
+            (column, key) = ("title_key", CatalogKey.fold(title ?? "", title: true))
+        }
+        guard !key.isEmpty else { return [] }
+        return try database.prepare(
+            """
+            SELECT DISTINCT master_id, release_id FROM title_keys WHERE \(column) = ?
+            ORDER BY master_id IS NULL, master_id, release_id LIMIT ?
+            """
+        ).map(key, limit) { row in
+            if let master = row.optionalInt(0) { return .master(master) }
+            return .release(try row.int(1))
+        }
+    }
+
     /// The masters, and the releases with no master, whose artist and title fold as `artist`
     /// and `title` do: masters first, each in id order.
     func titleMatches(artist: String, title: String) throws -> [TitleMatch] {
