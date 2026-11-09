@@ -2,6 +2,9 @@
 
 - **Date:** 2026-11-08
 - **Status:** accepted
+- **Amended by:** [0159](0159-settings-the-menus-dont-list.md): the setting is in the General
+  pane only, not the File menu. Phase 55 has the track table, with the option on, sort a
+  title's releases by their earliest date too, those with none last, at a subquery per row.
 - **See also:** [0129](0129-custom-tag-fields.md) (the release id among the custom keys),
   [0136](0136-asking-before-a-rescan-and-undoing-a-tagger-write.md) (the rescan question),
   [0142](0142-library-snapshots.md) (the relaunch, and restores)

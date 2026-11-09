@@ -67,15 +67,34 @@ private func tablePaths(_ index: LibraryIndex, groupByAlbumArtist: Bool) throws 
             ["/m/untagged/1.flac"],
             ["/m/remaster/1.flac", "/m/remaster/2.flac"],
         ], "by year, the padded id the same release")
-    // The table has no year to sort by, so releases come in the order they were added, each
-    // whole.
+    // The table lists them by date too, each whole, though the remaster was added first.
     for groupByAlbumArtist in [false, true] {
         #expect(
             try tablePaths(index, groupByAlbumArtist: groupByAlbumArtist) == [
-                "/m/remaster/1.flac", "/m/remaster/2.flac", "/m/original/1.flac",
-                "/m/original/2.flac", "/m/untagged/1.flac",
+                "/m/original/1.flac", "/m/original/2.flac", "/m/untagged/1.flac",
+                "/m/remaster/1.flac", "/m/remaster/2.flac",
             ])
     }
+}
+
+/// Off, the table keeps the order albums were added in among albums of one title, as it reads
+/// no date then; on, a release with no date comes after those with one.
+@Test func theTableOrdersReleasesByDateOnlyWithTheOptionOn() throws {
+    let tracks = [
+        Crafted(path: "/m/none/1.flac", album: "Album", custom: release(3)),
+        Crafted(path: "/m/new/1.flac", album: "Album", custom: release(2), date: "2025-03-01"),
+        Crafted(path: "/m/old/1.flac", album: "Album", custom: release(1), date: "2025-01-15"),
+    ]
+    let on = try LibraryIndex(at: libraryURL(), separateReleases: true)
+    try on.store(tracks.map(\.scanned))
+    #expect(
+        try tablePaths(on, groupByAlbumArtist: false)
+            == ["/m/old/1.flac", "/m/new/1.flac", "/m/none/1.flac"])
+    let off = try LibraryIndex(at: libraryURL())
+    try off.store(tracks.map(\.scanned))
+    #expect(
+        try tablePaths(off, groupByAlbumArtist: true)
+            == ["/m/none/1.flac", "/m/new/1.flac", "/m/old/1.flac"])
 }
 
 @Test func anOpenThatAsksNothingKeepsTheStoredOption() throws {

@@ -112,6 +112,13 @@ extension LibraryIndex {
         }
         let direction = ascending ? "ASC" : "DESC"
         var order = "\(column.expression) \(direction)"
+        // The album ID keeps two releases of one title apart, each whole. With Separate
+        // Releases on, a title's releases go earliest date first, those with none last, as the
+        // Album pane lists them; the subquery costs a lookup a row, so only then.
+        let release =
+            separateReleases
+            ? "\(albumDateSQL) IS NULL \(direction), \(albumDateSQL) \(direction), "
+            : ""
         let tieBreak: String
         if filter.groupByAlbumArtist, column == .artist || column == .album {
             // Each album's tracks stay together, in disc and track order, whoever plays on them.
@@ -119,17 +126,16 @@ extension LibraryIndex {
             let album = "al.sort_title \(direction)"
             order =
                 (column == .artist ? "\(artist), \(album)" : "\(album), \(artist)")
-                + ", t.album_id \(direction)"
+                + ", \(release)t.album_id \(direction)"
             tieBreak = "t.disc_number, t.track_number, t.sort_title, t.file_id"
         } else if column == .lastPlayed {
             // A time is almost unique, so the ID breaks ties without the artist and album
             // lookups the other columns need.
             tieBreak = "t.file_id \(direction)"
         } else {
-            // The album ID keeps two releases of one title apart, each whole.
             tieBreak =
-                "\(filter.groupByAlbumArtist ? "ga" : "ar").sort_name, al.sort_title, t.album_id,"
-                + " t.disc_number, t.track_number, t.sort_title, t.file_id"
+                "\(filter.groupByAlbumArtist ? "ga" : "ar").sort_name, al.sort_title, \(release)"
+                + "t.album_id, t.disc_number, t.track_number, t.sort_title, t.file_id"
         }
         let sql = """
             SELECT \(columns) FROM tracks t
@@ -532,3 +538,10 @@ private func warningKind(_ name: String) throws -> MetadataWarning.Kind {
     }
     return kind
 }
+
+/// The earliest date the tracks of `t`'s album have, among those that start with a year; null
+/// for an album with none.
+private let albumDateSQL = """
+    (SELECT min(a.date) FROM tracks a WHERE a.album_id = t.album_id
+        AND a.date GLOB '[0-9][0-9][0-9][0-9]*')
+    """
