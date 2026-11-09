@@ -553,7 +553,7 @@ package final class Downloads {
         question.window.initialFirstResponder = field
         question.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            guard let id = QueueChoice.pastedReleaseID(field.stringValue) else {
+            guard let id = pastedReleaseID(field.stringValue) else {
                 self.alert(
                     "That isn't a Discogs release",
                     ["\(field.stringValue.debugDescription) has no release id."])

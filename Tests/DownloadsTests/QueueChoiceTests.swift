@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import Discogs
 @testable import Downloads
 @testable import Library
 @testable import Recommender
@@ -19,7 +20,7 @@ import Testing
     ("Made-Up Album", nil),
 ])
 func aPastedReleaseIsAnIdOrADiscogsReleaseURL(text: String, id: Int?) {
-    #expect(QueueChoice.pastedReleaseID(text) == id)
+    #expect(pastedReleaseID(text) == id)
 }
 
 private func album(_ id: Int64, _ releases: [String?]) -> DiscogsAlbum {

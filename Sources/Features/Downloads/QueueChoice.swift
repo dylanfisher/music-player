@@ -58,20 +58,4 @@ struct QueueChoice: Equatable, Sendable {
     static func albumTitle(_ artist: String?, _ title: String) -> String {
         artist.map { "\($0) - \(title)" } ?? title
     }
-
-    /// The release id in what the owner pasted: a number, or a Discogs release URL
-    /// (`…/release/<id>`, with or without a slug after the id). Nil for anything else.
-    static func pastedReleaseID(_ text: String) -> Int? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let id = Int(trimmed.hasPrefix("r") ? String(trimmed.dropFirst()) : trimmed) {
-            return id > 0 ? id : nil
-        }
-        guard let url = URL(string: trimmed), let host = url.host?.lowercased(),
-            host == "discogs.com" || host.hasSuffix(".discogs.com")
-        else { return nil }
-        let parts = url.pathComponents
-        guard let at = parts.firstIndex(of: "release"), at + 1 < parts.count else { return nil }
-        let digits = parts[at + 1].prefix(while: \.isNumber)
-        return Int(digits).flatMap { $0 > 0 ? $0 : nil }
-    }
 }
