@@ -31,7 +31,7 @@ extension LibraryBrowser {
         }
         guard !paths.isEmpty else { return }
         // The tags are read from the volume, which may be a share that has stopped answering.
-        let plan = await blockingFileWork { planOrganizing(paths, libraryFolder: folder) }
+        let plan = await blockingFileWork { layoutMoves(paths, libraryFolder: folder) }
         guard !plan.moved.isEmpty else {
             return finishOrganizing(plan, carried: nil, failure: nil)
         }

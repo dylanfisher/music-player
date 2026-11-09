@@ -134,7 +134,8 @@ public final class TagEditing {
             undo: { writer.undoLast(ifNewestIs: $0) },
             newestEdit: { () throws(TagWriteError) in try writer.newestEdit() },
             present: { $0.show(after: $1) }, confirm: ask,
-            alert: showProblems, organize: { organizeFiles($0, libraryFolder: $1) },
+            alert: showProblems,
+            organize: { moveToLayout(layoutMoves($0, libraryFolder: $1), libraryFolder: $1) },
             follow: { writer.follow($0.map { ($0.from, $0.to) }) })
         // A write in place a crash cut short is finished before anything reads the file
         // again; the writer logs what it found (ADR 0107).

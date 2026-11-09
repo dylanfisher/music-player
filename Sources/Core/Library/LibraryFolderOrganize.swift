@@ -15,8 +15,6 @@ public struct FilesOrganized: Equatable, Sendable {
     /// Why each file that should have moved didn't: its path taken, its tags unreadable, a
     /// failed rename. One line each, for the Problems window.
     public var problems: [String] = []
-    /// Folders a move left empty, removed.
-    var removedFolders: [String] = []
     /// Folders a move took the last audio file from that still hold other files, such as
     /// cover art, which are left where they are.
     var keptFolders: [String] = []
@@ -33,22 +31,24 @@ public struct FilesOrganized: Equatable, Sendable {
 
     /// `outside` and `problems` as lines for the Problems window.
     public var problemLines: [String] {
-        outside.map { "\($0): not moved, it isn't in the library folder" } + problems
+        outside.map { MoveRefusal.outsideLibrary($0).description } + problems
             + keptFolders.map { "\($0): left in place, it holds files that aren't audio" }
     }
 }
 
-/// Where each of `paths` would go in `libraryFolder` by its tags (ADR 0124's layout), for
-/// Organize Selected Files to count before it asks: nothing is renamed. A path taken is a
-/// problem, as it would be in `organizeFiles`. Reads the files, so call it off the main thread.
-public func planOrganizing(_ paths: [String], libraryFolder: String) -> FilesOrganized {
+/// Where each of `paths` goes in `libraryFolder` by its tags (ADR 0124's layout), with nothing
+/// renamed: what Organize Selected Files asks about, and what `moveToLayout` then does. A path
+/// named twice counts once; a path taken, on disk or by an earlier file of `paths`, is a
+/// problem. Reads the files, so call it off the main thread.
+public func layoutMoves(_ paths: [String], libraryFolder: String) -> FilesOrganized {
     var plan = FilesOrganized()
     guard let library = resolved(libraryFolder) else {
-        plan.problems = ["the library folder \(libraryFolder) can't be found"]
+        plan.problems = [MoveRefusal.notFound(libraryFolder).description]
         return plan
     }
+    var named: Set<String> = []
     var destinations: Set<String> = []
-    for path in paths {
+    for path in paths where named.insert(nfc(path)).inserted {
         switch place(path, libraryFolder: libraryFolder, resolvedLibrary: library) {
         case .outside: plan.outside.append(path)
         case .inPlace: plan.inPlace += 1
@@ -64,39 +64,33 @@ public func planOrganizing(_ paths: [String], libraryFolder: String) -> FilesOrg
     return plan
 }
 
-/// Renames each of `paths` that's in `libraryFolder` to the path its tags give it there
-/// (ADR 0164), never over a file and never to another volume, and removes the folders that
-/// leaves empty, never the library folder itself. A file whose path is taken is left where it
-/// is and listed. Blocks on the volume, so call it off the main thread, and from one queue at a
-/// time: the tag writes' (ADR 0164).
-public func organizeFiles(_ paths: [String], libraryFolder: String) -> FilesOrganized {
-    organizeFiles(paths, libraryFolder: libraryFolder, calls: MoveCalls())
+/// Renames the files of `plan`, which `layoutMoves` made, never over a file and never to
+/// another volume, and removes the folders that leaves empty, never the library folder itself
+/// (ADR 0164). A file whose path is taken by then is left where it is and listed. Blocks on the
+/// volume, so call it off the main thread, and from one queue at a time: the tag writes'.
+public func moveToLayout(_ plan: FilesOrganized, libraryFolder: String) -> FilesOrganized {
+    moveToLayout(plan, libraryFolder: libraryFolder, calls: MoveCalls())
 }
 
-func organizeFiles(_ paths: [String], libraryFolder: String, calls: MoveCalls)
+func moveToLayout(_ plan: FilesOrganized, libraryFolder: String, calls: MoveCalls)
     -> FilesOrganized
 {
-    var result = FilesOrganized()
+    var result = plan
+    result.moved = []
     guard let library = resolved(libraryFolder) else {
-        result.problems = ["the library folder \(libraryFolder) can't be found"]
+        result.problems += plan.moved.map { _ in MoveRefusal.notFound(libraryFolder).description }
         return result
     }
     var left: Set<String> = []
-    for path in paths {
-        switch place(path, libraryFolder: libraryFolder, resolvedLibrary: library) {
-        case .outside: result.outside.append(path)
-        case .inPlace: result.inPlace += 1
-        case .problem(let line): result.problems.append(line)
-        case .move(let destination):
-            if let problem = rename(path, to: destination, library, calls) {
-                result.problems.append(problem)
-            } else {
-                result.moved.append(TrackMove(from: path, to: destination))
-                left.insert(parentOf(path))
-            }
+    for move in plan.moved {
+        if let problem = rename(move.from, to: move.to, library, calls) {
+            result.problems.append(problem)
+        } else {
+            result.moved.append(move)
+            left.insert(parentOf(move.from))
         }
     }
-    (result.removedFolders, result.keptFolders) = removeEmptied(left, library)
+    result.keptFolders = removeEmptied(left, library)
     return result
 }
 
@@ -118,9 +112,9 @@ private func place(_ path: String, libraryFolder: String, resolvedLibrary librar
     } catch {
         switch error {
         case .unreadable(let detail):
-            return .problem("\(path): not moved, its tags don't read: \(detail)")
+            return .problem(notMoved(path, MoveRefusal.unreadable(path, detail)))
         case .unlisted(let detail):
-            return .problem("\(path): not moved, its folder can't be listed: \(detail)")
+            return .problem(MoveRefusal.failed(path, libraryFolder, detail).description)
         }
     }
     return nfc(destination) == nfc(path) ? .inPlace : .move(destination)
@@ -132,17 +126,17 @@ private func rename(
 ) -> String? {
     let parent = parentOf(destination)
     guard isFolder(parent, in: library) else {
-        return "\(path): not moved, \(parent) isn't in the library folder"
+        return notMoved(path, .outsideLibrary(parent))
     }
     if pathExists(destination) { return taken(path, destination) }
     do {
         try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
     } catch {
-        return "\(path): couldn't move to \(destination): \(error.localizedDescription)"
+        return MoveRefusal.failed(path, destination, error.localizedDescription).description
     }
     // The folders just made could be a link someone else put there in between.
     guard isFolder(parent, in: library) else {
-        return "\(path): not moved, \(parent) isn't in the library folder"
+        return notMoved(path, .outsideLibrary(parent))
     }
     switch renameNeverOver(path, to: destination, calls) {
     case 0: return nil
@@ -150,33 +144,33 @@ private func rename(
     case EXDEV:
         return "\(path): not moved, \(destination) is on another volume, and a move there would"
             + " be a copy and a delete"
-    case let code: return "\(path): couldn't move to \(destination): \(errorText(code))"
+    case let code: return MoveRefusal.failed(path, destination, errorText(code)).description
     }
 }
 
+private func notMoved(_ path: String, _ refusal: MoveRefusal) -> String {
+    "\(path): not moved, \(refusal)"
+}
+
 private func taken(_ path: String, _ destination: String) -> String {
-    "\(path): not moved, \(destination) is already there"
+    notMoved(path, .collisions([destination]))
 }
 
 /// Removes each of `folders`, and then its parents, while it's empty and inside the library
 /// folder; `rmdir` refuses a folder with anything in it, cover art or a `.DS_Store` included.
-/// Returns the folders removed, and those of `folders` kept with no audio file left in them
-/// but some other file a user would see.
-private func removeEmptied(_ folders: Set<String>, _ library: String)
-    -> (removed: [String], kept: [String])
-{
-    var removed: [String] = []
+/// Returns those of `folders` kept with no audio file left in them but some other file a user
+/// would see.
+private func removeEmptied(_ folders: Set<String>, _ library: String) -> [String] {
     var kept: [String] = []
     // The deepest first, so a parent is tried once its children are gone.
     for folder in folders.sorted(by: { $0.count > $1.count }) {
         var current = folder
         while let real = resolved(current), isPath(real, under: library), rmdir(current) == 0 {
-            removed.append(current)
             current = parentOf(current)
         }
         if current == folder, holdsOnlyOtherFiles(folder) { kept.append(folder) }
     }
-    return (removed, kept.sorted())
+    return kept.sorted()
 }
 
 /// Whether `folder` holds no audio file or folder, and some file that isn't hidden.

@@ -38,7 +38,8 @@ private final class OrganizeFolders {
     }
 
     func organize(_ paths: [String], _ calls: MoveCalls = MoveCalls()) -> FilesOrganized {
-        organizeFiles(paths, libraryFolder: library, calls: calls)
+        moveToLayout(
+            layoutMoves(paths, libraryFolder: library), libraryFolder: library, calls: calls)
     }
 }
 
@@ -52,10 +53,7 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     #expect(result.moved == [TrackMove(from: old, to: new)])
     #expect(exists(new))
     #expect(!exists(old))
-    #expect(
-        result.removedFolders == [
-            folders.library + "/Old Artist/Old Album", folders.library + "/Old Artist",
-        ])
+    #expect(!exists(folders.library + "/Old Artist"))
     #expect(exists(folders.library))
     #expect(result.problemLines.isEmpty)
 }
@@ -74,14 +72,14 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     let there = try folders.file("library/Artist/Album/01 Song.flac", title: "Other")
     let before = try Data(contentsOf: URL(fileURLWithPath: there, isDirectory: false))
     let old = try folders.file("library/Loose/song.flac", title: "Song")
-    let planned = planOrganizing([old], libraryFolder: folders.library)
+    let planned = layoutMoves([old], libraryFolder: folders.library)
     let result = folders.organize([old])
     #expect(result.moved.isEmpty)
-    #expect(result.problems == ["\(old): not moved, \(there) is already there"])
+    #expect(result.problems == ["\(old): not moved, already in the library: \(there)"])
     #expect(planned.problems == result.problems)
     #expect(exists(old))
     #expect(try Data(contentsOf: URL(fileURLWithPath: there, isDirectory: false)) == before)
-    #expect(result.removedFolders.isEmpty)
+    #expect(exists(folders.library + "/Loose"))
 }
 
 @Test func twoFilesWithOnePathMoveTheFirstAndListTheSecond() throws {
@@ -89,11 +87,11 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     let one = try folders.file("library/a.flac", title: "Song")
     let two = try folders.file("library/b.flac", title: "Song")
     let new = folders.library + "/Artist/Album/01 Song.flac"
-    let planned = planOrganizing([one, two], libraryFolder: folders.library)
+    let planned = layoutMoves([one, two], libraryFolder: folders.library)
     #expect(planned.moved == [TrackMove(from: one, to: new)])
     let result = folders.organize([one, two])
     #expect(result.moved == [TrackMove(from: one, to: new)])
-    #expect(result.problems == ["\(two): not moved, \(new) is already there"])
+    #expect(result.problems == ["\(two): not moved, already in the library: \(new)"])
     #expect(exists(two))
 }
 
@@ -106,7 +104,7 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     #expect(result.moved.isEmpty)
     #expect(result.outside == [outside, linked])
     #expect(exists(outside))
-    #expect(result.problemLines.first == "\(outside): not moved, it isn't in the library folder")
+    #expect(result.problemLines.first == "\(outside) isn't inside the library folder")
 }
 
 @Test func coverArtKeepsTheOldFolderAndIsListed() throws {
@@ -117,7 +115,7 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     let result = folders.organize([old])
     #expect(result.moved.count == 1)
     #expect(exists(cover))
-    #expect(result.removedFolders.isEmpty)
+    #expect(exists(folders.library + "/Old"))
     #expect(result.keptFolders == [folders.library + "/Old"])
 }
 
@@ -128,7 +126,6 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     let result = folders.organize([old])
     #expect(result.moved.count == 1)
     #expect(exists(stays))
-    #expect(result.removedFolders.isEmpty)
     #expect(result.keptFolders.isEmpty)
 }
 
