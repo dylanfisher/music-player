@@ -137,7 +137,10 @@ func model(
     cover: @escaping @Sendable (Int) async -> Result<Cover, CoverProblem> = { _ in
         .failure(.needsToken)
     },
-    importing: @escaping DiscogsTagger.Import = { _, _, _ in throw CatalogImportError.stopped }
+    importing: @escaping DiscogsTagger.Import = { _, _, _ in throw CatalogImportError.stopped },
+    lookUp: @escaping @Sendable (ReleaseQuery, DiscogsAlbum) async throws -> ReleaseLookup = {
+        _, _ in throw TaggerModel.LookUpUnavailable()
+    }
 ) async -> TaggerModel {
     let made = TaggerModel(
         effects: .init(
@@ -182,7 +185,7 @@ func model(
                 return (files(ids), [])
             },
             checkCatalog: { catalog }, unfinishedImport: { unfinished },
-            importCatalog: importing, cover: cover),
+            importCatalog: importing, cover: cover, lookUp: lookUp),
 
         mapping: mapping, savedMappings: [], choices: choices, source: source)
     await made.checkCatalog()

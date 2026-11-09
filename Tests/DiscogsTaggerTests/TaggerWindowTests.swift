@@ -890,6 +890,92 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     #expect(empty.otherReleasesButton.title == "No Other Releases")
 }
 
+/// What the stand-in Look Up Release search was asked.
+private final class Queries: @unchecked Sendable {
+    // `asked` is guarded by `lock`.
+    private let lock = NSLock()
+    private var asked: [(ReleaseQuery, [Int64])] = []
+
+    func add(_ query: ReleaseQuery, _ album: DiscogsAlbum) {
+        lock.withLock { asked.append((query, album.tracks.map(\.fileID))) }
+    }
+    var all: [(ReleaseQuery, [Int64])] { lock.withLock { asked } }
+}
+
+/// Look Up Release opens on the album's artist and title, asks nothing until Search, lists
+/// what it finds and where from, and a release from Discogs is chosen with the API.
+@MainActor
+@Test func lookUpReleaseSearchesAndChoosesWhatItFinds() async throws {
+    let queries = Queries()
+    let seen = Seen()
+    let summary: @Sendable (Int) -> ReleaseSummary = { id in
+        ReleaseSummary(
+            id: id, artist: "Persuader", title: "Found \(id)", label: "Svek",
+            catalogNumber: "SK \(id)", country: "Sweden", year: "2000", format: "CD",
+            trackCount: 1)
+    }
+    let tagger = await model(
+        seen, albums: [album(3, "Nothing", titles: ["One", "Two"])],
+        matches: { album, chosen in
+            chosen.map { match(album, release($0, "Found", titles: ["One", "Two"]), tier: .exact) }
+                ?? match(album, nil, tier: .noCandidate)
+        },
+        lookUp: { query, album in
+            queries.add(query, album)
+            return ReleaseLookup(
+                releases: [(summary(40), 0.9), (summary(41), 0.5)], origin: .api, isCut: true)
+        })
+    tagger.analyze()
+    await tagger.finished()
+    tagger.tab = .noCandidate
+    tagger.selectedID = 3
+    let controller = TaggerWindow(model: tagger)
+    let window = try #require(controller.window)
+    window.orderFront(nil)
+    defer { window.close() }
+    #expect(controller.releaseLine.stringValue == "Look Up… searches the catalog, then Discogs.")
+    #expect(controller.lookUpButton.isEnabled)
+
+    click(controller.lookUpButton)
+    try await eventually { window.attachedSheet?.windowController is ReleasesSheet }
+    let sheet = try #require(window.attachedSheet?.windowController as? ReleasesSheet)
+    #expect(sheet.artistField.stringValue == "Persuader")
+    #expect(sheet.titleField.stringValue == "Nothing")
+    #expect(sheet.shown.isEmpty && queries.all.isEmpty, "nothing asked before Search")
+    sheet.catalogNumberField.stringValue = "SK 40"
+    await sheet.runSearch()
+    #expect(queries.all.first?.0 == ReleaseQuery(
+        artist: "Persuader", title: "Nothing", catalogNumber: "SK 40"))
+    #expect(queries.all.first?.1 == [300, 301])
+    #expect(sheet.shown.map(\.summary.id) == [40, 41])
+    #expect(sheet.text(0, .score) == "90%")
+    #expect(sheet.heading.stringValue == "The catalog has no match; the first 2 releases from Discogs")
+    try snapshot(try #require(sheet.window), "discogs-look-up-release")
+
+    sheet.table.selectRowIndexes([0], byExtendingSelection: false)
+    sheet.table.sendAction(sheet.table.doubleAction, to: sheet.table.target)
+    try await eventually { tagger.selected?.match.releaseID == 40 }
+    #expect(seen.sources.last == .both, "a release from Discogs is matched with the API")
+    #expect(tagger.selected?.review == .chosen(releaseID: 40))
+}
+
+@MainActor
+@Test func lookUpReleaseSaysWhereWhatItFoundCameFrom() {
+    let summary = ReleaseSummary(
+        id: 1, artist: "", title: "", label: "", catalogNumber: "", country: "", year: "",
+        format: "", trackCount: 0)
+    let found = { (count: Int, origin: MatchOrigin, cut: Bool) in
+        ReleasesSheet.foundText(
+            ReleaseLookup(
+                releases: Array(repeating: (summary, 1), count: count), origin: origin,
+                isCut: cut))
+    }
+    #expect(found(1, .catalog, false) == "1 release in the catalog")
+    #expect(found(200, .catalog, true) == "The first 200 releases in the catalog")
+    #expect(found(3, .api, false) == "The catalog has no match; 3 releases from Discogs")
+    #expect(found(0, .api, false) == "Neither the catalog nor Discogs has a match")
+}
+
 /// The release area's Open on Discogs is on only for an album with a release, and opens that
 /// release's page from the one URL builder.
 @MainActor

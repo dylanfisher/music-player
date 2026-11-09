@@ -119,6 +119,15 @@ final class TaggerModel {
         var cover: @Sendable (Int) async -> Result<Cover, CoverProblem> = { _ in
             .failure(.needsToken)
         }
+        /// Look Up Release's search for the album given, the catalog first, then Discogs.
+        var lookUp: @Sendable (ReleaseQuery, DiscogsAlbum) async throws -> ReleaseLookup = {
+            _, _ in throw LookUpUnavailable()
+        }
+    }
+
+    /// A tagger without Look Up Release, as a staged job's is.
+    struct LookUpUnavailable: Error, CustomStringConvertible {
+        var description: String { "this tagger can't look releases up" }
     }
 
     private let effects: Effects
@@ -492,13 +501,33 @@ final class TaggerModel {
 
     // MARK: - Reviewing an album
 
-    /// Makes `releaseID` the album's match, rescored against its files, and remembers it.
-    func choose(_ releaseID: Int, for albumID: Int64) async {
+    /// Whether Look Up Release can search for the selected album: not in a staged job, whose
+    /// release is fixed, nor while work runs.
+    var canLookUp: Bool { selected != nil && staged == nil && !isBusy && rematchingID == nil }
+
+    /// What Look Up Release's fields start with: the album's artist and title as tagged.
+    func lookUpQuery() -> ReleaseQuery {
+        ReleaseQuery(artist: selected?.album.artist ?? "", title: selected?.album.title ?? "")
+    }
+
+    /// Searches for `query`, the catalog first, then Discogs, each release scored against the
+    /// selected album's files but those left out.
+    func lookUp(_ query: ReleaseQuery) async throws -> ReleaseLookup {
+        guard let album = selected?.matched else { throw LookUpUnavailable() }
+        return try await effects.lookUp(query, album)
+    }
+
+    /// Makes `releaseID` the album's match, rescored against its files, and remembers it. A
+    /// release from the API, as Look Up Release can find, is matched with the API even when
+    /// the source is the catalog.
+    func choose(_ releaseID: Int, for albumID: Int64, from origin: MatchOrigin = .catalog) async {
         guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
         let album = albums[index]
+        let source: DiscogsSource =
+            origin == .api && runSource == .catalog ? (isCatalogReady ? .both : .api) : runSource
         do {
             let match = try await effects.match(
-                [album.matched], [albumID: releaseID], choices.skipVideo, runSource
+                [album.matched], [albumID: releaseID], choices.skipVideo, source
             ) { _ in }
             try await effects.review(
                 .chosen(releaseID: releaseID), album.album.tracks.map(\.fileID))
@@ -847,7 +876,7 @@ final class TaggerModel {
 }
 
 /// `text` with its first letter capitalized, as an alert's message starts.
-private func sentence(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
+func sentence(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
 
 /// "Artist – Title", or the title alone, as the album list and the problems name an album.
 func albumTitle(_ album: DiscogsAlbum) -> String {

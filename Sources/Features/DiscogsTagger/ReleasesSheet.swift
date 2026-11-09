@@ -1,5 +1,6 @@
 import AppKit
 import Discogs
+import DisplayText
 
 /// Other Releases… (51.11, after YATE's release list): the album's candidates with filters by
 /// artist, title, country, label and format, sorted by any column's header. Choosing one
@@ -32,7 +33,10 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
         }
     }
 
-    let candidates: [(summary: ReleaseSummary, score: Double?)]
+    /// Searches the catalog, then Discogs, for Look Up Release.
+    typealias LookUp = (ReleaseQuery) async throws -> ReleaseLookup
+
+    private(set) var candidates: [(summary: ReleaseSummary, score: Double?)]
     let chosen: Int?
     let fields: [Filter: NSSearchField]
     let table = NSTableView()
@@ -41,13 +45,35 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
     private(set) var shown: [(summary: ReleaseSummary, score: Double?)]
     /// The release chosen; nil for Cancel.
     private(set) var result: Int?
+    /// Where the releases listed came from: the API only for a look-up Discogs answered.
+    private(set) var origin = MatchOrigin.catalog
     /// Shows the release given, over this sheet.
     var viewRelease: (Int) -> Void = { _ in }
     private var texts: [Filter: String] = [:]
+    let heading = NSTextField(labelWithString: "")
+    private let albumTitle: String
 
-    init(candidates: [(summary: ReleaseSummary, score: Double?)], chosen: Int?, title: String) {
+    /// Look Up Release's search, with its fields; nil for Other Releases.
+    private let lookUp: LookUp?
+    let artistField = NSTextField()
+    let titleField = NSTextField()
+    let catalogNumberField = NSTextField()
+    let releaseField = NSTextField()
+    let searchButton = NSButton(title: "Search", target: nil, action: nil)
+    let searching = NSProgressIndicator()
+    /// The search running, which a new one or Cancel stops.
+    private var search: Task<Void, Never>?
+
+    /// Other Releases… over `candidates`, or with `lookUp`, Look Up Release, which lists what
+    /// its search finds, its fields filled from `query`.
+    init(
+        candidates: [(summary: ReleaseSummary, score: Double?)], chosen: Int?, title: String,
+        lookUp: LookUp? = nil, query: ReleaseQuery = ReleaseQuery()
+    ) {
         self.candidates = candidates
         self.chosen = chosen
+        self.lookUp = lookUp
+        albumTitle = title
         shown = candidates
         fields = Dictionary(uniqueKeysWithValues: Filter.allCases.map { ($0, NSSearchField()) })
         let window = NSWindow(
@@ -55,17 +81,24 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
             styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.minSize = NSSize(width: 640, height: 300)
         super.init(window: window)
-        build(in: window, title: title)
+        artistField.stringValue = query.artist
+        titleField.stringValue = query.title
+        catalogNumberField.stringValue = query.catalogNumber
+        releaseField.stringValue = query.release
+        build(in: window)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
-    private func build(in window: NSWindow, title: String) {
-        let heading = NSTextField(
-            labelWithString: "\(candidates.count) releases found for \(title)")
+    private func build(in window: NSWindow) {
+        heading.stringValue =
+            lookUp == nil
+            ? "\(candidates.count) releases found for \(albumTitle)"
+            : "Look up a release for \(albumTitle): the catalog first, then Discogs"
         heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         heading.lineBreakMode = .byTruncatingTail
+        heading.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let filters = NSStackView(
             views: Filter.allCases.map { filter in
                 let field = fields[filter]!
@@ -92,19 +125,104 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
         let viewButton = NSButton(
             title: "View Release…", target: self, action: #selector(showRelease))
         let use = NSButton(title: "Use Release", target: self, action: #selector(choose))
-        use.keyEquivalent = "\r"
+        // Return searches in Look Up Release; a double click still uses a release.
+        if lookUp == nil { use.keyEquivalent = "\r" }
         let buttons = NSStackView(views: [NSView(), cancel, viewButton, use])
-        let page = NSStackView(views: [heading, filters, scroll, buttons])
+        var rows: [NSView] = [heading]
+        if lookUp != nil { rows.append(queryRow()) }
+        rows += [filters, scroll, buttons]
+        let page = NSStackView(views: rows)
         page.orientation = .vertical
         page.alignment = .leading
         page.spacing = 10
         page.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
-        for view in [filters, scroll, buttons] {
+        for view in rows.dropFirst() {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -32).isActive = true
         }
         window.contentView = page
         if let chosen, let row = shown.firstIndex(where: { $0.summary.id == chosen }) {
             table.selectRowIndexes([row], byExtendingSelection: false)
+        }
+    }
+
+    /// Look Up Release's fields and Search, on one line.
+    private func queryRow() -> NSStackView {
+        let placed: [(NSTextField, String)] = [
+            (artistField, TaggerColumn.artist.title), (titleField, TaggerColumn.title.title),
+            (catalogNumberField, TaggerColumn.catalogNumber.title),
+            (releaseField, "Release ID or URL"),
+        ]
+        for (field, placeholder) in placed {
+            field.placeholderString = placeholder
+            field.lineBreakMode = .byTruncatingTail
+            field.cell?.isScrollable = true
+        }
+        searchButton.target = self
+        searchButton.action = #selector(startSearch)
+        searchButton.keyEquivalent = "\r"
+        searching.style = .spinning
+        searching.controlSize = .small
+        searching.isDisplayedWhenStopped = false
+        let fields = NSStackView(views: placed.map(\.0))
+        fields.distribution = .fillEqually
+        let row = NSStackView(views: [fields, searching, searchButton])
+        fields.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return row
+    }
+
+    /// What the fields ask for.
+    var query: ReleaseQuery {
+        ReleaseQuery(
+            artist: artistField.stringValue, title: titleField.stringValue,
+            catalogNumber: catalogNumberField.stringValue, release: releaseField.stringValue)
+    }
+
+    @objc private func startSearch() {
+        // Ending the edit commits the field's text first.
+        window?.makeFirstResponder(nil)
+        search?.cancel()
+        search = Task { await runSearch() }
+    }
+
+    /// Searches for what the fields ask, and lists what's found, saying where it came from.
+    func runSearch() async {
+        guard let lookUp else { return }
+        let query = query
+        guard !query.isEmpty else {
+            heading.stringValue = "Type an artist, a title, a catalog number or a release ID"
+            return NSSound.beep()
+        }
+        searchButton.isEnabled = false
+        searching.startAnimation(nil)
+        heading.stringValue = "Searching…"
+        defer {
+            searchButton.isEnabled = true
+            searching.stopAnimation(nil)
+        }
+        let found: ReleaseLookup
+        do {
+            found = try await lookUp(query)
+        } catch is CancellationError {
+            return
+        } catch {
+            heading.stringValue = "The search stopped: \(error)"
+            return
+        }
+        guard !Task.isCancelled else { return }
+        origin = found.origin
+        candidates = found.releases.map { (summary: $0.summary, score: Optional($0.score)) }
+        heading.stringValue = Self.foundText(found)
+        showCandidates()
+    }
+
+    /// "12 releases in the catalog", "The catalog has no match; 8 releases from Discogs".
+    static func foundText(_ found: ReleaseLookup) -> String {
+        let count = found.releases.count
+        guard count > 0 else { return "Neither the catalog nor Discogs has a match" }
+        let releases = (found.isCut ? "the first " : "") + DisplayText.count(count, "release")
+        return switch found.origin {
+        case .catalog: sentence(releases) + " in the catalog"
+        case .api: "The catalog has no match; \(releases) from Discogs"
         }
     }
 
@@ -209,7 +327,10 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
         }
     }
 
-    @objc private func cancel() { endSheet() }
+    @objc private func cancel() {
+        search?.cancel()
+        endSheet()
+    }
 
     @objc private func showRelease() {
         guard table.selectedRow >= 0, table.selectedRow < shown.count else { return NSSound.beep() }

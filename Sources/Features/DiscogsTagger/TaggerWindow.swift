@@ -67,6 +67,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Why a Likely or Incomplete album isn't Exact, under the release's lines.
     let reasonsLine = NSTextField(labelWithString: "")
     let otherReleasesButton = NSButton(title: "Other Releases…", target: nil, action: nil)
+    static let lookUpTitle = "Look Up…"
+    let lookUpButton = NSButton(title: TaggerWindow.lookUpTitle, target: nil, action: nil)
     let changesButton = NSButton(title: "View Changes…", target: nil, action: nil)
     let discogsButton = NSButton(title: openOnDiscogsTitle, target: nil, action: nil)
     let rejectButton = NSButton(title: "Reject", target: nil, action: nil)
@@ -147,7 +149,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             (importButton, #selector(chooseDumps)),
             (revealButton, #selector(revealCatalog)), (resumeButton, #selector(resumeImport)),
             (startOverButton, #selector(startImportOver)),
-            (otherReleasesButton, #selector(showOtherReleases)),
+            (otherReleasesButton, #selector(showOtherReleases)), (lookUpButton, #selector(showLookUp)),
             (changesButton, #selector(showChanges)), (rejectButton, #selector(toggleRejected)),
             (discogsButton, #selector(openReleasePage)),
             (applyButton, #selector(applyAll)),
@@ -166,6 +168,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             + " replaces does: a field Discogs has no value for is cleared."
         skipVideoBox.toolTip = "Releases that are only Blu-ray, DVD or video are never candidates."
         sortArtistBox.toolTip = "Files with no sort artist get the album artist as one."
+        lookUpButton.toolTip =
+            "Look up the album's release by artist, title, catalog number or ID: the local"
+            + " catalog first, then Discogs"
         mappingButton.toolTip =
             "Choose which tags each Discogs field writes, and how, for every album."
         importButton.toolTip =
@@ -226,7 +231,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
         revealButton.isHidden = true
-        reviewButtons.setViews([otherReleasesButton, changesButton, rejectButton], in: .leading)
+        reviewButtons.setViews([otherReleasesButton, lookUpButton, changesButton, rejectButton], in: .leading)
         reviewButtons.setViews([discogsButton], in: .trailing)
         reviewButtons.spacing = 8
         let detail = NSStackView(views: [
@@ -478,7 +483,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             releaseTitle.stringValue = album == nil ? "No album selected" : "No release"
             releaseLine.stringValue =
                 album == nil
-                ? "" : "Other Releases… lists what the catalog found, if anything."
+                ? "" : "\(Self.lookUpTitle) searches the catalog, then Discogs."
         }
         reasonsLine.stringValue = album.flatMap { reasonsText($0.match, separator: " · ") } ?? ""
         leftOut = album?.leftOut ?? []
@@ -489,6 +494,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         let others = album?.match.candidates.count ?? 0
         otherReleasesButton.title = Self.otherReleasesTitle(others)
         otherReleasesButton.isEnabled = reviewing && others > 0
+        lookUpButton.isEnabled = model.canLookUp && sheet == nil
         let changes = album.flatMap { $0.applied ? nil : model.changeCounts[$0.id] }
         changesButton.title = changes.map { "View \(count($0, "Change"))…" } ?? "View Changes…"
         changesButton.isEnabled = reviewing && summary != nil && album?.isRejected == false
@@ -770,6 +776,25 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 guard let id = releases.result, id != album.match.releaseID else { return }
                 Task { await model.choose(id, for: album.id) }
             }
+        }
+    }
+
+    /// Look Up Release…: the release list with a search above it, filled from the album's tags;
+    /// nothing is asked until Search. A release used is chosen as Other Releases' is.
+    @objc private func showLookUp() {
+        guard let window, let album = model.selected, model.canLookUp, sheet == nil else {
+            return
+        }
+        let releases = ReleasesSheet(
+            candidates: [], chosen: album.match.releaseID, title: albumTitle(album.album),
+            lookUp: { [model] in try await model.lookUp($0) }, query: model.lookUpQuery())
+        releases.viewRelease = { [self, weak releases] id in
+            guard let over = releases?.window else { return }
+            viewRelease(id, over: over)
+        }
+        present(releases, over: window) { [self] in
+            guard let id = releases.result, id != album.match.releaseID else { return }
+            Task { await model.choose(id, for: album.id, from: releases.origin) }
         }
     }
 
