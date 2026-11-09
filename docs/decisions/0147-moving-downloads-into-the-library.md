@@ -9,6 +9,8 @@
 - **Amended by:** [0164](0164-keep-files-organized.md): Keep Files Organized renames files
   in the library folder through the same rename, and the fallback for a share that refuses
   `RENAME_EXCL` reserves the name with an exclusive create.
+  [0169](0169-approve-at-once-and-manual-upgrades.md): an old file is held to the release id it
+  carried when the sheet found it, kept in the ledger when it isn't the job's.
 - **See also:** [0026](0026-sync-identity-is-the-relative-path.md) (the move list that
   carries stats),
   [0028](0028-network-folders-by-share.md) (paths by share),
@@ -73,7 +75,8 @@ answer, nothing moves.
 5. The old files go to `moveToTrash`, the function Remove and Move to Trash calls, made public
    in `Features/LibraryBrowser` and handed to the import as a closure, so there is one copy. Only
    files the job lists as the album's, resolved by path and still carrying the release id, are
-   passed.
+   passed; for an album found by its artist and title, the release id each carried when the
+   sheet found it (ADR 0169).
 6. Stats move from each old path to its new one through the move list (`importMoves`), which
    also logs the moves for the other Macs.
 

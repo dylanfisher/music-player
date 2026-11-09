@@ -5,6 +5,9 @@
 - **Amends:** [0147](0147-moving-downloads-into-the-library.md) (Approve renames into the
   library folder never over a file, and deletes an upgrade's old files only after the new ones
   are checked in place)
+- **Amended by:** [0169](0169-approve-at-once-and-manual-upgrades.md): a new album replaces the
+  library's album of its release found by release id, else by artist and title, wherever its
+  paths are, and the sheet offers Keep Both.
 - **See also:** [0124](0124-drop-files-and-the-library-folder.md) (the library folder's layout),
   [0026](0026-sync-identity-is-the-relative-path.md) (stats belong to a path)
 
