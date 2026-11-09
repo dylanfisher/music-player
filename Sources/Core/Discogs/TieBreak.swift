@@ -4,8 +4,9 @@ import Library
 /// The order for releases that fit an album's tracklist equally, which the owner approved on
 /// 2026-11-07 (ADR 0131): a barcode or catalog number spelled as the tags spell it, then one
 /// that folds the same, then the format the tags' `MEDIA` names, then the tags' `DATE`, then
-/// their country, then a digital or CD format rather than vinyl or another, then the master's
-/// main release. `MEDIA`, `DATE` and the country match as written first, then as Discogs has
+/// their country, then a digital or CD format rather than vinyl or another, then a standard
+/// edition rather than a limited, special or promotional one of the same pressing, then the
+/// master's main release. `MEDIA`, `DATE` and the country match as written first, then as Discogs has
 /// since filled them in or changed them: more descriptions, a fuller date, a region that names
 /// the country. A number on the first label, which is the one YATE writes,
 /// beats one on another, and a release with both the barcode and the number beats one with
@@ -25,6 +26,9 @@ func tieBreak(
             label.catalogNumber.map { same($0) ? (index == 0 ? 2 : 1) : 0 }
         }.max() ?? 0
     }
+    var left = scores
+    // The releases still tied, which the edition step compares each release with.
+    func tied() -> [CatalogRelease] { left.compactMap { releases[$0.releaseID] } }
     let steps: [(CatalogRelease) -> Int] = [
         { release in
             (spelledBarcode.map { release.barcodes.contains($0) ? 1 : 0 } ?? 0)
@@ -54,9 +58,12 @@ func tieBreak(
             return countriesFit(country, released) ? 1 : 0
         },
         { release in release.formats.contains { preferredFormats.contains($0.name) } ? 1 : 0 },
+        { release in
+            !isEdition(release)
+                || !tied().contains { !isEdition($0) && samePressing(release, $0) } ? 1 : 0
+        },
         { release in release.isMainRelease ? 1 : 0 },
     ]
-    var left = scores
     for step in steps where left.count > 1 {
         let weights = left.map { score in releases[score.releaseID].map(step) ?? 0 }
         guard let top = weights.max(), top > 0 else { continue }
@@ -67,6 +74,30 @@ func tieBreak(
 
 /// The formats the tie-break prefers: a download, or a CD of any kind.
 let preferredFormats: Set<String> = ["File", "CD", "CDr", "SACD"]
+
+/// The format descriptions Discogs gives an edition other than the standard one, which the
+/// tie-break passes over when a standard release of the same pressing fits as well.
+let editionDescriptions: Set<String> = [
+    "Limited Edition", "Numbered", "Special Edition", "Deluxe Edition", "Club Edition", "Promo",
+    "Test Pressing", "White Label", "Unofficial Release",
+]
+
+/// Whether a format of the release names it a limited, special or promotional edition.
+func isEdition(_ release: CatalogRelease) -> Bool {
+    release.formats.contains { !editionDescriptions.isDisjoint(with: $0.descriptions) }
+}
+
+/// Whether two releases are one pressing in two editions: the first label's catalog number
+/// the same once folded, or the same release date to the month at least. A limited original
+/// and a later download of it differ in both, so the main release still decides between them.
+func samePressing(_ a: CatalogRelease, _ b: CatalogRelease) -> Bool {
+    guard a.formats.first?.name == b.formats.first?.name else { return false }
+    let numbers = [a, b].map { $0.labels.first?.catalogNumber.flatMap(CatalogKey.catalogNumber) }
+    if let number = numbers[0], number == numbers[1] { return true }
+    guard let first = a.released, let second = b.released else { return false }
+    let months = [first, second].map { $0.prefix(7) }
+    return months.allSatisfy { $0.count == 7 && !$0.hasSuffix("-00") } && datesFit(first, second)
+}
 
 /// A format as YATE writes it to `MEDIA`: its name, and its descriptions in brackets joined
 /// with "," when it has any (ADR 0128).

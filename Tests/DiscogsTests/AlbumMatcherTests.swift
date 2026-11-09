@@ -373,6 +373,59 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(main.releaseID == 11)
 }
 
+@Test func withoutANumberInTheTagsAStandardEditionOfTheSamePressingBeatsALimitedOne()
+    throws
+{
+    let limitedMain =
+        release(
+            10, master: 100, main: true, descriptions: ["Album", "Limited Edition"],
+            tracks: stockholm)
+        + release(11, master: 100, descriptions: ["Album", "Promo"], tracks: stockholm)
+        + release(12, master: 100, descriptions: ["Album", "Reissue"], tracks: stockholm)
+    let standard = try match(
+        album(stockholmTitles), masters: master(100, main: 10), releases: limitedMain)
+    #expect(standard.tier == .exact)
+    #expect(standard.releaseID == 12)
+
+    let onlyLimited =
+        release(10, master: 100, descriptions: ["Numbered"], tracks: stockholm)
+        + release(11, master: 100, main: true, descriptions: ["Limited Edition"], tracks: stockholm)
+    let main = try match(
+        album(stockholmTitles), masters: master(100, main: 11), releases: onlyLimited)
+    #expect(main.tier == .exact)
+    #expect(main.releaseID == 11)
+
+    let numbered =
+        release(
+            10, master: 100, catno: "SK 032L", descriptions: ["Limited Edition"],
+            tracks: stockholm)
+        + release(11, master: 100, catno: "SK 033", tracks: stockholm)
+    let byNumber = try match(
+        album(stockholmTitles, catalogNumber: "SK 032L"), masters: master(100, main: 11),
+        releases: numbered)
+    #expect(byNumber.releaseID == 10)
+
+    let limitedOriginal = release(
+        10, master: 100, main: true, catno: "SK 032", format: "CDr",
+        descriptions: ["Limited Edition", "Numbered"], released: "2015-05-30", tracks: stockholm)
+    let sameDay = try match(
+        album(stockholmTitles), masters: master(100, main: 10),
+        releases: limitedOriginal
+            + release(
+                11, master: 100, catno: "SK 032D", format: "CDr", released: "2015-05-30",
+                tracks: stockholm))
+    #expect(sameDay.tier == .exact)
+    #expect(sameDay.releaseID == 11)
+    let laterDownload = try match(
+        album(stockholmTitles), masters: master(100, main: 10),
+        releases: limitedOriginal
+            + release(
+                11, master: 100, catno: "none", format: "File", descriptions: ["FLAC"],
+                released: "2018-10-08", tracks: stockholm))
+    #expect(laterDownload.tier == .exact)
+    #expect(laterDownload.releaseID == 10)
+}
+
 @Test func releasesStillTiedAfterTheTieBreakMakeTheAlbumLikely() throws {
     let releases =
         release(10, master: 100, tracks: stockholm) + release(11, master: 100, tracks: stockholm)

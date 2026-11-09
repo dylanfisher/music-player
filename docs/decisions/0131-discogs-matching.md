@@ -89,7 +89,8 @@ Each step gives each release a weight and keeps those of the highest weight, whe
 5. a country that is the tags': first as written, then folded, or as one of the other's
    " & " list (`UK` and `UK & Europe`);
 6. File, CD, CDr or SACD over vinyl and the rest;
-7. the master's main release.
+7. a standard edition over a limited, special or promotional one of the same pressing;
+8. the master's main release.
 
 In steps 1 and 2 a catalog number on the first label weighs 2 and on another label 1, since
 `CATALOGNUMBER` is the first label's (ADR 0128), and a matching barcode adds 1, so a release
@@ -101,6 +102,18 @@ own (barcode or catalog number, format, main release) with step 1 split in two a
 step on the same day, after the tuning found 13 wrong Exacts only the country told apart. Among releases that don't fit the
 tracklist, the best rank (tracklist, plus `durationWeight` times the share of agreeing
 lengths, a release without lengths counting half) is chosen, with the same tie-break.
+
+**Step 7,** added on 2026-11-08 at the owner's request: a release with a format description
+in `editionDescriptions` (Limited Edition, Numbered, Special, Deluxe or Club Edition, Promo,
+Test Pressing, White Label, Unofficial Release) is passed over only when a release without
+one is still tied and is the same pressing: the same first format, and the first label's
+catalog number the same once folded or the release date the same to the month. Unscoped, the
+step cost the titles-only run 3 points (61.6% to 58.6% same or twin, 233 to 253 wrong Exacts)
+and placed after the main release 0.3: on small labels the main release is often the only
+physical one and "Limited Edition", and the owner tagged it, where the release without the
+description is a later download. Scoped by date and number without the format, a download the
+label put out the same month still beat the limited CD (59.1%). As built, the tags run is
+unchanged (95.6%, 30) and the titles-only run is 1,008 (61.8%) and 228 (14.0%).
 
 The result per album is its tier, the chosen release, its tracks as files, each file's track,
 and the other candidates best first.
