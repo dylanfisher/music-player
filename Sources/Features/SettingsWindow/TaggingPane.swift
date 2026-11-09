@@ -233,8 +233,9 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         let problem = model.problem
         problemLabel.stringValue = problem.map { "config.json wouldn't take this: \($0)" } ?? ""
         problemLabel.isHidden = problem == nil
-        noteLabel.stringValue = model.note ?? ""
-        noteLabel.isHidden = model.note == nil
+        let note = model.isBlocked() ? ConfigBanner.blockedLine : model.note
+        noteLabel.stringValue = note ?? ""
+        noteLabel.isHidden = note == nil
         saveButton.isEnabled = model.canSave
         revertButton.isEnabled = model.isEdited
         let row = TaggingModel.fields.firstIndex(of: field)!

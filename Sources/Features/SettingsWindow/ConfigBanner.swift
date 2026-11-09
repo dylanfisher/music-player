@@ -13,6 +13,8 @@ public final class ConfigBanner: NSViewController {
     static let removeTitle = "Remove Obsolete Setting"
     /// What a config file with a problem that refuses every change means.
     static let blockedText = "Nothing in it applies, and nothing can change, until it's fixed."
+    /// The line a pane or the bar builder shows while the file refuses every change.
+    static let blockedLine = "The config file has a problem. \(blockedText)"
     static let removeAllTitle = "Remove Obsolete Settings"
 
     public var openConfigFile: () -> Void = {}

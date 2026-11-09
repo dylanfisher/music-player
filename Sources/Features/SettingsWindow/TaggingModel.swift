@@ -86,8 +86,10 @@ final class TaggingModel {
     }
 
     /// Reads the mapping again, after the file or the app changed it. A draft without changes
-    /// takes the new mapping; one with changes is kept, with a note.
+    /// takes the new mapping; one with changes is kept, with a note. While the file is blocked
+    /// the settings hold the defaults, not the file's mapping (ADR 0082), so nothing changes.
     func reload() {
+        guard !isBlocked() else { return }
         let file = Self.read(value)
         guard file != stored else { return }
         if !isEdited || draft == file {

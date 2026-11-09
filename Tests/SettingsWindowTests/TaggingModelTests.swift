@@ -161,6 +161,33 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     #expect(!model.canSave)
 }
 
+@MainActor @Test func aBlockedFileLeavesTheDraftAsItWas() throws {
+    nonisolated(unsafe) var values: [String: Any] = [
+        TaggingModel.setting.key: json(DiscogsPreset.yate.mapping)
+    ]
+    nonisolated(unsafe) var blocked = false
+    let model = TaggingModel(
+        value: { values[$0] }, set: { key, json in values[key] = json }, isBlocked: { blocked })
+    // A blocked file gives the defaults, not its mapping.
+    blocked = true
+    values[TaggingModel.setting.key] = json(TaggingModel.setting.defaultValue)
+    model.reload()
+    #expect(model.draft == DiscogsPreset.yate.mapping)
+    #expect(!model.isEdited)
+    model.draft[.barcode].mode = .off
+    model.reload()
+    #expect(model.draft[.barcode].mode == .off)
+    #expect(model.note == nil)
+    #expect(!model.canSave)
+    // Fixed, the file's mapping is read again.
+    blocked = false
+    values[TaggingModel.setting.key] = json(DiscogsPreset.minimal.mapping)
+    model.reload()
+    #expect(model.note == TaggingModel.changedNote)
+    model.revert()
+    #expect(model.draft == DiscogsPreset.minimal.mapping)
+}
+
 // MARK: Over the config file
 
 /// Made up for these tests; no real token appears in a test (ADR 0137, ADR 0144).

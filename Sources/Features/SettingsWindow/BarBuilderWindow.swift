@@ -161,7 +161,7 @@ final class BarBuilderWindow: NSObject {
         let problem =
             editable
             ? model.unsaved ?? model.refused
-            : "The config file has a problem. \(ConfigBanner.blockedText)"
+            : ConfigBanner.blockedLine
         message.stringValue =
             problem
             ?? "Drag parts between columns and the tray, and a side column by the handle at its"

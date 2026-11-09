@@ -131,6 +131,27 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
     #expect(pane.noteLabel.stringValue == TaggingModel.changedNote)
 }
 
+@MainActor @Test func aBlockedFileShowsTheBlockAndKeepsTheRule() throws {
+    nonisolated(unsafe) var blocked = false
+    let mapping = try! JSONSerialization.jsonObject(
+        with: Data(TaggingModel.setting.text(DiscogsPreset.yate.mapping).utf8))
+    let pane = TaggingPane(
+        model: TaggingModel(
+            value: { _ in mapping }, set: { _, _ in }, isBlocked: { blocked }))
+    _ = pane.view
+    select(.artist, in: pane)
+    pane.popUp(.suffixes).selectItem(at: 0)
+    _ = pane.popUp(.suffixes).target?.perform(
+        pane.popUp(.suffixes).action, with: pane.popUp(.suffixes))
+    #expect(pane.saveButton.isEnabled)
+    blocked = true
+    pane.reload()
+    #expect(!pane.noteLabel.isHidden)
+    #expect(pane.noteLabel.stringValue == ConfigBanner.blockedLine)
+    #expect(!pane.saveButton.isEnabled)
+    #expect(pane.popUp(.suffixes).indexOfSelectedItem == 0, "the edit is kept")
+}
+
 @MainActor @Test func theMappingsSettingOpensTheTaggingPane() throws {
     let general = GeneralModel(
         settings: AppSettings().settings, searcherInstalled: true,
