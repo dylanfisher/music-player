@@ -663,7 +663,7 @@ What exists, found by search (map.md recipes):
   `MainWindow.saveFrame`, checked on screen by `restoredFrame`). Downloads, the tagger and Year
   in Review call `setFrameAutosaveName`, which writes user defaults (ADR 0055 rejected those
   for layout), and Downloads then calls `center()`, which moves it to the screen the window
-  was made on, the primary. Settings, Library Health and the bar builder `center()` once.
+  was made on, the primary. Settings, Library Problems and the bar builder `center()` once.
 - `GeneralPane` lays a pane out as a stack the window sizes to (`fitWindow`); nothing scrolls.
   Its Library section adds the database and snapshot rows in `addSnapshotRows`, and it has
   a disclosure triangle for fallback rows (`disclosureLine`).
@@ -688,13 +688,14 @@ Parts, in order, each its own commit or two:
    each move and resize, with one call, `window.keepsFrame(as: name)`. The app sets the
    frames saved at the last launch, the main window as the anchor, and the save, at launch;
    `AppState` gains `window.frames`, a name-to-frame map. Settings, Downloads, the tagger,
-   Year in Review, Library Health, the bar builder and the first Spectrum window adopt it;
-   the autosave names and `center()` calls go. Get Info keeps its own place until phase 57.
+   Year in Review, Library Problems, the playback problem panel, the bar builders and the
+   first Spectrum window adopt it; the autosave names and `center()` calls go. Get Info keeps
+   its own place until phase 57.
    Tests: `placedFrame`'s cases, and a window remembered, moved and placed again.
 2. **55.2 Settings height.** Each pane sits in a scroll view no taller than its screen's
-   visible frame less the title bar and toolbar; `fitWindow` sizes to that. Library's
-   snapshot list and Restore… go under a disclosure, Snapshots, closed by default; Last
-   Snapshot and Back Up Now stay. Tests: a pane taller than a short screen scrolls; the
+   visible frame less the title bar and toolbar, which `PaneScroller.fit` sizes the window
+   to. Library's snapshot list and Restore… go under a disclosure, Snapshots, closed by
+   default; Last Snapshot and Back Up Now stay. Tests: a pane taller than a short screen scrolls; the
    snapshot rows hidden until opened.
 3. **55.3 Restore during a scan.** `LibraryWatcher.stop(then:)` stops watching, cancels the
    running scan, paused or not, and runs the job once it has stopped; Restore… uses it, and
