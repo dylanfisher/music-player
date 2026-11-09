@@ -76,6 +76,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|toolbar\|library\|shortcuts\|statusBar\|headerStatus\|toolbarSheet\|downloads]` |
 | Run tests: only the targets edited since the last pass (`--fresh` for all), or those changed since a commit | `./scripts/test [--fresh]`, `./scripts/test --changed [ref]` |
 | Build the `.app`, signed ad hoc with the hardened runtime (debug also lets lldb attach) | `./scripts/bundle [debug\|release]` |
+| Build the release `.app` and replace the copy in `/Applications`, quitting it first | `./scripts/install` |
 | Check a release bundle's signature and entitlements, and that it launches hardened (not in `check`) | `./scripts/check-signature "<Music Player.app>" [--launch]` |
 | Update a second Mac's clone, then run the app | `./scripts/pull` |
 | Build the fixture library (43k tagged files) | `./scripts/fixtures [--count N]` |

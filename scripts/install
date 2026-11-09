@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Builds the release .app and puts it in /Applications, replacing the copy there. SwiftPM
+# rebuilds only what changed since the last release build. A running copy is asked to quit first,
+# and the old bundle is removed rather than copied over, so no stale file stays inside it.
+#   ./scripts/install
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+app="$(./scripts/bundle release)"
+dest="/Applications/$(basename "$app")"
+bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Contents/Info.plist")
+
+running() {
+  [ "$(osascript -e "application id \"$bundle_id\" is running")" = true ]
+}
+if running; then
+  osascript -e "tell application id \"$bundle_id\" to quit"
+  for _ in $(seq 50); do
+    running || break
+    sleep 0.2
+  done
+  if running; then
+    echo "$(basename "$app") didn't quit; quit it, then run this again." >&2; exit 1
+  fi
+fi
+
+rm -rf "$dest"
+ditto "$app" "$dest"
+echo "installed $dest"
