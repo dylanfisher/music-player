@@ -53,6 +53,7 @@ private func changed(
     #expect(first["DISCOGS_RELEASE_URL"] == "https://www.discogs.com/release/100")
     #expect(first["album"] == "Live")
     #expect(first["albumArtist"] == "Band (3)")
+    #expect(first["DISCOGS_ALBUMARTIST_URL"] == "https://www.discogs.com/artist/1")
     #expect(first["publisher"] == "Label (2) & Other")
     #expect(first["DISCOGS_LABEL_URL"] == "https://www.discogs.com/label/5")
     #expect(first["DISCOGS_LABEL_URL-2"] == "https://www.discogs.com/label/6")
