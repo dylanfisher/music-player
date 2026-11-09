@@ -17,6 +17,10 @@ extension CommandID {
     public static let tenRowsUp = CommandID("selection.tenRowsUp")
     public static let extendTenRowsDown = CommandID("selection.extendTenRowsDown")
     public static let extendTenRowsUp = CommandID("selection.extendTenRowsUp")
+    public static let nextAlbum = CommandID("selection.nextAlbum")
+    public static let previousAlbum = CommandID("selection.previousAlbum")
+    public static let extendToNextAlbum = CommandID("selection.extendToNextAlbum")
+    public static let extendToPreviousAlbum = CommandID("selection.extendToPreviousAlbum")
     public static let selectFirst = CommandID("selection.first")
     public static let selectLast = CommandID("selection.last")
     public static let pageDown = CommandID("selection.pageDown")
@@ -198,13 +202,20 @@ public enum AppCommands {
             Command(.selectPrevious, "Select Previous Row", [.init(.up)]),
             Command(.extendDown, "Extend Selection Down", [.init(.down, shift)]),
             Command(.extendUp, "Extend Selection Up", [.init(.up, shift)]),
-            Command(
-                .tenRowsDown, "Move Down 10 Rows",
-                [.init(.down, opt), .init(.down, [ctrl, shift])]),
-            Command(.tenRowsUp, "Move Up 10 Rows", [.init(.up, opt), .init(.up, [ctrl, shift])]),
+            Command(.tenRowsDown, "Move Down 10 Rows", [.init(.down, opt)]),
+            Command(.tenRowsUp, "Move Up 10 Rows", [.init(.up, opt)]),
             Command(
                 .extendTenRowsDown, "Extend Selection Down 10 Rows", [.init(.down, [opt, shift])]),
             Command(.extendTenRowsUp, "Extend Selection Up 10 Rows", [.init(.up, [opt, shift])]),
+            // Mission Control takes ⌃↑ and ⌃↓ first while its shortcuts are on (ADR 0160).
+            Command(.nextAlbum, "Select Next Album", [.init(.down, ctrl)]),
+            Command(.previousAlbum, "Select Previous Album", [.init(.up, ctrl)]),
+            Command(
+                .extendToNextAlbum, "Extend Selection to Next Album",
+                [.init(.down, [ctrl, shift])]),
+            Command(
+                .extendToPreviousAlbum, "Extend Selection to Previous Album",
+                [.init(.up, [ctrl, shift])]),
             Command(.selectFirst, "Select First Row", [.init(.home), .init(.up, [opt, cmd])]),
             Command(.selectLast, "Select Last Row", [.init(.end), .init(.down, [opt, cmd])]),
             Command(.pageDown, "Page Down", [.init(.pageDown)]),

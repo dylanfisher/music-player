@@ -119,12 +119,16 @@ class RowListController: NSViewController {
 
     // MARK: Selection
 
+    /// Each row's album ID, for the album moves; nil for a list without albums.
+    var album: ((Int) -> Int64?)? { nil }
+
     func move(_ move: RowMove, extending: Bool) {
         let current = ListSelection(
             rows: table.selectedRowIndexes, cursor: cursor, anchor: anchor)
         select(
             current.moved(
-                move, extending: extending, rowCount: table.numberOfRows, pageRows: pageRows))
+                move, extending: extending, rowCount: table.numberOfRows, pageRows: pageRows,
+                album: album))
         if let cursor { table.scrollRowToVisible(cursor) }
     }
 

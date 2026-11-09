@@ -63,3 +63,43 @@ private func at(_ row: Int) -> ListSelection {
     let back = jumped.moved(jumpUp.move, extending: jumpUp.extending, rowCount: 20, pageRows: 3)
     #expect(back == ListSelection(rows: [2], cursor: 2, anchor: 2))
 }
+
+/// Rows 0–2 album 1, rows 3–4 no album, rows 5–7 album 2.
+private func albums(_ row: Int) -> Int64? { row < 3 ? 1 : row < 5 ? nil : 2 }
+
+private func album(_ selection: ListSelection, _ move: RowMove, extending: Bool = false)
+    -> ListSelection
+{
+    selection.moved(move, extending: extending, rowCount: 8, pageRows: 3, album: albums)
+}
+
+@Test func albumMovesGoToTheFirstTrackOfTheNextOrPreviousAlbum() {
+    #expect(album(at(1), .nextAlbum) == at(3))
+    #expect(album(at(3), .nextAlbum) == at(5))
+    // Past the last album there's no next one to go to.
+    #expect(album(at(6), .nextAlbum) == at(6))
+    // From inside an album, the album before it, not its own start.
+    #expect(album(at(6), .previousAlbum) == at(3))
+    #expect(album(at(4), .previousAlbum) == at(0))
+    // The first album has none before it: its first row.
+    #expect(album(at(2), .previousAlbum) == at(0))
+    let none = ListSelection(rows: [], cursor: nil, anchor: nil)
+    #expect(album(none, .nextAlbum) == at(0))
+    #expect(album(none, .previousAlbum) == at(5))
+}
+
+@Test func albumMovesExtendWithShiftAndDoNothingWithoutAlbums() {
+    #expect(
+        album(at(1), .nextAlbum, extending: true)
+            == ListSelection(rows: [1, 2, 3], cursor: 3, anchor: 1))
+    #expect(at(4).moved(.nextAlbum, extending: false, rowCount: 8, pageRows: 3) == at(4))
+}
+
+@MainActor @Test func controlArrowsMoveByAlbum() throws {
+    let registry = try KeyBindings(AppCommands.all(), overrides: [:], rules: ChordRules())
+        .registry
+    #expect(registry.command(for: KeyChord(.down, .control)) == .nextAlbum)
+    #expect(registry.command(for: KeyChord(.up, .control)) == .previousAlbum)
+    #expect(registry.command(for: KeyChord(.down, [.control, .shift])) == .extendToNextAlbum)
+    #expect(registry.command(for: KeyChord(.up, [.control, .shift])) == .extendToPreviousAlbum)
+}

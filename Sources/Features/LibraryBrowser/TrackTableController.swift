@@ -452,6 +452,9 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         return this.albumID != next.albumID
     }
 
+    /// The album the album lines and the art column group `row` by, read through the row cache.
+    override var album: ((Int) -> Int64?)? { { [unowned self] in trackRow($0)?.albumID } }
+
     /// Whether `row` shows the track playing. Read from the row cache, which already holds the
     /// rows on screen.
     func isPlaying(_ row: Int) -> Bool {
