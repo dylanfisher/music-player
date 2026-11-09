@@ -74,6 +74,10 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private var databaseReads = 0
     /// The template rows' lines under their fields, saying why the text typed isn't saved.
     private var templateProblems: [String: NSTextField] = [:]
+    /// The address rows' Save buttons, and their lines under the fields saying why the address
+    /// wasn't saved.
+    private(set) var saveButtons: [String: NSButton] = [:]
+    private(set) var addressProblems: [String: NSTextField] = [:]
     /// The color rows' wells, and their Default buttons, which set null.
     private var colorWells: [String: NSColorWell] = [:]
     private var colorDefaults: [String: NSButton] = [:]
@@ -397,7 +401,6 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     @objc private func disclose(_ triangle: NSButton) {
         guard let key = disclosures.first(where: { $0.value === triangle })?.key else { return }
         fallbackRows[key]?.isHidden = triangle.state == .off
-        (parent as? PaneScroller)?.fit()
     }
 
     private func button(_ title: String, _ action: Selector) -> NSButton {
@@ -410,7 +413,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private func textField(_ row: GeneralModel.Row, optional: Bool) -> NSTextField {
         let field = NSTextField()
         field.identifier = NSUserInterfaceItemIdentifier(row.key)
-        field.placeholderString = optional ? noValueText : nil
+        field.placeholderString = row.address ?? (optional ? noValueText : nil)
         field.delegate = self
         field.translatesAutoresizingMaskIntoConstraints = false
         field.widthAnchor.constraint(equalToConstant: row.control.isNumber ? 60 : 300)
@@ -418,6 +421,16 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         field.setAccessibilityLabel(row.title)
         fields[row.key] = field
         return field
+    }
+
+    /// A red line under a field saying why what was typed isn't saved, hidden until then.
+    private func problemLine() -> NSTextField {
+        let problem = NSTextField(wrappingLabelWithString: "")
+        problem.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        problem.textColor = .systemRed
+        problem.preferredMaxLayoutWidth = Self.summaryWidth
+        problem.isHidden = true
+        return problem
     }
 
     /// Lists a template's tokens in a popover under its help button.
@@ -463,13 +476,20 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             help.bezelStyle = .helpButton
             help.toolTip = GeneralModel.help(tokens)
             help.setAccessibilityLabel("Tokens for \(row.title)")
-            let problem = NSTextField(wrappingLabelWithString: "")
-            problem.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-            problem.textColor = .systemRed
-            problem.preferredMaxLayoutWidth = Self.summaryWidth
-            problem.isHidden = true
+            let problem = problemLine()
             templateProblems[row.key] = problem
             let stack = NSStackView(views: [NSStackView(views: [field, help]), problem])
+            stack.orientation = .vertical
+            stack.alignment = .leading
+            stack.spacing = 2
+            return stack
+        case .text(let optional) where row.address != nil:
+            let field = textField(row, optional: optional)
+            let save = button("Save", #selector(clickedSave(_:)))
+            saveButtons[row.key] = save
+            let problem = problemLine()
+            addressProblems[row.key] = problem
+            let stack = NSStackView(views: [NSStackView(views: [field, save]), problem])
             stack.orientation = .vertical
             stack.alignment = .leading
             stack.spacing = 2
@@ -572,6 +592,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             show(row, in: control)
             let enabled = model.isEnabled(row.key)
             (fields[row.key] ?? control as? NSControl)?.isEnabled = enabled
+            saveButtons[row.key]?.isEnabled = enabled
             labels[row.key]?.textColor = enabled ? .labelColor : .disabledControlTextColor
             summaries[row.key]?.textColor =
                 enabled ? .secondaryLabelColor : .disabledControlTextColor
@@ -802,12 +823,32 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let field = notification.object as? NSTextField, let key = field.identifier?.rawValue
         else { return }
+        if addressProblems[key] != nil { return saveAddress(key) }
         // Text that didn't parse is put back below, so its problem no longer applies.
         templateProblems[key]?.isHidden = true
         // The field may still be the one being edited, which `reload` leaves alone, so a value
         // the setting refused is put back here.
         if !attempt({ try model.setText(key, field.stringValue) }) {
             field.stringValue = model.text(key)
+        }
+    }
+
+    @objc private func clickedSave(_ button: NSButton) {
+        saveButtons.first { $0.value === button }.map { saveAddress($0.key) }
+    }
+
+    /// Saves an address row's text, or keeps it in the field with why it was refused under it,
+    /// so it can be corrected.
+    private func saveAddress(_ key: String) {
+        guard let field = fields[key], let problem = addressProblems[key] else { return }
+        do {
+            try model.setText(key, field.stringValue)
+            problem.isHidden = true
+            errorLabel.isHidden = true
+        } catch {
+            logger.error("\(error)")
+            problem.stringValue = GeneralModel.refusal(error)
+            problem.isHidden = false
         }
     }
 

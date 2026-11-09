@@ -1075,6 +1075,46 @@ private func visibleLabels(in view: NSView) -> [String] {
     #expect(values[schema.stagingFolder.key] is NSNull)
 }
 
+/// The service address has a Save button and its form as a placeholder, and an address the
+/// config refuses says why under the field, keeping what was typed to correct.
+@MainActor @Test func theServiceAddressSavesFromAButtonAndSaysWhyItsRefused() throws {
+    let schema = AppSettings()
+    let key = schema.recommenderAddress.key
+    nonisolated(unsafe) var values: [String: Any] = [:]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { values[$0] },
+        set: { key, json in
+            let text = json as? String ?? ""
+            if let problem = IPAddressSetting(text).problem() {
+                throw SettingsError.invalid(
+                    path: "/tmp/config.json",
+                    problems: [SettingProblem(key: key, reason: .invalid(problem))])
+            }
+            values[key] = json
+        }, isBlocked: { false })
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.downloads])
+    let field = try #require(view(key, in: pane.view) as? NSTextField)
+    #expect(field.placeholderString == "192.168.1.10")
+    let save = try #require(pane.saveButtons[key])
+    let problem = try #require(pane.addressProblems[key])
+    #expect(problem.isHidden)
+
+    field.stringValue = "http://192.168.1.156"
+    click(save)
+    #expect(values[key] == nil)
+    #expect(!problem.isHidden)
+    #expect(
+        problem.stringValue
+            == "\"http://192.168.1.156\" isn't an IPv4 or IPv6 address; host names aren't taken")
+    #expect(field.stringValue == "http://192.168.1.156")
+
+    field.stringValue = "192.168.1.156"
+    click(save)
+    #expect(values[key] as? String == "192.168.1.156")
+    #expect(problem.isHidden)
+}
+
 /// The section under `view` whose heading is `title`: a stack of the heading and its box.
 @MainActor
 private func section(titled title: String, in view: NSView) -> NSStackView? {

@@ -8,6 +8,7 @@ final class PaneScroller: NSViewController {
     let pane: NSViewController
     /// The visible frame of the screen the window is on; tests give a short one.
     private let visibleFrame: (NSWindow) -> NSRect?
+    private var resized: (any NSObjectProtocol)?
 
     init(_ pane: NSViewController, visibleFrame: @escaping (NSWindow) -> NSRect?) {
         self.pane = pane
@@ -30,12 +31,17 @@ final class PaneScroller: NSViewController {
         let content = pane.view
         content.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = content
-        // The pane's own rows set its height; `fit` sets the window's.
+        // The pane's own rows set its height; `fit` sets the window's, each time the pane's
+        // changes, as a disclosure opens or a refusal shows under its field.
         NSLayoutConstraint.activate([
             content.topAnchor.constraint(equalTo: clip.topAnchor),
             content.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
             scroll.widthAnchor.constraint(equalTo: content.widthAnchor),
         ])
+        content.postsFrameChangedNotifications = true
+        resized = NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification, object: content, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.fit() } }
         view = scroll
     }
 
@@ -52,8 +58,9 @@ final class PaneScroller: NSViewController {
     }
 
     /// Sets the window to the pane's height, as far as its screen allows, keeping its top where
-    /// it is unless that would put its bottom off the screen: as a pane shows, and as a
-    /// disclosure in it opens or closes.
+    /// it is unless that would put its bottom off the screen: as a pane shows, and as its
+    /// height changes. The window would grow by itself as a row shows, but keep that height as
+    /// it hides, which left a gap.
     func fit() {
         guard let window = view.window else { return }
         let limit = heightLimit(in: window)

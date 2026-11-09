@@ -49,7 +49,14 @@ public final class GeneralModel {
         /// The line the row shares with the rows of the same group, which the pane shows under
         /// the group's title and summary, each row a button of its own.
         var group: RowGroup? = nil
+        /// For an IP address: the field's placeholder, the form an address takes, and a Save
+        /// button beside it, since Return or leaving the field isn't an obvious way to save.
+        var address: String? = nil
     }
+
+    /// An IP address row's placeholder: an address alone, since the port has its own row and
+    /// a scheme or a host name is refused.
+    static let addressPlaceholder = "192.168.1.10"
 
     /// Rows of one kind shown on one line, under one label and summary, as the Custom Status
     /// layouts are: each row is a button titled with its number, counted from 1.
@@ -249,7 +256,20 @@ public final class GeneralModel {
             disclosure: setting.key == schema.receiverAddress.key
                 ? "Can't find the receiver?" : nil,
             group: schema.customStatusLayouts.firstIndex { $0.key == setting.key }.map(
-                RowGroup.customStatus))
+                RowGroup.customStatus),
+            address: [schema.recommenderAddress.key, schema.receiverAddress.key].contains(
+                setting.key) ? addressPlaceholder : nil)
+    }
+
+    /// Why a change was refused, without the config file's path and the key, which the row
+    /// already shows: "\"http://192.0.2.1\" isn't an IPv4 or IPv6 address; host names aren't
+    /// taken".
+    static func refusal(_ error: any Error) -> String {
+        guard case .invalid(_, let problems) = error as? SettingsError, !problems.isEmpty else {
+            return "\(error)"
+        }
+        let reasons = problems.map { "\($0.reason)" }.joined(separator: "; ")
+        return reasons.prefix(1).uppercased() + reasons.dropFirst()
     }
 
     /// Whether a row can be changed now: not while its section's switch is off.
