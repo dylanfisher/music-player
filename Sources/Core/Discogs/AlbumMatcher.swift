@@ -264,7 +264,6 @@ final class AlbumMatcher {
                 score.order.1 == top.1 && top.2 - score.rank <= MatchThreshold.tie
             }
         }
-        let left = tieBreak(best, releases: releases, album: album)
-        return (left[0], left.count > 1)
+        return tieBreak(best, releases: releases, album: album)
     }
 }

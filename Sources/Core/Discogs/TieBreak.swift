@@ -8,13 +8,19 @@ import Library
 /// edition rather than a limited, special or promotional one of the same pressing, then the
 /// master's main release. `MEDIA`, `DATE` and the country match as written first, then as Discogs has
 /// since filled them in or changed them: more descriptions, a fuller date, a region that names
-/// the country. A number on the first label, which is the one YATE writes,
+/// the country. A `DATE` of a year alone only fits, since a year tells no pressings apart. A number on the first label, which is the one YATE writes,
 /// beats one on another, and a release with both the barcode and the number beats one with
 /// either. Each step keeps the scores that pass it best, when any pass; more than one left
 /// is still a tie.
+///
+/// The release chosen is the one the owner's preferences put first among those the steps
+/// before the main release leave (ADR 0131, 2026-11-09): the country most of them share, then
+/// a first pressing rather than a repress or reissue, then the main release, then a standard
+/// edition. They only order the tie: the choice is untied only when the main release alone
+/// leaves the same one release.
 func tieBreak(
     _ scores: [ReleaseScore], releases: [Int: CatalogRelease], album: DiscogsAlbum
-) -> [ReleaseScore] {
+) -> (ReleaseScore, tied: Bool) {
     let barcode = album.barcode.map(CatalogKey.barcode).flatMap { $0.isEmpty ? nil : $0 }
     let number = album.catalogNumber.flatMap(CatalogKey.catalogNumber)
     let spelledBarcode = barcode == nil ? nil : album.barcode?.trimmingCharacters(in: .whitespaces)
@@ -47,7 +53,10 @@ func tieBreak(
             album.media.map { media in release.formats.contains { fits(media, $0) } ? 1 : 0 }
                 ?? 0
         },
-        { release in album.date != nil && release.released == album.date ? 1 : 0 },
+        { release in
+            guard let date = album.date, date.count > 4 else { return 0 }
+            return release.released == date ? 1 : 0
+        },
         { release in
             guard let date = album.date, let released = release.released else { return 0 }
             return datesFit(date, released) ? 1 : 0
@@ -62,14 +71,36 @@ func tieBreak(
             !isEdition(release)
                 || !tied().contains { !isEdition($0) && samePressing(release, $0) } ? 1 : 0
         },
-        { release in release.isMainRelease ? 1 : 0 },
     ]
-    for step in steps where left.count > 1 {
-        let weights = left.map { score in releases[score.releaseID].map(step) ?? 0 }
-        guard let top = weights.max(), top > 0 else { continue }
-        left = zip(left, weights).filter { $0.1 == top }.map(\.0)
+    let main: (CatalogRelease) -> Int = { release in release.isMainRelease ? 1 : 0 }
+    let preferences: [(CatalogRelease) -> Int] = [
+        { release in
+            guard let country = release.country else { return 0 }
+            return tied().filter { other in
+                other.id != release.id && other.country.map { countriesFit(country, $0) } ?? false
+            }.count
+        },
+        { release in
+            release.formats.contains { !laterPressings.isDisjoint(with: $0.descriptions) } ? 0 : 1
+        },
+        main,
+        { release in isEdition(release) ? 0 : 1 },
+    ]
+    func run(_ steps: [(CatalogRelease) -> Int]) {
+        for step in steps where left.count > 1 {
+            let weights = left.map { score in releases[score.releaseID].map(step) ?? 0 }
+            guard let top = weights.max(), top > 0 else { continue }
+            left = zip(left, weights).filter { $0.1 == top }.map(\.0)
+        }
     }
-    return left
+    run(steps)
+    let tie = left
+    run([main])
+    let decided = left
+    left = tie
+    run(preferences)
+    let untied = decided.count == 1 && left.count == 1 && decided[0].releaseID == left[0].releaseID
+    return (left[0], !untied)
 }
 
 /// The formats the tie-break prefers: a download, or a CD of any kind.
@@ -81,6 +112,10 @@ let editionDescriptions: Set<String> = [
     "Limited Edition", "Numbered", "Special Edition", "Deluxe Edition", "Club Edition", "Promo",
     "Test Pressing", "White Label", "Unofficial Release",
 ]
+
+/// The format descriptions Discogs gives a pressing after the first, which the tie-break puts
+/// after a first pressing among releases still tied.
+let laterPressings: Set<String> = ["Repress", "Reissue", "Remastered"]
 
 /// Whether a format of the release names it a limited, special or promotional edition.
 func isEdition(_ release: CatalogRelease) -> Bool {

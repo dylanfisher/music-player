@@ -426,6 +426,53 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(laterDownload.releaseID == 10)
 }
 
+/// Feels, as the 20261101 dump has it: the main release is a repress, the first pressing shares
+/// its countries with most of the others, and a promo and a Russian CD tie with both.
+@Test func amongReleasesStillTiedTheMajorityCountrysFirstPressingIsChosenButStaysLikely()
+    throws
+{
+    let feels =
+        release(
+            10, master: 100, main: true, descriptions: ["Album", "Repress"], country: "UK &amp; US",
+            tracks: stockholm)
+        + release(11, master: 100, descriptions: ["Album"], country: "Russia", tracks: stockholm)
+        + release(
+            12, master: 100, catno: "SK 032P", descriptions: ["Album", "Promo"],
+            country: "UK &amp; US", tracks: stockholm)
+        + release(
+            13, master: 100, descriptions: ["Album"], country: "UK &amp; US", tracks: stockholm)
+        + release(
+            14, master: 100, descriptions: ["Album", "Reissue"], country: "UK", tracks: stockholm)
+    let preferred = try match(
+        album(stockholmTitles), masters: master(100, main: 10), releases: feels)
+    #expect(preferred.tier == .likely)
+    #expect(preferred.releaseID == 13)
+    #expect(preferred.reasons.contains(.tiedAfterTieBreak))
+
+    // A year alone in `DATE` fits the first pressing's full date as well as the promo's year.
+    let dated =
+        release(
+            10, master: 100, main: true, descriptions: ["Album", "Repress"], released: "2005",
+            country: "UK &amp; US", tracks: stockholm)
+        + release(
+            12, master: 100, catno: "SK 032P", descriptions: ["Album", "Promo"], released: "2005",
+            country: "UK &amp; US", tracks: stockholm)
+        + release(
+            13, master: 100, descriptions: ["Album"], released: "2005-10-17",
+            country: "UK &amp; US", tracks: stockholm)
+    let byYear = try match(
+        album(stockholmTitles, date: "2005"), masters: master(100, main: 10), releases: dated)
+    #expect(byYear.releaseID == 13)
+
+    let mainFirst =
+        release(10, master: 100, main: true, country: "US", tracks: stockholm)
+        + release(11, master: 100, descriptions: ["Reissue"], country: "US", tracks: stockholm)
+    let agreed = try match(
+        album(stockholmTitles), masters: master(100, main: 10), releases: mainFirst)
+    #expect(agreed.tier == .exact)
+    #expect(agreed.releaseID == 10)
+}
+
 @Test func releasesStillTiedAfterTheTieBreakMakeTheAlbumLikely() throws {
     let releases =
         release(10, master: 100, tracks: stockholm) + release(11, master: 100, tracks: stockholm)

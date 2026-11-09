@@ -117,6 +117,27 @@ description is a later download. Scoped by date and number without the format, a
 label put out the same month still beat the limited CD (59.1%). As built, the tags run is
 unchanged (95.6%, 30) and the titles-only run is 1,008 (61.8%) and 228 (14.0%).
 
+**Choosing among a tie,** added on 2026-11-09 at the owner's request: Feels, titles only,
+tied 12 CDs and went Exact on the main release, a repress, over the first pressing. Among
+the releases the steps before the main release leave, the release shown first is the one
+the owner's preferences put first: the country most of them share (each release weighs the
+number of the others whose country fits its own, as in step 5, so `UK` and `US` count for
+`UK & US`, and a lone Russian pressing weighs no more than one without a country), then no
+Repress, Reissue or Remastered in its
+formats, then the main release, then no description in `editionDescriptions`. They only
+order the tie: the album is Exact only when step 8 alone leaves the same one release, and
+otherwise Likely, still tied. The owner tagged a reissue, repress or remaster for 229 of
+1,769 releases and the main release for 765, so letting the preferences decide made wrong
+Exacts: on the titles-only run 61.5% and 251 (15.4%), against 61.5% and 212 (13.0%) as
+built, from 61.8% and 228 (14.0%) before. Tried and rejected: CD and SACD over File and CDr
+(62.2%, 245), the earliest year among the tied (58.5%, 340), and editions passed over beyond
+one pressing (58.7%, 272).
+
+The same day, a `DATE` of a year alone stopped counting in step 4's first part, as written:
+Feels's files say `2005`, which only its represses and promos have as written, and the first
+pressing's `2005-10-17` was passed over before the preferences saw it. A year alone now only
+fits. The tags run went from 95.6% and 30 to 95.8% and 29.
+
 The result per album is its tier, the chosen release, its tracks as files, each file's track,
 and the other candidates best first.
 
