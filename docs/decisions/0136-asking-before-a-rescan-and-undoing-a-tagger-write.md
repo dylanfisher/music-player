@@ -4,7 +4,8 @@
 - **Status:** accepted
 - **See also:** [0022](0022-stable-track-identity-and-play-timeline.md) (the stats rebuild's discard notice),
   [0107](0107-tags-written-in-place-within-the-padding.md) (writes in place), [0133](0133-one-confirmation-for-a-match-set.md)
-  (the tagger writes through Undo Tag Edit's queue), [0131](0131-discogs-matching.md) (the tiers)
+  (the tagger writes through Undo Tag Edit's queue), [0131](0131-discogs-matching.md) (the tiers),
+  [0170](0170-match-confidence-and-the-safe-tab.md) (the Safe tab, read from the reasons)
 
 ## Context
 
