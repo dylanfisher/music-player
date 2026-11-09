@@ -68,7 +68,7 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
 
 @MainActor @Test func theProblemIsTheConfigFilesAndBlocksSave() throws {
     let (model, values) = model()
-    model.setJoin("", for: .genres)
+    model.draft[.genres].setJoin("")
     let expected: String
     do {
         _ = try TaggingModel.setting.value(fromText: TaggingModel.setting.text(model.draft))
@@ -141,7 +141,7 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     #expect(model.draft == DiscogsPreset.yate.mapping)
     #expect(!model.isEdited)
     #expect(model.note == nil)
-    model.setMode(.off, for: .barcode)
+    model.draft[.barcode].mode = .off
     values[TaggingModel.setting.key] = json(DiscogsPreset.minimal.mapping)
     model.reload()
     #expect(model.draft[.barcode].mode == .off)
@@ -156,7 +156,7 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     let model = TaggingModel(
         value: { _ in json(DiscogsPreset.oneToOne.mapping) }, set: { _, _ in },
         isBlocked: { true })
-    model.setMode(.off, for: .barcode)
+    model.draft[.barcode].mode = .off
     #expect(model.problem == nil)
     #expect(!model.canSave)
 }

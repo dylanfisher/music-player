@@ -230,7 +230,7 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     @objc private func modeChosen() {
         let modes = DiscogsFieldRule.Mode.shown
         guard modes.indices.contains(modePopUp.indexOfSelectedItem) else { return }
-        model.setMode(modes[modePopUp.indexOfSelectedItem], for: field)
+        model.draft[field].mode = modes[modePopUp.indexOfSelectedItem]
         refresh()
     }
 
@@ -279,9 +279,9 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     func controlTextDidChange(_ notification: Notification) {
         guard let control = notification.object as? NSTextField else { return }
         if control === joinField {
-            model.setJoin(control.stringValue, for: field)
+            model.draft[field].setJoin(control.stringValue)
         } else if control === templateField {
-            model.setTemplate(control.stringValue, for: field)
+            model.draft[field].setTemplate(control.stringValue)
         } else {
             return
         }

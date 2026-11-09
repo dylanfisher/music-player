@@ -15,11 +15,11 @@ import Testing
     #expect(draft.mapping[.styles].targets == [.field(.mood), .key("STYLE_TOO")])
     #expect(draft.targetsText(.styles) == "mood, STYLE_TOO")
     #expect(draft.chosenName == nil, "edited")
-    draft.setMode(.fillEmpty, for: .styles)
-    draft.setJoin("", for: .styles)
+    draft.mapping[.styles].mode = .fillEmpty
+    draft.mapping[.styles].setJoin("")
     #expect(draft.problem == "styles is a list, so it needs a join")
-    draft.setJoin("; ", for: .styles)
-    draft.setTemplate("{genre} - {styles}", for: .genres)
+    draft.mapping[.styles].setJoin("; ")
+    draft.mapping[.genres].setTemplate("{genre} - {styles}")
     #expect(draft.mapping[.genres].format.template == "{genre} - {styles}")
     #expect(draft.problem == nil)
 }
@@ -41,7 +41,7 @@ import Testing
     #expect(draft.save(as: " ") == "has no name")
     #expect(draft.save(as: DiscogsPreset.minimal.name) != nil)
     #expect(draft.save(as: "Mine") == nil)
-    draft.setMode(.off, for: .label)
+    draft.mapping[.label].mode = .off
     #expect(draft.save(as: "Mine") == nil)
     #expect(draft.saved.map(\.name) == ["Mine"], "replaced, not added")
     #expect(draft.saved[0].mapping[.label].mode == .off)
@@ -65,7 +65,7 @@ import Testing
 
 @Test func anImportedMappingIsShownUnsavedAndABadOneChangesNothing() {
     var yate = MappingDraft(mapping: DiscogsPreset.yate.mapping, saved: [])
-    yate.setJoin("; ", for: .styles)
+    yate.mapping[.styles].setJoin("; ")
     var draft = MappingDraft(mapping: DiscogsPreset.minimal.mapping, saved: [])
     #expect(draft.load(yate.exported, from: "Pasted") == nil)
     #expect(draft.mapping == yate.mapping)

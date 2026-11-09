@@ -121,7 +121,7 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
     #expect(pane.field == .artist)
     #expect(pane.partPopUps[.suffixes]?.indexOfSelectedItem == 1, "YATE drops the (2)")
     #expect(pane.noteLabel.isHidden)
-    pane.model.setMode(.off, for: .barcode)
+    pane.model.draft[.barcode].mode = .off
     store(DiscogsPreset.minimal.mapping)
     pane.reload()
     #expect(!pane.noteLabel.isHidden)

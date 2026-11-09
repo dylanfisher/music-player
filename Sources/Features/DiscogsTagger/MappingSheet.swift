@@ -201,16 +201,16 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         let field = Self.fields[row]
         switch column {
         case .targets: draft.setTargets(text, for: field)
-        case .join: draft.setJoin(text, for: field)
-        case .template: draft.setTemplate(text, for: field)
+        case .join: draft.mapping[field].setJoin(text)
+        case .template: draft.mapping[field].setTemplate(text)
         default: return
         }
         refresh()
     }
 
     @objc private func modeChosen(_ sender: NSPopUpButton) {
-        draft.setMode(
-            DiscogsFieldRule.Mode.shown[sender.indexOfSelectedItem], for: Self.fields[sender.tag])
+        draft.mapping[Self.fields[sender.tag]].mode =
+            DiscogsFieldRule.Mode.shown[sender.indexOfSelectedItem]
         refresh()
     }
 

@@ -75,19 +75,6 @@ struct MappingDraft: Equatable {
         }
     }
 
-    mutating func setMode(_ mode: DiscogsFieldRule.Mode, for field: DiscogsField) {
-        mapping[field].mode = mode
-    }
-
-    /// Empty text is no join, or no template.
-    mutating func setJoin(_ text: String, for field: DiscogsField) {
-        mapping[field].format.join = text.isEmpty ? nil : text
-    }
-
-    mutating func setTemplate(_ text: String, for field: DiscogsField) {
-        mapping[field].format.template = text.isEmpty ? nil : text
-    }
-
     /// The mapping as Export… writes it: as the config file holds its mapping, one encoder for
     /// both.
     var exported: String { AppSettings().discogsMapping.text(mapping) }

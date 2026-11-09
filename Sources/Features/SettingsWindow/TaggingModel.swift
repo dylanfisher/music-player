@@ -131,19 +131,6 @@ final class TaggingModel {
         return spelled + (target.isNumbered ? " (each value numbered)" : "")
     }
 
-    func setMode(_ mode: DiscogsFieldRule.Mode, for field: DiscogsField) {
-        draft[field].mode = mode
-    }
-
-    /// Empty text is no join, or no template.
-    func setJoin(_ text: String, for field: DiscogsField) {
-        draft[field].format.join = text.isEmpty ? nil : text
-    }
-
-    func setTemplate(_ text: String, for field: DiscogsField) {
-        draft[field].format.template = text.isEmpty ? nil : text
-    }
-
     /// Sets a part of the field's format to its `index`th choice.
     func choose(_ index: Int, of part: Part, for field: DiscogsField) {
         guard part.choices.indices.contains(index), index != part.selected(in: draft[field].format)

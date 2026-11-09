@@ -67,3 +67,16 @@ extension DiscogsFieldRule {
     public static let joinTitle = "Join"
     public static let templateTitle = "Template"
 }
+
+extension DiscogsFieldRule {
+    /// Sets the text between a list's values, as both editors take it typed: empty text is no
+    /// join.
+    public mutating func setJoin(_ text: String) {
+        format.join = text.isEmpty ? nil : text
+    }
+
+    /// Sets the template; empty text is none, which writes the field's own value.
+    public mutating func setTemplate(_ text: String) {
+        format.template = text.isEmpty ? nil : text
+    }
+}
