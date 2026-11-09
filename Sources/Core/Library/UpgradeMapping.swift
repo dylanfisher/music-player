@@ -90,7 +90,7 @@ package enum UpgradeRefusal: Error, Equatable, CustomStringConvertible {
         case .notInLibrary(let path): "\(path) isn't in the library"
         case .otherRelease(let path, let found, let expected):
             "\(path) is tagged with " + (found.map { "release \($0)" } ?? "no release")
-                + ", not " + (expected.map { "release \($0)" } ?? "none")
+                + (expected.map { ", not release \($0)" } ?? ", and had no release when approved")
         }
     }
 }

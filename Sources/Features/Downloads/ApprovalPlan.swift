@@ -252,8 +252,8 @@ struct ApprovalPlan: Sendable {
             case .none: break
             case .several(let count, let byName):
                 found.notReplaced =
-                    "\(count) albums in the library have this "
-                    + (byName ? "artist and title" : "release")
+                    "\(count) albums in the library "
+                    + (byName ? "have this artist and title" : "are tagged with this release")
                     + ", so it's imported as a new album beside them."
             case .album(let album, let byName):
                 if let paths = try index.albumFiles(album.id, shareRoot: places.shareRoot) {

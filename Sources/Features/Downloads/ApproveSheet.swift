@@ -157,7 +157,8 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
             }
             if plan.checking && checked.contains(file.name) {
                 return FileRow(
-                    name: file.name, destination: destination, check: "Checking…", warns: false,
+                    name: file.name, destination: destination, check: "Checking the file…",
+                    warns: false,
                     checking: true)
             }
             let (check, warns) = Self.check(file.name, plan)

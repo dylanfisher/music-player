@@ -368,7 +368,8 @@ func aJobQueuedByHandReplacesTheLibrarysAlbumOfItsRelease(_ byName: Bool) async 
         stagedJob(sizes), places: places, databaseURL: index.fileURL, catalog: nil)
     #expect(plan.replaced == nil)
     #expect(!plan.isUpgrade)
-    #expect(plan.notReplaced?.hasPrefix("2 albums in the library have this release") == true)
+    #expect(
+        plan.notReplaced?.hasPrefix("2 albums in the library are tagged with this release") == true)
     #expect(plan.moves.count == 2)
 }
 
