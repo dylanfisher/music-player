@@ -15,6 +15,36 @@ private let secondary = CGRect(x: 1440, y: 0, width: 1920, height: 1055)
             screens: [primary, secondary], anchorScreen: primary) == saved)
 }
 
+/// A frame a screen shows only a sliver of, here a pixel, moves onto that screen, title bar and
+/// all, rather than opening where it can't be dragged back.
+@Test func aFrameBarelyOnAScreenMovesOntoIt() {
+    let saved = CGRect(x: 3359, y: 600, width: 900, height: 500)
+    #expect(
+        placedFrame(
+            saved: saved, size: saved.size, resizable: true, screens: [primary, secondary],
+            anchorScreen: primary) == CGRect(x: 2460, y: 555, width: 900, height: 500))
+    // Above the screen's top by a pixel's overlap, its title bar comes down onto it.
+    let above = CGRect(x: 100, y: 874, width: 600, height: 400)
+    #expect(
+        placedFrame(
+            saved: above, size: above.size, resizable: false, screens: [primary],
+            anchorScreen: primary) == CGRect(x: 100, y: 475, width: 600, height: 400))
+}
+
+/// A resizable window larger than the screen it's on shrinks to fit it.
+@Test func aResizableWindowLargerThanItsScreenShrinksToIt() {
+    let saved = CGRect(x: -100, y: -50, width: 1600, height: 1000)
+    #expect(
+        placedFrame(
+            saved: saved, size: saved.size, resizable: true, screens: [primary],
+            anchorScreen: primary) == primary)
+    // One that doesn't resize keeps its size, its top and left edges on the screen.
+    #expect(
+        placedFrame(
+            saved: saved, size: saved.size, resizable: false, screens: [primary],
+            anchorScreen: primary) == CGRect(x: 0, y: -125, width: 1600, height: 1000))
+}
+
 /// A window its content sizes, as Settings is, keeps that size under the saved top left.
 @Test func aWindowThatDoesntResizeKeepsItsSizeUnderTheSavedTopLeft() {
     let saved = CGRect(x: 1600, y: 200, width: 640, height: 500)
