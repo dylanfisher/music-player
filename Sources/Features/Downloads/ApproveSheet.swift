@@ -1,5 +1,6 @@
 import Analysis
 import AppKit
+import DisplayText
 import Library
 import Settings
 
@@ -146,17 +147,20 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
         }
 
         // A resumed import's files may be in the library by now, so it lists them alone.
-        addColumn(
-            to: filesTable, Column.name.rawValue, title: TrackColumn.fileName.title, width: 220,
+        filesTable.addColumn(
+            NSUserInterfaceItemIdentifier(Column.name.rawValue), title: TrackColumn.fileName.title,
+            width: 220,
             stretches: plan.resuming)
         if !plan.resuming {
-            addColumn(
-                to: filesTable, Column.destination.rawValue, title: "Moves To", width: 320,
+            filesTable.addColumn(
+                NSUserInterfaceItemIdentifier(Column.destination.rawValue), title: "Moves To",
+                width: 320,
                 stretches: true)
-            addColumn(
-                to: filesTable, Column.check.rawValue, title: "Lossy-Origin Check", width: 220)
+            filesTable.addColumn(
+                NSUserInterfaceItemIdentifier(Column.check.rawValue), title: "Lossy-Origin Check",
+                width: 220)
         }
-        let filesScroll = listTable(filesTable, source: self)
+        let filesScroll = filesTable.inListScrollView(source: self)
         views.append(filesScroll)
         var tables = [filesScroll]
 
@@ -166,15 +170,19 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
                 views.append(warning(problem))
             } else {
                 views.append(warning(Self.deleteWarning))
-                addColumn(to: oldTable, Column.tick.rawValue, title: "", width: 24)
-                addColumn(
-                    to: oldTable, Column.old.rawValue, title: TrackColumn.path.title, width: 360,
+                oldTable.addColumn(
+                    NSUserInterfaceItemIdentifier(Column.tick.rawValue), title: "", width: 24)
+                oldTable.addColumn(
+                    NSUserInterfaceItemIdentifier(Column.old.rawValue),
+                    title: TrackColumn.path.title, width: 360,
                     stretches: true)
-                addColumn(
-                    to: oldTable, Column.position.rawValue, title: TrackColumn.trackNumber.title,
+                oldTable.addColumn(
+                    NSUserInterfaceItemIdentifier(Column.position.rawValue),
+                    title: TrackColumn.trackNumber.title,
                     width: 50)
-                addColumn(to: oldTable, Column.note.rawValue, title: "", width: 320)
-                let oldScroll = listTable(oldTable, source: self)
+                oldTable.addColumn(
+                    NSUserInterfaceItemIdentifier(Column.note.rawValue), title: "", width: 320)
+                let oldScroll = oldTable.inListScrollView(source: self)
                 views.append(oldScroll)
                 tables.append(oldScroll)
             }

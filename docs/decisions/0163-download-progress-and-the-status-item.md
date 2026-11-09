@@ -62,7 +62,8 @@ thread.
   of the staged files (where each goes, relative to the library folder, and what the
   lossy-origin check found), and for an upgrade a table of the old files with a box in the row
   of each that has no new file. What blocks Approve is one line beside the buttons. The tables
-  are `listTable`'s, the look the window, the Queue sheet and the tagger's tables share.
+  are `NSTableView.inListScrollView`'s, in `DisplayText`, the look the Downloads window, the
+  Queue sheet and the tagger's tables share.
 
 ## Alternatives considered
 
@@ -93,5 +94,5 @@ thread.
   reply is a LAN device's input (ADR 0025, row 65): a service that isn't the owner's could
   point Open slskd at any http or https page, which the owner sees in the button's tooltip
   before clicking.
-- The tagger keeps its own copy of the table setup until its branch lands; then the two can
-  share one in a module both import.
+- The tagger and the downloads build their tables with the same two `NSTableView` helpers, in
+  the `DisplayText` primitive, so the look is one copy.

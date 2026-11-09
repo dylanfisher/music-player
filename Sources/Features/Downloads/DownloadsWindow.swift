@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Library
 import Recommender
 import Settings
@@ -115,15 +116,16 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         bar.addArrangedSubview(addButton)
 
         for column in DownloadColumn.allCases {
-            addColumn(
-                to: table, column.rawValue, title: column.title, width: column.width,
+            table.addColumn(
+                NSUserInterfaceItemIdentifier(column.rawValue), title: column.title,
+                width: column.width,
                 stretches: column == .album)
         }
         table.rowHeight = 20
         let menu = NSMenu()
         menu.delegate = self
         table.menu = menu
-        let scroll = listTable(table, source: self)
+        let scroll = table.inListScrollView(source: self)
 
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

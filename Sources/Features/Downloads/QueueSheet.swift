@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Recommender
 
 /// The Upgrades and From Library Selection sheets (54.13): albums with a box each, those that
@@ -48,12 +49,12 @@ final class QueueSheet: NSWindowController, NSTableViewDataSource, NSTableViewDe
         let noteLabel = NSTextField(wrappingLabelWithString: note)
         noteLabel.textColor = .secondaryLabelColor
         for (column, width) in [(Column.tick, 24.0), (.title, 300.0), (.detail, 260.0)] {
-            addColumn(
-                to: table, column.rawValue,
+            table.addColumn(
+                NSUserInterfaceItemIdentifier(column.rawValue),
                 title: column == .title ? DownloadColumn.album.title : "", width: width,
                 stretches: column == .title)
         }
-        let scroll = listTable(table, source: self)
+        let scroll = table.inListScrollView(source: self)
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
         cancel.keyEquivalent = "\u{1b}"
         queueButton.target = self

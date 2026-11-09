@@ -710,7 +710,7 @@ Parts, each its own commit or two, with a test that fails without it:
    in slskd** (the window's bar, from the config route, fetched when the window opens).
 8. **Approve sheet:** a table of the files (file, where it goes, the lossy-origin check)
    and for an upgrade a table of the old files with a box for each with no new file, in the
-   tables' shared look (`listTable`, used by the window and the Queue sheet too), a single
+   tables' shared look (`NSTableView.inListScrollView`, the tagger's too), a single
    line of warnings and blockers above the buttons.
 
 ### 60. Keep Files Organized

@@ -161,19 +161,11 @@ enum TaggerColumn: String {
         }
     }
 
-    /// A column of `width` points with this title. A title's column shares the width the table
-    /// gains; the rest keep theirs.
-    @MainActor
-    func column(width: CGFloat) -> NSTableColumn {
-        let column = NSTableColumn(identifier: identifier)
-        column.title = title
-        column.width = width
-        let flexible: Set<TaggerColumn> = [
-            .album, .fileTitle, .releaseTitle, .current, .written, .title, .targets, .template,
-        ]
-        column.resizingMask =
-            flexible.contains(self) ? [.autoresizingMask, .userResizingMask] : .userResizingMask
-        return column
+    /// Whether the column shares the width the table gains: a title's does; the rest keep
+    /// theirs.
+    var stretches: Bool {
+        [.album, .fileTitle, .releaseTitle, .current, .written, .title, .targets, .template]
+            .contains(self)
     }
 }
 
@@ -184,17 +176,11 @@ func taggerTable(
     _ table: NSTableView, _ columns: [(TaggerColumn, CGFloat)],
     source: some NSTableViewDataSource & NSTableViewDelegate
 ) -> NSScrollView {
-    for (column, width) in columns { table.addTableColumn(column.column(width: width)) }
-    table.dataSource = source
-    table.delegate = source
-    table.usesAlternatingRowBackgroundColors = true
-    table.style = .fullWidth
-    table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-    let scroll = NSScrollView()
-    scroll.documentView = table
-    scroll.hasVerticalScroller = true
-    scroll.borderType = .bezelBorder
-    return scroll
+    for (column, width) in columns {
+        table.addColumn(
+            column.identifier, title: column.title, width: width, stretches: column.stretches)
+    }
+    return table.inListScrollView(source: source)
 }
 
 extension TrackComparison {
