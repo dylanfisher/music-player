@@ -6,7 +6,7 @@ import Settings
 
 private let logger = moduleLogger()
 
-/// The browser's logic, apart from AppKit: the sidebar's source, the three columns, the search
+/// The browser's logic, apart from AppKit: the sidebar's source, the columns, the search
 /// and the sort decide which track IDs the table shows, and in what order.
 ///
 /// Every query runs on the `LibraryReader`, off the main thread. A change that a newer one
@@ -34,7 +34,7 @@ public final class BrowserModel {
     public private(set) var columns = BrowserColumn.defaults.map(\.grouping)
     /// Each column's entries.
     public private(set) var entries: [[ColumnEntry]] = Array(
-        repeating: [], count: BrowserColumn.count)
+        repeating: [], count: BrowserColumn.defaults.count)
     public private(set) var trackIDs: [Int64] = []
     public private(set) var sortColumn: TrackColumn
     public private(set) var ascending: Bool
@@ -191,7 +191,7 @@ public final class BrowserModel {
         guard let column = pendingColumns.firstIndex(of: grouping) else { return }
         pending.selections[grouping] = value
         let next = column + 1
-        await reload(panesFrom: next < BrowserColumn.count ? next : nil, reason: .user)
+        await reload(panesFrom: next < pendingColumns.count ? next : nil, reason: .user)
     }
 
     /// Has the column at `column` group by `grouping`, at All. A grouping another column shows
@@ -209,17 +209,45 @@ public final class BrowserModel {
         return next
     }
 
+    /// The columns' groupings with a column added right of `column`, grouping by the first
+    /// grouping no column shows; nil when the browser has as many columns as it may.
+    func groupings(addingAfter column: Int) -> [BrowserGrouping]? {
+        guard pendingColumns.count < BrowserColumn.counts.upperBound,
+            let grouping = BrowserGrouping.allCases.first(where: { !pendingColumns.contains($0) })
+        else { return nil }
+        var next = pendingColumns
+        next.insert(grouping, at: min(column + 1, next.count))
+        return next
+    }
+
+    /// The columns' groupings without the column at `column`; nil when it's the only one.
+    func groupings(removing column: Int) -> [BrowserGrouping]? {
+        guard pendingColumns.count > BrowserColumn.counts.lowerBound,
+            pendingColumns.indices.contains(column)
+        else { return nil }
+        var next = pendingColumns
+        next.remove(at: column)
+        return next
+    }
+
     /// Has the columns group by `groupings`, as the config file says (ADR 0106). Each column
-    /// whose grouping changes goes to All, and the columns from the first of them reload.
+    /// whose grouping changes, or that's added or taken away, goes to All, and the columns
+    /// from the first of them reload.
     func setGroupings(_ groupings: [BrowserGrouping]) async {
-        let changed = groupings.indices.filter { groupings[$0] != pendingColumns[$0] }
+        let changed = (0..<max(groupings.count, pendingColumns.count)).filter {
+            groupings.indices.contains($0) != pendingColumns.indices.contains($0)
+                || groupings[$0] != pendingColumns[$0]
+        }
         guard let first = changed.first else { return }
         for column in changed {
-            pending.selections[pendingColumns[column]] = nil
-            pending.selections[groupings[column]] = nil
+            if pendingColumns.indices.contains(column) {
+                pending.selections[pendingColumns[column]] = nil
+            }
+            if groupings.indices.contains(column) { pending.selections[groupings[column]] = nil }
         }
         pendingColumns = groupings
-        await reload(panesFrom: first, reason: .user)
+        // Past the last column, as when it was taken away, the last reloads, so the panes do.
+        await reload(panesFrom: max(0, min(first, groupings.count - 1)), reason: .user)
     }
 
     /// Selects All in every column, for hiding them, so nothing hidden narrows the table.
@@ -860,13 +888,16 @@ public final class BrowserModel {
         let sort = pendingSort
         let columns = pendingColumns
         var next = pending
-        var entries = self.entries
+        // As many as the columns, which a change may have added or taken away.
+        var entries = columns.indices.map {
+            self.entries.indices.contains($0) ? self.entries[$0] : []
+        }
         // A newer change, such as a keystroke, doesn't wait behind a refresh's queries.
         let reader = reason == .libraryChanged ? reader.refreshes : reader
         do {
             // The timeline lists plays, which its own model pages through.
             let tracks = next.source?.listsPlays != true
-            for column in (first ?? BrowserColumn.count)..<BrowserColumn.count {
+            for column in (first ?? columns.count)..<columns.count {
                 let grouping = columns[column]
                 // The selections of this column and those to its right don't narrow it.
                 entries[column] =
@@ -874,7 +905,11 @@ public final class BrowserModel {
                     ? try await reader.columnEntries(
                         grouping, next, ignoring: Set(columns[column...])) : []
                 next.selections[grouping] = resolve(
-                    next.selections[grouping], saved?.columns[column].selection,
+                    next.selections[grouping],
+                    saved.flatMap {
+                        $0.columns.indices.contains(column) ? $0.columns[column] : nil
+                    }?
+                    .selection,
                     in: entries[column], grouping)
             }
             let ids =

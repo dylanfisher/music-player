@@ -4,8 +4,8 @@ import KeyChord
 import Library
 import Settings
 
-/// The browser's three columns, side by side, each with an All row first. Right-clicking a
-/// column's header picks what it groups by, as in Swinsian.
+/// The browser's columns, side by side, each with an All row first. Right-clicking a column's
+/// header picks what it groups by, as in Swinsian, or adds or removes a column.
 @MainActor
 final class PanesController: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuDelegate
@@ -16,9 +16,13 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
     /// An entry chosen, or All for nil, in the column grouping by what the columns showed.
     private let select: (BrowserGrouping, BrowserValue?) -> Void
     private let setGrouping: (BrowserGrouping, Int) -> Void
+    /// A column added right of this one, or with false this one removed.
+    private let changeColumns: (_ adding: Bool, _ column: Int) -> Void
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
     /// Moves the keys to the next column, or with false the previous one.
     private let focusPane: (Bool) -> Void
+    /// Called after the tables were made again for a new count of columns.
+    var tablesRemade: () -> Void = {}
     /// Set while selections are set from the model, so they don't count as clicks.
     private var applying = false
     private var typeSelect: TypeSelect? = TypeSelect()
@@ -26,12 +30,14 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
     init(
         model: BrowserModel, select: @escaping (BrowserGrouping, BrowserValue?) -> Void,
         setGrouping: @escaping (BrowserGrouping, Int) -> Void,
+        changeColumns: @escaping (_ adding: Bool, _ column: Int) -> Void = { _, _ in },
         keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome,
         focusPane: @escaping (Bool) -> Void
     ) {
         self.model = model
         self.select = select
         self.setGrouping = setGrouping
+        self.changeColumns = changeColumns
         self.keyCommand = keyCommand
         self.focusPane = focusPane
         super.init(nibName: nil, bundle: nil)
@@ -45,7 +51,16 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         let row = NSStackView()
         row.distribution = .fillEqually
         row.spacing = 1
-        for column in 0..<BrowserColumn.count {
+        view = row
+        makeTables()
+    }
+
+    /// One table for each of the model's columns, in place of those there were.
+    private func makeTables() {
+        guard let row = view as? NSStackView else { return }
+        for scroll in row.arrangedSubviews { scroll.removeFromSuperview() }
+        tables = []
+        for column in model.columns.indices {
             let table = KeyTableView()
             table.takeKey = { [weak self] event in self?.takeKey(event, in: column) ?? false }
             let tableColumn = NSTableColumn(identifier: entryIdentifier)
@@ -67,11 +82,17 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
             scroll.autohidesScrollers = true
             row.addArrangedSubview(scroll)
         }
-        view = row
     }
 
     func reload() {
         typeSelect?.reset()
+        if tables.count != model.columns.count {
+            // The keys were in a table that's going: they go to the first column.
+            let hadKeys = tables.contains { $0.window?.firstResponder === $0 }
+            makeTables()
+            if hadKeys, let first = tables.first { first.window?.makeFirstResponder(first) }
+            tablesRemade()
+        }
         applying = true
         defer { applying = false }
         for (column, table) in tables.enumerated() {
@@ -190,7 +211,8 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         fill(menu, column: column)
     }
 
-    /// Lists every grouping, the column's own checked.
+    /// Lists every grouping, the column's own checked, then Add Column and Remove Column, each
+    /// off where the column count is at its limit.
     func fill(_ menu: NSMenu, column: Int) {
         menu.removeAllItems()
         for grouping in BrowserGrouping.allCases {
@@ -201,11 +223,30 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
             item.state = model.columns[column] == grouping ? .on : .off
             menu.addItem(item)
         }
+        menu.addItem(.separator())
+        let counts = BrowserColumn.counts
+        for (title, adding, possible) in [
+            (addColumnTitle, true, model.columns.count < counts.upperBound),
+            (removeColumnTitle, false, model.columns.count > counts.lowerBound),
+        ] {
+            let item = NSMenuItem(
+                title: title, action: possible ? #selector(changeColumn(_:)) : nil,
+                keyEquivalent: "")
+            item.target = self
+            item.tag = column
+            item.representedObject = adding
+            menu.addItem(item)
+        }
     }
 
     @objc private func chooseGrouping(_ item: NSMenuItem) {
         guard let choice = item.representedObject as? GroupingChoice else { return }
         setGrouping(choice.grouping, choice.column)
+    }
+
+    @objc private func changeColumn(_ item: NSMenuItem) {
+        guard let adding = item.representedObject as? Bool else { return }
+        changeColumns(adding, item.tag)
     }
 }
 
@@ -219,6 +260,9 @@ private final class GroupingChoice: NSObject {
         self.column = column
     }
 }
+
+let addColumnTitle = "Add Column"
+let removeColumnTitle = "Remove Column"
 
 /// Each column's one column of the table, and its cells.
 private let entryIdentifier = NSUserInterfaceItemIdentifier("entry")

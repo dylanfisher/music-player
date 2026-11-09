@@ -82,6 +82,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
         browser.statsHeightChanged = { height in
             if AppState.statsHeightRange.contains(height) { saver.set(\.statsHeight, height) }
         }
+        // New columns' tables come without the glass.
+        browser.panesRemade = { [weak self] in self?.glass?.refresh() }
         browser.stateChanged = { [weak self] state in
             saver.set(\.browserColumns, state.columns)
             saver.set(\.sourceSort, state.sourceSort)

@@ -4,8 +4,10 @@ public struct BrowserColumn: SettingValue {
     public var grouping: BrowserGrouping
     public var selection: String?
 
-    /// The browser has three columns, as Swinsian's does.
-    public static let count = 3
+    /// How many columns the browser may have. Three by default, as Swinsian's; six at most,
+    /// which on a 13-inch screen beside the sidebar still leaves each about 150 points
+    /// (ADR 0160).
+    public static let counts = 1...6
     /// Genres, Artists and Albums, nothing selected.
     public static let defaults = [BrowserGrouping.genres, .artists, .albums].map {
         BrowserColumn(grouping: $0, selection: nil)
@@ -39,14 +41,17 @@ public struct BrowserColumn: SettingValue {
 
     /// The columns to load: `saved`, the state file's, grouped as `groupings` says when the
     /// config file names them. A saved selection stays only in a column that still groups by
-    /// what it was made in, since a name means nothing in another grouping (ADR 0106).
+    /// what it was made in, since a name means nothing in another grouping (ADR 0106). The
+    /// config file's count wins: columns past the state file's start at All.
     public static func restored(_ saved: [BrowserColumn], groupings: [BrowserGrouping]?)
         -> [BrowserColumn]
     {
         guard let groupings else { return saved }
-        return zip(groupings, saved).map { grouping, column in
-            BrowserColumn(
-                grouping: grouping, selection: column.grouping == grouping ? column.selection : nil)
+        return groupings.enumerated().map { index, grouping in
+            let column = saved.indices.contains(index) ? saved[index] : nil
+            return BrowserColumn(
+                grouping: grouping,
+                selection: column?.grouping == grouping ? column?.selection : nil)
         }
     }
 }

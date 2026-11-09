@@ -54,6 +54,13 @@ final class WindowGlass {
         if on { clear(in: window.contentView) } else { restore() }
     }
 
+    /// Clears lists made since the glass went on, such as a browser column added.
+    func refresh() {
+        guard isOn else { return }
+        restore()
+        clear(in: window.contentView)
+    }
+
     /// Gives the window the full-size content view while the glass is on, and takes it away
     /// while off. In full screen the frame is the screen's, for AppKit to manage and put back, so
     /// the change waits until the window has left full screen and calls this again.

@@ -488,7 +488,7 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(reloaded[\.browserColumns] == columns)
 }
 
-@Test func browserColumnsMustBeThreeDifferentKnownGroupings() throws {
+@Test func browserColumnsMustBeOneToSixDifferentKnownGroupings() throws {
     let url = temporaryFile()
     try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -508,7 +508,7 @@ private func problems(_ json: String) -> [SettingProblem] {
             #"[{"grouping": "genres", "selection": null}, {"grouping": "genres", "selection": null},"#
                 + #" {"grouping": "albums", "selection": null}]"#, "genres is listed twice"
         ),
-        (#"[{"grouping": "genres", "selection": null}]"#, "1 columns"),
+        (#"[]"#, "0 columns"),
         (
             #"[{"grouping": "moods", "selection": null}, {"grouping": "genres", "selection": null},"#
                 + #" {"grouping": "albums", "selection": null}]"#, "moods"

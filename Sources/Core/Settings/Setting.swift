@@ -132,8 +132,8 @@ extension Setting where Value == [ToolbarItem] {
 }
 
 extension Setting where Value == [BrowserColumn] {
-    /// The browser's columns, left to right: `BrowserColumn.count` of them, each grouping by
-    /// something the others don't.
+    /// The browser's columns, left to right: as many as `BrowserColumn.counts` allows, each
+    /// grouping by something the others don't.
     init(_ key: String, title: String, columns defaultValue: [BrowserColumn], _ summary: String) {
         self.init(key, title, defaultValue, summary, Value.kind) { columns in
             columnsProblem(columns.map(\.grouping))
@@ -150,11 +150,14 @@ extension Setting where Value == [BrowserGrouping] {
     }
 }
 
-/// Why `groupings` can't be the browser's columns: not `BrowserColumn.count` of them, or one
-/// listed twice.
+/// Why `groupings` can't be the browser's columns: more or fewer than `BrowserColumn.counts`
+/// allows, or one listed twice.
 private func columnsProblem(_ groupings: [BrowserGrouping]) -> SettingProblem.Reason? {
-    guard groupings.count == BrowserColumn.count else {
-        return .invalid("\(groupings.count) columns; the browser has \(BrowserColumn.count)")
+    let counts = BrowserColumn.counts
+    guard counts.contains(groupings.count) else {
+        return .invalid(
+            "\(groupings.count) columns; the browser has \(counts.lowerBound) to \(counts.upperBound)"
+        )
     }
     var seen: Set<BrowserGrouping> = []
     for (index, grouping) in groupings.enumerated() where !seen.insert(grouping).inserted {

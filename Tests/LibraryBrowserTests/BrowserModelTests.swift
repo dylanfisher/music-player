@@ -528,11 +528,13 @@ private func loadedModel(
         model: model, select: { _, _ in }, setGrouping: { chosen.append(($0, $1)) },
         keyCommand: { _ in .unbound }, focusPane: { _ in })
     _ = panes.view
-    #expect(panes.tables.count == BrowserColumn.count)
+    #expect(panes.tables.count == BrowserColumn.defaults.count)
     #expect(panes.tables.allSatisfy { $0.headerView?.menu != nil })
     let menu = NSMenu()
     panes.fill(menu, column: 1)
-    #expect(menu.items.map(\.title) == BrowserGrouping.allCases.map(\.title))
+    #expect(
+        menu.items.map(\.title)
+            == BrowserGrouping.allCases.map(\.title) + ["", "Add Column", "Remove Column"])
     #expect(menu.items.filter { $0.state == .on }.map(\.title) == ["Artists"])
     let years = try #require(menu.items.firstIndex { $0.title == "Years" })
     menu.performActionForItem(at: years)
@@ -672,4 +674,63 @@ private func loadedModel(
     #expect(browser.model.columns == [.genres, .artists, .albums])
     await browser.setGroupings(chosen[0])
     #expect(browser.model.columns == [.albums, .artists, .genres])
+}
+
+@MainActor @Test func theHeaderMenuAddsAndRemovesColumnsAndThePanesFollow() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false, thumbnails: nil)
+    await browser.load(BrowserState(source: nil))
+    var chosen: [[BrowserGrouping]] = []
+    browser.groupingsChosen = { chosen.append($0) }
+    var remade = 0
+    browser.panesRemade = { remade += 1 }
+    let menu = NSMenu()
+    browser.panes.fill(menu, column: 0)
+    menu.performActionForItem(at: try #require(menu.items.firstIndex { $0.title == "Add Column" }))
+    // Right of the column, with the first grouping no column shows.
+    #expect(chosen == [[.genres, .albumArtists, .artists, .albums]])
+    await browser.setGroupings(chosen[0])
+    #expect(browser.model.columns == [.genres, .albumArtists, .artists, .albums])
+    #expect(browser.model.entries.count == 4)
+    #expect(browser.panes.tables.count == 4)
+    #expect(
+        browser.panes.tables[1].tableColumns.first?.title == BrowserGrouping.albumArtists.header)
+    #expect(browser.panes.tables[1].numberOfRows == browser.model.entries[1].count + 1)
+    #expect(remade == 1)
+
+    browser.panes.fill(menu, column: 1)
+    menu.performActionForItem(
+        at: try #require(menu.items.firstIndex { $0.title == "Remove Column" }))
+    #expect(chosen.last == [.genres, .artists, .albums])
+    await browser.setGroupings([.genres])
+    #expect(browser.panes.tables.count == 1)
+    // One column is the fewest: Remove Column is off.
+    browser.panes.fill(menu, column: 0)
+    let remove = try #require(menu.items.first { $0.title == "Remove Column" })
+    #expect(remove.action == nil)
+}
+
+@MainActor @Test func columnsAddedOrRemovedGoToAllAndTheRestKeepTheirSelections() async throws {
+    let (model, _) = try await loadedModel()
+    let genre = try #require(model.genres.first)
+    await model.select(.genre, id: genre.id)
+    let album = try #require(model.albums.first)
+    await model.select(.album, id: album.id)
+    await model.setGroupings([.genres, .artists, .years, .albums])
+    #expect(model.columns == [.genres, .artists, .years, .albums])
+    #expect(model.entries.count == 4)
+    #expect(model.filter.genre == genre.id)
+    // The Albums column moved a place, so it went to All.
+    #expect(model.filter.album == nil)
+    await model.setGroupings([.genres])
+    #expect(model.entries.count == 1)
+    #expect(model.filter.genre == genre.id)
+    #expect(model.groupings(removing: 0) == nil)
+    let six: [BrowserGrouping] = [.genres, .artists, .albums, .years, .composers, .works]
+    await model.setGroupings(six)
+    #expect(model.groupings(addingAfter: 5) == nil)
+    #expect(model.groupings(removing: 5) == Array(six.prefix(5)))
 }

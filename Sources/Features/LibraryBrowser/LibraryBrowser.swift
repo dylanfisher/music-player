@@ -12,7 +12,7 @@ import Settings
 
 private let logger = moduleLogger()
 
-/// The library half of the window: the sidebar, the browser's three columns over the track
+/// The library half of the window: the sidebar, the browser's columns over the track
 /// table, the search field, and the status line. The app places the views and handles what they
 /// report; the logic is in `BrowserModel`.
 @MainActor
@@ -78,6 +78,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Called with the columns' groupings a choice in a column's header menu asks for. The
     /// columns change only through `setGroupings`, once the config file has them (ADR 0106).
     public var groupingsChosen: ([BrowserGrouping]) -> Void = { _ in }
+    /// Called after the browser's columns were made again, added or removed.
+    public var panesRemade: () -> Void {
+        get { panes.tablesRemade }
+        set { panes.tablesRemade = newValue }
+    }
     /// Called after the track table's selection changed, which the play state keeps.
     public var selectionChanged: () -> Void = {}
     /// Called after each refresh for a library change, so other views can read their rows again.
@@ -284,6 +289,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             select: { grouping, value in Task { await model.select(grouping, value) } },
             setGrouping: { grouping, column in
                 owner?.groupingsChosen(model.groupings(choosing: grouping, ofColumn: column))
+            },
+            changeColumns: { adding, column in
+                let next =
+                    adding
+                    ? model.groupings(addingAfter: column) : model.groupings(removing: column)
+                if let next { owner?.groupingsChosen(next) } else { NSSound.beep() }
             },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
             focusPane: { forward in owner?.focusPane(forward: forward) })

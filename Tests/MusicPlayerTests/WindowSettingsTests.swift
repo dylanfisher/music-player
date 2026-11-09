@@ -37,9 +37,17 @@ private func launchColumns(config: String?, saved: [BrowserColumn]) throws -> [B
     // A config that doesn't name them, or that a problem blocks, leaves the state file's.
     #expect(try launchColumns(config: #"{"appearance.glass": true}"#, saved: saved) == saved)
     #expect(try launchColumns(config: nil, saved: saved) == saved)
+    // Another count is the config's, the state file's selections kept where they still fit.
     #expect(
         try launchColumns(
-            config: #"{"browser.columnGroupings": ["genres", "artists"]}"#, saved: saved) == saved)
+            config: #"{"browser.columnGroupings": ["genres", "years"]}"#, saved: saved) == [
+                BrowserColumn(grouping: .genres, selection: "Jazz"),
+                BrowserColumn(grouping: .years, selection: "1959"),
+            ])
+    #expect(
+        try launchColumns(
+            config: #"{"browser.columnGroupings": ["genres", "years", "albums", "composers"]}"#,
+            saved: saved) == saved + [BrowserColumn(grouping: .composers, selection: nil)])
 }
 
 @MainActor @Test func theSavedSearchLoadsOnlyWhileTheToolbarHasTheSearchField() throws {

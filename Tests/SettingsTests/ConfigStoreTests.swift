@@ -392,7 +392,11 @@ private struct FolderSchema: SettingsSchema {
 
     for (value, problem) in [
         (#"["genres", "genres", "albums"]"#, "column 1: genres is listed twice"),
-        (#"["genres", "albums"]"#, "2 columns; the browser has 3"),
+        (#"[]"#, "0 columns; the browser has 1 to 6"),
+        (
+            #"["genres", "albums", "years", "composers", "artists", "works", "comments"]"#,
+            "7 columns; the browser has 1 to 6"
+        ),
         (#"["moods", "genres", "albums"]"#, "moods"),
         (#""genres""#, "expected a list of a browser grouping"),
     ] {
