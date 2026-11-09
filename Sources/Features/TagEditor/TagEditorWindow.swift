@@ -679,8 +679,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             model?.deleteExtra(extraRows[row].key)
         }
         extrasTable.deselectAll(nil)
-        showExtras()
-        showEdited()
+        showValues()
+        if let model { showDiscogs(model.shownReleaseIDs) }
     }
 
     /// + while any file can be saved, and − while a key is selected too.

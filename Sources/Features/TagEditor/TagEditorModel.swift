@@ -266,7 +266,10 @@ public struct TagEditorModel: Equatable, Sendable {
 
     /// Sets `key`, a key `extras` lists, to `text` in every track. Empty text removes the key
     /// when saved.
-    mutating func setExtra(_ key: String, _ text: String) { typedExtras[key] = text }
+    mutating func setExtra(_ key: String, _ text: String) {
+        typedExtras[key] = text
+        deletedExtras.remove(key)
+    }
 
     /// Takes `key` out of every track when saved, or drops it if it was only added.
     mutating func deleteExtra(_ key: String) {
@@ -299,22 +302,29 @@ public struct TagEditorModel: Equatable, Sendable {
         return "is an ID3 frame, which \(other.rawValue) doesn't hold"
     }
 
+    /// The release id the user gave: the one typed, empty once deleted in Extras, nil for
+    /// neither.
+    private var editedReleaseID: String? {
+        typedExtras[DiscogsKey.releaseID]
+            ?? (deletedExtras.contains(DiscogsKey.releaseID) ? "" : nil)
+    }
+
     /// What the Discogs tab's Release ID field shows: the id typed, else the one every track
-    /// holds; empty when mixed or none has one.
+    /// holds; empty when deleted, mixed or none has one.
     var releaseIDText: String {
-        typedExtras[DiscogsKey.releaseID] ?? sharedExtra(DiscogsKey.releaseID) ?? ""
+        editedReleaseID ?? sharedExtra(DiscogsKey.releaseID) ?? ""
     }
 
     /// Whether the tracks hold different release ids, or some none, and none was typed.
     var isReleaseIDMixed: Bool {
-        typedExtras[DiscogsKey.releaseID] == nil && sharedExtra(DiscogsKey.releaseID) == nil
+        editedReleaseID == nil && sharedExtra(DiscogsKey.releaseID) == nil
     }
 
     /// The release the Discogs tab shows: the id typed, while it's one, else the first the
     /// tracks hold, each once.
     var shownReleaseIDs: [Int] {
-        guard let typed = typedExtras[DiscogsKey.releaseID] else { return discogsReleaseIDs }
-        return isReleaseID(typed) ? [Int(typed)!] : []
+        guard let edited = editedReleaseID else { return discogsReleaseIDs }
+        return isReleaseID(edited) ? [Int(edited)!] : []
     }
 
     /// The Discogs release ids the tracks carry, each once, in the tracks' order; a value that

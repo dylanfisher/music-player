@@ -157,3 +157,18 @@ private func waitFor(_ what: String, _ condition: () -> Bool) async throws {
     cleared.setExtra(DiscogsKey.releaseID, "")
     #expect(try cleared.edit().custom == [DiscogsKey.releaseID: ""])
 }
+
+/// A release id deleted in Extras shows as none on the Discogs tab, and an id typed there
+/// afterwards replaces it rather than the delete removing it.
+@Test func anIdTypedAfterExtrasDeletedTheKeyReplacesIt() throws {
+    var model = TagEditorModel(tracks: [track("a", release: "42")])
+    model.deleteExtra(DiscogsKey.releaseID)
+    #expect(model.releaseIDText.isEmpty)
+    #expect(!model.isReleaseIDMixed)
+    #expect(model.shownReleaseIDs.isEmpty)
+    #expect(try model.edit().custom == [DiscogsKey.releaseID: ""])
+    model.setExtra(DiscogsKey.releaseID, "7")
+    #expect(model.releaseIDText == "7")
+    #expect(model.extras.map(\.key) == [DiscogsKey.releaseID])
+    #expect(try model.edit().custom == [DiscogsKey.releaseID: "7"])
+}
