@@ -392,8 +392,9 @@ private final class Titles: @unchecked Sendable {
     #expect(heard == progress)
 }
 
-/// The status bar counts every batch queued and running, so a batch queued mid-write raises
-/// the total at once; a finished batch leaves the count, as in the tagger's window.
+/// The status bar counts every batch queued since the queue was last empty, so a batch queued
+/// mid-write raises the total at once and a finished batch stays counted until the queue
+/// drains: the count never goes backwards.
 @MainActor
 @Test func theSavingStatusCountsEveryQueuedBatch() async throws {
     var step = TagWriteProgress(total: 1)
@@ -423,7 +424,7 @@ private final class Titles: @unchecked Sendable {
     #expect(
         shown == [
             "Saving tags: 0 of 1", "Saving tags: 1 of 1", "Saving tags: 1 of 3",
-            "Saving tags: 0 of 2", "Saving tags: 1 of 2", nil,
+            "Saving tags: 1 of 3", "Saving tags: 2 of 3", nil,
         ])
 }
 

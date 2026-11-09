@@ -138,8 +138,9 @@ public final class TagEditing {
     private var completions: [Int: (Set<String>) -> Void] = [:]
     /// What to tell a Discogs write's caller of its progress, by write number.
     private var progresses: [Int: (TagWriteProgress) -> Void] = [:]
-    /// The writes queued and running, by write number: how many files each writes, and its
-    /// last report, nil before its first.
+    /// The writes queued, running and finished since the queue was last empty, by write number:
+    /// how many files each writes, and its last report, nil before its first. Cleared when the
+    /// queue drains, so the status bar's count never falls back.
     private var batches: [Int: (files: Int, progress: TagWriteProgress?)] = [:]
     private var lastWrite = 0
     /// Each open window's latest read, so an earlier read that comes back late is dropped.
@@ -237,6 +238,7 @@ public final class TagEditing {
     private func writeEnded() {
         pendingWrites -= 1
         guard pendingWrites == 0 else { return }
+        batches = [:]
         saving(nil)
         quitWhenDone.map { quit in
             quitWhenDone = nil
@@ -555,8 +557,7 @@ public final class TagEditing {
         }
     }
 
-    /// The writes queued and running as one batch, as the tagger's window counts its own;
-    /// nil until one of them reports.
+    /// The writes since the queue was last empty as one batch; nil until one of them reports.
     private var savingProgress: TagWriteProgress? {
         let reports = batches.values.compactMap(\.progress)
         guard !reports.isEmpty else { return nil }
@@ -579,7 +580,6 @@ public final class TagEditing {
         defer { writeEnded() }
         readCanUndo()
         progresses.removeValue(forKey: number)
-        batches.removeValue(forKey: number)
         completions.removeValue(forKey: number)?(
             Set(report.failures.map(\.path) + report.notWritten))
         guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }

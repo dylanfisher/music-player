@@ -12,9 +12,8 @@ Tag writes and undos run one at a time on `TagEditing`'s queue, and a Discogs ma
 batch edit on the NAS can take minutes. ⌘Q quit at once: the batch running was cut short, and
 the batches queued behind it were never written, with nothing said. The owner asked, on
 2026-11-09 (phase 62), for a question at quit, and for the status bar's "Saving tags: N of M"
-to count the whole queue. It counted each batch alone, so a second batch queued during the
-first raised M only once the first ended, while the tagger's window already summed its writes
-with `TagWriteProgress.combined`.
+to count the whole queue, and never to go backwards. It counted each batch alone, so a second
+batch queued during the first raised M only once the first ended.
 
 ## Decision
 
@@ -30,10 +29,11 @@ with `TagWriteProgress.combined`.
   returned `.terminateLater` before it replies. A quit while one is already waiting joins it
   rather than asking again. The app asks only a tag editor already made, so a quit never makes
   one, which would start the launch's recovery of an interrupted write.
-- **The saving count.** `TagEditing` keeps each write batch queued or running with its file
-  count and its last report, and the status bar shows their `TagWriteProgress.combined`. A
-  batch queued while a save shows sends the new total at once. A finished batch leaves the
-  count, as it leaves the tagger's. Undos and Organize Selected Files have no count to give
+- **The saving count.** `TagEditing` keeps each write batch queued since the queue was last
+  empty, running or finished, with its file count and its last report, and the status bar
+  shows their `TagWriteProgress.combined`: M is every file queued in that span and N every
+  file written. A batch queued while a save shows sends the new total at once. A finished
+  batch stays counted until the whole queue drains, then the count clears. Undos and Organize Selected Files have no count to give
   and add none, as before.
 
 ## Alternatives considered
@@ -43,8 +43,8 @@ with `TagWriteProgress.combined`.
 - **A sheet on the main window.** Rejected: the main window may be closed or hidden at quit.
 - **Counting files rather than batches in the question.** The undo has no count until it runs;
   a batch is what the user queued.
-- **Keeping finished batches in the count until the queue empties,** so N never falls back.
-  Rejected for now: the owner asked for the tagger's count, which drops a finished write.
+- **Dropping a finished batch from the count,** as the tagger's window does. Rejected: N fell
+  back when a batch ended, which the owner didn't want.
 
 ## Consequences
 
