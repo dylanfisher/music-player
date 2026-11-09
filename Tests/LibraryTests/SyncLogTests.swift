@@ -13,6 +13,8 @@ private let everyEvent: [SyncEvent] = [
     .totals(path: "music/a.flac", player: .swinsian, plays: 3, skips: 1, lastPlayed: nil),
     .totals(path: "music/a.flac", player: .iTunes, plays: 0, skips: 0, lastPlayed: 12.5),
     .rating(path: "music/Caf\u{e9} \"q\"\\b.flac", stars: 0),
+    .playCount(path: "music/a.flac", offset: 12),
+    .playCount(path: "music/a.flac", offset: -40),
     .loved(path: "music/line\nbreak.flac", loved: true),
     .disliked(path: "music/a.flac"),
     .added(path: "music/a.flac", at: 0),
@@ -73,6 +75,9 @@ private func problem(_ line: String) -> String? {
         (#"{\#(head),"event":"play","path":"a","at":-1}"#, "isn't in"),
         (#"{\#(head),"event":"play","path":"a","at":"1"}"#, "isn't a number"),
         (#"{\#(head),"event":"rating","path":"a","stars":6}"#, "isn't in"),
+        (#"{\#(head),"event":"playCount","path":"a","offset":1.5}"#, "isn't an integer"),
+        (#"{\#(head),"event":"playCount","path":"a","offset":-2147483648}"#, "isn't in"),
+        (#"{\#(head),"event":"playCount","path":"a"}"#, #"has no "offset""#),
         (#"{\#(head),"event":"loved","path":"a","loved":1}"#, "true or false"),
         (#"{\#(head),"event":"playlistDelete","playlist":"ABAB"}"#, "hex digits"),
         (

@@ -12,6 +12,10 @@ enum SyncEvent: Equatable, Sendable {
         path: String, player: PlayerLibrary.Player, plays: Int, skips: Int, lastPlayed: Double?)
     /// 0 clears the rating.
     case rating(path: String, stars: Int)
+    /// A play count set by hand, as the plays it adds to those the path's plays and imports
+    /// count, below 0 for one set lower (ADR 0161). The latest wins, so the plays each machine
+    /// counts, the same once every log is read, stay under it.
+    case playCount(path: String, offset: Int)
     /// Liked, or no opinion: the latest of this and `disliked` is the path's opinion.
     case loved(path: String, loved: Bool)
     case disliked(path: String)
@@ -45,6 +49,8 @@ package struct SyncRecord: Equatable, Sendable {
     /// What a time in a log may be: seconds since 1970, up to 2100.
     static let secondsRange: ClosedRange<Double> = 0...4_102_444_800
     static let countRange: ClosedRange<Int64> = 0...Int64(Int32.max)
+    /// What a hand-set play count's offset may be: the count's range, either way.
+    static let offsetRange: ClosedRange<Int64> = -Int64(Int32.max)...Int64(Int32.max)
     static let maximumNameBytes = 4096
     static let maximumPathBytes = 4096
     /// Entries one playlist event lists at most; a longer playlist isn't synced.
@@ -113,6 +119,7 @@ extension SyncEvent {
         case .skip: .skip
         case .totals: .totals
         case .rating: .rating
+        case .playCount: .playCount
         case .loved: .loved
         case .disliked: .disliked
         case .added: .added
@@ -139,6 +146,8 @@ extension SyncEvent {
             ]
         case .rating(let path, let stars):
             [(.path, .string(path)), (.stars, .integer(Int64(stars)))]
+        case .playCount(let path, let offset):
+            [(.path, .string(path)), (.offset, .integer(Int64(offset)))]
         case .loved(let path, let loved): [(.path, .string(path)), (.loved, .bool(loved))]
         case .disliked(let path): [(.path, .string(path))]
         case .added(let path, let at): [(.path, .string(path)), (.at, .number(at))]
@@ -164,6 +173,7 @@ extension SyncEvent {
 /// The keys of a log line.
 enum SyncKey: String {
     case seq, ms, n, event, path, at, player, plays, skips, lastPlayed, stars, loved, from, to
+    case offset
     case playlist
     case name, rules, paths
     case folder, names
@@ -175,7 +185,7 @@ enum SyncEventName: String {
     case playlistRename
     /// What an import added, which earlier builds logged and this one skips (`retiredCounts`).
     case counts
-    case playlistRules, playlistEntries, playlistDelete
+    case playlistRules, playlistEntries, playlistDelete, playCount
 }
 
 /// A line's keys not yet decoded.
@@ -223,6 +233,10 @@ extension SyncEvent {
                 path: try fields.path(.path),
                 stars: Int(
                     try fields.take(.stars).integer(.stars, in: 0...Int64(SmartField.maxRating))))
+        case .playCount:
+            self = .playCount(
+                path: try fields.path(.path),
+                offset: Int(try fields.take(.offset).integer(.offset, in: SyncRecord.offsetRange)))
         case .loved:
             self = .loved(
                 path: try fields.path(.path), loved: try fields.take(.loved).bool(.loved))

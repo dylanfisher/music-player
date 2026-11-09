@@ -71,6 +71,11 @@ extension LibraryIndex {
                 try wins(stamp, .rating, id)
             else { return nil }
             try setRating(stars, of: id)
+        case .playCount(let path, let offset):
+            guard let id = try mergedPathID(path, seenAt: seconds, &merge),
+                try wins(stamp, .playCount, id)
+            else { return nil }
+            try setPlayCountOffset(offset, of: id)
         case .loved(let path, let loved):
             guard let id = try mergedPathID(path, seenAt: seconds, &merge),
                 try wins(stamp, .loved, id)
@@ -341,12 +346,34 @@ extension LibraryIndex {
         try statement("UPDATE OR IGNORE \(importedPlaysTable) SET path_id = ? WHERE path_id = ?")
             .run(kept, gone)
         try statement("DELETE FROM \(importedPlaysTable) WHERE path_id = ?").run(gone)
+        try absorbPlayCount(gone, into: kept)
         try statement(
             "UPDATE OR IGNORE \(importedLastPlaysTable) SET path_id = ? WHERE path_id = ?"
         ).run(kept, gone)
         // A last play `kept` has for the same player stays: two dated plays would stand for
         // one player's single last play.
         try statement("DELETE FROM \(importedLastPlaysTable) WHERE path_id = ?").run(gone)
+    }
+
+    /// Moves `gone`'s hand-set offset onto `kept`'s, where its plays went with the counts, so
+    /// the count `kept` shows stays theirs added; the later of the two sets' clocks goes with
+    /// it.
+    private func absorbPlayCount(_ gone: Int64, into kept: Int64) throws {
+        let offset = try statement("SELECT plays FROM \(playCountOffsetsTable) WHERE path_id = ?")
+        guard let goneOffset = try offset.map(gone, row: { try $0.int(0) }).first else {
+            return try deleteStamp(.playCount, gone)
+        }
+        let keptOffset = try offset.map(kept, row: { try $0.int(0) }).first ?? 0
+        try statement("DELETE FROM \(playCountOffsetsTable) WHERE path_id = ?").run(gone)
+        try statement(
+            "INSERT OR REPLACE INTO \(playCountOffsetsTable) (path_id, plays) VALUES (?, ?)"
+        ).run(kept, keptOffset + goneOffset)
+        if let goneStamp = try stamp(.playCount, gone),
+            try stamp(.playCount, kept).map({ goneStamp > $0 }) ?? true
+        {
+            try setStamp(.playCount, kept, goneStamp)
+        }
+        try deleteStamp(.playCount, gone)
     }
 
     /// Whether `kept` takes `gone`'s value of `field`: the later change, or with no clock on

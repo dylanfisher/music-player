@@ -22,6 +22,10 @@ enum SchemaPart: String, CaseIterable {
     /// Each import's last play of a path, the one dated play of its counted plays (ADR 0105).
     /// A part of its own so adding it kept the import counts, which a second import needs.
     case importedLastPlays
+    /// Each path's hand-set play count, as how far it sits from the plays counted (ADR 0161).
+    /// A part of its own for the same reason as `loved`. After `imports`, whose discard the
+    /// offsets have to outlast: it counts them in, and this part's discard takes them out.
+    case playCounts
     /// This machine's log and what it read of the others' (ADR 0038). Rebuilding it from an
     /// earlier shape rebuilds the stats too: the new machine ID reads every log from the
     /// start, its own old one included, which the old stats already hold.
@@ -70,6 +74,7 @@ enum SchemaPart: String, CaseIterable {
         case .disliked: dislikedSchema
         case .imports: importsSchema
         case .importedLastPlays: importedLastPlaysSchema
+        case .playCounts: playCountsSchema
         case .sync: syncSchema
         case .scans: scansSchema
         case .removed: removedSchema
@@ -98,7 +103,11 @@ enum SchemaPart: String, CaseIterable {
     /// What takes the part's data out of the stats before its earlier tables are dropped, in a
     /// rebuild that keeps the stats; nil for a part whose rows the stats don't count.
     var discardSQL: String? {
-        self == .imports ? importsDiscardSQL : nil
+        switch self {
+        case .imports: importsDiscardSQL
+        case .playCounts: playCountsDiscardSQL
+        default: nil
+        }
     }
 
     /// The tables the part creates; nil for the index, which is every table no other part names.
@@ -110,6 +119,7 @@ enum SchemaPart: String, CaseIterable {
         case .disliked: [dislikedTable]
         case .imports: [importedPlaysTable]
         case .importedLastPlays: [importedLastPlaysTable]
+        case .playCounts: [playCountOffsetsTable]
         case .sync: syncTables
         case .scans: [scannedFoldersTable]
         case .removed: [removedTable]
@@ -153,6 +163,7 @@ let discogsCacheTable = "discogs_cache"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
+let playCountOffsetsTable = "play_count_offsets"
 let syncStateTable = "sync_state"
 let syncOutboxTable = "sync_outbox"
 let syncLogsTable = "sync_logs"
@@ -523,12 +534,33 @@ private let importsSchema = """
 
 /// Takes the imports' plays and skips out of the counts before `imported_plays` is dropped, or
 /// the next import would add them again. Each play count becomes its history, the plays recorded
-/// here and synced; skips have no history, so each loses the skips the imports recorded.
+/// here and synced, and its hand-set offset; skips have no history, so each loses the skips the
+/// imports recorded. It reads `play_count_offsets`, which a database from before that part
+/// lacks: one opened by a build that changes this part too fails to open, saying so.
 private let importsDiscardSQL = """
     UPDATE plays SET
-        play_count = (SELECT count(*) FROM history h WHERE h.path_id = plays.path_id),
+        play_count = (SELECT count(*) FROM history h WHERE h.path_id = plays.path_id)
+            + ifnull((SELECT o.plays FROM \(playCountOffsetsTable) o
+                WHERE o.path_id = plays.path_id), 0),
         skip_count = max(0, skip_count - (SELECT ifnull(sum(i.skip_count), 0)
             FROM \(importedPlaysTable) i WHERE i.path_id = plays.path_id));
+    """
+
+private let playCountsSchema = """
+    -- The plays each hand-set play count adds to the plays counted, below 0 for one set lower:
+    -- a path's play count is its plays, each player's import total and this. Synced as the
+    -- latest set wins (sync_items).
+    CREATE TABLE \(playCountOffsetsTable) (
+        path_id INTEGER PRIMARY KEY REFERENCES paths (id),
+        plays INTEGER NOT NULL
+    );
+    """
+
+/// Takes the hand-set offsets out of the counts before `play_count_offsets` is dropped.
+private let playCountsDiscardSQL = """
+    UPDATE plays SET play_count = play_count - (SELECT o.plays FROM \(playCountOffsetsTable) o
+        WHERE o.path_id = plays.path_id)
+    WHERE path_id IN (SELECT path_id FROM \(playCountOffsetsTable));
     """
 
 private let importedLastPlaysSchema = """

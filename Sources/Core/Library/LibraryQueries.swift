@@ -453,7 +453,7 @@ private let rowSelect = """
     SELECT t.file_id, f.path, t.title, ar.name, al.title, t.album_id, aa.name, g.name, t.date,
         t.track_number, t.disc_number, t.codec, t.sample_rate_hz, t.bits_per_sample,
         t.length_frames, pa.added_seconds, t.art_offset, t.art_byte_count, t.art_mime_type,
-        t.art_unsynchronised, al_ar.name, p.play_count, p.skip_count, p.last_played_seconds,
+        t.art_unsynchronised, al_ar.name, max(0, p.play_count), p.skip_count, p.last_played_seconds,
         r.rating, t.track_total, t.disc_total, t.compilation, t.composer, t.comment, t.channels,
         f.size_bytes, \(bitRateSQL), \(fileNameSQL), \(fileTypeSQL), f.created_seconds,
         f.modified_seconds, t.grouping, t.catalog_number, t.barcode, t.bpm, t.musical_key,

@@ -371,6 +371,95 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try a.track("renamed.flac")?.playCount == 2)
 }
 
+/// A play count set by hand reaches the other Mac as the plays it adds over those counted, so
+/// plays made after it, here or there, add to it, and the later of two sets wins without the
+/// two adding up (ADR 0161).
+@Test func aHandSetPlayCountSyncsAndPlaysAddToIt() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let onA = try a.scanned("x.flac")
+    let onB = try b.scanned("x.flac")
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_100)
+    try syncAll([a, b])
+    #expect(try b.track("x.flac")?.playCount == 2)
+
+    try a.index.setPlayCount(40, trackIDs: [onA])
+    #expect(try a.track("x.flac")?.playCount == 40)
+    #expect(try a.history("x.flac") == 2, "the plays logged stay")
+    try syncAll([a, b])
+    #expect(try b.track("x.flac")?.playCount == 40)
+
+    try b.index.recordPlay(b.path("x.flac"), at: 1_700_000_200)
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_300)
+    try syncAll([a, b])
+    #expect(try a.track("x.flac")?.playCount == 42)
+    #expect(try b.track("x.flac")?.playCount == 42)
+
+    // Both set it, B later: B's stands everywhere, not the two added.
+    try a.index.setPlayCount(10, trackIDs: [onA])
+    b.nowMs += 60_000
+    try b.index.setPlayCount(5, trackIDs: [onB])
+    try syncAll([a, b])
+    #expect(try a.track("x.flac")?.playCount == 5)
+    #expect(try b.track("x.flac")?.playCount == 5)
+
+    // Set back to the plays counted, nothing is left over.
+    b.nowMs += 60_000
+    try b.index.setPlayCount(4, trackIDs: [onB])
+    try syncAll([a, b])
+    #expect(try a.track("x.flac")?.playCount == 4)
+    let offsets = try a.index.database.prepare("SELECT count(*) FROM \(playCountOffsetsTable)")
+        .map { try $0.int(0) }[0]
+    #expect(offsets == 0)
+}
+
+/// A count set below the plays a Mac has counted shows 0 there until the plays it was set
+/// over arrive, never below.
+@Test func aCountSetBelowThePlaysAMacHasYetToReadShowsNone() throws {
+    let nas = try SimulatedNAS()
+    let b = try machines(1, nas)[0]
+    let id = try b.scanned("x.flac")
+    // As B reads A's set of 1 over A's 3 plays, which A's log hasn't given it yet.
+    try b.index.inTransaction { try b.index.setPlayCountOffset(-2, of: id) }
+    #expect(try b.track("x.flac")?.playCount == 0)
+    for at in 0..<3 { try b.index.recordPlay(b.path("x.flac"), at: 1_700_000_000 + Double(at)) }
+    #expect(try b.track("x.flac")?.playCount == 1)
+}
+
+/// A move carries a hand-set count with the plays, onto a path played since.
+@Test func aMoveCarriesAHandSetCount() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let old = try a.scanned("x.flac", title: "Song")
+    try a.index.setPlayCount(30, trackIDs: [old])
+    try a.index.remove([old])
+    try a.scanned("renamed.flac", title: "Song")
+    #expect(try a.index.matchMoves().count == 1)
+    #expect(try a.track("renamed.flac")?.playCount == 30)
+    try b.scanned("renamed.flac", title: "Song")
+    try b.index.recordPlay(b.path("renamed.flac"), at: 1_700_000_500)
+    try syncAll([a, b])
+    #expect(try b.track("renamed.flac")?.playCount == 31)
+    #expect(try a.track("renamed.flac")?.playCount == 31)
+}
+
+/// Rebuilding the imports keeps a hand-set count; rebuilding the play counts part takes its
+/// offsets out of the counts with it, leaving the plays counted.
+@Test func aRebuildKeepsOrTakesOutTheOffsets() throws {
+    let nas = try SimulatedNAS()
+    var machine = try machines(1, nas)[0]
+    let id = try machine.scanned("x.flac")
+    try machine.index.recordPlay(machine.path("x.flac"), at: 1_700_000_000)
+    try machine.index.setPlayCount(9, trackIDs: [id])
+    for (part, count) in [(SchemaPart.imports, 9), (.playCounts, 1)] {
+        try machine.index.database.execute(
+            "UPDATE schema_identity SET sql = 'earlier' WHERE part = '\(part.rawValue)'")
+        machine = try machine.reopened()
+        #expect(try machine.track("x.flac")?.playCount == count, "\(part)")
+    }
+}
+
 @Test func aDecomposedNameOnOneMachineIsThePrecomposedOneOnAnother() throws {
     let nas = try SimulatedNAS()
     let all = try machines(2, nas)

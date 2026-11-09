@@ -281,6 +281,44 @@ extension LibraryIndex {
         }
     }
 
+    /// Sets the play count of the tracks `ids` to `count` by hand. Each keeps it as how far it
+    /// sits from the plays counted, so a play here or on another Mac adds to it (ADR 0161).
+    public func setPlayCount(_ count: Int, trackIDs ids: [Int64]) throws {
+        precondition(
+            SyncRecord.countRange.contains(Int64(count)), "a play count of \(count)")
+        try statsTransaction {
+            let roots = try syncRoots()
+            let counted = try statement(
+                "SELECT ifnull((SELECT play_count FROM plays WHERE path_id = ?1), 0)"
+                    + " - ifnull((SELECT plays FROM \(playCountOffsetsTable) WHERE path_id = ?1), 0)"
+            )
+            for id in ids {
+                let offset = count - (try counted.map(id) { try $0.int(0) }[0])
+                try setPlayCountOffset(offset, of: id)
+                try logSync(pathID: id, roots, field: .playCount) {
+                    .playCount(path: $0, offset: offset)
+                }
+            }
+        }
+    }
+
+    /// Gives the path `id` the hand-set offset `offset`, changing its play count by what it
+    /// changes. Call inside a transaction.
+    func setPlayCountOffset(_ offset: Int, of id: Int64) throws {
+        let old =
+            try statement("SELECT plays FROM \(playCountOffsetsTable) WHERE path_id = ?").map(id) {
+                try $0.int(0)
+            }.first ?? 0
+        try statement(addPlaysSQL).run(id, offset - old, 0, nil as Double?)
+        if offset == 0 {
+            try statement("DELETE FROM \(playCountOffsetsTable) WHERE path_id = ?").run(id)
+        } else {
+            try statement(
+                "INSERT OR REPLACE INTO \(playCountOffsetsTable) (path_id, plays) VALUES (?, ?)"
+            ).run(id, offset)
+        }
+    }
+
     /// Gives the tracks `ids` `opinion`, or clears it when every one of them has it already.
     /// Liking a disliked track drops the dislike, and the other way round.
     public func toggle(_ opinion: TrackOpinion, trackIDs ids: [Int64]) throws {

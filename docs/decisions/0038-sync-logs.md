@@ -7,6 +7,8 @@
   [0028](0028-network-folders-by-share.md), [0033](0033-import-from-other-players.md)
 - **Amended by:** [0098](0098-scan-adds-by-folder-hog-mode-off-ember-icon.md): a scan's new
   files go in the log as one `addedFiles` event a folder.
+- **Amended by:** [0161](0161-a-hand-set-play-count.md): a `playCount` event, a hand-set
+  count's offset over the plays counted, last writer wins.
 - **Amended:** phase 46 (an import's `totals` in place of `counts`, merged by the higher; a
   `counts` line is skipped; a merged move counts each player's import once).
 
