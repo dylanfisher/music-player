@@ -80,8 +80,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// Counts each color row's changes, so a save waiting out the pause knows a newer one
     /// replaced it.
     private var colorGenerations: [String: Int] = [:]
-    /// The fallback rows, hidden under their disclosures until opened or given a value, and
-    /// the disclosures' triangles.
+    /// The rows hidden under disclosures, by key, and the disclosures' triangles: the fallback
+    /// rows until opened or given a value, and the snapshot list under `snapshotsKey`.
     private(set) var fallbackRows: [String: NSGridRow] = [:]
     private(set) var disclosures: [String: NSButton] = [:]
     /// Each row group's line of buttons, by the group's title, which its later rows join.
@@ -295,8 +295,11 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         grid.addRow(with: [NSTextField(labelWithString: "Database:"), line])
     }
 
-    /// The last snapshot's time with Back Up Now, then the snapshots with Restore…, under the
-    /// index's row.
+    /// The key the snapshot list's row and disclosure go under.
+    static let snapshotsKey = "library.snapshots"
+
+    /// The last snapshot's time with Back Up Now, then a disclosure, closed at first, over the
+    /// snapshots with Restore…, which would make the Library section the pane's tallest.
     private func addSnapshotRows(to grid: NSGridView) {
         let last = NSTextField(wrappingLabelWithString: "")
         last.preferredMaxLayoutWidth = Self.summaryWidth
@@ -327,7 +330,10 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         cell.orientation = .vertical
         cell.alignment = .leading
         cell.spacing = 6
-        grid.addRow(with: [NSTextField(labelWithString: "Snapshots:"), cell])
+        grid.addRow(with: [NSGridCell.emptyContentView, disclosureLine("Snapshots", Self.snapshotsKey)])
+        let row = grid.addRow(with: [NSTextField(labelWithString: "Snapshots:"), cell])
+        row.isHidden = true
+        fallbackRows[Self.snapshotsKey] = row
     }
 
     /// Reads the index's size and the snapshots off the main actor and shows them; a pane
@@ -391,22 +397,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     @objc private func disclose(_ triangle: NSButton) {
         guard let key = disclosures.first(where: { $0.value === triangle })?.key else { return }
         fallbackRows[key]?.isHidden = triangle.state == .off
-        fitWindow()
-    }
-
-    /// Sets the window to the rows' height, keeping its top where it is. The window grows by
-    /// itself for an opened disclosure but keeps that height when it closes, which left a gap.
-    private func fitWindow() {
-        guard let window = view.window else { return }
-        view.layoutSubtreeIfNeeded()
-        let content = window.contentRect(forFrameRect: window.frame)
-        let height = view.fittingSize.height
-        window.setFrame(
-            window.frameRect(
-                forContentRect: NSRect(
-                    x: content.minX, y: content.maxY - height, width: content.width,
-                    height: height)),
-            display: true)
+        (parent as? PaneScroller)?.fit()
     }
 
     private func button(_ title: String, _ action: Selector) -> NSButton {

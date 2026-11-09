@@ -56,6 +56,13 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private let toolbarPane: GeneralPane
     private let folders: FoldersPane
     private let shortcuts: ShortcutsPane
+    /// Each pane in its scroll view, made as it's first shown.
+    private var scrollers: [Pane: PaneScroller] = [:]
+    /// The visible frame of the screen a window is on, which caps a pane's height; tests give a
+    /// short one.
+    var visibleFrame: (NSWindow) -> NSRect? = {
+        ($0.screen ?? NSScreen.main)?.visibleFrame
+    }
 
     public init(
         general: GeneralModel, shortcuts: ShortcutsModel, configPath: String,
@@ -143,7 +150,12 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     }
 
     private func select(_ pane: Pane) {
-        window.contentViewController = controller(pane)
+        let scroller =
+            scrollers[pane]
+            ?? PaneScroller(controller(pane)) { [weak self] in self?.visibleFrame($0) }
+        scrollers[pane] = scroller
+        window.contentViewController = scroller
+        scroller.fit()
         window.title = pane.title
         window.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(pane.rawValue)
     }

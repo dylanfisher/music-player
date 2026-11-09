@@ -89,6 +89,23 @@ private func settingsPane(
     #expect(pane.backUpButton?.isEnabled == true)
 }
 
+/// The snapshot list waits under a disclosure, closed at first, so the Library section stays
+/// short; Last Snapshot and Back Up Now stay in view.
+@MainActor @Test func theSnapshotListIsUnderADisclosure() async throws {
+    let pane = settingsPane()
+    _ = pane.view
+    await pane.showDatabase()
+    let row = try #require(pane.fallbackRows[GeneralPane.snapshotsKey])
+    let triangle = try #require(pane.disclosures[GeneralPane.snapshotsKey])
+    #expect(row.isHidden && triangle.state == .off)
+    #expect(pane.lastSnapshotLabel?.stringValue == database.lastSnapshotText)
+    click(triangle)
+    #expect(!row.isHidden)
+    #expect(pane.snapshotList?.table.numberOfRows == 2)
+    click(triangle)
+    #expect(row.isHidden)
+}
+
 @MainActor @Test func theSnapshotFolderDefaultsToBackupsBesideTheLibrary() throws {
     let pane = settingsPane()
     _ = pane.view

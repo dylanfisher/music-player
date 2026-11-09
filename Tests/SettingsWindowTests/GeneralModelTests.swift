@@ -747,6 +747,34 @@ private func waitFor(_ condition: () -> Bool) async throws {
     controller.window.close()
 }
 
+/// A pane taller than its screen scrolls: the window is no taller than the screen's visible
+/// height, and the pane's last rows are reached by scrolling.
+@MainActor @Test func aPaneTallerThanTheScreenScrolls() throws {
+    let model = GeneralModel(
+        settings: AppSettings().settings, searcherInstalled: true, value: { _ in nil },
+        set: { _, _ in }, isBlocked: { false })
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
+    let controller = SettingsWindowController(
+        general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
+        configPath: "/tmp/config.json", actions: actions())
+    let short = NSRect(x: 0, y: 0, width: 1280, height: 420)
+    controller.visibleFrame = { _ in short }
+    controller.show(.general)
+    defer { controller.window.close() }
+    let scroll = try #require(controller.window.contentViewController?.view as? NSScrollView)
+    let pane = try #require(scroll.documentView)
+    #expect(controller.window.frame.height <= short.height)
+    #expect(pane.fittingSize.height > scroll.frame.height)
+    #expect(controller.window.frame.minY >= short.minY)
+    // A pane that fits shows whole, unscrolled.
+    controller.visibleFrame = { _ in NSRect(x: 0, y: 0, width: 1280, height: 4000) }
+    controller.show(.playback)
+    let playback = try #require(controller.window.contentViewController?.view as? NSScrollView)
+    let rows = try #require(playback.documentView)
+    #expect(abs(playback.frame.height - rows.fittingSize.height) <= 1)
+}
+
 /// Settings opens with its top left where it was left at the last launch, at the height of the
 /// pane it shows (ADR 0158), and keeps the place it's moved to.
 @MainActor @Test func theSettingsWindowOpensWhereItWasLeft() throws {
@@ -1004,7 +1032,7 @@ private func visibleLabels(in view: NSView) -> [String] {
         backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     defer { window.close() }
-    window.contentViewController = pane
+    window.contentViewController = PaneScroller(pane) { _ in nil }
     window.layoutIfNeeded()
     let triangle = try #require(pane.disclosures[key])
     let closed = pane.view.frame.height
