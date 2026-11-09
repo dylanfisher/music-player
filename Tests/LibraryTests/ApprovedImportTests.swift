@@ -497,3 +497,23 @@ private func asides(_ setup: ImportFolders) -> [String] {
     #expect(oldFilesThere(setup))
     #expect(try setup.folders.staged() == ["01.flac", "02.flac"])
 }
+
+@Test(.enabled(if: tempIgnoresCase))
+func anUpgradeOfAnAlbumSpelledInAnotherCaseKeepsItsPathsAndStats() async throws {
+    let setup = try ImportFolders(names: ["01 first.flac", "02 second.flac"])
+    let old = setup.names.map(setup.oldPath)
+    let outcome = await setup.run(carry: { _ in
+        Issue.record("nothing to carry")
+        return MoveListImport(problems: [])
+    }).run(try setup.job(upgrade: true))
+    #expect(outcome == .imported(old))
+    #expect(try setup.folders.staged().isEmpty)
+    #expect(asides(setup).allSatisfy { !FileManager.default.fileExists(atPath: $0) })
+    #expect(
+        try FileManager.default.contentsOfDirectory(atPath: setup.folders.library + "/Artist/Album")
+            .sorted() == setup.names)
+    try setup.index.store(old.map { Crafted(path: $0, title: "new", album: "Album").scanned })
+    let track = try #require(try setup.index.track(path: old[0]))
+    #expect(track.id == setup.played)
+    #expect(track.playCount == 1)
+}

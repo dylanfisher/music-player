@@ -143,7 +143,7 @@ package struct LibraryFolderMove: Sendable {
             } catch {
                 throw MoveRefusal.unreadable(source, "\(error)")
             }
-            let destination = libraryFolder + "/" + libraryFolderPath(for: tags, of: source)
+            let destination = try asListed(libraryFolderPath(for: tags, of: source))
             let key = nfc(destination)
             if (pathExists(destination) && !replacing.contains(key)) || seen.contains(key) {
                 taken.append(destination)
@@ -172,6 +172,31 @@ package struct LibraryFolderMove: Sendable {
                 stagedPath: stagedPath, source: stagingRoot + "/" + stagedPath,
                 destination: shareRoot + "/" + destination, sizeBytes: step.sizeBytes ?? -1)
         }
+    }
+
+    /// `relative`, a path in the library folder, with each part that's there named as its
+    /// folder lists it. On a volume that ignores case, such as the NAS, a part the tags spell
+    /// in another case is the same file or folder, and the index and the move list know it by
+    /// the name it has.
+    private func asListed(_ relative: String) throws -> String {
+        let ignoresCase = pathconf(libraryFolder, _PC_CASE_SENSITIVE) == 0
+        var path = libraryFolder
+        var listing = true
+        for part in relative.split(separator: "/").map(String.init) {
+            if listing, ignoresCase {
+                let names = try FileManager.default.contentsOfDirectory(atPath: path)
+                if let listed = names.first(where: {
+                    $0.compare(part, options: .caseInsensitive) == .orderedSame
+                }) {
+                    path += "/" + listed
+                    listing = pathIsDirectory(path)
+                    continue
+                }
+                listing = false
+            }
+            path += "/" + part
+        }
+        return path
     }
 
     /// Renames `move`'s file unless it's already where it goes, as the file system says. With
@@ -313,6 +338,11 @@ enum MoveRefusal: Error, Equatable, CustomStringConvertible {
 }
 
 private func nfc(_ path: String) -> String { path.precomposedStringWithCanonicalMapping }
+
+private func pathIsDirectory(_ path: String) -> Bool {
+    var info = stat()
+    return lstat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR
+}
 
 /// Whether anything is at `path`, a symbolic link included.
 func pathExists(_ path: String) -> Bool {

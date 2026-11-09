@@ -322,10 +322,12 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
 
 /// The library album of release 77 at the album's destinations, with a third track the
 /// download doesn't have, on disk and in the index; `release` tags the first file.
-private func libraryAlbum(_ folders: MoveFolders, firstRelease release: String = "77") throws {
+private func libraryAlbum(
+    _ folders: MoveFolders, firstRelease release: String = "77", paths given: [String]? = nil
+) throws {
     try FileManager.default.createDirectory(
         atPath: folders.library + "/Artist/Album", withIntermediateDirectories: true)
-    let paths = folders.destinations + [folders.library + "/Artist/Album/03 Third.flac"]
+    let paths = given ?? folders.destinations + [folders.library + "/Artist/Album/03 Third.flac"]
     for path in paths {
         #expect(FileManager.default.createFile(atPath: path, contents: Data("old".utf8)))
     }
@@ -361,4 +363,24 @@ private func libraryAlbum(_ folders: MoveFolders, firstRelease release: String =
         try folders.mover().albumToReplace(
             folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
     }
+}
+
+/// Whether the temporary folder's volume ignores case, as a Mac's startup disk and the NAS do.
+let tempIgnoresCase = pathconf(NSTemporaryDirectory(), _PC_CASE_SENSITIVE) == 0
+
+@Test(.enabled(if: tempIgnoresCase))
+func anAlbumSpelledInAnotherCaseIsReplacedAtThePathsItHas() throws {
+    let folders = try MoveFolders()
+    let lower = ["artist/Album/01 first.flac", "artist/Album/02 second.flac"]
+    try FileManager.default.createDirectory(
+        atPath: folders.library + "/artist/Album", withIntermediateDirectories: true)
+    try libraryAlbum(folders, paths: lower.map { folders.library + "/" + $0 })
+    let album = try folders.mover().albumToReplace(
+        folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
+    #expect(album == lower.map { "library/" + $0 })
+    #expect(
+        try folders.mover().destinations(
+            folder: "job-7", files: try folders.files(),
+            replacing: folders.mover().libraryPaths(album ?? []))
+            == lower.map { folders.library + "/" + $0 })
 }
