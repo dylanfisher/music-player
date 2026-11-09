@@ -95,3 +95,22 @@ func aFailedJobCancelsUpToTaggingAndSearchesAgainOnlyFromItsDownload(
     #expect(FormatPolicy.offered(upgrade: true) == [.flac, .lossless])
     #expect(FormatPolicy.offered(upgrade: false) == [.flac, .lossless, .mp3320, .any])
 }
+
+@Test(arguments: [
+    (JobState.staged, true), (.approved, true), (.importing, true), (.failed, true),
+    (.downloaded, false), (.downloading, false), (.imported, false),
+])
+func revealInFinderNeedsAStagedFolderButNotTheService(state: JobState, applies: Bool) {
+    let staged = job(1, state)
+    for answering in [true, false] {
+        #expect(
+            DownloadAction.applies(
+                .revealInFinder, to: staged, machine: me, answering: answering, canTag: false)
+                == applies)
+    }
+    var unstaged = staged
+    unstaged.stagedPath = nil
+    #expect(
+        !DownloadAction.applies(
+            .revealInFinder, to: unstaged, machine: me, answering: true, canTag: true))
+}

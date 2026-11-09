@@ -46,6 +46,10 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     let statusLabel = NSTextField(wrappingLabelWithString: "")
     let empty = NSTextField(labelWithString: "No downloads.")
     let addButton = NSPopUpButton(frame: .zero, pullsDown: true)
+    /// Opens slskd's web page, where Soulseek's searches and transfers can be watched.
+    let slskdButton = NSButton(title: "Open slskd", target: nil, action: nil)
+    static let slskdHelp = "Open slskd's web page, where the searches and transfers run."
+    static let noSlskdHelp = "music-recommender hasn't said where slskd's web page is."
     private(set) var buttons: [DownloadAction: NSButton] = [:]
     /// The rows shown, in the window's order.
     private(set) var rows: [DownloadRow] = []
@@ -57,6 +61,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     var applies: (DownloadAction, DownloadRow) -> Bool = { _, _ in false }
     var act: (DownloadAction, DownloadRow) -> Void = { _, _ in }
     var add: (DownloadAddition) -> Void = { _ in }
+    var openSlskd: () -> Void = {}
     /// Hears the window open and close, for the polling's pace.
     var visibilityChanged: (Bool) -> Void = { _ in }
 
@@ -73,7 +78,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
             defer: false)
         window.title = Self.title
-        window.minSize = NSSize(width: 720, height: 300)
+        window.minSize = NSSize(width: 960, height: 300)
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
@@ -95,6 +100,10 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
             bar.addArrangedSubview(button)
         }
         bar.addArrangedSubview(NSView())
+        slskdButton.bezelStyle = .rounded
+        slskdButton.target = self
+        slskdButton.action = #selector(slskdClicked)
+        bar.addArrangedSubview(slskdButton)
         addButton.addItem(withTitle: "Add")
         for addition in DownloadAddition.allCases {
             addButton.addItem(withTitle: addition.title)
@@ -164,6 +173,15 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         addButton.isEnabled = canAdd
         enableButtons()
     }
+
+    /// Enables Open slskd for `page`, slskd's web page, or says why it's off.
+    func showSlskd(_ page: URL?) {
+        slskdButton.isEnabled = page != nil
+        slskdButton.toolTip =
+            page.map { Self.slskdHelp + "\n" + $0.absoluteString } ?? Self.noSlskdHelp
+    }
+
+    @objc private func slskdClicked() { openSlskd() }
 
     var selectedRow: DownloadRow? {
         let row = table.selectedRow

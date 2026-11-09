@@ -137,8 +137,17 @@ final class FakeService: @unchecked Sendable {
             create: { snapshot, order throws(RecommenderError) in try self.create(snapshot, order)
             },
             retry: { id, policy throws(RecommenderError) in try self.retry(id, policy) },
-            cancel: { id throws(RecommenderError) in try self.cancel(id) })
+            cancel: { id throws(RecommenderError) in try self.cancel(id) },
+            slskdPage: { () throws(RecommenderError) in
+                try self.locked { () throws(RecommenderError) in
+                    guard !self.isDown else { throw self.unreachable("/v1/downloads/config") }
+                    return self.slskd
+                }
+            })
     }
+
+    /// slskd's page as the config route reports it.
+    var slskd: URL? = URL(string: "http://192.0.2.7:5030")
 
     /// Every job created, with its order.
     var created: [(release: Int, order: JobOrder)] { lock.withLock { orders } }

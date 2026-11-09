@@ -75,6 +75,8 @@ package final class Downloads {
         /// Whether this Mac has a catalog, so it can queue and tag.
         var canTag = false
         var problems: [String] = []
+        /// slskd's web page, from the service's config, asked each time the window opens.
+        var slskdPage: URL?
 
         init(_ setup: Setup, model: DownloadsModel) {
             self.setup = setup
@@ -115,6 +117,12 @@ package final class Downloads {
         (StagedJob, String, @escaping @Sendable (AutoTagRun.Verdict) -> Void) -> Void = {
             _, _, _ in
         }
+
+    /// Shows files in the Finder, and opens a web page; tests stand in for both.
+    var showInFinder: ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
+    var openPage: (URL) -> Void = { url in
+        if !NSWorkspace.shared.open(url) { logger.error("couldn't open \(url)") }
+    }
 
     /// The status bar's item, which App puts at the bar's right end.
     let statusItem = DownloadsStatusItem()
@@ -268,6 +276,30 @@ package final class Downloads {
         controller.showWindow(nil)
         session?.model.setWindowOpen(true)
         offerSelection()
+        askForSlskd()
+    }
+
+    /// Asks the service where slskd's page is, for Open slskd, each time the window opens, so
+    /// a change to the service's config shows on the next.
+    private func askForSlskd() {
+        guard let session else { return }
+        let page = session.setup.service.slskdPage
+        Task {
+            do throws(RecommenderError) {
+                let found = try await page()
+                guard self.session === session else { return }
+                session.slskdPage = found
+            } catch {
+                logger.info("slskd's page wasn't found: \(error)")
+            }
+            refresh()
+        }
+    }
+
+    /// Opens slskd's web page, where the service says it is.
+    func openSlskd() {
+        guard let page = session?.slskdPage else { return }
+        openPage(page)
     }
 
     /// Whether File > Downloads… found tracks selected, whose From Library Selection opens
@@ -297,6 +329,7 @@ package final class Downloads {
         made.applies = { [weak self] action, row in self?.applies(action, row) ?? false }
         made.act = { [weak self] action, row in self?.act(action, row) }
         made.add = { [weak self] addition in self?.add(addition) }
+        made.openSlskd = { [weak self] in self?.openSlskd() }
         made.visibilityChanged = { [weak self] open in
             if !open {
                 self?.cancelReview()
@@ -312,6 +345,7 @@ package final class Downloads {
         showStatus()
         guard let controller else { return }
         defer { offerSelection() }
+        controller.showSlskd(session?.slskdPage)
         guard let session else {
             return controller.show([], status: Self.notSet, canAdd: false)
         }
@@ -366,6 +400,7 @@ package final class Downloads {
                 }
             }
         case .retry: retry(job, row, session)
+        case .revealInFinder: reveal(job, session)
         case .openInTagger:
             guard let coordinator = session.coordinator else { return }
             Task {
@@ -387,6 +422,27 @@ package final class Downloads {
                     }
                 }
             }
+        }
+    }
+
+    /// Shows `job`'s staged folder in the Finder, found where the staging folder is now.
+    func reveal(_ job: DownloadJob, _ session: Session) {
+        guard let folder = job.stagedPath else { return }
+        let places = session.setup.places
+        Task {
+            let root: String
+            do {
+                root = try await places().stagingRoot
+            } catch {
+                return alert("The staging folder wasn't found", ["\(error)"])
+            }
+            let url = URL(fileURLWithPath: root, isDirectory: true)
+                .appendingPathComponent(folder, isDirectory: true)
+            let there = await blockingFileWork { FileManager.default.fileExists(atPath: url.path) }
+            guard there else {
+                return alert("The staged folder isn't there", [url.path])
+            }
+            showInFinder([url])
         }
     }
 

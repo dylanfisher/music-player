@@ -3,7 +3,7 @@ import Recommender
 /// What the Downloads window's toolbar and context menu do to one job. Whether each applies is
 /// a pure function of the job, this Mac and the service, table-tested, so the window only asks.
 enum DownloadAction: CaseIterable, Sendable {
-    case approve, reject, retry, cancel, openInTagger, resumeHere
+    case approve, reject, retry, cancel, openInTagger, resumeHere, revealInFinder
 
     var title: String {
         switch self {
@@ -13,6 +13,7 @@ enum DownloadAction: CaseIterable, Sendable {
         case .cancel: "Cancel Download"
         case .openInTagger: "Open in Tagger"
         case .resumeHere: "Resume Here"
+        case .revealInFinder: "Reveal in Finder"
         }
     }
 
@@ -24,17 +25,23 @@ enum DownloadAction: CaseIterable, Sendable {
         case .cancel: "Stop the search or download and delete what it got."
         case .openInTagger: "Resolve the discrepancy in the Discogs Tagger."
         case .resumeHere: "Finish an import another Mac, or an earlier run, left."
+        case .revealInFinder: "Show the album's staged folder in the Finder."
         }
     }
 
     /// Whether the action applies to `job` on the Mac named `machine`. Nothing applies while
     /// the service doesn't answer; a job another Mac is reviewing takes only Resume Here, which
     /// takes the claim over. Approve needs the job staged and tagged clean; Open in Tagger a
-    /// discrepancy or an error, on a Mac with a catalog (`canTag`).
+    /// discrepancy or an error, on a Mac with a catalog (`canTag`). Reveal in Finder, which only
+    /// looks, needs a staged folder, from `staged` until the import, and not the service.
     static func applies(
         _ action: DownloadAction, to job: DownloadJob, machine: String, answering: Bool,
         canTag: Bool
     ) -> Bool {
+        if action == .revealInFinder {
+            return job.stagedPath != nil
+                && [.staged, .approved, .importing, .failed].contains(job.state)
+        }
         guard answering else { return false }
         let elsewhere = DownloadRow.claimedElsewhere(job.review, machine: machine) != nil
         switch action {
@@ -58,6 +65,8 @@ enum DownloadAction: CaseIterable, Sendable {
                 && (job.tagging.status == .discrepancy || job.tagging.status == .error)
         case .resumeHere:
             return job.state == .approved || job.state == .importing
+        // Answered before the service's guard.
+        case .revealInFinder: return false
         }
     }
 

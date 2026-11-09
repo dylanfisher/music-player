@@ -190,3 +190,48 @@ private func rows() -> [DownloadRow] {
     downloads.window?.close()
     downloads.stop()
 }
+
+@MainActor
+@Test func revealInFinderShowsTheStagedFolderWhereTheStagingFolderIsNow() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "staging-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(
+        at: root.appendingPathComponent("job-1", isDirectory: true),
+        withIntermediateDirectories: true)
+    let service = FakeService([job(1)])
+    let (downloads, session) = try await started(service.service) {
+        ImportPlaces(stagingRoot: root.path, libraryFolder: "/nowhere", shareRoot: "/")
+    }
+    var shown: [URL] = []
+    downloads.showInFinder = { shown += $0 }
+    downloads.reveal(try #require(service.job(1)), session)
+    await eventually("the Finder") { !shown.isEmpty }
+    #expect(shown.map(\.lastPathComponent) == ["job-1"])
+    #expect(shown.first?.deletingLastPathComponent().path == root.path)
+    downloads.stop()
+}
+
+@MainActor
+@Test func openSlskdOpensThePageTheServiceReports() async throws {
+    let service = FakeService([job(1)])
+    let (downloads, session) = try await started(service.service) { throw CancellationError() }
+    var opened: [URL] = []
+    downloads.openPage = { opened.append($0) }
+    downloads.show()
+    let window = try #require(downloads.controller)
+    await eventually("the config's answer") { session.slskdPage != nil }
+    #expect(window.slskdButton.isEnabled)
+    window.slskdButton.performClick(nil)
+    #expect(opened.map(\.absoluteString) == ["http://192.0.2.7:5030"])
+    downloads.window?.close()
+    downloads.stop()
+
+    let none = FakeService([job(1)])
+    none.slskd = nil
+    let (other, _) = try await started(none.service) { throw CancellationError() }
+    other.show()
+    #expect(other.controller?.slskdButton.isEnabled == false)
+    #expect(other.controller?.slskdButton.toolTip == DownloadsWindow.noSlskdHelp)
+    other.window?.close()
+    other.stop()
+}
