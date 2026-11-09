@@ -198,13 +198,17 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(written[0].count == 6)
     #expect(tagger.applicable(.exact).isEmpty, "each album is written once a session")
     #expect(tagger.writeProgress?.tags == 23 && tagger.writeProgress?.files == 6)
-    #expect(tagger.writeProgress?.written == nil, "no report yet")
+    #expect(tagger.writeProgress?.progress == nil, "no report yet")
     var progress = TagWriteProgress(total: 6)
     progress.read = 6
     progress.written = 3
     report(progress)
-    #expect(tagger.writeProgress?.written == 3)
-    #expect(tagger.writeProgress?.fraction == 0.75)
+    #expect(tagger.writeProgress?.progress?.written == 3)
+    #expect(tagger.writeProgress?.progress?.fraction == 0.75)
+    #expect(tagger.writeProgress?.text == "Writing 23 tags to 6 files: 3 of 6 written")
+    #expect(
+        TaggerModel.WriteProgress(tags: 1, files: 1).text == "Writing 1 tag to 1 file…",
+        "singular nouns")
 
     // A file of album 4 that wasn't written puts that album back, and only that one.
     completion([try #require(plan.files.first { $0.path.hasSuffix("/400.flac") }).path])

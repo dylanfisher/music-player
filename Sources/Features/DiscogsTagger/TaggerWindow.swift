@@ -472,17 +472,15 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     /// The writes running, beside the status bar's line: "Writing 120 tags to 20 files: 3 of
     /// 20 written", or a moving bar alone until a write reports, as a staged write never does.
-    private func showWriting(_ writing: (tags: Int, files: Int, written: Int?, fraction: Double?)) {
-        let what =
-            "Writing \(number(writing.tags)) tags to \(count(writing.files, "file"))"
-        if let written = writing.written, let fraction = writing.fraction {
-            show(0, of: 0, "\(what): \(number(written)) of \(number(writing.files)) written")
-            progress.doubleValue = fraction
+    private func showWriting(_ writing: TaggerModel.WriteProgress) {
+        if let report = writing.progress {
+            show(0, of: 0, writing.text)
+            progress.doubleValue = report.fraction
         } else {
             progress.isHidden = false
             progress.isIndeterminate = true
             progress.startAnimation(nil)
-            statusLabel.stringValue = "\(what)…"
+            statusLabel.stringValue = writing.text
         }
     }
 

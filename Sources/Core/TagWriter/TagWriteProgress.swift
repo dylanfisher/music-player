@@ -14,6 +14,15 @@ public struct TagWriteProgress: Equatable, Sendable {
     public var fraction: Double {
         total == 0 ? 1 : Double(read + written) / Double(2 * total)
     }
+
+    /// The batches `parts` as one batch of `total` files, the files of a batch that hasn't
+    /// reported yet counting as neither read nor written.
+    public static func combined(_ parts: [TagWriteProgress], total: Int) -> TagWriteProgress {
+        var all = TagWriteProgress(total: total)
+        all.read = parts.map(\.read).reduce(0, +)
+        all.written = parts.map(\.written).reduce(0, +)
+        return all
+    }
 }
 
 /// A batch's progress, counted from the threads that write its files, each change handed to

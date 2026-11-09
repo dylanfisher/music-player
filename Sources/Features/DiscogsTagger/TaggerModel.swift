@@ -937,7 +937,10 @@ final class TaggerModel {
         let number = writes
         writing[number] = Writing(tags: plan.fieldCount, files: plan.files.count)
         if let staged {
-            applyStaged(plan, staged) { [weak self] in self?.wrote(number) }
+            applyStaged(plan, staged) { [weak self] in
+                self?.status = Self.wroteText(plan, staged: true)
+                self?.wrote(number)
+            }
         } else {
             write(
                 plan.files,
@@ -957,17 +960,20 @@ final class TaggerModel {
         for index in albums.indices where applied.contains(albums[index].id) {
             albums[index].applied = true
         }
-        status =
-            "Writing \(DisplayText.number(plan.fieldCount)) tags to"
-            + " \(DisplayText.number(plan.files.count)) files;"
-            + (staged == nil ? " Undo Tag Edit puts them back" : Self.stagedWrite)
+        // The line shows the write's progress until it ends, then `wroteText`.
+        status = ""
         changed()
     }
 
-    /// The status line once the library's writer has finished a plan.
-    static func wroteText(_ plan: ApplyPlan) -> String {
-        "Wrote \(number(plan.fieldCount)) tags to \(number(plan.files.count)) files;"
-            + " Undo Tag Edit puts them back"
+    /// "120 tags to 20 files": what a write writes.
+    nonisolated static func tagsToFiles(tags: Int, files: Int) -> String {
+        "\(DisplayText.count(tags, "tag")) to \(DisplayText.count(files, "file"))"
+    }
+
+    /// The status line once a plan is written.
+    static func wroteText(_ plan: ApplyPlan, staged: Bool = false) -> String {
+        "Wrote \(tagsToFiles(tags: plan.fieldCount, files: plan.files.count));"
+            + (staged ? stagedWrite : " Undo Tag Edit puts them back")
     }
 
     /// The write `number` has finished, whatever it wrote.
@@ -976,20 +982,32 @@ final class TaggerModel {
         changed()
     }
 
-    /// What the window shows of the writes running: the tags and files in all, and how many
-    /// files are written and how far along, from 0 to 1, as `TagWriteProgress` counts it, nil
-    /// until a write reports; nil when nothing is being written.
-    var writeProgress: (tags: Int, files: Int, written: Int?, fraction: Double?)? {
+    /// The writes running, as the window shows them.
+    struct WriteProgress: Equatable {
+        var tags: Int
+        var files: Int
+        /// The writes' progress as one; nil until one reports, and for a staged write.
+        var progress: TagWriteProgress?
+
+        /// "Writing 120 tags to 20 files: 3 of 20 written", or without the count before a
+        /// report.
+        var text: String {
+            let what = "Writing \(TaggerModel.tagsToFiles(tags: tags, files: files))"
+            guard let progress else { return what + "…" }
+            return
+                "\(what): \(DisplayText.number(progress.written)) of \(DisplayText.number(files)) written"
+        }
+    }
+
+    /// The writes running, nil when there are none.
+    var writeProgress: WriteProgress? {
         guard !writing.isEmpty else { return nil }
         let values = Array(writing.values)
         let files = values.map(\.files).reduce(0, +)
         let reports = values.compactMap(\.progress)
-        guard !reports.isEmpty else { return (values.map(\.tags).reduce(0, +), files, nil, nil) }
-        let steps = reports.map { $0.read + $0.written }.reduce(0, +)
-        return (
-            values.map(\.tags).reduce(0, +), files, reports.map(\.written).reduce(0, +),
-            files == 0 ? 1 : Double(steps) / Double(2 * files)
-        )
+        return WriteProgress(
+            tags: values.map(\.tags).reduce(0, +), files: files,
+            progress: reports.isEmpty ? nil : .combined(reports, total: files))
     }
 }
 
