@@ -212,6 +212,48 @@ private func rows() -> [DownloadRow] {
 }
 
 @MainActor
+@Test func revealInFinderRefusesAFolderOutsideTheStagingFolder() async throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "staging-\(UUID().uuidString)", isDirectory: true)
+    let root = base.appendingPathComponent("staging", isDirectory: true)
+    let outside = base.appendingPathComponent("library", isDirectory: true)
+    for folder in [root, outside] {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+    // A staged folder that's a link out of the staging folder.
+    try FileManager.default.createSymbolicLink(
+        at: root.appendingPathComponent("job-2"), withDestinationURL: outside)
+    let service = FakeService([
+        job(1) { $0.stagedPath = "../library" }, job(2), job(3) { $0.stagedPath = "/" },
+    ])
+    let (downloads, session) = try await started(service.service) {
+        ImportPlaces(stagingRoot: root.path, libraryFolder: outside.path, shareRoot: "/")
+    }
+    var shown: [URL] = []
+    downloads.showInFinder = { shown += $0 }
+    downloads.show()
+    let window = try #require(downloads.window)
+    for id in [1, 2, 3] {
+        downloads.reveal(try #require(service.job(id)), session)
+        await eventually("job \(id)'s refusal") { window.attachedSheet != nil }
+        if let sheet = window.attachedSheet { window.endSheet(sheet) }
+    }
+    #expect(shown.isEmpty)
+    window.close()
+    downloads.stop()
+}
+
+@Test func onlyOneFolderNameIsAStagedFolder() {
+    for (path, folder) in [
+        ("job-42", "job-42"), ("..", nil), (".", nil), ("", nil), ("../x", nil), ("/", nil),
+        ("/tmp", nil), ("a/b", nil),
+    ] as [(String, String?)] {
+        #expect(job(1) { $0.stagedPath = path }.stagedFolder == folder, "\(path)")
+    }
+    #expect(job(1) { $0.stagedPath = nil }.stagedFolder == nil)
+}
+
+@MainActor
 @Test func openSlskdOpensThePageTheServiceReports() async throws {
     let service = FakeService([job(1)])
     let (downloads, session) = try await started(service.service) { throw CancellationError() }

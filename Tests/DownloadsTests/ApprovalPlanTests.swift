@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import Analysis
+@testable import Discogs
 @testable import Downloads
 @testable import Fixtures
 @testable import Library
@@ -70,6 +71,24 @@ private let lossy = StagedOrigin(
     #expect(
         plan(resuming: true, movesProblem: "x").approved(ticked: [], acknowledgedOrigins: false)?
             .state == .importing)
+}
+
+@Test func aStagedFolderOutsideTheStagingFolderIsNeverApproved() async throws {
+    for resuming in [false, true] {
+        var outside = job(5, resuming ? .importing : .staged) { $0.tagging.status = .clean }
+        outside.stagedPath = "../library"
+        let built = await ApprovalPlan.build(
+            outside,
+            places: ImportPlaces(stagingRoot: "/s", libraryFolder: "/l", shareRoot: "/"),
+            databaseURL: URL(fileURLWithPath: "/nowhere.sqlite", isDirectory: false),
+            catalog: nil)
+        #expect(built.movesProblem?.contains("isn't one folder name") == true)
+        #expect(!built.blockers(ticked: [], acknowledgedOrigins: true).isEmpty)
+        #expect(built.approved(ticked: [], acknowledgedOrigins: true) == nil)
+    }
+    var tagged = job(5)
+    tagged.stagedPath = "/"
+    #expect(StagedJob(tagged) == nil, "nor tagged")
 }
 
 @Test func anUpgradeWaitsForEachUnmatchedOldFileToBeTicked() throws {

@@ -63,7 +63,8 @@ struct ApprovalPlan: Sendable {
     /// origins' findings are acknowledged; empty when it can.
     func blockers(ticked: Set<String>, acknowledgedOrigins: Bool) -> [String] {
         var found: [String] = []
-        if !resuming, let movesProblem { found.append(movesProblem) }
+        // A resume goes on whatever the moves found, but not from a folder it can't name.
+        if !resuming || job.stagedFolder == nil, let movesProblem { found.append(movesProblem) }
         if !resuming, let upgradeProblem { found.append(upgradeProblem) }
         let unticked = unmatched.filter { !ticked.contains($0.sharePath) }
         if !unticked.isEmpty {
@@ -81,7 +82,7 @@ struct ApprovalPlan: Sendable {
     /// empty, or for a job the service listed with no staged folder.
     func approved(ticked: Set<String>, acknowledgedOrigins: Bool) -> ApprovedImport? {
         guard blockers(ticked: ticked, acknowledgedOrigins: acknowledgedOrigins).isEmpty,
-            let folder = job.stagedPath
+            let folder = job.stagedFolder
         else { return nil }
         return ApprovedImport(
             jobID: job.id, releaseID: job.release.releaseID, state: job.state, folder: folder,
@@ -103,8 +104,10 @@ struct ApprovalPlan: Sendable {
             job: job, resuming: resuming, moves: [], movesProblem: nil, old: [], unmatched: [],
             upgradeProblem: nil, origins: [], originsProblem: nil,
             libraryFolder: places.libraryFolder)
-        guard let folder = job.stagedPath else {
-            plan.movesProblem = "the service listed the job with no staged folder"
+        guard let folder = job.stagedFolder else {
+            plan.movesProblem =
+                job.stagedPath.map(DownloadJob.notOneFolder)
+                ?? "the service listed the job with no staged folder"
             return plan
         }
         var oldPaths = job.upgrade?.oldPaths

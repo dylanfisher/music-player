@@ -36,7 +36,7 @@ extension StagedJob {
 
     /// `job` as AutoTag takes it; nil until the service has staged it in a folder.
     package init?(_ job: DownloadJob) {
-        guard let folder = job.stagedPath, let format = job.candidate?.format else { return nil }
+        guard let folder = job.stagedFolder, let format = job.candidate?.format else { return nil }
         self.init(
             releaseID: job.release.releaseID, artist: job.release.artist, folder: folder,
             format: format, files: job.files)

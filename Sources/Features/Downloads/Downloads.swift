@@ -425,9 +425,14 @@ package final class Downloads {
         }
     }
 
-    /// Shows `job`'s staged folder in the Finder, found where the staging folder is now.
+    /// Shows `job`'s staged folder in the Finder, found where the staging folder is now. A
+    /// folder the service names outside the staging folder, by its name or by a link, is
+    /// refused.
     func reveal(_ job: DownloadJob, _ session: Session) {
-        guard let folder = job.stagedPath else { return }
+        guard let path = job.stagedPath else { return }
+        guard let folder = job.stagedFolder else {
+            return alert("The staged folder wasn't shown", [DownloadJob.notOneFolder(path)])
+        }
         let places = session.setup.places
         Task {
             let root: String
@@ -438,10 +443,17 @@ package final class Downloads {
             }
             let url = URL(fileURLWithPath: root, isDirectory: true)
                 .appendingPathComponent(folder, isDirectory: true)
-            let there = await blockingFileWork { FileManager.default.fileExists(atPath: url.path) }
-            guard there else {
-                return alert("The staged folder isn't there", [url.path])
+            let found = await blockingFileWork { () -> String? in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    return "\(url.path) isn't there"
+                }
+                let real = url.resolvingSymlinksInPath().path
+                let realRoot = URL(fileURLWithPath: root, isDirectory: true)
+                    .resolvingSymlinksInPath().path
+                return isPath(real, inOrAt: realRoot) && real != realRoot
+                    ? nil : "\(url.path) leads outside the staging folder, to \(real)"
             }
+            if let found { return alert("The staged folder wasn't shown", [found]) }
             showInFinder([url])
         }
     }

@@ -277,8 +277,25 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     package var candidate: Candidate?
     /// In release order; empty until a candidate is chosen.
     package var files: [File]
-    /// From `staged` on: the job's folder in the staging folder, one component.
+    /// From `staged` on: the job's folder in the staging folder, one component, as the service
+    /// sent it. Read it through `stagedFolder`, which refuses any other.
     package var stagedPath: String?
+
+    /// `stagedPath` when it's the one folder name the contract promises; nil before the job is
+    /// staged, and for a path with a `/` or that is empty, `.` or `..`, which would name a
+    /// folder outside the staging folder.
+    package var stagedFolder: String? {
+        guard let path = stagedPath, !path.isEmpty, path != ".", path != "..",
+            !path.contains("/")
+        else { return nil }
+        return path
+    }
+
+    /// Why a `stagedPath` that `stagedFolder` refuses isn't used.
+    package static func notOneFolder(_ path: String) -> String {
+        "the service's staged folder \(path.debugDescription) isn't one folder name in the"
+            + " staging folder"
+    }
     package var tagging: Tagging
     package var lease: Hold?
     package var review: Hold?
