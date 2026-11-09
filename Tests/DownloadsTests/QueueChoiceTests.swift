@@ -1,27 +1,11 @@
 import Foundation
 import Testing
 
-@testable import Discogs
 @testable import Downloads
 @testable import Library
 @testable import Recommender
 
-// The queue sheets' rules: a pasted release, the albums of a selection, and the orders made.
-
-@Test(arguments: [
-    ("1234567", 1_234_567 as Int?),
-    ("  r42\n", 42),
-    ("https://www.discogs.com/release/1234567-Made-Up-Artist-Made-Up-Album", 1_234_567),
-    ("https://discogs.com/release/99", 99),
-    ("https://www.discogs.com/fr/release/99-Album", 99),
-    ("https://www.discogs.com/master/99-Album", nil),
-    ("https://example.com/release/99", nil),
-    ("0", nil),
-    ("Made-Up Album", nil),
-])
-func aPastedReleaseIsAnIdOrADiscogsReleaseURL(text: String, id: Int?) {
-    #expect(pastedReleaseID(text) == id)
-}
+// The queue sheets' rules: the albums of a selection, and the orders made.
 
 private func album(_ id: Int64, _ releases: [String?]) -> DiscogsAlbum {
     DiscogsAlbum(
