@@ -233,10 +233,16 @@ func theGlassHeadersAreFrosted(_ appearance: NSAppearance.Name) throws {
     added.width = 100
     let stock = added.headerCell
     table.addTableColumn(added)
+    // Liquid Glass from macOS 26, the header material before (ADR 0150).
+    let materials = shown.subviews.compactMap { $0 as? NSVisualEffectView }
+    if #available(macOS 26, *) {
+        #expect(shown.subviews.filter { $0 is NSGlassEffectView }.count == 1)
+        #expect(materials.isEmpty)
+    } else {
+        #expect(materials.map(\.material) == [.headerView])
+    }
     // The test's window is never key, and an inactive window's material is a flat color, as
     // the glass's own backdrop is.
-    let materials = shown.subviews.compactMap { $0 as? NSVisualEffectView }
-    #expect(materials.map(\.material) == [.headerView])
     for material in materials { material.state = .active }
     window.displayIfNeeded()
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))

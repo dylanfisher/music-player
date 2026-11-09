@@ -158,22 +158,19 @@ struct DividerPositions {
     }
 }
 
-/// A list's header on glass: the header material, blurring the rows that scroll under it, with
+/// A list's header on glass: Liquid Glass or the header material, blurring the rows that scroll under it, with
 /// a line under it and the columns' titles over it. `NSTableHeaderView` fills itself opaque
 /// behind any cell that isn't its own, which hid the glass (ADR 0087), and a view's subviews
 /// draw over its own drawing, so this header draws nothing itself and a titles view over the
 /// material draws the cells.
 final class GlassHeaderView: NSTableHeaderView {
-    private let backdrop = NSVisualEffectView()
+    private let backdrop = GlassHeaderView.material()
     private let titles = HeaderTitles()
     /// Clears a column's header cell, for a column added after the glass went on.
     var clear: (NSTableColumn) -> Void = { _ in }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        backdrop.material = .headerView
-        backdrop.blendingMode = .withinWindow
-        backdrop.state = .followsWindowActiveState
         titles.header = self
         for view in [backdrop, titles] {
             view.frame = bounds
@@ -184,6 +181,21 @@ final class GlassHeaderView: NSTableHeaderView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+
+    /// Liquid Glass from macOS 26, square to fill the header (ADR 0150); the header material
+    /// before.
+    private static func material() -> NSView {
+        if #available(macOS 26, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = 0
+            return glass
+        }
+        let effect = NSVisualEffectView()
+        effect.material = .headerView
+        effect.blendingMode = .withinWindow
+        effect.state = .followsWindowActiveState
+        return effect
+    }
 
     override var isOpaque: Bool { false }
 

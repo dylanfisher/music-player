@@ -280,6 +280,15 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(palette.window.frame.size == NSSize(width: 680, height: 420))
     #expect(palette.field.font == .systemFont(ofSize: 24, weight: .light))
     #expect(palette.window.contentView?.layer?.cornerRadius == 16)
+    // The panel's material: Liquid Glass with the same radius from macOS 26, the popover
+    // material before (ADR 0150).
+    let material = try #require(palette.window.contentView?.subviews.first)
+    if #available(macOS 26, *) {
+        let glass = try #require(material as? NSGlassEffectView)
+        #expect(glass.cornerRadius == 16)
+    } else {
+        #expect((material as? NSVisualEffectView)?.material == .popover)
+    }
     #expect(palette.table.rect(ofRow: 0).height == 32)
     let scroll = try #require(palette.table.enclosingScrollView)
     // Eleven whole rows show, 5.5 points from the line and the bottom.

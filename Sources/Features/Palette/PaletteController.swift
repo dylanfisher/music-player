@@ -300,10 +300,6 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
 
         let clip = PaletteClip()
-        let backdrop = NSVisualEffectView()
-        backdrop.material = .popover
-        backdrop.blendingMode = .behindWindow
-        backdrop.state = .active
 
         let glass = NSImageView(
             image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
@@ -353,14 +349,30 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         top.heightAnchor.constraint(equalToConstant: Self.fieldHeight).isActive = true
         separator.heightAnchor.constraint(equalToConstant: Self.separatorHeight).isActive = true
         scroll.heightAnchor.constraint(equalToConstant: Self.rowsHeight).isActive = true
-        for view in [backdrop, stack] {
+        // Liquid Glass from macOS 26 (ADR 0150), holding the stack so its text takes the glass's
+        // vibrancy; the popover material behind it before.
+        let material: NSView
+        if #available(macOS 26, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = Self.cornerRadius
+            glass.contentView = stack
+            material = glass
+        } else {
+            let effect = NSVisualEffectView()
+            effect.material = .popover
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.addSubview(stack)
+            material = effect
+        }
+        clip.addSubview(material)
+        for (view, container) in [(stack, material), (material, clip)] {
             view.translatesAutoresizingMaskIntoConstraints = false
-            clip.addSubview(view)
             NSLayoutConstraint.activate([
-                view.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
-                view.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
-                view.topAnchor.constraint(equalTo: clip.topAnchor),
-                view.bottomAnchor.constraint(equalTo: clip.bottomAnchor),
+                view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                view.topAnchor.constraint(equalTo: container.topAnchor),
+                view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             ])
         }
         panel.contentView = clip
