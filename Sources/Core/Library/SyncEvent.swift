@@ -34,6 +34,9 @@ enum SyncEvent: Equatable, Sendable {
     case playlistDelete(playlist: String)
 }
 
+/// The highest play count, imported or set by hand, that a log carries.
+public let maximumPlayCount = Int(Int32.max)
+
 /// An event as one line of a log: its sequence number in the log, its clock and the event.
 package struct SyncRecord: Equatable, Sendable {
     var seq: Int64
@@ -48,9 +51,10 @@ package struct SyncRecord: Equatable, Sendable {
     static let seqRange: ClosedRange<Int64> = 1...(1 << 53)
     /// What a time in a log may be: seconds since 1970, up to 2100.
     static let secondsRange: ClosedRange<Double> = 0...4_102_444_800
-    static let countRange: ClosedRange<Int64> = 0...Int64(Int32.max)
+    static let countRange: ClosedRange<Int64> = 0...Int64(maximumPlayCount)
     /// What a hand-set play count's offset may be: the count's range, either way.
-    static let offsetRange: ClosedRange<Int64> = -Int64(Int32.max)...Int64(Int32.max)
+    static let offsetRange: ClosedRange<Int64> =
+        -Int64(maximumPlayCount)...Int64(maximumPlayCount)
     static let maximumNameBytes = 4096
     static let maximumPathBytes = 4096
     /// Entries one playlist event lists at most; a longer playlist isn't synced.

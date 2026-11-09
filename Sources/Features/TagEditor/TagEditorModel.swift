@@ -122,7 +122,7 @@ public struct TagEditorModel: Equatable, Sendable {
     func checkPlayCount() throws(PlayCountError) {
         guard isPlayCountEdited, let typed = typedPlayCount else { return }
         guard typed.allSatisfy({ $0.isASCII && $0.isNumber }), let count = Int(typed),
-            count <= LibraryIndex.maximumPlayCount
+            count <= maximumPlayCount
         else { throw PlayCountError(text: typed) }
     }
 
@@ -354,7 +354,7 @@ struct PlayCountError: Error, Equatable, CustomStringConvertible {
     var text: String
 
     var description: String {
-        "\(TrackColumn.playCount.title) \"\(text)\" isn't a whole number from 0 to \(LibraryIndex.maximumPlayCount)"
+        "\(TrackColumn.playCount.title) \"\(text)\" isn't a whole number from 0 to \(maximumPlayCount)"
     }
 }
 
