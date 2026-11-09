@@ -51,6 +51,8 @@ struct ApprovalPlan: Sendable {
     /// The job was queued as a new album, but its files' paths are taken by the tracks of one
     /// library album of its release, so Approve replaces that album as an upgrade does.
     var replacesAlbum = false
+    /// The library folder the moves go into, which the sheet shows them relative to.
+    var libraryFolder = ""
 
     var isUpgrade: Bool { job.upgrade != nil || replacesAlbum }
 
@@ -99,7 +101,8 @@ struct ApprovalPlan: Sendable {
         let resuming = job.state == .approved || job.state == .importing
         var plan = ApprovalPlan(
             job: job, resuming: resuming, moves: [], movesProblem: nil, old: [], unmatched: [],
-            upgradeProblem: nil, origins: [], originsProblem: nil)
+            upgradeProblem: nil, origins: [], originsProblem: nil,
+            libraryFolder: places.libraryFolder)
         guard let folder = job.stagedPath else {
             plan.movesProblem = "the service listed the job with no staged folder"
             return plan

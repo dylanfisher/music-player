@@ -2,12 +2,13 @@ import Analysis
 import AppKit
 import Library
 
-/// Approve… (54.13, ADR 0147): what moves where; for an upgrade, the old files deleted, which
-/// on a share with no Trash is for good, and the old files with no new one, each ticked to lose;
-/// and the lossy-origin check, acknowledged when it found anything. Approve stays off until
-/// nothing blocks it, then ends the sheet with `result` set.
+/// Approve… (54.13, ADR 0147), laid out as the tagger's sheets are: a heading and a line under
+/// it, a table of the staged files with where each goes and what the lossy-origin check found,
+/// and for an upgrade a table of the old files it deletes, with a box for each that has no new
+/// file, to lose it. What still blocks Approve is one line beside the buttons. Approve ends the
+/// sheet with `result` set.
 @MainActor
-final class ApproveSheet: NSWindowController {
+final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     /// Said plainly, since the owner's library share has no Trash.
     static let deleteWarning =
         "These old files are deleted. On a share with no Trash, such as the NAS, they're deleted"
@@ -17,26 +18,60 @@ final class ApproveSheet: NSWindowController {
         "This release is already in the library, at the paths these files take. Approve replaces"
         + " that album, as an upgrade does, and keeps its tracks' plays, ratings, loves and"
         + " playlist entries."
+    static let resumeNote =
+        "The import stopped partway. It goes on from where the library and the import's record"
+        + " say it got to."
+
+    /// A staged file: its name, where it goes, and what the check found of it.
+    struct FileRow: Equatable {
+        var name: String
+        /// Relative to the library folder; empty when the moves couldn't be worked out.
+        var destination: String
+        var check: String
+        /// The check found something, or couldn't read the file.
+        var warns: Bool
+    }
+
+    /// An upgrade's old file: where it is, its track, and what Approve does to it.
+    struct OldRow: Equatable {
+        var sharePath: String
+        var path: String
+        var position: String
+        var note: String
+        /// It has no new file, so it's deleted only once ticked.
+        var tickable: Bool
+    }
+
+    enum Column: String {
+        case tick, name, destination, check, old, position, note
+    }
 
     let plan: ApprovalPlan
+    let files: [FileRow]
+    let old: [OldRow]
+    let filesTable = NSTableView()
+    let oldTable = NSTableView()
     let approveButton: NSButton
-    let blockersLabel = NSTextField(wrappingLabelWithString: "")
+    let blockersLabel = NSTextField(labelWithString: "")
     let acknowledgeBox = NSButton(
         checkboxWithTitle: "I've read what the check found; approve anyway", target: nil,
         action: nil)
-    private(set) var unmatchedBoxes: [NSButton] = []
+    /// The old files ticked to lose, by their path on the share.
+    private(set) var ticked: Set<String> = []
     /// The approved import; nil for Cancel.
     private(set) var result: ApprovedImport?
 
     init(plan: ApprovalPlan, album: String) {
         self.plan = plan
+        files = Self.fileRows(plan)
+        old = Self.oldRows(plan)
         approveButton = NSButton(
             title: plan.resuming ? DownloadAction.resumeHere.title : "Approve", target: nil,
             action: nil)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: plan.isUpgrade ? 560 : 420),
             styleMask: [.titled, .resizable], backing: .buffered, defer: false)
-        window.minSize = NSSize(width: 560, height: 380)
+        window.minSize = NSSize(width: 600, height: 320)
         super.init(window: window)
         build(in: window, album: album)
         refresh()
@@ -45,104 +80,139 @@ final class ApproveSheet: NSWindowController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
+    // MARK: - The rows
+
+    /// Each staged file, in release order, with its destination and the check's finding. The
+    /// check reads the first and last file only, so the rest say so.
+    static func fileRows(_ plan: ApprovalPlan) -> [FileRow] {
+        let destinations = Dictionary(
+            plan.moves.map { ($0.name, $0.destination) }, uniquingKeysWith: { one, _ in one })
+        let prefix = plan.libraryFolder.isEmpty ? nil : plan.libraryFolder + "/"
+        return plan.job.files.map { file in
+            var destination = destinations[file.name] ?? ""
+            if let prefix, destination.hasPrefix(prefix) {
+                destination.removeFirst(prefix.count)
+            }
+            let (check, warns) = Self.check(file.name, plan)
+            return FileRow(name: file.name, destination: destination, check: check, warns: warns)
+        }
+    }
+
+    /// What the lossy-origin check found of the file `name`.
+    private static func check(_ name: String, _ plan: ApprovalPlan) -> (String, Bool) {
+        if plan.resuming { return ("", false) }
+        if let problem = plan.originsProblem { return ("Not checked: \(problem)", true) }
+        guard let origin = plan.origins.first(where: { $0.path.hasSuffix("/" + name) }) else {
+            return ("Not checked", false)
+        }
+        if let failure = origin.failure { return ("Couldn't be analyzed: \(failure)", true) }
+        if origin.verdicts.isEmpty { return ("No sign of a lossy origin", false) }
+        return (origin.verdicts.map(\.text).joined(separator: "; "), true)
+    }
+
+    /// An upgrade's old files, each saying whether a new file takes its place.
+    static func oldRows(_ plan: ApprovalPlan) -> [OldRow] {
+        let unmatched = Set(plan.unmatched.map(\.sharePath))
+        return plan.old.map { file in
+            let lone = unmatched.contains(file.sharePath)
+            let note =
+                !lone
+                ? "Replaced by its new file"
+                : file.hasStats
+                    ? "No new file: tick to delete it with its plays, rating, love and playlist"
+                        + " entries"
+                    : "No new file: tick to delete it"
+            return OldRow(
+                sharePath: file.sharePath, path: file.path, position: file.position ?? "",
+                note: note, tickable: lone)
+        }
+    }
+
+    // MARK: - The layout
+
     private func build(in window: NSWindow, album: String) {
         var views: [NSView] = []
-        let title = NSTextField(
+        let heading = NSTextField(
             labelWithString: (plan.resuming ? "Resume the import of " : "Approve ") + album)
-        title.font = .boldSystemFont(ofSize: NSFont.systemFontSize + 1)
-        title.lineBreakMode = .byTruncatingTail
-        views.append(title)
-        views.append(secondary(DownloadRow.releaseName(plan.job.release.releaseID)))
-
-        if plan.resuming {
-            views.append(
-                NSTextField(
-                    wrappingLabelWithString:
-                        "The import stopped partway. It goes on from where the library and the"
-                        + " import's record say it got to."))
-        } else if let problem = plan.movesProblem {
+        heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        heading.lineBreakMode = .byTruncatingTail
+        views.append(heading)
+        views.append(secondary(Self.subtitle(plan)))
+        if plan.resuming { views.append(note(Self.resumeNote)) }
+        if plan.replacesAlbum { views.append(note(Self.replacesAlbumNote)) }
+        if !plan.resuming, let problem = plan.movesProblem {
             views.append(warning("The files can't be moved: \(problem)"))
-        } else {
-            views.append(
-                NSTextField(
-                    labelWithString:
-                        "Moves \(plan.moves.count) file\(plan.moves.count == 1 ? "" : "s") into the library:"
-                ))
-            views.append(lines(plan.moves.map { "\($0.name)  →  \($0.destination)" }, height: 110))
         }
 
+        // A resumed import's files may be in the library by now, so it lists them alone.
+        addColumn(
+            to: filesTable, Column.name.rawValue, title: "File", width: 220,
+            stretches: plan.resuming)
+        if !plan.resuming {
+            addColumn(
+                to: filesTable, Column.destination.rawValue, title: "Moves To", width: 320,
+                stretches: true)
+            addColumn(
+                to: filesTable, Column.check.rawValue, title: "Lossy-Origin Check", width: 220)
+        }
+        let filesScroll = listTable(filesTable, source: self)
+        views.append(filesScroll)
+        var tables = [filesScroll]
+
         if plan.isUpgrade {
-            if plan.replacesAlbum {
-                views.append(NSTextField(wrappingLabelWithString: Self.replacesAlbumNote))
-            }
+            views.append(sectionHeading("Old files"))
             if let problem = plan.upgradeProblem {
                 views.append(warning(problem))
             } else {
                 views.append(warning(Self.deleteWarning))
-                views.append(lines(plan.old.map(\.path), height: 90))
-                if !plan.unmatched.isEmpty {
-                    views.append(
-                        NSTextField(
-                            wrappingLabelWithString:
-                                "These old files have no new one at their place on the release."
-                                + " Tick each to delete it with its plays, rating, love and"
-                                + " playlist entries:"))
-                    for file in plan.unmatched {
-                        let box = NSButton(
-                            checkboxWithTitle: file.path + (file.hasStats ? " (has stats)" : ""),
-                            target: self, action: #selector(changed))
-                        box.lineBreakMode = .byTruncatingMiddle
-                        unmatchedBoxes.append(box)
-                        views.append(box)
-                    }
-                }
+                addColumn(to: oldTable, Column.tick.rawValue, title: "", width: 24)
+                addColumn(
+                    to: oldTable, Column.old.rawValue, title: "File", width: 360,
+                    stretches: true)
+                addColumn(to: oldTable, Column.position.rawValue, title: "Track", width: 50)
+                addColumn(to: oldTable, Column.note.rawValue, title: "", width: 320)
+                let oldScroll = listTable(oldTable, source: self)
+                views.append(oldScroll)
+                tables.append(oldScroll)
             }
         }
 
-        if !plan.resuming {
-            views.append(NSTextField(labelWithString: "Lossy-origin check:"))
-            views.append(lines(Self.originLines(plan), height: 54))
-            if plan.originsBlock {
-                acknowledgeBox.target = self
-                acknowledgeBox.action = #selector(changed)
-                views.append(acknowledgeBox)
-            }
+        if !plan.resuming && plan.originsBlock {
+            acknowledgeBox.target = self
+            acknowledgeBox.action = #selector(changed)
+            views.append(acknowledgeBox)
         }
 
-        blockersLabel.textColor = .systemOrange
-        views.append(blockersLabel)
+        blockersLabel.textColor = .secondaryLabelColor
+        blockersLabel.lineBreakMode = .byTruncatingTail
+        blockersLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
         cancel.keyEquivalent = "\u{1b}"
         approveButton.target = self
         approveButton.action = #selector(approve)
-        let buttons = NSStackView(views: [NSView(), cancel, approveButton])
+        let buttons = NSStackView(views: [blockersLabel, NSView(), cancel, approveButton])
         views.append(buttons)
 
         let page = NSStackView(views: views)
         page.orientation = .vertical
         page.alignment = .leading
-        page.spacing = 8
+        page.spacing = 10
         page.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
         for view in views where !(view is NSButton) {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -32).isActive = true
         }
+        for scroll in tables { scroll.setContentHuggingPriority(.defaultLow, for: .vertical) }
+        if tables.count == 2 {
+            tables[0].heightAnchor.constraint(equalTo: tables[1].heightAnchor).isActive = true
+        }
         window.contentView = page
     }
 
-    /// A line per analyzed file: fine, what it shows, or why it couldn't be read.
-    static func originLines(_ plan: ApprovalPlan) -> [String] {
-        if let problem = plan.originsProblem { return ["The check couldn't run: \(problem)"] }
-        return plan.origins.map { origin in
-            let name = (origin.path as NSString).lastPathComponent
-            if let failure = origin.failure { return "\(name): couldn't be analyzed: \(failure)" }
-            if origin.verdicts.isEmpty { return "\(name): no sign of a lossy origin" }
-            return "\(name): " + origin.verdicts.map(\.text).joined(separator: "; ")
-        }
-    }
-
-    var ticked: Set<String> {
-        Set(
-            zip(plan.unmatched, unmatchedBoxes).filter { $0.1.state == .on }.map(\.0.sharePath))
+    /// "Discogs release 4242 · FLAC 16/44.1, 12 files · Replaces MP3 320".
+    static func subtitle(_ plan: ApprovalPlan) -> String {
+        ([DownloadRow.releaseName(plan.job.release.releaseID), DownloadRow.format(plan.job)]
+            + [plan.job.upgrade.map { "Replaces \($0.currentQuality)" }].compactMap { $0 })
+            .joined(separator: " · ")
     }
 
     private var acknowledged: Bool { acknowledgeBox.state == .on }
@@ -150,11 +220,25 @@ final class ApproveSheet: NSWindowController {
     private func refresh() {
         let blockers = plan.blockers(ticked: ticked, acknowledgedOrigins: acknowledged)
         blockersLabel.stringValue = blockers.joined(separator: " ")
+        blockersLabel.toolTip = blockers.joined(separator: "\n")
         blockersLabel.isHidden = blockers.isEmpty
         approveButton.isEnabled = blockers.isEmpty
+        approveButton.keyEquivalent = blockers.isEmpty ? "\r" : ""
+    }
+
+    /// Ticks or unticks the old file in `row`; one with a new file has no box.
+    func toggleOld(_ row: Int) {
+        guard row < old.count, old[row].tickable else { return }
+        let path = old[row].sharePath
+        if ticked.remove(path) == nil { ticked.insert(path) }
+        oldTable.reloadData(
+            forRowIndexes: [row], columnIndexes: IndexSet(integersIn: 0..<oldTable.numberOfColumns))
+        refresh()
     }
 
     @objc private func changed() { refresh() }
+
+    @objc private func boxClicked(_ sender: NSButton) { toggleOld(sender.tag) }
 
     @objc private func cancel() { endSheet() }
 
@@ -165,8 +249,71 @@ final class ApproveSheet: NSWindowController {
         endSheet()
     }
 
+    // MARK: - The tables
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        tableView === filesTable ? files.count : old.count
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
+        -> NSView?
+    {
+        guard let column = tableColumn.flatMap({ Column(rawValue: $0.identifier.rawValue) })
+        else { return nil }
+        if tableView === filesTable {
+            let file = files[row]
+            switch column {
+            case .name: return cell(file.name, truncating: .byTruncatingMiddle)
+            case .destination:
+                return cell(file.destination, truncating: .byTruncatingHead)
+            case .check:
+                let label = cell(file.check, truncating: .byTruncatingTail)
+                label.textColor = file.warns ? .systemOrange : .secondaryLabelColor
+                return label
+            default: return nil
+            }
+        }
+        let file = old[row]
+        switch column {
+        case .tick:
+            guard file.tickable else { return nil }
+            let box = NSButton(checkboxWithTitle: "", target: self, action: #selector(boxClicked))
+            box.tag = row
+            box.state = ticked.contains(file.sharePath) ? .on : .off
+            return box
+        case .old: return cell(file.path, truncating: .byTruncatingHead)
+        case .position: return cell(file.position, truncating: .byTruncatingTail)
+        case .note:
+            let label = cell(file.note, truncating: .byTruncatingTail)
+            label.textColor = file.tickable ? .systemOrange : .secondaryLabelColor
+            return label
+        default: return nil
+        }
+    }
+
+    private func cell(_ text: String, truncating: NSLineBreakMode) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.lineBreakMode = truncating
+        label.toolTip = text.isEmpty ? nil : text
+        return label
+    }
+
     private func secondary(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        return label
+    }
+
+    private func note(_ text: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.textColor = .secondaryLabelColor
+        return label
+    }
+
+    private func sectionHeading(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
         label.textColor = .secondaryLabelColor
         return label
     }
@@ -175,18 +322,5 @@ final class ApproveSheet: NSWindowController {
         let label = NSTextField(wrappingLabelWithString: text)
         label.textColor = .systemRed
         return label
-    }
-
-    /// `text`, a line each, in a read-only scrolling view `height` points high.
-    private func lines(_ text: [String], height: CGFloat) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
-        scroll.borderType = .bezelBorder
-        if let view = scroll.documentView as? NSTextView {
-            view.isEditable = false
-            view.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-            view.string = text.joined(separator: "\n")
-        }
-        scroll.heightAnchor.constraint(equalToConstant: height).isActive = true
-        return scroll
     }
 }

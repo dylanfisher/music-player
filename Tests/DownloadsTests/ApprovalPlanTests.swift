@@ -105,16 +105,50 @@ private let lossy = StagedOrigin(
     #expect(texts.contains(ApproveSheet.deleteWarning))
     #expect(ApproveSheet.deleteWarning.contains("deleted permanently"))
     #expect(!sheet.approveButton.isEnabled)
-    #expect(sheet.unmatchedBoxes.count == 1)
-    click(sheet.unmatchedBoxes[0])
+    #expect(!sheet.blockersLabel.isHidden)
+    // A box only for the old file with no new one.
+    let tick = try #require(sheet.oldTable.tableColumns.first)
+    #expect(sheet.tableView(sheet.oldTable, viewFor: tick, row: 0) == nil)
+    let box = try #require(sheet.tableView(sheet.oldTable, viewFor: tick, row: 2) as? NSButton)
+    click(box)
+    #expect(sheet.ticked == ["library/03.mp3"])
     #expect(!sheet.approveButton.isEnabled, "the lossy origin still waits")
     click(sheet.acknowledgeBox)
     #expect(sheet.approveButton.isEnabled)
     #expect(sheet.blockersLabel.isHidden)
+}
+
+@MainActor
+@Test func theFilesTableSaysWhereEachGoesAndWhatTheCheckFound() throws {
+    var plan = plan(upgrade: true, origins: [lossy])
+    plan.libraryFolder = "/Volumes/music/library"
     #expect(
-        ApproveSheet.originLines(sheet.plan) == [
-            "01 First Song.flac: suspect lossy origin: cutoff at 16.0 kHz"
+        ApproveSheet.fileRows(plan) == [
+            .init(
+                name: "01 First Song.flac", destination: "A/01 First Song.flac",
+                check: "suspect lossy origin: cutoff at 16.0 kHz", warns: true),
+            .init(
+                name: "02 Second Song.flac", destination: "A/02 Second Song.flac",
+                check: "Not checked", warns: false),
         ])
+    #expect(ApproveSheet.oldRows(plan).map(\.tickable) == [false, false, true])
+    #expect(ApproveSheet.oldRows(plan).map(\.position) == ["1", "2", ""])
+    #expect(ApproveSheet.oldRows(plan)[2].note.contains("plays"), "it has stats")
+    #expect(
+        ApproveSheet.subtitle(plan)
+            == "Discogs release 4242 · FLAC 16/44.1, 2 files · Replaces MP3 320 kbps")
+    let sheet = ApproveSheet(plan: plan, album: "A - B")
+    #expect(
+        sheet.filesTable.tableColumns.map(\.title) == ["File", "Moves To", "Lossy-Origin Check"])
+    #expect(sheet.filesTable.numberOfRows == 2 && sheet.oldTable.numberOfRows == 3)
+}
+
+@MainActor
+@Test func aResumeListsTheFilesAlone() throws {
+    let sheet = ApproveSheet(plan: plan(resuming: true), album: "A - B")
+    #expect(sheet.filesTable.tableColumns.map(\.title) == ["File"])
+    #expect(sheet.approveButton.title == DownloadAction.resumeHere.title)
+    #expect(sheet.approveButton.isEnabled)
 }
 
 /// A temporary share with a staging folder of two tagged FLACs of the job 5, a library folder
