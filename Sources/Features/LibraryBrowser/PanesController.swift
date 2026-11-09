@@ -261,8 +261,8 @@ private final class GroupingChoice: NSObject {
     }
 }
 
-let addColumnTitle = "Add Column"
-let removeColumnTitle = "Remove Column"
+private let addColumnTitle = "Add Column"
+private let removeColumnTitle = "Remove Column"
 
 /// Each column's one column of the table, and its cells.
 private let entryIdentifier = NSUserInterfaceItemIdentifier("entry")
