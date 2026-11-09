@@ -714,7 +714,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         playCountField.alignment = .right
         playCountField.cell?.usesSingleLineMode = true
         playCountField.widthAnchor.constraint(equalToConstant: Self.shortWidth).isActive = true
-        playCountField.toolTip = "Kept in the library, not the files; Undo Tag Edit leaves it"
+        playCountField.toolTip = playCountToolTip
         showLabel(playCountLabel, TrackColumn.playCount.title, edited: false)
         rows.append([playCountLabel, playCountField])
         let grid = NSGridView(views: rows)

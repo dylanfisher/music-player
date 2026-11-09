@@ -349,12 +349,14 @@ private func isReleaseID(_ text: String) -> Bool {
     text.allSatisfy { $0.isASCII && $0.isNumber } && (Int(text) ?? 0) > 0
 }
 
-/// A play count typed that isn't one.
+/// A play count typed that isn't one, worded as `TagValueError` words a field's: its name,
+/// the text and why.
 struct PlayCountError: Error, Equatable, CustomStringConvertible {
     var text: String
 
     var description: String {
-        "\(TrackColumn.playCount.title) \"\(text)\" isn't a whole number from 0 to \(maximumPlayCount)"
+        "\(TrackColumn.playCount.rawValue) \"\(text)\" isn't a whole number from 0 to"
+            + " \(maximumPlayCount)"
     }
 }
 
