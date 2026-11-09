@@ -541,19 +541,19 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     {
         guard let id = tableColumn.flatMap({ TaggerColumn(rawValue: $0.identifier.rawValue) })
         else { return nil }
-        let isLeftOut = tableView !== albumTable && rows[row].fileID.map(leftOut.contains) == true
+        let leftOutRow = (tableView === fileTable || tableView === releaseTable) && isLeftOut(row)
         if id == .include {
             guard rows[row].fileID != nil else { return nil }
             let box = NSButton(checkboxWithTitle: "", target: self, action: #selector(included))
             box.tag = row
-            box.state = isLeftOut ? .off : .on
+            box.state = leftOutRow ? .off : .on
             box.isEnabled = model.canLeaveOut
-            box.toolTip = isLeftOut ? "Put this file back in the match" : "Leave this file out"
+            box.toolTip = leftOutRow ? "Put this file back in the match" : "Leave this file out"
             return box
         }
         let cell = NSTextField(labelWithString: text(tableView, id, row))
         cell.lineBreakMode = .byTruncatingTail
-        if isLeftOut {
+        if leftOutRow {
             cell.textColor = .tertiaryLabelColor
             if id == .state {
                 cell.toolTip = TaggerText.leftOutTip
@@ -621,10 +621,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         case .releaseTitle: return comparison.releaseTitle ?? ""
         case .releaseTime: return comparison.releaseSeconds.map { clock(Double($0)) } ?? ""
         case .include: return ""
-        default:
-            return comparison.fileID.map(leftOut.contains) == true
-                ? TaggerText.leftOut : comparison.stateText
+        default: return isLeftOut(row) ? TaggerText.leftOut : comparison.stateText
         }
+    }
+
+    /// Whether the tracklists' row `row` is a file left out.
+    private func isLeftOut(_ row: Int) -> Bool {
+        row < rows.count && rows[row].fileID.map(leftOut.contains) == true
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -649,7 +652,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         -> (any NSPasteboardWriting)?
     {
         guard tableView === fileTable, model.canRemap, let fileID = rows[row].fileID,
-            !leftOut.contains(fileID)
+            !isLeftOut(row)
         else {
             return nil
         }
@@ -662,7 +665,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         _ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int,
         proposedDropOperation dropOperation: NSTableView.DropOperation
     ) -> NSDragOperation {
-        guard tableView !== albumTable, model.canRemap, row < rows.count else { return [] }
+        guard tableView === fileTable || tableView === releaseTable, model.canRemap,
+            row < rows.count
+        else { return [] }
         tableView.setDropRow(row, dropOperation: .on)
         return .move
     }
@@ -681,8 +686,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Maps the dragged file to the track on `row`: a row of the release's gets its track, a
     /// file's own row past them maps it to none.
     func drop(_ fileID: Int64, onRow row: Int) -> Bool {
-        guard model.canRemap, row < rows.count, !leftOut.contains(fileID),
-            !(rows[row].fileID.map(leftOut.contains) ?? false)
+        guard model.canRemap, row < rows.count, !leftOut.contains(fileID), !isLeftOut(row)
         else { return false }
         model.assign(fileID, to: rows[row].track)
         return true
