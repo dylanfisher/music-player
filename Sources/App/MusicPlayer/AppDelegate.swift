@@ -900,7 +900,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Watched folders
 
-    private func startWatching(_ settings: ConfigStore<AppSettings>) {
+    func startWatching(_ settings: ConfigStore<AppSettings>) {
         watcher?.stop()
         watcher = nil
         guard let browser else { return }

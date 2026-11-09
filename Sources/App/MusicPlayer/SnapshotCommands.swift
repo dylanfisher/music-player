@@ -7,7 +7,7 @@ import SettingsWindow
 import Snapshot
 
 /// The library's daily snapshots, Back Up Now and Restore… (ADR 0142): each runs between the
-/// watcher's scans, so never during a scan or sync.
+/// watcher's scans, so never during a scan or sync. Restore… stops a running scan first.
 extension AppDelegate {
     /// How often the app asks for the day's snapshot after the launch's: once the day changes,
     /// the next ask writes it.
@@ -126,13 +126,15 @@ extension AppDelegate {
         }
     }
 
-    /// Restore…: asks over `window`, then prepares the restore between scans and relaunches.
+    /// Restore…: asks over `window`, then stops watching, and a running scan with it, prepares
+    /// the restore and relaunches.
     func confirmRestoring(_ snapshot: LibraryDatabase.Snapshot, over window: NSWindow) {
         let alert = NSAlert()
         alert.messageText = "Replace the library with the snapshot of \(snapshot.day)?"
         alert.informativeText =
             "Plays, ratings and playlists in it replace the current ones. The library as it is"
             + " now is snapshotted first, and the app quits and opens again to make the change."
+            + (browser?.isScanning == true ? " The scan running now stops first." : "")
         alert.addButton(withTitle: "Restore and Relaunch")
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { [weak self] response in
@@ -145,7 +147,7 @@ extension AppDelegate {
         guard let folder = snapshotFolder else { return }
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
         let source = URL(fileURLWithPath: snapshot.path, isDirectory: false)
-        betweenScans { [weak self] in
+        let job: @Sendable () -> Void = { [weak self] in
             let prepared = Result {
                 try prepareRestore(
                     of: source, databaseURL: databaseURL, snapshotFolder: folder, now: Date())
@@ -158,9 +160,17 @@ extension AppDelegate {
                             failing: "The app couldn't open again; open it to finish the restore")
                     case .failure(let error):
                         self?.fail(Self.restoreFailedTitle, error)
+                        // The app goes on, so it watches the folders again.
+                        if let self, let settings = self.settings { self.startWatching(settings) }
                     }
                 }
             }
+        }
+        // Not behind a running scan, which may have far to go on a share.
+        if let watcher {
+            watcher.stop(then: job)
+        } else {
+            betweenScans(job)
         }
     }
 }
