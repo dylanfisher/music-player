@@ -4,14 +4,15 @@ import Log
 private let logger = moduleLogger()
 
 /// App state in effect: the schema's defaults overridden by the values in a JSON file, which holds
-/// only values that differ from their defaults. A file that doesn't match the schema is logged and
-/// discarded whole, and the next save writes over it: it holds only where the user left things,
-/// and stored data has one shape before release. Safe to use from any thread.
+/// only values that differ from their defaults. A key the schema doesn't have, or whose value
+/// doesn't match, is logged and dropped, and the rest of the file is kept; a file that isn't a JSON
+/// object is dropped whole. The next save writes over what was dropped: stored data has one shape
+/// before release, but one stale key mustn't cost the whole layout. Safe to use from any thread.
 public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
     public let schema: Schema
     public let fileURL: URL
-    /// Why the file was discarded when it was read, for the window to show; nil when it decoded
-    /// or wasn't there.
+    /// What was dropped when the file was read, and why, for the window to show: the keys that
+    /// didn't match, or the whole file. Nil when it all decoded or wasn't there.
     public let discardReason: String?
     private let descriptors: [SettingDescriptor]
     private let byKey: [String: SettingDescriptor]
@@ -40,8 +41,12 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
             throw SettingsError.unreadable(path: fileURL.path, reason: "\(error)")
         }
         do {
-            overrides = try parse(data, path: fileURL.path, settings: byKey)
-            discardReason = nil
+            let parsed = try parse(data, path: fileURL.path, settings: byKey)
+            overrides = parsed.values
+            discardReason = parsed.dropped.map { "\($0)" }
+            if let dropped = parsed.dropped {
+                logger.error("dropped from the state file, not matching this build: \(dropped)")
+            }
         } catch {
             logger.error("discarded \(fileURL.path), which doesn't match this build: \(error)")
             overrides = [:]
@@ -84,10 +89,11 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
     }
 }
 
-/// Decodes and validates a settings file, collecting every bad key before throwing.
+/// Decodes and validates a settings file: the values that match, and every bad key at once as
+/// `SettingsError.invalid`. Throws only when the file isn't a JSON object.
 func parse(
     _ data: Data, path: String, settings byKey: [String: SettingDescriptor]
-) throws -> [String: any SettingValue] {
+) throws -> (values: [String: any SettingValue], dropped: SettingsError?) {
     let object: Any
     do {
         object = try JSONSerialization.jsonObject(with: data)
@@ -109,8 +115,7 @@ func parse(
         case .failure(let reason): problems.append(SettingProblem(key: key, reason: reason))
         }
     }
-    guard problems.isEmpty else { throw SettingsError.invalid(path: path, problems: problems) }
-    return values
+    return (values, problems.isEmpty ? nil : SettingsError.invalid(path: path, problems: problems))
 }
 
 /// A value as `JSONSerialization` holds it.

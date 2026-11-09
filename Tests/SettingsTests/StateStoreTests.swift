@@ -50,18 +50,20 @@ func keyed(_ schema: some SettingsSchema) -> [String: SettingDescriptor] {
     Dictionary(uniqueKeysWithValues: schema.settings.map { ($0.key, $0) })
 }
 
-/// The problems a file is rejected with.
+/// The problems a file's values are dropped for.
 private func problems(_ json: String) -> [SettingProblem] {
     do {
-        _ = try parse(Data(json.utf8), path: "test.json", settings: keyed(TestSchema()))
-    } catch SettingsError.invalid(_, let problems) {
+        let dropped = try parse(Data(json.utf8), path: "test.json", settings: keyed(TestSchema()))
+            .dropped
+        guard case .invalid(_, let problems)? = dropped else {
+            Issue.record("the file was accepted")
+            return []
+        }
         return problems
     } catch {
-        Issue.record("expected SettingsError.invalid, got \(error)")
+        Issue.record("expected the file to parse, got \(error)")
         return []
     }
-    Issue.record("the file was accepted")
-    return []
 }
 
 @Test func missingFileMeansDefaults() throws {
@@ -146,10 +148,10 @@ private func problems(_ json: String) -> [SettingProblem] {
 @Test func acceptsAnOptionalInsideItsRangeOrNull() throws {
     let limits = try parse(
         Data(#"{"limit": 4}"#.utf8), path: "test.json", settings: keyed(TestSchema()))
-    #expect(limits["limit"] as? Int == 4)
+    #expect(limits.values["limit"] as? Int == 4)
     let none = try parse(
         Data(#"{"limit": null}"#.utf8), path: "test.json", settings: keyed(TestSchema()))
-    #expect(none.keys.contains("limit"))
+    #expect(none.values.keys.contains("limit"))
 }
 
 @Test func namesTheBadFieldInsideAStructuredValue() throws {
@@ -178,11 +180,10 @@ private func problems(_ json: String) -> [SettingProblem] {
 }
 
 @Test func errorMessageNamesTheFileAndKey() throws {
-    #expect {
-        try parse(Data(#"{"count": 0}"#.utf8), path: "/x/state.json", settings: keyed(TestSchema()))
-    } throws: { error in
-        "\(error)" == "/x/state.json: \"count\": 0 is outside 1...10"
-    }
+    let dropped = try parse(
+        Data(#"{"count": 0}"#.utf8), path: "/x/state.json", settings: keyed(TestSchema())
+    ).dropped
+    #expect(dropped.map { "\($0)" } == "/x/state.json: \"count\": 0 is outside 1...10")
 }
 
 @Test func rejectsFilesThatArentAnObject() {
@@ -372,13 +373,13 @@ private func problems(_ json: String) -> [SettingProblem] {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(json.utf8).write(to: url)
-        do {
-            _ = try parse(Data(contentsOf: url), path: url.path, settings: keyed(AppState()))
-        } catch SettingsError.invalid(_, let problems) {
-            return problems.map { "\($0.key) \($0.reason)" }.joined()
+        let parsed = try parse(Data(contentsOf: url), path: url.path, settings: keyed(AppState()))
+        guard case .invalid(_, let problems)? = parsed.dropped else {
+            Issue.record("accepted \(json)")
+            return ""
         }
-        Issue.record("accepted \(json)")
-        return ""
+        #expect(parsed.values.isEmpty)
+        return problems.map { "\($0.key) \($0.reason)" }.joined()
     }
     #expect(
         try reason(
@@ -400,17 +401,24 @@ private func problems(_ json: String) -> [SettingProblem] {
             .contains("z: unknown key"))
 }
 
-@Test func aStateFileThatDoesntMatchIsDiscardedAndReported() throws {
+/// A key this build doesn't have, or a value that doesn't match, is dropped and reported, and the
+/// rest of the layout is kept: a removed key once reset the whole window layout.
+@Test func aStateFileKeepsWhatMatchesAndDropsAndReportsTheRest() throws {
     let url = temporaryFile()
     try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try Data(#"{"window.sidebarWidth": 250, "window.old": 1}"#.utf8).write(to: url)
-    #expect(throws: SettingsError.self) {
-        try parse(Data(contentsOf: url), path: url.path, settings: keyed(AppState()))
-    }
+    try Data(
+        #"{"window.sidebarWidth": 250, "window.old": 1, "window.queueWidth": "wide"}"#.utf8
+    ).write(to: url)
     let state = try StateStore(AppState(), fileURL: url)
-    #expect(state[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
+    #expect(state[\.sidebarWidth] == 250)
+    #expect(state[\.queueWidth] == AppState().queueWidth.defaultValue)
     #expect(state.discardReason?.contains("window.old") == true)
+    #expect(state.discardReason?.contains("window.queueWidth") == true)
+    try state.set(\.queueVisible, to: !AppState().queueVisible.defaultValue)
+    let saved = try StateStore(AppState(), fileURL: url)
+    #expect(saved.discardReason == nil)
+    #expect(saved[\.sidebarWidth] == 250)
     // Half-written, as a crash mid-write on a volume without atomic renames would leave it.
     try Data(#"{"window.sidebarWidth": 2"#.utf8).write(to: url)
     #expect(try StateStore(AppState(), fileURL: url).discardReason != nil)
@@ -427,11 +435,11 @@ private func problems(_ json: String) -> [SettingProblem] {
     ])
     try state.set(\.paletteVisits, to: log)
     #expect(try StateStore(AppState(), fileURL: url)[\.paletteVisits] == log)
-    #expect(throws: SettingsError.self) {
+    #expect(
         try parse(
             Data(#"{"palette.visits": [{"key": "a", "count": 1, "lastSeconds": 0, "x": 1}]}"#.utf8),
-            path: url.path, settings: keyed(AppState()))
-    }
+            path: url.path, settings: keyed(AppState())
+        ).dropped != nil)
     let unsorted = VisitLog(visits: log.visits.reversed())
     #expect(throws: SettingsError.self) { try state.set(\.paletteVisits, to: unsorted) }
 }
@@ -522,7 +530,7 @@ private func problems(_ json: String) -> [SettingProblem] {
         let discarded = try state(columns)
         #expect(discarded.discardReason?.contains(problem) == true, "\(columns)")
         #expect(discarded[\.browserColumns] == BrowserColumn.defaults)
-        #expect(discarded[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
+        #expect(discarded[\.sidebarWidth] == 250)
     }
 }
 
