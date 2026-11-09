@@ -22,6 +22,22 @@ extension AppDelegate {
             run: { [weak self] in
                 self?.browser?.openSelectedRelease { NSWorkspace.shared.open(discogsPage($0)) }
             })
+        dispatcher.handle(
+            .getDiscogsArtwork, enabled: hasSelectedTracks,
+            run: { [weak self] in
+                guard let self, let window = self.window?.window, let browser = self.browser
+                else { return }
+                let ids: [Int64]
+                do {
+                    ids = try browser.selectedTrackIDs()
+                } catch {
+                    return browser.reportCommand("couldn't get the artwork", error)
+                }
+                // The fetch shows where the save does, which then counts the write.
+                self.discogsTaggerController()?.getArtwork(forTracks: ids, over: window) {
+                    [weak browser] in browser?.showSaving($0)
+                }
+            })
     }
 
     /// The tagger, made on first use; nil, after saying why, when the library can't be read.

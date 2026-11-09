@@ -96,6 +96,8 @@ extension CommandID {
     public static let undoTagEdit = CommandID("track.undoTagEdit")
     public static let replaceArtwork = CommandID("tags.replaceArtwork")
     public static let removeArtwork = CommandID("tags.removeArtwork")
+    /// The selection's front covers from Discogs, for files tagged with a release id (ADR 0172).
+    public static let getDiscogsArtwork = CommandID("track.getDiscogsArtwork")
     public static let removeFromQueue = CommandID("queue.remove")
     public static let addToPlaylist = CommandID("playlist.addSelection")
     /// Like: the loved flag.
@@ -284,6 +286,7 @@ public enum AppCommands {
             Command(.undoTagEdit, "Undo Tag Edit", [.init("z", [opt, cmd])]),
             Command(.replaceArtwork, "Replace Artwork…"),
             Command(.removeArtwork, "Remove Artwork"),
+            Command(.getDiscogsArtwork, "Get Discogs Artwork…"),
             Command(.removeFromQueue, "Remove from Queue or Playlist", [.init(.delete, cmd)]),
             Command(.addToPlaylist, "Add to Playlist…"),
             Command(.showInPlaylist, "Show in Playlist…"),
