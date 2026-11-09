@@ -217,3 +217,59 @@ phase 62; no bench row covers the matcher. Cost: implementer (Opus) 255k tokens,
 
 **Owner check:** the Match column and the Safe tab on the real library, with Apply to All in
 Safe; choose another release in API mode and see no search in the log.
+
+### 63. A Library pane in Settings
+
+Asked by the owner on 2026-11-09; the owner chose one merged pane.
+
+- [x] **Library pane:** a new toolbar pane, Library, holds the watched folders list, Folder
+      Changes, Network Folders, Library Folder, the `library.*` settings (health, database)
+      and Snapshots, with the Snapshot Folder row. The Watched Folders pane goes; General keeps
+      the rest. ADR 0042's pane list amended.
+- [x] **Snapshots gap:** opening then closing the Snapshots disclosure leaves no empty space at
+      the top. The pane's scroll origin returns to the top when `fit()` shrinks the window, and
+      a test opens and closes it and checks the document's top is at the clip's top.
+
+Implementation plan, phase 63 (ADR 0168):
+
+What exists, found by search (map.md recipes): the panes are `SettingsWindowController.Pane`,
+each naming the `GeneralModel.Section`s it shows, and General shows the rest. The Watched
+Folders pane is `FoldersPane`, the folders table over a `GeneralPane` of its sections. The
+Library section's extra rows (Show Library Health, Database, Last Snapshot, the Snapshots
+disclosure) are added by any `GeneralPane` that shows `.library`; Snapshot Folder is a
+`library.` row of that section. `PaneScroller.fit()` sizes the window to the pane.
+
+- 63.1 Gap (fix): reproduced in a test before any change. `fit()` runs from the pane's
+  frame-change notice, which the window's layout pass posts; resizing the window inside that
+  pass leaves the scroll view at its old height plus the change again, so after a close it's
+  shorter than the window and the strip above it is empty. `fit()` runs after the pass
+  instead. The test opens and closes Snapshots and checks the pane's top is at the window's
+  content top.
+- 63.2 Rename (refactor): `FoldersPane` becomes `LibraryPane`, the file with it.
+- 63.3 The pane (feat): `Pane.folders` becomes `.library`, titled Library, symbol
+  `books.vertical`, in the same toolbar place, with the sections Folder Changes, Network
+  Folders, Library Folder, Browsing and Database, in that order (`Section` cases reordered to
+  match; the owner split the Library box in two, ADR 0168).
+  The palette's watched folders and Watched Folders… open it. `--snapshot-of folders` becomes
+  `library` (`SnapshotTarget`, `AppDelegate`, README, main.swift's comment).
+- 63.4 Docs: ADR 0168, the amended-by lines of 0042 and 0017, README's two pane names.
+
+Tests: the gap test above; the Library pane holds the watched folders table, every section
+above with the health, database and snapshot rows and Snapshot Folder, and General none of
+them; the palette opens Library for a folder, network or `library.` setting; the command line
+test's list of targets.
+
+Result, phase 63: shipped both items (ADR 0168; 0042 and 0017 amended). The Library pane
+replaces Watched Folders: the folders list, Folder Changes, Network Folders, Library Folder,
+then two boxes the owner asked for at the gate, Browsing (Group by Album Artist, Separate
+Releases, File Viewer, Show Library Health) and Database (the database row, Snapshot Folder,
+Last Snapshot, the Snapshots list). `--snapshot-of folders` is now `--snapshot-of library`. The
+gap wasn't the scroll position: `PaneScroller.fit()` resized the window from inside the layout
+pass, which then sized the scroll view again from its old height, 235 pt off; `fit()` now runs
+on the next main-queue turn. The gate found no bug. `./scripts/check links format typecheck arch
+dupes surface test` passed, and format, typecheck and test again after the rebase onto phases
+62 and 65; no bench row covers it. Cost: implementer (Opus) 167k tokens, 95 tool calls, 27 min;
+gate (Sonnet) 118k tokens, 32 tool calls, 8 min.
+
+**Owner check:** open and close Snapshots several times, with the window near the screen's
+height too; every setting in the Library pane, and the palette's folder settings opening it.
