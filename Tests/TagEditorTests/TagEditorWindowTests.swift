@@ -107,3 +107,28 @@ private func track(_ path: String, title: String? = nil, release: String? = nil)
     #expect(second.window.frame.minX > first.window.frame.minX)
     #expect(second.window.frame.maxY < first.window.frame.maxY)
 }
+
+/// The File tab stays at the left of its tab whichever tab was shown before it: its grid takes
+/// the tab's width inside the inset, and the labels' column only its labels' width.
+@MainActor @Test func theFileTabStaysLeftWhenTabsAreSwitched() throws {
+    for before in TagEditorTab.allCases where before != .file {
+        let editor = TagEditorWindow(paths: ["/music/a.flac"])
+        editor.show(after: nil)
+        defer { editor.close() }
+        editor.load(TagEditorModel(tracks: [track("/music/a.flac", title: "A")]))
+        editor.tabs.selectTabViewItem(withIdentifier: before.rawValue)
+        editor.window.displayIfNeeded()
+        editor.tabs.selectTabViewItem(withIdentifier: TagEditorTab.file.rawValue)
+        editor.window.displayIfNeeded()
+        let grid = try #require(editor.playCountField.superview as? NSGridView)
+        let tab = try #require(grid.superview)
+        #expect(grid.frame.minX == 16, "\(before)")
+        #expect(grid.frame.width == tab.bounds.width - 32, "\(before)")
+        let labels = (0..<grid.numberOfRows).compactMap {
+            grid.cell(atColumnIndex: 0, rowIndex: $0).contentView
+        }
+        let widest = labels.map(\.fittingSize.width).max() ?? 0
+        #expect(labels.allSatisfy { $0.frame.maxX <= widest + 4 }, "\(before)")
+        editor.tabs.selectTabViewItem(withIdentifier: TagEditorTab.info.rawValue)
+    }
+}

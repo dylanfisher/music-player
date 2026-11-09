@@ -384,7 +384,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             case .discogs: discogsView()
             default: grid(tab.rows)
             }
-        let container = NSView()
+        // At the tab view's size from the start, so the content pinned to it is never laid out
+        // in a view of no width.
+        let container = NSView(frame: tabs.contentRect)
         content.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(content)
         let inset = 16.0
@@ -805,6 +807,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             value.isSelectable = true
             value.lineBreakMode = .byTruncatingMiddle
             value.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            // The values take the width the tab has past the labels; with no column that does,
+            // the grid gave it to the labels' column, which put the labels at the right.
+            value.setContentHuggingPriority(.init(1), for: .horizontal)
             fileValues[row] = value
             return [title, value]
         }
@@ -818,6 +823,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         let grid = NSGridView(views: rows)
         grid.rowSpacing = 6
         grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 0).width = rows.map { $0[0].fittingSize.width }.max() ?? 0
         return grid
     }
 
