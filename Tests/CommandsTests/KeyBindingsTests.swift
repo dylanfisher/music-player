@@ -210,7 +210,7 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
             "Column Lines", "Row Lines", "Album Lines", "Alternating Rows", "Compact Row Height",
             "Regular Row Height", "Large Row Height", "Scaled to Fit Album Art",
             "Full Width Album Art", "Window Glass", "Minimal Status Bar", "Tall Status Bar",
-            "Count Download Status", "Label Download Status", "Progress Bar Download Status",
+            "Count Download Status", "Text Download Status", "Progress Bar Download Status",
         ])
     // Numbers, lists and folders aren't commands.
     #expect(!generated.contains { $0.key == "library.watchedFolders" })

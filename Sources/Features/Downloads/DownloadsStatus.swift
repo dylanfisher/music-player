@@ -38,14 +38,13 @@ struct DownloadsStatus: Equatable, Sendable {
     func text(_ style: DownloadsStatusStyle) -> String {
         switch style {
         case .count, .progress: number(albums)
-        case .label: "Downloading \(count(albums, "album")), \(percent)"
+        case .text: "Downloading \(count(albums, "album")), \(percent)"
         }
     }
 
     /// The albums and what each is doing, then what a click and a right-click do.
     var tooltip: String {
-        (lines + ["", Self.help]).joined(separator: "\n")
+        (lines + ["", "Click to open Downloads. Right-click to choose how this shows."])
+            .joined(separator: "\n")
     }
-
-    static let help = "Click to open Downloads. Right-click to choose how this shows."
 }

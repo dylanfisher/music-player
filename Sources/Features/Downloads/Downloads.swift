@@ -466,7 +466,7 @@ package final class Downloads {
                 .appendingPathComponent(folder, isDirectory: true)
             let found = await blockingFileWork { () -> String? in
                 guard FileManager.default.fileExists(atPath: url.path) else {
-                    return "\(url.path) isn't there"
+                    return "\(url.path) is missing"
                 }
                 let real = url.resolvingSymlinksInPath().path
                 let realRoot = URL(fileURLWithPath: root, isDirectory: true)

@@ -31,14 +31,14 @@ private func downloading(_ id: Int, bytes: Int, created: Int) -> DownloadJob {
     #expect(status.fraction == 0.5)
     #expect(status.text(.count) == "3")
     #expect(status.text(.progress) == "3")
-    #expect(status.text(.label) == "Downloading 3 albums, 50%")
+    #expect(status.text(.text) == "Downloading 3 albums, 50%")
     #expect(
         status.tooltip
             == [
                 "Made-Up Artist - Made-Up Album (1999): Copying to staging…",
                 "Made-Up Artist - Made-Up Album (1999): Searching…",
                 "Made-Up Artist - Made-Up Album (1999): Downloading, 1 of 4 files",
-                "", DownloadsStatus.help,
+                "", "Click to open Downloads. Right-click to choose how this shows.",
             ].joined(separator: "\n"))
 }
 
@@ -52,10 +52,10 @@ private func downloading(_ id: Int, bytes: Int, created: Int) -> DownloadJob {
     #expect(item.bar.doubleValue == 0.25 && item.label.stringValue == "1")
     item.show(status, style: .count)
     #expect(item.bar.isHidden && !item.image.isHidden && item.label.stringValue == "1")
-    item.show(status, style: .label)
+    item.show(status, style: .text)
     #expect(item.bar.isHidden && !item.image.isHidden)
     #expect(item.label.stringValue == "Downloading 1 album, 25%")
-    item.show(nil, style: .label)
+    item.show(nil, style: .text)
     #expect(item.isHidden)
 }
 
@@ -115,7 +115,7 @@ private func downloading(_ id: Int, bytes: Int, created: Int) -> DownloadJob {
     let (downloads, session) = try await started(service.service) {
         throw CancellationError()
     }
-    downloads.statusStyle = .label
+    downloads.statusStyle = .text
     downloads.setStatusBarShown(true)
     #expect(session.model.isStatusShown)
     await eventually("the item") { !downloads.statusItem.isHidden }
