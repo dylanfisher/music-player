@@ -165,25 +165,41 @@ private func rows() -> [DownloadRow] {
     var selection: [Int64] = []
     downloads.selectedTracks = { selection }
     downloads.show(offeringSelection: true)
-    #expect(!downloads.offersSelection, "nothing selected")
+    #expect(downloads.offeredTracks == nil, "nothing selected")
     downloads.window?.close()
 
     selection = [7]
     downloads.show()
-    #expect(!downloads.offersSelection, "only File > Downloads… offers it")
+    #expect(downloads.offeredTracks == nil, "only File > Downloads… offers it")
     downloads.window?.close()
 
     // No catalog on this Mac: it can't queue, so the offer waits, until the window closes.
     downloads.show(offeringSelection: true)
-    #expect(downloads.offersSelection)
+    #expect(downloads.offeredTracks == [7])
+    // The selection changes; the offer keeps the tracks selected when the window opened, and a
+    // click on the status item, which offers nothing, leaves it waiting.
+    selection = [9]
+    downloads.statusItem.clicked()
+    #expect(downloads.offeredTracks == [7])
     downloads.window?.close()
-    #expect(!downloads.offersSelection)
+    #expect(downloads.offeredTracks == nil)
+
+    // Another sheet on the window drops the offer, so it never comes up after it.
+    downloads.show(offeringSelection: true)
+    let window = try #require(downloads.window)
+    let other = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 100, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.beginSheet(other) { _ in }
+    #expect(downloads.offeredTracks == nil)
+    window.endSheet(other)
+    window.close()
 
     session.canTag = true
     await session.model.poll()
     #expect(session.model.connection == .answering)
     downloads.show(offeringSelection: true)
-    #expect(!downloads.offersSelection, "taken at once")
+    #expect(downloads.offeredTracks == nil, "taken at once")
     // The selection's track is in no album of the library, so nothing is shown for it.
     try await Task.sleep(nanoseconds: 50_000_000)
     #expect(downloads.window?.attachedSheet == nil)

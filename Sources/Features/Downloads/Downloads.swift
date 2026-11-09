@@ -264,15 +264,16 @@ package final class Downloads {
     // MARK: - The window
 
     /// Shows the window, making it the first time, where it was left (ADR 0158). With
-    /// `offeringSelection`, File > Downloads…, library tracks selected open From Library
-    /// Selection for them once the window can queue.
+    /// `offeringSelection`, File > Downloads…, the library tracks selected now open From
+    /// Library Selection for them once the window can queue. Without it, an offer waiting
+    /// stays.
     package func show(offeringSelection: Bool = false) {
         let controller = self.controller ?? makeWindow()
         if self.controller == nil {
             self.controller = controller
             controller.window?.keepsFrame(as: DownloadsWindow.title)
         }
-        offersSelection = offeringSelection && hasSelection()
+        if offeringSelection { offeredTracks = currentSelection() }
         refresh(opening: true)
         controller.showWindow(nil)
         session?.model.setWindowOpen(true)
@@ -303,26 +304,34 @@ package final class Downloads {
         openPage(page)
     }
 
-    /// Whether File > Downloads… found tracks selected, whose From Library Selection opens
-    /// once the window can queue: after the catalog check and the first answer.
-    private(set) var offersSelection = false
+    /// The tracks selected when File > Downloads… opened the window, whose From Library
+    /// Selection opens once the window can queue: after the catalog check and the first
+    /// answer. Any other sheet on the window drops it, as does closing the window.
+    private(set) var offeredTracks: [Int64]?
+    /// How many sheets the window has begun, so an offer that finds one begun since gives way.
+    private var sheetsBegun = 0
+    private var sheetObserver: (any NSObjectProtocol)?
 
-    private func hasSelection() -> Bool {
+    /// The tracks selected in the library; nil for none, or a selection that can't be read.
+    private func currentSelection() -> [Int64]? {
         do {
-            return !(try selectedTracks()).isEmpty
+            let tracks = try selectedTracks()
+            return tracks.isEmpty ? nil : tracks
         } catch {
             logger.notice("the library's selection couldn't be read: \(error)")
-            return false
+            return nil
         }
     }
 
-    /// Opens From Library Selection when it was offered and the window can queue now.
+    /// Opens From Library Selection for the tracks offered, once the window can queue and has
+    /// no sheet up.
     private func offerSelection() {
-        guard offersSelection, let session, session.canTag, sheet == nil,
-            session.model.connection == .answering, controller?.window?.isVisible == true
+        guard let tracks = offeredTracks, let session, session.canTag, sheet == nil,
+            session.model.connection == .answering, let window = controller?.window,
+            window.isVisible, window.attachedSheet == nil
         else { return }
-        offersSelection = false
-        add(.fromSelection, asked: false)
+        offeredTracks = nil
+        queueFromSelection(tracks, asked: false)
     }
 
     func makeWindow() -> DownloadsWindow {
@@ -334,9 +343,18 @@ package final class Downloads {
         made.visibilityChanged = { [weak self] open in
             if !open {
                 self?.cancelReview()
-                self?.offersSelection = false
+                self?.offeredTracks = nil
             }
             self?.session?.model.setWindowOpen(open)
+        }
+        if let sheetObserver { NotificationCenter.default.removeObserver(sheetObserver) }
+        sheetObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willBeginSheetNotification, object: made.window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.sheetsBegun += 1
+                self?.offeredTracks = nil
+            }
         }
         controller = made
         return made
@@ -584,9 +602,8 @@ package final class Downloads {
 
     // MARK: - Adding
 
-    /// Queues by `addition`. `asked` is false for the From Library Selection that opening the
-    /// window offers, which shows nothing unless the selection has an album to queue.
-    private func add(_ addition: DownloadAddition, asked: Bool = true) {
+    /// Queues by `addition`.
+    private func add(_ addition: DownloadAddition) {
         guard let session, session.canTag else { return }
         let setup = session.setup
         switch addition {
@@ -623,28 +640,41 @@ package final class Downloads {
                 return alert("The selection couldn't be read", ["\(error)"])
             }
             guard !selected.isEmpty else {
-                guard asked else { return }
                 return alert(
                     "No tracks are selected", ["Select an album's tracks in the library first."])
             }
-            Task {
-                let found = await blockingFileWork {
-                    Result { try LibraryIndex(at: setup.databaseURL).discogsAlbums() }
-                }
-                let albums: [DiscogsAlbum]
-                do {
-                    albums = try found.get()
-                } catch {
-                    return alert("The library couldn't be read", ["\(error)"])
-                }
-                let choices = QueueChoice.selection(selected, albums: albums)
-                guard asked || choices.contains(where: { $0.refusal == nil }) else { return }
-                chooseAndQueue(
-                    heading: "From Library Selection",
-                    note: "The albums of the selected tracks, each downloaded as its release.",
-                    choices, upgrade: false, tickingAll: true)
-            }
+            queueFromSelection(selected, asked: true)
         case .pasteRelease: askForRelease()
+        }
+    }
+
+    /// From Library Selection for `tracks`. `asked` is false for the one opening the window
+    /// offers, which shows nothing unless the tracks hold an album to queue, and gives way to
+    /// any sheet begun while the albums are read.
+    private func queueFromSelection(_ tracks: [Int64], asked: Bool) {
+        guard let session else { return }
+        let database = session.setup.databaseURL
+        let begun = sheetsBegun
+        Task {
+            let found = await blockingFileWork {
+                Result { try LibraryIndex(at: database).discogsAlbums() }
+            }
+            let albums: [DiscogsAlbum]
+            do {
+                albums = try found.get()
+            } catch {
+                return alert("The library couldn't be read", ["\(error)"])
+            }
+            let choices = QueueChoice.selection(tracks, albums: albums)
+            if !asked {
+                guard choices.contains(where: { $0.refusal == nil }), sheetsBegun == begun,
+                    controller?.window?.attachedSheet == nil
+                else { return }
+            }
+            chooseAndQueue(
+                heading: "From Library Selection",
+                note: "The albums of the selected tracks, each downloaded as its release.",
+                choices, upgrade: false, tickingAll: true)
         }
     }
 
