@@ -259,6 +259,23 @@ func aJobIsMovingWhileTheServiceOrAPlayerWorksOnIt(
     #expect(DownloadsModel.interval(windowOpen: false, jobs: [one]) == 60)
 }
 
+@Test(arguments: [
+    (JobState.queued, true), (.searching, true), (.candidateFound, true), (.downloading, true),
+    (.downloaded, true), (.notFound, false), (.staged, false), (.approved, false),
+    (.importing, false), (.failed, false), (.imported, false),
+])
+func theStatusBarPollsEvery5SecondsWhileAJobIsOnItsWay(state: JobState, onItsWay: Bool) {
+    let one = job(1, state)
+    #expect(DownloadsModel.isOnItsWay(one) == onItsWay)
+    #expect(
+        DownloadsModel.interval(windowOpen: false, statusShown: true, jobs: [one])
+            == (onItsWay ? 5 : 60))
+    #expect(DownloadsModel.interval(windowOpen: false, statusShown: false, jobs: [one]) == 60)
+    if onItsWay {
+        #expect(DownloadsModel.interval(windowOpen: true, statusShown: true, jobs: [one]) == 2)
+    }
+}
+
 @MainActor
 private func model(_ service: FakeService) -> DownloadsModel {
     let clock = service.clock
@@ -296,6 +313,23 @@ private func model(_ service: FakeService) -> DownloadsModel {
     #expect(service.listed.count == 4)
     downloads.stop()
     await eventually("no wait after stopping") { clock.waiting.isEmpty }
+}
+
+@MainActor @Test func theStatusBarComingIntoViewPollsAtOnceThenEvery5Seconds() async {
+    let service = FakeService([job(1, .downloading)])
+    let clock = service.clock
+    let downloads = model(service)
+    downloads.start()
+    await eventually("the first poll and its wait") { clock.waiting == [60] }
+    downloads.setStatusShown(true)
+    await eventually("a poll on showing, then a 5 s wait") { clock.waiting == [5] }
+    #expect(service.listed.count == 2)
+
+    // Out of view, the wait running ends and the next is a minute.
+    downloads.setStatusShown(false)
+    clock.advance(by: 5)
+    await eventually("a minute's wait") { service.listed.count == 3 && clock.waiting == [60] }
+    downloads.stop()
 }
 
 @MainActor @Test func eachPollAsksFromTheLastEpochAndRevision() async {

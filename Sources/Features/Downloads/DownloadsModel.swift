@@ -3,8 +3,9 @@ import Recommender
 
 /// The Downloads window's state, with no AppKit: the service's jobs as rows, and the polling
 /// that keeps them current. It polls every 2 s while the window is open and a job is moving,
-/// and every 60 s otherwise, from launch to quit, so a job queued on another Mac appears. The
-/// requests run off the main actor; only the rows are kept here.
+/// every 5 s while the status bar shows a job on its way, and every 60 s otherwise, from
+/// launch to quit, so a job queued on another Mac appears. The requests run off the main
+/// actor; only the rows are kept here.
 @MainActor
 final class DownloadsModel {
     /// Waits about this many seconds. Throws when cancelled.
@@ -12,6 +13,9 @@ final class DownloadsModel {
 
     /// The poll's interval while the window is open and a job is moving.
     nonisolated static let activeInterval: TimeInterval = 2
+    /// The poll's interval while the status bar shows a job on its way: the service rewrites
+    /// a download's progress about this often.
+    nonisolated static let statusInterval: TimeInterval = 5
     /// The poll's interval otherwise.
     nonisolated static let idleInterval: TimeInterval = 60
 
@@ -35,6 +39,7 @@ final class DownloadsModel {
     private(set) var rows: [DownloadRow] = []
     private(set) var connection = Connection.waiting
     private(set) var isWindowOpen = false
+    private(set) var isStatusShown = false
     private var lastGood: Date?
     /// The speeds of the jobs moving bytes, fed only while the window is open, the one place
     /// that shows them.
@@ -73,11 +78,25 @@ final class DownloadsModel {
         }
     }
 
-    /// How long to wait before the next poll.
-    nonisolated static func interval(windowOpen: Bool, jobs: some Sequence<DownloadJob>)
-        -> TimeInterval
-    {
-        windowOpen && jobs.contains(where: isMoving) ? activeInterval : idleInterval
+    /// Whether the service is still bringing `job` to the staging folder: the jobs the status
+    /// bar counts.
+    nonisolated static func isOnItsWay(_ job: DownloadJob) -> Bool {
+        switch job.state {
+        case .queued, .searching, .candidateFound, .downloading, .downloaded: true
+        case .notFound, .staged, .approved, .importing, .imported, .rejected, .failed,
+            .cancelled:
+            false
+        }
+    }
+
+    /// How long to wait before the next poll; `statusShown` is whether the status bar, where
+    /// a job on its way shows, is in view.
+    nonisolated static func interval(
+        windowOpen: Bool, statusShown: Bool = false, jobs: some Sequence<DownloadJob>
+    ) -> TimeInterval {
+        if windowOpen && jobs.contains(where: isMoving) { return activeInterval }
+        if statusShown && jobs.contains(where: isOnItsWay) { return statusInterval }
+        return idleInterval
     }
 
     /// Starts polling, with a poll now.
@@ -103,6 +122,15 @@ final class DownloadsModel {
         restart(pollingFirst: open)
     }
 
+    /// The status bar coming into view polls at once and then at its pace, so what it shows is
+    /// current; going out of view goes back to the idle pace after the wait running.
+    func setStatusShown(_ shown: Bool) {
+        guard shown != isStatusShown else { return }
+        isStatusShown = shown
+        guard shown, polling != nil, !isWindowOpen else { return }
+        restart(pollingFirst: true)
+    }
+
     private func restart(pollingFirst: Bool) {
         polling?.cancel()
         polling = Task { [weak self] in
@@ -111,7 +139,9 @@ final class DownloadsModel {
                 guard let self else { return }
                 if pollNow { await self.poll() }
                 pollNow = true
-                let wait = Self.interval(windowOpen: self.isWindowOpen, jobs: self.jobs.rows.values)
+                let wait = Self.interval(
+                    windowOpen: self.isWindowOpen, statusShown: self.isStatusShown,
+                    jobs: self.jobs.rows.values)
                 let sleep = self.sleep
                 do {
                     try await sleep(wait)
