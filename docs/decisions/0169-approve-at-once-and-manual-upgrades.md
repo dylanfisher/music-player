@@ -30,8 +30,9 @@ another sheet on it, Approve asks the service for nothing.
 
 **Finding the album to replace.** For a job with no `upgrade`, the plan looks for the library
 album of the job's release: the one album whose every track carries the release id, else the
-one whose album artist and title fold, by the key the matcher compares titles by
-(`CatalogKey.matchKey`), to the release's artist and title. Two or more matches choose none,
+one whose album artist and title fold, by the key the matcher compares by
+(`CatalogKey.matchKey`), to the release's artist and title. The title keeps its edition words:
+"Album (Deluxe Edition)" is not "Album", because a match sends the old files to the Trash. Two or more matches choose none,
 and the sheet says so; so does an album with a file off the staging folder's share, whose
 files can't be named relative to it. The one album found is planned as an upgrade, as ADR 0156
 did for an album found by its paths, which this replaces: that album is found this way too.

@@ -33,7 +33,7 @@ private func album(
     #expect(
         libraryAlbum(
             replacedBy: 42, artist: "Daft Punk (2)",
-            title: "Random Access Memories (Remastered)", among: [mixed, other])
+            title: "random access memories", among: [mixed, other])
             == .album(mixed, byName: true))
     #expect(
         libraryAlbum(replacedBy: 42, artist: "Daft Punk", title: "Homework", among: [other])
@@ -56,4 +56,21 @@ private func album(
     #expect(
         libraryAlbum(replacedBy: 42, artist: "A", title: "B", among: [three, four])
             == .several(count: 2, byName: true))
+}
+
+@Test func anEditionOfTheAlbumIsNotTheAlbum() {
+    let deluxe = album(1, "Daft Punk", "Random Access Memories (Deluxe Edition)")
+    let plain = album(2, "Daft Punk", "Random Access Memories")
+    #expect(
+        libraryAlbum(
+            replacedBy: 42, artist: "Daft Punk", title: "Random Access Memories",
+            among: [deluxe]) == .none)
+    #expect(
+        libraryAlbum(
+            replacedBy: 42, artist: "Daft Punk", title: "Random Access Memories (Deluxe Edition)",
+            among: [plain]) == .none)
+    #expect(
+        libraryAlbum(
+            replacedBy: 42, artist: "Daft Punk", title: "Random Access Memories",
+            among: [deluxe, plain]) == .album(plain, byName: true))
 }
