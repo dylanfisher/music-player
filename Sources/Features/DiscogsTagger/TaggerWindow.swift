@@ -71,10 +71,14 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// The row of buttons under the tracklists, and the one under the album list and them.
     let reviewButtons = NSStackView()
     let applyButton = NSButton(title: "", target: nil, action: nil)
+    /// Get Artwork for the albums listed with a release id: their front covers from Discogs.
+    let artworkButton = NSButton(title: "", target: nil, action: nil)
     let bottom = NSStackView()
 
     /// Writes the confirmed edits.
     var write: TaggerModel.Write = { _, _, _ in }
+    /// Get Artwork over the albums given, which asks first (ADR 0172).
+    var getArtwork: ([ArtworkGroup]) -> Void = { _ in }
     var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
     var choicesChosen: (TaggerChoices) -> Void = { _ in }
     var dumpsFolder: () -> URL? = { nil }
@@ -150,6 +154,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             (changesButton, #selector(showChanges)), (rejectButton, #selector(toggleRejected)),
             (discogsButton, #selector(openReleasePage)),
             (applyButton, #selector(applyAll)),
+            (artworkButton, #selector(getArtworkClicked)),
         ] {
             button.bezelStyle = .rounded
             button.target = self
@@ -257,6 +262,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
         detail.widthAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
 
+        bottom.setViews([artworkButton], in: .leading)
         bottom.setViews([applyButton], in: .trailing)
         let page = NSStackView(views: [bar, choices, catalogBox, resumeBox, tabs, split, bottom])
         page.orientation = .vertical
@@ -456,6 +462,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         applyButton.isHidden = !canApply
         applyButton.title = "Apply to All in \(model.tab.title)…"
         applyButton.isEnabled = canApply && !model.isBusy && !model.applicable(model.tab).isEmpty
+        let artwork = model.artworkGroups.count
+        artworkButton.title = "Get Artwork for \(DisplayText.count(artwork, "Album"))…"
+        // A staged job is written through its own journal, which covers aren't (ADR 0146).
+        artworkButton.isHidden = model.isStaged
+        artworkButton.isEnabled = !model.isBusy && artwork > 0
 
         shownAlbums = model.albums(in: model.tab)
         albumTable.reloadData()
@@ -892,6 +903,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         guard let album = model.selected else { return }
         Task { await model.setRejected(!album.isRejected, album.id) }
     }
+
+    @objc private func getArtworkClicked() { getArtwork(model.artworkGroups) }
 
     @objc private func applyAll() {
         apply(model.applicable(model.tab).map(\.id))

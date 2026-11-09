@@ -132,6 +132,11 @@ final class TaggerModel {
         var cover: @Sendable (Int) async -> Result<Cover, CoverProblem> = { _ in
             .failure(.needsToken)
         }
+        /// The library's paths of the files by id, for Get Artwork.
+        var paths: @Sendable ([Int64]) async throws -> [Int64: String] = { _ in [:] }
+        /// The pixels of the art the file at a path shows, nil for none, read off the main
+        /// thread, for Get Artwork's Fill Missing.
+        var pixels: @Sendable (String) async throws -> Int? = { _ in nil }
         /// Look Up Release's search for the album given, the catalog first, then Discogs.
         var lookUp: @Sendable (ReleaseQuery, DiscogsAlbum) async throws -> ReleaseLookup = {
             _, _ in throw LookUpUnavailable()
@@ -143,7 +148,7 @@ final class TaggerModel {
         var description: String { "this tagger can't look releases up" }
     }
 
-    private let effects: Effects
+    let effects: Effects
     /// The staged job the tagger is open on; nil for the library's tagger.
     let staged: Staged?
     private(set) var catalog = CatalogState.checking
@@ -151,7 +156,7 @@ final class TaggerModel {
     private(set) var unfinished: UnfinishedImport?
     private(set) var activity = Activity.idle
     /// What the last Analyze, import or Apply ended with, for the line under the toolbar.
-    private(set) var status = ""
+    var status = ""
     /// Where Analyze looks releases up. Until the first catalog check, the saved one, or the
     /// catalog; then, when none was saved, the catalog when there is one, else the API.
     private(set) var source: DiscogsSource

@@ -145,6 +145,8 @@ func model(
         .failure(.needsToken)
     },
     importing: @escaping DiscogsTagger.Import = { _, _, _ in throw CatalogImportError.stopped },
+    paths: @escaping @Sendable ([Int64]) async throws -> [Int64: String] = { _ in [:] },
+    pixels: @escaping @Sendable (String) async throws -> Int? = { _ in nil },
     lookUp: @escaping @Sendable (ReleaseQuery, DiscogsAlbum) async throws -> ReleaseLookup = {
         _, _ in throw TaggerModel.LookUpUnavailable()
     }
@@ -198,7 +200,7 @@ func model(
                 return (files(ids), [])
             },
             checkCatalog: { catalog }, unfinishedImport: { unfinished },
-            importCatalog: importing, cover: cover, lookUp: lookUp),
+            importCatalog: importing, cover: cover, paths: paths, pixels: pixels, lookUp: lookUp),
 
         mapping: mapping, savedMappings: [], choices: choices, source: source)
     await made.checkCatalog()

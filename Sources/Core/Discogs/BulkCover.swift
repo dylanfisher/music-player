@@ -34,16 +34,20 @@ public struct CoverPlan: Sendable {
 }
 
 /// Works out Get Artwork's edits for `albums`: each release's cover through `cover`, once a
-/// release, and for Fill Missing each file's art as `pixels` reads it, which runs on the
-/// caller's thread. The cover replaces only the front cover, so a file's other pictures stay.
-public func coverPlan(
+/// release, and for Fill Missing each file's art as `pixels` reads it. `progress` hears how
+/// many albums are done. The cover replaces only the front cover, so a file's other pictures
+/// stay. Stops, with what it has, once the task is cancelled.
+nonisolated(nonsending) public func coverPlan(
     _ albums: [CoverAlbum], fill: CoverFill,
     cover: (Int) async -> Result<Cover, CoverProblem>,
-    pixels: (String) throws -> Int?
+    pixels: (String) async throws -> Int?,
+    progress: (Int) -> Void = { _ in }
 ) async -> CoverPlan {
     var plan = CoverPlan()
     var covers: [Int: Result<Cover, CoverProblem>] = [:]
-    for album in albums {
+    for (done, album) in albums.enumerated() {
+        progress(done)
+        guard !Task.isCancelled else { break }
         let result: Result<Cover, CoverProblem>
         if let known = covers[album.releaseID] {
             result = known
@@ -62,7 +66,7 @@ public func coverPlan(
         for path in album.paths {
             if fill == .fillMissing {
                 do {
-                    if let held = try pixels(path), held >= image.width * image.height {
+                    if let held = try await pixels(path), held >= image.width * image.height {
                         continue
                     }
                 } catch {
@@ -76,6 +80,7 @@ public func coverPlan(
         }
         if covered { plan.albums += 1 }
     }
+    progress(albums.count)
     return plan
 }
 

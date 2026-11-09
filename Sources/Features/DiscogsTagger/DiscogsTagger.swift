@@ -52,6 +52,16 @@ public final class DiscogsTagger {
     /// first shown, and what saves them as a sheet closes.
     public var sheetLayouts = TaggerSheetLayouts()
     public var sheetLayoutsChosen: (TaggerSheetLayouts) -> Void = { _ in }
+    /// Asks Get Artwork's question over the window, then calls back with Fill Missing,
+    /// Replace, or nil for Cancel; tests answer it.
+    var askArtwork:
+        ((message: String, detail: String), NSWindow, @escaping (CoverFill?) -> Void) -> Void = {
+            askForArtwork($0, over: $1, answer: $2)
+        }
+    /// Shows what Get Artwork couldn't do over the window; tests collect it.
+    var artworkAlert: (String, [String], NSWindow) -> Void = {
+        showArtworkProblems($0, $1, over: $2)
+    }
 
     /// `reader` gives the albums and keeps the reviews; `catalog` is the catalog's file. `api`
     /// gives the Discogs API as the config file's token has it now, which the app builds, so
@@ -104,6 +114,10 @@ public final class DiscogsTagger {
                     } catch {
                         return .failure(error)
                     }
+                },
+                paths: { try await reader.paths(ids: $0) },
+                pixels: { path in
+                    try await blockingFileWork { Result { try artPixels(at: path) } }.get()
                 },
                 lookUp: { query, album in
                     try await lookUpReleases(
@@ -210,6 +224,13 @@ public final class DiscogsTagger {
         made.write = { [weak self, weak made] files, progress, completion in
             guard let self, let window = made?.window else { return }
             write(files, window, progress, completion)
+        }
+        made.getArtwork = { [weak self, weak made] groups in
+            guard let self, let window = made?.window else { return }
+            getArtwork(groups, over: window) { [weak self] progress in
+                self?.model.status = progress?.text ?? ""
+                self?.model.changed()
+            }
         }
         // The model takes the mapping from `mappingChanged`, once the settings have saved it.
         made.mappingChosen = { [weak self] mapping, saved in self?.mappingChosen(mapping, saved) }
