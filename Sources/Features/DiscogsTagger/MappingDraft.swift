@@ -42,14 +42,7 @@ struct MappingDraft: Equatable {
 
     /// The targets as the sheet's text shows them: field names and keys, comma-separated.
     func targetsText(_ field: DiscogsField) -> String {
-        mapping[field].targets.map { target in
-            switch target {
-            case .field(let tag): tag.rawValue
-            case .key(let names, nil) where names.isUniform: names.vorbis
-            case .key(let names, let numbered):
-                names.vorbis + (numbered == nil ? " (spelled per format)" : " (numbered)")
-            }
-        }.joined(separator: ", ")
+        mapping[field].targets.map(\.text).joined(separator: ", ")
     }
 
     /// Whether the targets are plain enough to edit as text; a key spelled per format or

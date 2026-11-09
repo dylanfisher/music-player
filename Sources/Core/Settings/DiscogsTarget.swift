@@ -38,6 +38,16 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
         if case .key(_, let numbered) = self { numbered } else { nil }
     }
 
+    /// The target as the Field Mapping sheet and Settings ▸ Tagging list it: its name, or each
+    /// format's spelling, vorbis, mp4 then id3, where they differ, and "(numbered)" after a
+    /// numbered key.
+    public var text: String {
+        let spelled =
+            names.isUniform
+            ? names.vorbis : [names.vorbis, names.mp4, names.id3].joined(separator: " / ")
+        return spelled + (isNumbered ? " (numbered)" : "")
+    }
+
     /// The key names `numbered` is followed by before a value's number: "DISCOGS_LABEL_URL-2".
     static let numberSeparator = "-"
 

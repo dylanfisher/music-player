@@ -105,7 +105,7 @@ final class TaggingModel {
     func ruleText(_ field: DiscogsField) -> String {
         let rule = draft[field]
         var parts = [rule.mode.title]
-        let tags = rule.targets.map { Self.tagText($0) }.joined(separator: ", ")
+        let tags = rule.targets.map(\.text).joined(separator: ", ")
         if !tags.isEmpty { parts.append(tags) }
         if let join = rule.format.join { parts.append("join “\(join)”") }
         if let template = rule.format.template { parts.append(template) }
@@ -119,16 +119,6 @@ final class TaggingModel {
             parts.append("credits " + styles.joined(separator: " / "))
         }
         return parts.joined(separator: " · ")
-    }
-
-    /// A tag as the value column shows it: its name, or each format's spelling where they
-    /// differ, with "numbered" after a numbered key.
-    static func tagText(_ target: DiscogsTarget) -> String {
-        let names = target.names
-        let spelled =
-            names.isUniform
-            ? names.vorbis : Spelling.allCases.map { $0.name(in: names) }.joined(separator: " / ")
-        return spelled + (target.isNumbered ? " (each value numbered)" : "")
     }
 
     /// Sets a part of the field's format to its `index`th choice.

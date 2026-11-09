@@ -102,7 +102,7 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
                 PerTagFormat(
                     vorbis: "RELEASECOUNTRY", mp4: "Release Country", id3: "Release Country")))
     #expect(
-        TaggingModel.tagText(model.tags(.country)[position])
+        model.tags(.country)[position].text
             == "RELEASECOUNTRY / Release Country / Release Country")
     // Spelled per format, a vorbis name changes vorbis alone.
     model.setTag("COUNTRY_OF_RELEASE", spelling: .vorbis, at: position, for: .country)
