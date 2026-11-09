@@ -90,6 +90,14 @@ private func tablePaths(_ index: LibraryIndex, groupByAlbumArtist: Bool) throws 
     #expect(
         try tablePaths(on, groupByAlbumArtist: false)
             == ["/m/old/1.flac", "/m/new/1.flac", "/m/none/1.flac"])
+    // Sorted the other way too, as the Album pane lists them.
+    var grouped = TrackFilter()
+    grouped.groupByAlbumArtist = true
+    let descending = try on.trackIDs(grouped, sortedBy: .album, ascending: false)
+    let paths = try on.paths(ids: descending)
+    #expect(
+        descending.compactMap { paths[$0] }
+            == ["/m/old/1.flac", "/m/new/1.flac", "/m/none/1.flac"])
     let off = try LibraryIndex(at: libraryURL())
     try off.store(tracks.map(\.scanned))
     #expect(

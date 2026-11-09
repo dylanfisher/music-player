@@ -113,12 +113,11 @@ extension LibraryIndex {
         let direction = ascending ? "ASC" : "DESC"
         var order = "\(column.expression) \(direction)"
         // The album ID keeps two releases of one title apart, each whole. With Separate
-        // Releases on, a title's releases go earliest date first, those with none last, as the
-        // Album pane lists them; the subquery costs a lookup a row, so only then.
-        let release =
-            separateReleases
-            ? "\(albumDateSQL) IS NULL \(direction), \(albumDateSQL) \(direction), "
-            : ""
+        // Releases on, a title's releases go earliest date first and those with none last,
+        // whichever way the table sorts, as the Album pane lists them. Each album's date is read
+        // once a query, by a pass over the tracks, so only then.
+        let release = separateReleases ? "coalesce(ad.first_date, '9999'), " : ""
+        let releaseJoin = separateReleases ? albumDatesJoin : ""
         let tieBreak: String
         if filter.groupByAlbumArtist, column == .artist || column == .album {
             // Each album's tracks stay together, in disc and track order, whoever plays on them.
@@ -141,6 +140,7 @@ extension LibraryIndex {
             SELECT \(columns) FROM tracks t
             \(trackJoins)
             \(entries)
+            \(releaseJoin)
             \(whereClause(conditions))
             ORDER BY \(order), \(tieBreak)
             """
@@ -539,9 +539,9 @@ private func warningKind(_ name: String) throws -> MetadataWarning.Kind {
     return kind
 }
 
-/// The earliest date the tracks of `t`'s album have, among those that start with a year; null
-/// for an album with none.
-private let albumDateSQL = """
-    (SELECT min(a.date) FROM tracks a WHERE a.album_id = t.album_id
-        AND a.date GLOB '[0-9][0-9][0-9][0-9]*')
+/// Each album's earliest date as `ad.first_date`, among its tracks' dates that start with a
+/// year; null for an album with none, which the order reads as "9999", after every year.
+private let albumDatesJoin = """
+    LEFT JOIN (SELECT album_id, min(date) AS first_date FROM tracks
+        WHERE date GLOB '[0-9][0-9][0-9][0-9]*' GROUP BY album_id) ad ON ad.album_id = t.album_id
     """
