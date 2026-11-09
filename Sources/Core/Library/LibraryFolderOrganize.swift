@@ -39,13 +39,16 @@ public struct FilesOrganized: Equatable, Sendable {
 /// Where each of `paths` goes in `libraryFolder` by its tags (ADR 0124's layout), with nothing
 /// renamed: what Organize Selected Files asks about, and what `moveToLayout` then does. A path
 /// named twice counts once; a path taken, on disk or by an earlier file of `paths`, is a
-/// problem. Reads the files, so call it off the main thread.
+/// problem. On a volume that ignores case, a folder an earlier file of `paths` goes to keeps
+/// that file's spelling, as the folder will once the earlier move makes it, and names are
+/// compared as the volume compares them. Reads the files, so call it off the main thread.
 public func layoutMoves(_ paths: [String], libraryFolder: String) -> FilesOrganized {
     var plan = FilesOrganized()
     guard let library = resolved(libraryFolder) else {
         plan.problems = [MoveRefusal.notFound(libraryFolder).description]
         return plan
     }
+    var spelling = Spelling(libraryFolder)
     var named: Set<String> = []
     var destinations: Set<String> = []
     for path in paths where named.insert(nfc(path)).inserted {
@@ -53,8 +56,11 @@ public func layoutMoves(_ paths: [String], libraryFolder: String) -> FilesOrgani
         case .outside: plan.outside.append(path)
         case .inPlace: plan.inPlace += 1
         case .problem(let line): plan.problems.append(line)
-        case .move(let destination):
-            if pathExists(destination) || !destinations.insert(nfc(destination)).inserted {
+        case .move(let found):
+            let destination = spelling.respelled(found)
+            if pathExists(destination)
+                || !destinations.insert(spelling.key(destination)).inserted
+            {
                 plan.problems.append(taken(path, destination))
             } else {
                 plan.moved.append(TrackMove(from: path, to: destination))
@@ -92,6 +98,38 @@ func moveToLayout(_ plan: FilesOrganized, libraryFolder: String, calls: MoveCall
     }
     result.keptFolders = removeEmptied(left, library)
     return result
+}
+
+/// The folders a plan's earlier moves will make, as they'll be spelled, so a later file's
+/// folder that the volume holds to be the same name takes that spelling.
+private struct Spelling {
+    let libraryFolder: String
+    let ignoresCase: Bool
+    /// Each folder planned, by `key`, as the first file to go there spells it.
+    var folders: [String: String] = [:]
+
+    init(_ libraryFolder: String) {
+        self.libraryFolder = libraryFolder
+        ignoresCase = pathconf(libraryFolder, _PC_CASE_SENSITIVE) == 0
+    }
+
+    /// `path` as the volume compares names.
+    func key(_ path: String) -> String {
+        ignoresCase ? nfc(path).folding(options: .caseInsensitive, locale: nil) : nfc(path)
+    }
+
+    /// `destination`, a path in the library folder, with each of its folders spelled as an
+    /// earlier destination spelled it.
+    mutating func respelled(_ destination: String) -> String {
+        let parts = destination.dropFirst(libraryFolder.count + 1).split(separator: "/")
+        var path = libraryFolder
+        for part in parts.dropLast() {
+            let next = path + "/" + part
+            path = folders[key(next)] ?? next
+            folders[key(path)] = path
+        }
+        return path + "/" + (parts.last.map(String.init) ?? "")
+    }
 }
 
 /// Where a file goes.

@@ -24,15 +24,16 @@ private final class OrganizeFolders {
 
     /// A FLAC at `path`, relative to the root, tagged with `title`, track 1 of the album.
     @discardableResult
-    func file(_ path: String, title: String, album: String = "Album", track: Int = 1) throws
-        -> String
-    {
+    func file(
+        _ path: String, title: String, artist: String = "Artist", album: String = "Album",
+        track: Int = 1
+    ) throws -> String {
         let full = root + "/" + path
         try FileManager.default.createDirectory(
             atPath: (full as NSString).deletingLastPathComponent,
             withIntermediateDirectories: true)
         try taggedFLAC(tags: [
-            "TITLE": title, "ARTIST": "Artist", "ALBUM": album, "TRACKNUMBER": "\(track)",
+            "TITLE": title, "ARTIST": artist, "ALBUM": album, "TRACKNUMBER": "\(track)",
         ]).write(to: URL(fileURLWithPath: full, isDirectory: false))
         return full
     }
@@ -172,4 +173,31 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     #expect(try index.existingPathID(new) == id)
     #expect(try index.existingPathID(old) == nil)
     #expect(try index.playlistTrackIDs(playlist) == [id])
+}
+
+/// Whether the library folder's volume ignores case, as the temp directory's usually does.
+private func ignoresCase(_ folder: String) -> Bool { pathconf(folder, _PC_CASE_SENSITIVE) == 0 }
+
+@Test func oneBatchSpellsAFolderOneWayOnAVolumeThatIgnoresCase() throws {
+    let folders = try OrganizeFolders()
+    guard ignoresCase(folders.library) else { return }
+    let one = try folders.file("library/a.flac", title: "One", artist: "Artist", track: 1)
+    let two = try folders.file("library/b.flac", title: "Two", artist: "ARTIST", track: 2)
+    let result = folders.organize([one, two])
+    #expect(
+        result.moved.map(\.to) == [
+            folders.library + "/Artist/Album/01 One.flac",
+            folders.library + "/Artist/Album/02 Two.flac",
+        ])
+    #expect(try FileManager.default.contentsOfDirectory(atPath: folders.library) == ["Artist"])
+}
+
+@Test func twoNamesTheVolumeHoldsToBeOneAreOneDestination() throws {
+    let folders = try OrganizeFolders()
+    guard ignoresCase(folders.library) else { return }
+    let one = try folders.file("library/a.flac", title: "Song", artist: "Artist")
+    let two = try folders.file("library/b.flac", title: "SONG", artist: "artist")
+    let plan = layoutMoves([one, two], libraryFolder: folders.library)
+    #expect(plan.moved.map(\.from) == [one])
+    #expect(plan.problems.count == 1)
 }
