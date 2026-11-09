@@ -6,6 +6,8 @@
   library folder), [0050](0050-remove-from-library.md) and
   [0125](0125-trash-always-removes.md) (what passes files to the Trash, and what a share with
   no Trash does)
+- **Amended by:** [0164](0164-keep-files-organized.md): Keep Files Organized renames files
+  in the library folder through the same rename.
 - **See also:** [0026](0026-sync-identity-is-the-relative-path.md) (the move list that
   carries stats),
   [0028](0028-network-folders-by-share.md) (paths by share),

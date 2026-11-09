@@ -730,9 +730,10 @@ Not phases yet. Each becomes one when the owner asks.
 
 - **Mini player:** a small window with art, transport and seek.
 - **Library folder:** files dropped on the window are copied into it
-  ([ADR 0124](decisions/0124-drop-files-and-the-library-folder.md)). Keeping it organized by
-  album artist when tags change, Move and Consolidate Library move and rename music files,
-  which AGENTS.md doesn't allow, so they need an ADR and the owner's go-ahead first.
+  ([ADR 0124](decisions/0124-drop-files-and-the-library-folder.md)), and phase 60 keeps it
+  organized when tags change ([ADR 0164](decisions/0164-keep-files-organized.md)). Move and
+  Consolidate Library move and rename music files from outside it, which AGENTS.md doesn't
+  allow, so they need an ADR and the owner's go-ahead first.
 - **LLM review of incomplete matches:** after phase 51, a model reads an Incomplete album's
   files and its candidates and proposes a release and a mapping, which lands in Likely for the
   user to review. Needs the model, its key and what is sent decided first.

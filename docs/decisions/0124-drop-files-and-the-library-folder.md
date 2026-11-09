@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0009](0009-scanning-and-watching.md) (how files join the library),
   [0050](0050-remove-from-library.md) (the music-file boundary)
+- **Amended by:** [0164](0164-keep-files-organized.md): Keep Files Organized renames files
+  already in the library folder.
 
 ## Context
 

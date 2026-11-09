@@ -9,7 +9,8 @@
   until the journal puts it back. [0108](0108-faster-tag-writes.md): a rewrite leaves 64 KiB
   of padding or the tag's size, and an MP4 with `moov` last grows in place.
   [0128](0128-discogs-survey.md): agents may read the real library, read only, for phase 51's
-  survey, tuning and budgets.
+  survey, tuning and budgets. [0164](0164-keep-files-organized.md): the undo journal's
+  records follow a file Keep Files Organized renamed.
 - **See also:** [0025](0025-threat-model.md) records the writer's threats and how the temp file is made and checked.
 
 ## Context
