@@ -213,6 +213,22 @@ public struct TagWriter: Sendable {
         return report
     }
 
+    /// Keep Files Organized renamed each file `from` to `to` (ADR 0160): its undo records
+    /// follow it, so Undo Tag Edit finds it at its new path. Returns, for each file, why its
+    /// records couldn't follow; its edits then can't be undone.
+    public func follow(_ moves: [(from: String, to: String)]) -> [TagWriteError] {
+        var failures: [TagWriteError] = []
+        for move in moves {
+            do throws(TagWriteError) {
+                try journal.follow(from: move.from, to: move.to, moved: try identity(move.to))
+            } catch {
+                logger.error("\(error.description)")
+                failures.append(error)
+            }
+        }
+        return failures
+    }
+
     enum Outcome {
         case unchanged
         /// Written and read back as the reader reads it; `problem` is set when its undo record

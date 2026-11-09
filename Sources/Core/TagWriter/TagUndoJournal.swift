@@ -388,6 +388,37 @@ public struct TagUndoJournal: Sendable {
         return records
     }
 
+    /// Points every record of the file `from`, in every edit kept, at `to`, where Keep Files
+    /// Organized renamed it (ADR 0160), so undo finds it there and an older edit still follows
+    /// a newer one. A record whose edited size and mtime are `moved`'s takes its identity too,
+    /// since a rename changes neither but a share may give the file a new inode. A record that
+    /// doesn't read is left alone; `latest` reports and deletes it when undo reaches its edit.
+    func follow(from: String, to: String, moved: FileIdentity) throws(TagWriteError) {
+        var changed = false
+        for sequence in try sequences(in: directory) {
+            let entry = Entry(
+                sequence: sequence, folder: directory.appendingPathComponent(name(sequence)))
+            for number in try sequences(in: entry.folder) {
+                let handle = Handle(entry: entry, number: number)
+                guard
+                    var record = try? decodeExactly(
+                        FileRecord.self, from: Data(contentsOf: handle.record)),
+                    record.path.precomposedStringWithCanonicalMapping
+                        == from.precomposedStringWithCanonicalMapping
+                else { continue }
+                record.path = to
+                if record.editedSize == moved.size,
+                    record.editedModifiedNanoseconds == moved.modifiedNanoseconds
+                {
+                    record.setEdited(moved)
+                }
+                try update(record, at: handle, drive: false)
+                changed = true
+            }
+        }
+        if changed { try flushDrive(directory.path) }
+    }
+
     /// The old bytes of one file, as `RestoreSegment.old` consumes them.
     func oldBytes(_ handle: Handle) throws(TagWriteError) -> [UInt8] {
         do {
