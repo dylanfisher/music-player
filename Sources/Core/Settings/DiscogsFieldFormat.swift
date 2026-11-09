@@ -77,7 +77,7 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
     public var dateWritten: DateForm { date ?? .full }
     /// How credits are written in each format: `credits`, or "Name (Role)" in every format
     /// when it's left out.
-    var creditsWritten: PerTagFormat<CreditStyle> { credits ?? PerTagFormat(.nameRole) }
+    public var creditsWritten: PerTagFormat<CreditStyle> { credits ?? PerTagFormat(.nameRole) }
 
     /// How a credit is written in `format`.
     public func creditStyle(in format: TagFormat) -> CreditStyle { creditsWritten[format] }

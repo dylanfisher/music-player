@@ -25,6 +25,19 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
         }
     }
 
+    /// The tag's name in each format: a field's name in all three, or the key's spellings.
+    public var names: PerTagFormat<String> {
+        switch self {
+        case .field(let field): PerTagFormat(field.rawValue)
+        case .key(let names, _): names
+        }
+    }
+
+    /// The numbered keys' spellings, or nil when the target isn't numbered.
+    public var numberedNames: PerTagFormat<String>? {
+        if case .key(_, let numbered) = self { numbered } else { nil }
+    }
+
     /// The key names `numbered` is followed by before a value's number: "DISCOGS_LABEL_URL-2".
     static let numberSeparator = "-"
 
