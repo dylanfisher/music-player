@@ -39,9 +39,14 @@ final class PaneScroller: NSViewController {
             scroll.widthAnchor.constraint(equalTo: content.widthAnchor),
         ])
         content.postsFrameChangedNotifications = true
+        // The window's layout pass posts the notice. A window resized inside that pass leaves
+        // the scroll view at its old height plus the change once more, too short after a row
+        // hides, with an empty strip above it, so `fit` waits for the pass to end.
         resized = NotificationCenter.default.addObserver(
             forName: NSView.frameDidChangeNotification, object: content, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.fit() } }
+        ) { [weak self] _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.fit() } }
+        }
         view = scroll
     }
 

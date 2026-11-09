@@ -119,3 +119,41 @@ private func settingsPane(
     #expect(newest.takenText == LibraryDatabase.writtenText(newest.written) + " (before a restore)")
     #expect(older.takenText == LibraryDatabase.writtenText(older.written))
 }
+
+/// Opening and closing Snapshots leaves the pane's top at the window's top: the window is
+/// resized after the layout pass that changed the pane's height, not inside it, which left the
+/// scroll view at its old height plus the change and an empty strip above it.
+@MainActor @Test func closingTheSnapshotsLeavesNoGapAtTheTop() async throws {
+    let pane = settingsPane()
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let scroller = PaneScroller(pane)
+    scroller.visibleFrame = { _ in nil }
+    window.contentViewController = scroller
+    await pane.showDatabase()
+    func settle() async throws {
+        window.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        window.layoutIfNeeded()
+    }
+    func expectPaneFillsTheWindow(_ when: Comment) {
+        let content = window.contentLayoutRect
+        let top = pane.view.convert(
+            NSPoint(x: 0, y: pane.view.isFlipped ? 0 : pane.view.bounds.maxY), to: nil)
+        #expect(scroller.view.frame.height == content.height, when)
+        #expect(top.y == content.maxY, when)
+        #expect(pane.view.frame.height == content.height, when)
+    }
+    try await settle()
+    expectPaneFillsTheWindow("at first")
+    let triangle = try #require(pane.disclosures[GeneralPane.snapshotsKey])
+    click(triangle)
+    try await settle()
+    expectPaneFillsTheWindow("opened")
+    click(triangle)
+    try await settle()
+    expectPaneFillsTheWindow("closed")
+}
