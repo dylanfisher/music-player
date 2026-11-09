@@ -99,6 +99,8 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     public func show(_ pane: Pane = .general) {
         select(pane)
         window.keepsFrame(as: Self.frameName)
+        // Placed on another screen, a short one, the pane fits that one.
+        scrollers[pane]?.fit()
         window.makeKeyAndOrderFront(nil)
     }
 
