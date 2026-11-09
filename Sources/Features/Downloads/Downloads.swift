@@ -273,7 +273,7 @@ package final class Downloads {
             controller.window?.keepsFrame(as: DownloadsWindow.title)
         }
         offersSelection = offeringSelection && hasSelection()
-        refresh()
+        refresh(opening: true)
         controller.showWindow(nil)
         session?.model.setWindowOpen(true)
         offerSelection()
@@ -342,9 +342,11 @@ package final class Downloads {
         return made
     }
 
-    private func refresh() {
+    /// Shows what changed: the status item always, the window only while it's open, or with
+    /// `opening`, just before it shows, so it opens on the rows as they are.
+    private func refresh(opening: Bool = false) {
         showStatus()
-        guard let controller else { return }
+        guard let controller, opening || controller.window?.isVisible == true else { return }
         defer { offerSelection() }
         controller.showSlskd(session?.slskdPage)
         guard let session else {

@@ -90,6 +90,26 @@ private func downloading(_ id: Int, bytes: Int, created: Int) -> DownloadJob {
 }
 
 @MainActor
+@Test func aClosedWindowIsntRedrawnWhileTheItemFollowsThePolls() async throws {
+    let service = FakeService([downloading(1, bytes: 10, created: 1)])
+    let (downloads, session) = try await started(service.service) { throw CancellationError() }
+    downloads.show()
+    let window = try #require(downloads.controller)
+    await session.model.poll()
+    window.window?.close()
+    let reloads = window.reloads
+    service.put(downloading(1, bytes: 60, created: 1))
+    await session.model.poll()
+    #expect(downloads.statusItem.status?.fraction == 0.6)
+    #expect(window.reloads == reloads, "the hidden table is left alone")
+    downloads.show()
+    #expect(window.reloads == reloads + 1)
+    #expect(window.rows.first?.progress == 0.6)
+    window.window?.close()
+    downloads.stop()
+}
+
+@MainActor
 @Test func theItemFollowsThePollsAndItsClickOpensTheWindow() async throws {
     let service = FakeService([downloading(1, bytes: 10, created: 1)])
     let (downloads, session) = try await started(service.service) {
