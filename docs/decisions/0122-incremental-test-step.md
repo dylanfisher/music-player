@@ -33,7 +33,7 @@ next run covers the same paths again. A new toolchain, a missing stamp, or `--fr
 everything.
 
 **`--changed [ref]`** runs the targets affected by the files changed since a commit,
-uncommitted and untracked files included, and leaves the stamp alone. A builder iterates with
+uncommitted and untracked files included, and leaves the stamp alone ([ADR 0171](0171-a-changed-pass-updates-the-test-stamp.md) changes this). A builder iterates with
 it, and a reviewer runs it against the commit a branch sits on.
 
 `scripts/affected-test` runs the script on paths whose answers are known from the real

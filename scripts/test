@@ -4,7 +4,9 @@
 #                                   passing run: only what the edits since then can affect, and
 #                                   nothing when there are none (ADR 0122). --fresh runs it all.
 #   ./scripts/test --changed [ref]  only the test targets the files changed since ref (default
-#                                   HEAD) can affect, uncommitted and untracked files included
+#                                   HEAD) can affect, uncommitted and untracked files included.
+#                                   A pass that covers every target the plain form would run
+#                                   updates its stamp, so the plain form then skips them.
 #   ./scripts/test <args>           passes args to `swift test`, e.g. --filter RingBufferTests
 #
 # scripts/affected.swift says which paths a test reads and which test targets a changed path
@@ -57,12 +59,6 @@ run() {
   esac
 }
 
-if [ "$changed" = 1 ]; then
-  files=$( { git diff --name-only "$ref"; git ls-files --others --exclude-standard; } | sort -u)
-  run "$(swift scripts/affected.swift <<<"$files")"
-  exit 0
-fi
-
 # The toolchain on the first line, then one `<sha>  <path>` line per input that exists, sorted
 # for comm.
 inputs() {
@@ -73,18 +69,43 @@ inputs() {
     xargs -0 shasum | LC_ALL=C sort
 }
 
-current=$(inputs)
-if [ "$fresh" = 1 ] || [ ! -e "$stamp" ] || [ "$(head -1 "$stamp")" != "$(head -1 <<<"$current")" ]; then
-  targets=all
-else
-  # Paths added, removed or edited since the last pass. shasum puts two spaces after the hash.
-  files=$(LC_ALL=C comm -3 <(tail -n +2 "$stamp") <(tail -n +2 <<<"$current") |
-    sed -E 's/^[[:space:]]*[0-9a-f]{40}  //' | sort -u)
-  if [ -z "$files" ]; then
-    echo "inputs match the last passing run — skipped (--fresh runs it anyway)"
-    exit 0
+# stale <inputs> — the test targets the edits since the last pass can affect: `all` with no
+# stamp or a new toolchain, nothing when the inputs match it.
+stale() {
+  if [ ! -e "$stamp" ] || [ "$(head -1 "$stamp")" != "$(head -1 <<<"$1")" ]; then
+    echo all
+    return
   fi
+  # Paths added, removed or edited since the last pass. shasum puts two spaces after the hash.
+  local files
+  files=$(LC_ALL=C comm -3 <(tail -n +2 "$stamp") <(tail -n +2 <<<"$1") |
+    sed -E 's/^[[:space:]]*[0-9a-f]{40}  //' | sort -u)
+  if [ -n "$files" ]; then swift scripts/affected.swift <<<"$files"; fi
+}
+
+# covers <targets run> <targets needed> — whether a pass over the first list covers the second.
+covers() {
+  [ -z "$2" ] || [ "$1" = all ] ||
+    { [ "$2" != all ] && [ -z "$(LC_ALL=C comm -13 <(sort <<<"$1") <(sort <<<"$2"))" ]; }
+}
+
+current=$(inputs)
+
+if [ "$changed" = 1 ]; then
+  files=$( { git diff --name-only "$ref"; git ls-files --others --exclude-standard; } | sort -u)
   targets=$(swift scripts/affected.swift <<<"$files")
+  needed=$(stale "$current")
+  run "$targets"
+  # A pass over every target the stamp says is stale is as good as a plain pass, so the gate's
+  # test step after it has nothing left to run (ADR 0171).
+  if covers "$targets" "$needed"; then printf '%s\n' "$current" > "$stamp"; fi
+  exit 0
+fi
+
+if [ "$fresh" = 1 ]; then targets=all; else targets=$(stale "$current"); fi
+if [ -z "$targets" ]; then
+  echo "inputs match the last passing run — skipped (--fresh runs it anyway)"
+  exit 0
 fi
 run "$targets"
 printf '%s\n' "$current" > "$stamp"
