@@ -359,3 +359,85 @@ landing; no bench row covers Downloads. Cost: implementer (Opus) 371k tokens, 20
 has no release id: the sheet appears at once, says "Replaces N files", and the old files go only
 after the new ones are in place. On a second display, the Downloads window reopens where it was
 left, at its size and column widths. Open in Tagger on a discrepancy.
+
+### 66. Artwork
+
+Asked by the owner on 2026-11-09. Bulk art is the front cover only, by the owner's choice.
+
+- [x] **Art viewer:** never scales an image past its own pixel size. An album with several
+      images shows a strip of thumbnails along the bottom; the selected image's height shrinks
+      to make room, and a click on a thumbnail shows it.
+- [x] **Get Info Artwork tab:** lists every embedded image with its type, and adds (open panel,
+      drag, paste) and removes any number. `TagEdit.art` becomes a list of pictures with types,
+      written by `TagWriter` for ID3, FLAC and MP4 (MP4 `covr` has no types); the round trip is
+      tested on generated fixtures. Mixed art across the selected tracks shows as mixed and is
+      left alone unless changed.
+- [x] **Get Info File tab:** stays aligned left when tabs are switched. The tab's container gets
+      its frame before its content is pinned, and the File grid's value column takes the spare
+      width.
+- [x] **Bulk Discogs cover:** "Get Artwork for N Albums…" in the tagger window, over every
+      album with a Discogs release id, and "Get Discogs Artwork" in the library's track menu
+      for the selection. Both confirm with the count, fetch the front cover through
+      `DiscogsAPI.cover(release:)` (one image request per release, rate-limited), fill albums
+      with no art or smaller art, or replace with the Replace choice, and write through
+      `TagWriter` with progress in the status bar. Needs the token.
+
+Implementation plan, phase 66 (ADR 0172):
+
+What exists, found by search (map.md recipes): the reader lists every picture in
+`TrackMetadata.pictures` (`EmbeddedPicture`, its type internal) when asked; `TrackMetadata.art`
+is the front cover or the first. `TagEdit.art` (`ArtChange`) replaces the picture the reader
+shows, as a front cover, or removes them all; the writer checks the shown art after each
+write. The viewer's `ArtViewer.frame(of:in:)` fits with no cap. Get Info's Artwork tab shows
+`TagEditorModel.shownArt`, one image. The tagger fetches covers through
+`DiscogsAPI.cover(release:)`, paced by `RateLimiter` in `DiscogsAPI.get`, and writes through
+`TagEditing.write(_:over:progress:completion:)`, which the status bar counts (ADR 0167).
+
+- 66.1 Picture types (`Core/Metadata`): `PictureType`, ID3's and FLAC's numbers with the five
+  the editor offers by name; `EmbeddedPicture.type` takes it.
+- 66.2 Several pictures written (`Core/TagWriter`): `ArtChange.pictures([ArtPicture])` puts
+  the list in place of every picture: ID3 `APIC` frames, each with a description of its own,
+  where the first old one was; FLAC `PICTURE` blocks; MP4 `covr` data atoms, front covers
+  first, no types. `.replace` stays the front cover alone, for Discogs. The write is checked
+  by reading every picture back. Round trip and undo on every generated sample.
+- 66.3 Editor model: `EditableTrack.pictures`, read whole; `TagEditorModel` lists the shared
+  pictures, mixed when the tracks differ, and adds, removes and retypes them into
+  `.pictures`; Replace and Remove keep their edits.
+- 66.4 Artwork tab: a table of every picture (thumbnail, type pop-up, size), + (open panel),
+  − for the selection, drops of image files and Paste.
+- 66.5 File tab: the cause found in a test, then fixed (container frame, value column width).
+- 66.6 Art viewer: no scale past the image's pixels; with several pictures, a strip of
+  thumbnails along the bottom, the image's height less the strip, a click shows one.
+- 66.7 Bulk cover (`Core/Discogs/BulkCover.swift`): albums by tagged release id, one
+  cover per release through `cover(release:)`, Fill Missing (no art, or fewer pixels than the
+  cover) or Replace, giving the edits and the problems. Stand-in transport only.
+- 66.8 Tagger: "Get Artwork for N Albums…" over the albums listed with a tagged release id,
+  confirming with the count and Fill Missing, Replace or Cancel, then `write`.
+- 66.9 Library: "Get Discogs Artwork" (`track.getDiscogsArtwork`) in the track menu, the same
+  flow for the selection, through the tagger's public entry, which needs the token.
+- 66.10 ADR 0172, see-also lines in 0020 and 0140, and AGENTS.md's clause if it needs one.
+
+Result, phase 66: shipped all four items (ADR 0172; 0020 and 0140 see-also lines, a clause in
+the AGENTS.md boundary). `ArtChange.pictures` writes every picture with its type, one APIC
+frame each with a unique description, one FLAC PICTURE block each, MP4 `covr` with front covers
+first and each picture's own data type code, and reads every one back; `.replace` still changes
+only the front cover. The Artwork tab lists the pictures the tracks share, with type pop-ups,
+add by panel, drag or paste, and remove; mixed art is left alone unless the list changes. A
+kept picture of any type is written back as it was (a gate fix: a GIF in the file blocked the
+save, and MP4 relabelled it as a JPEG). The File tab's labels went right because no grid column
+took the spare width; the values now do. The art viewer draws at most a point per pixel and
+shows a strip of thumbnails for several pictures. Get Artwork for N Albums… (tagger) and Get
+Discogs Artwork… (track menu) fill or replace front covers of albums tagged with a release id,
+after one question. The gate also replaced every `performClick` in Tests with
+`Fixtures.click` (ADR 0127's early exit 0). Deferred: a list edit drops pictures the reader
+can't list (compressed, encrypted or linked APIC frames, unknown `covr` types); a library Get
+Artwork's progress shares the save slot. Bench, Apple Silicon, all within budget: tag journal
+1000 files 7.99 s, NAS read 200 files 0.57 s, temp-file write on the NAS 72.2 s, JPEG decode
+14.6 ms, PNG 74.8 ms; window rows left for the owner's Mac. Full `./scripts/check` passed before
+landing. Cost: implementer (Opus) 429k tokens, 316 tool calls, 53 min; gate (Sonnet) 159k
+tokens, 71 tool calls, 23 min.
+
+**Owner checks:** in Get Info's Artwork tab on a scratch copy, add, retype and remove pictures
+in an MP3, a FLAC and an M4A, then check them in another player; the art viewer on an album with
+several pictures, on Retina and the 2015 MacBook Pro; Get Artwork on a few tagged albums, Fill
+Missing then Replace.

@@ -52,8 +52,7 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 3. Phases 55 to 61, the owner's feedback of 2026-11-09, run next: 55 and 58 (done) first, then 56,
    57 and 59, then 60 and 61. All seven are done. Each merges to `main` when its gate passes.
 4. Phases 62 to 66, the owner's feedback of 2026-11-09 (second list): 62, 63, 64 and 65 in
-   parallel, each on its own branch and worktree, then 66. Each merges to `main` when its gate
-   passes.
+   parallel, each on its own branch and worktree, then 66. All five are done.
 5. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
@@ -112,6 +111,8 @@ that phase's Result line, and delete its line here.
 
 ### Owner checks in the running app
 
+- **66** ([phase](plan-archive.md#66-artwork)): the Artwork tab on scratch MP3, FLAC and M4A
+  copies, the viewer's strip, Get Artwork's Fill Missing and Replace.
 - **64** ([phase](plan-archive.md#64-downloads-approve-upgrades-open-in-tagger-window)): a
   manual download replacing an album on the NAS (scratch album), the window's frame and
   columns on a second display, Open in Tagger on a discrepancy.
@@ -655,63 +656,6 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
-
-### 66. Artwork
-
-Asked by the owner on 2026-11-09. Bulk art is the front cover only, by the owner's choice.
-
-- [ ] **Art viewer:** never scales an image past its own pixel size. An album with several
-      images shows a strip of thumbnails along the bottom; the selected image's height shrinks
-      to make room, and a click on a thumbnail shows it.
-- [ ] **Get Info Artwork tab:** lists every embedded image with its type, and adds (open panel,
-      drag, paste) and removes any number. `TagEdit.art` becomes a list of pictures with types,
-      written by `TagWriter` for ID3, FLAC and MP4 (MP4 `covr` has no types); the round trip is
-      tested on generated fixtures. Mixed art across the selected tracks shows as mixed and is
-      left alone unless changed.
-- [ ] **Get Info File tab:** stays aligned left when tabs are switched. The tab's container gets
-      its frame before its content is pinned, and the File grid's value column takes the spare
-      width.
-- [ ] **Bulk Discogs cover:** "Get Artwork for N Albums…" in the tagger window, over every
-      album with a Discogs release id, and "Get Discogs Artwork" in the library's track menu
-      for the selection. Both confirm with the count, fetch the front cover through
-      `DiscogsAPI.cover(release:)` (one image request per release, rate-limited), fill albums
-      with no art or smaller art, or replace with the Replace choice, and write through
-      `TagWriter` with progress in the status bar. Needs the token.
-
-Implementation plan, phase 66 (ADR 0172):
-
-What exists, found by search (map.md recipes): the reader lists every picture in
-`TrackMetadata.pictures` (`EmbeddedPicture`, its type internal) when asked; `TrackMetadata.art`
-is the front cover or the first. `TagEdit.art` (`ArtChange`) replaces the picture the reader
-shows, as a front cover, or removes them all; the writer checks the shown art after each
-write. The viewer's `ArtViewer.frame(of:in:)` fits with no cap. Get Info's Artwork tab shows
-`TagEditorModel.shownArt`, one image. The tagger fetches covers through
-`DiscogsAPI.cover(release:)`, paced by `RateLimiter` in `DiscogsAPI.get`, and writes through
-`TagEditing.write(_:over:progress:completion:)`, which the status bar counts (ADR 0167).
-
-- 66.1 Picture types (`Core/Metadata`): `PictureType`, ID3's and FLAC's numbers with the five
-  the editor offers by name; `EmbeddedPicture.type` takes it.
-- 66.2 Several pictures written (`Core/TagWriter`): `ArtChange.pictures([ArtPicture])` puts
-  the list in place of every picture: ID3 `APIC` frames, each with a description of its own,
-  where the first old one was; FLAC `PICTURE` blocks; MP4 `covr` data atoms, front covers
-  first, no types. `.replace` stays the front cover alone, for Discogs. The write is checked
-  by reading every picture back. Round trip and undo on every generated sample.
-- 66.3 Editor model: `EditableTrack.pictures`, read whole; `TagEditorModel` lists the shared
-  pictures, mixed when the tracks differ, and adds, removes and retypes them into
-  `.pictures`; Replace and Remove keep their edits.
-- 66.4 Artwork tab: a table of every picture (thumbnail, type pop-up, size), + (open panel),
-  − for the selection, drops of image files and Paste.
-- 66.5 File tab: the cause found in a test, then fixed (container frame, value column width).
-- 66.6 Art viewer: no scale past the image's pixels; with several pictures, a strip of
-  thumbnails along the bottom, the image's height less the strip, a click shows one.
-- 66.7 Bulk cover (`Core/Discogs/BulkCover.swift`): albums by tagged release id, one
-  cover per release through `cover(release:)`, Fill Missing (no art, or fewer pixels than the
-  cover) or Replace, giving the edits and the problems. Stand-in transport only.
-- 66.8 Tagger: "Get Artwork for N Albums…" over the albums listed with a tagged release id,
-  confirming with the count and Fill Missing, Replace or Cancel, then `write`.
-- 66.9 Library: "Get Discogs Artwork" (`track.getDiscogsArtwork`) in the track menu, the same
-  flow for the selection, through the tagger's public entry, which needs the token.
-- 66.10 ADR 0172, see-also lines in 0020 and 0140, and AGENTS.md's clause if it needs one.
 
 ### 10. Web remote
 
