@@ -56,7 +56,7 @@ extension TrackColumn {
         case .dateAdded: "pa.added_seconds"
         case .dateCreated: "f.created_seconds"
         case .dateModified: "f.modified_seconds"
-        // A hand-set count can leave it below 0 until the plays it was set over arrive (ADR 0161).
+        // A hand-set count can leave it below 0 until the plays it was set over arrive (ADR 0162).
         case .playCount: "max(0, ifnull(p.play_count, 0))"
         case .skipCount: "ifnull(p.skip_count, 0)"
         case .lastPlayed: "p.last_played_seconds"

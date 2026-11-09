@@ -11,7 +11,7 @@ private func track(_ path: String, plays: Int?, readOnly: String? = nil) -> Edit
 }
 
 /// The Plays field shows the count the tracks share, "Mixed" where they differ, and goes to
-/// every track the index has, read-only files included (ADR 0161).
+/// every track the index has, read-only files included (ADR 0162).
 @Test func thePlayCountIsSharedOrMixedAndGoesToEveryCountedTrack() throws {
     var model = TagEditorModel(tracks: [
         track("/a.dsf", plays: 3, readOnly: "DSF tags can't be written"),

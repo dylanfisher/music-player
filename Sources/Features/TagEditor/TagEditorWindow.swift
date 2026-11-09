@@ -55,7 +55,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// The buttons that run a registry command, each with its command.
     private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
-    /// The File tab's play count, kept in the index, not the file (ADR 0161).
+    /// The File tab's play count, kept in the index, not the file (ADR 0162).
     let playCountField = NSTextField()
     private let playCountLabel = NSTextField(labelWithString: "")
     /// The Extras tab's keys and values, a row each; a value is typed in as a field is.
@@ -116,8 +116,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         window.isReleasedWhenClosed = false
         window.title = heading
         window.delegate = self
-        // The whole layout is made now, every tab there from the start, so nothing moves
-        // when the fields fill in.
+        // The whole layout is made now, with every tab, so nothing moves when the fields fill
+        // in.
         window.contentView = makeContent()
         build(Self.lastTab)
         tabs.selectTabViewItem(withIdentifier: Self.lastTab.rawValue)

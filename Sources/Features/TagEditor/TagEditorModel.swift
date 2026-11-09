@@ -64,7 +64,7 @@ public struct TagEditorModel: Equatable, Sendable {
     private(set) var typedExtras: [String: String] = [:]
     /// Keys the user deleted in Extras that some track holds.
     private(set) var deletedExtras: Set<String> = []
-    /// What the user typed as the play count, which isn't a tag (ADR 0161).
+    /// What the user typed as the play count, which isn't a tag (ADR 0162).
     private(set) var typedPlayCount: String?
 
     init(tracks: [EditableTrack]) {

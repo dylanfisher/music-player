@@ -37,7 +37,7 @@ public final class TagEditing {
     /// File tab's Plays field.
     public var playCounts: @MainActor ([String]) -> [Int?] = { $0.map { _ in nil } }
     /// Stores a play count typed in an info window for the tracks at the paths, in the index,
-    /// once the window's Save goes ahead (ADR 0161).
+    /// once the window's Save goes ahead (ADR 0162).
     public var setPlayCount: @MainActor (Int, [String]) -> Void = { _, _ in }
     /// Reads a release from the local catalog for an info window's Discogs tab: nil when the
     /// catalog doesn't have it, and `CatalogError.missing` when there's no catalog.

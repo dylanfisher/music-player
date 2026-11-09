@@ -1,4 +1,4 @@
-# 0161. A play count set by hand is an offset over the plays counted, the latest winning
+# 0162. A play count set by hand is an offset over the plays counted, the latest winning
 
 - **Date:** 2026-11-09
 - **Status:** accepted
@@ -23,9 +23,9 @@ either replace it or be lost.
 
 - **An offset, stored.** Setting a track's count to N stores, in `play_count_offsets`, how far
   N sits from the plays counted for it (history, synced plays and import totals): N less that,
-  below 0 for a count set lower. `plays.play_count` changes by the difference, so every reader
-  of it, the table, sort, smart playlists and Listening Stats' undated plays, sees N with no
-  change. The history keeps its rows: a hand-set count isn't dated plays.
+  below 0 for a count set lower. `plays.play_count` changes by the difference, so its
+  readers, the table, sort, smart playlists and Listening Stats' undated plays, see N with no
+  change of their own beyond the clamp below. The history keeps its rows: a hand-set count isn't dated plays.
 - **Synced as the latest set.** The set logs `playCount` with `path` and `offset`, a field of
   `sync_items` (`SyncField.playCount`), so the latest clock wins, then the higher machine ID,
   as for a rating. Merging puts the event's offset over the plays the reading Mac counts. Once
@@ -35,8 +35,8 @@ either replace it or be lost.
   set covered only the plays the setting Mac had counted.
 - **Two sets don't add up.** The later replaces the earlier everywhere.
 - **Never shown below 0.** A Mac that reads a set before plays it was set over (a log it
-  couldn't open this time) can hold a count below 0 until they arrive; the table and sort read
-  `max(0, play_count)`.
+  couldn't open this time) can hold a count below 0 until they arrive; the table, sort and
+  smart playlists read `max(0, play_count)`, and Listening Stats sums it clamped per row.
 - **A part of its own,** `playCounts`, so its shape changes without discarding the other
   stats, ordered after `imports`. Rebuilding it takes the offsets out of the counts first;
   rebuilding the imports, which recounts each play count from its history, counts the offsets

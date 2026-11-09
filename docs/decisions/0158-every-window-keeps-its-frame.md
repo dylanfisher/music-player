@@ -41,8 +41,8 @@ of the primary display.
   for each bar builder.
 - **Who takes part now:** Settings, Downloads, the tagger, Year in Review, Library Problems, the
   playback problem panel, each bar builder, and the first Spectrum window; later Spectrum
-  windows cascade from the last one open. Get Info keeps its own top-left place
-  (`tagEditor.place`) until phase 57 makes it resizable on this mechanism. The palette keeps
+  windows cascade from the last one open. Get Info joins as "Get Info Window", in the same
+  way (ADR 0160). The palette keeps
   its own place, near the top of the screen. The main window keeps its own frame, with its
   full-screen and layout-restoring rules, and opens through `placedFrame` too.
 

@@ -373,7 +373,7 @@ private func syncAll(_ machines: [Machine]) throws {
 
 /// A play count set by hand reaches the other Mac as the plays it adds over those counted, so
 /// plays made after it, here or there, add to it, and the later of two sets wins without the
-/// two adding up (ADR 0161).
+/// two adding up (ADR 0162).
 @Test func aHandSetPlayCountSyncsAndPlaysAddToIt() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair

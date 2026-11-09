@@ -12,7 +12,7 @@ let deleteDislikedSQL = "DELETE FROM \(dislikedTable) WHERE path_id = ?"
 let isDislikedSQL = "SELECT 1 FROM \(dislikedTable) WHERE path_id = ?"
 let setRatingSQL = "INSERT OR REPLACE INTO ratings (path_id, rating) VALUES (?, ?)"
 let deleteRatingSQL = "DELETE FROM ratings WHERE path_id = ?"
-/// A path's hand-set play count offset (ADR 0161).
+/// A path's hand-set play count offset (ADR 0162).
 let playCountOffsetSQL = "SELECT plays FROM \(playCountOffsetsTable) WHERE path_id = ?"
 let setPlayCountOffsetSQL =
     "INSERT OR REPLACE INTO \(playCountOffsetsTable) (path_id, plays) VALUES (?, ?)"
@@ -287,7 +287,7 @@ extension LibraryIndex {
     }
 
     /// Sets the play count of the tracks `ids` to `count` by hand. Each keeps it as how far it
-    /// sits from the plays counted, so a play here or on another Mac adds to it (ADR 0161).
+    /// sits from the plays counted, so a play here or on another Mac adds to it (ADR 0162).
     public func setPlayCount(_ count: Int, trackIDs ids: [Int64]) throws {
         precondition((0...maximumPlayCount).contains(count), "a play count of \(count)")
         try statsTransaction {

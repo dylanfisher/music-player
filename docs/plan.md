@@ -646,7 +646,7 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       choice to hide it without one is reversed.
 - [ ] **Play count** field, editable, for the count phase 56 lets the user set.
 
-Implementation plan, phase 57 (ADRs 0160, 0161):
+Implementation plan, phase 57 (ADRs 0160, 0162):
 
 What exists, found by search (map.md recipes):
 
@@ -682,11 +682,11 @@ Parts, in order, each its own commit:
    after `load`, for files with and without a release id.
 3. **Resizable, keeps its frame** (ADR 0160). `.resizable`, a minimum size from the content
    at its fitting size; the tabs take the extra height and the fields the extra width. The
-   first window open keeps its frame as "Get Info"; one opened while another is open
+   first window open keeps its frame as "Get Info Window"; one opened while another is open
    cascades from the last, at its size. `tagEditor.place`, `InfoWindowPlace`, `moved`,
    `start` and the cascade-past-taken-corners code go. Tests: the window resizes, its frame
    is kept under the name, and a second window cascades.
-4. **Play count, stored and synced** (ADR 0161). `LibraryIndex.setPlayCount(_:paths:)`
+4. **Play count, stored and synced** (ADR 0162). `LibraryIndex.setPlayCount(_:paths:)`
    stores each track's hand-set count as an offset over its counted plays (a part of its own,
    `playCounts`), changing `plays.play_count` by the difference, and logs a `playCount`
    event with the offset, last writer wins through `sync_items`. Merging applies the

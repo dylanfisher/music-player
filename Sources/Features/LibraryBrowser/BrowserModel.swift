@@ -456,7 +456,7 @@ public final class BrowserModel {
         await refreshEdited()
     }
 
-    /// Sets the play count of the tracks at `paths` by hand (ADR 0161).
+    /// Sets the play count of the tracks at `paths` by hand (ADR 0162).
     func setPlayCount(_ count: Int, paths: [String]) async throws {
         try await reader.setPlayCount(count, paths: paths)
         await refreshEdited()

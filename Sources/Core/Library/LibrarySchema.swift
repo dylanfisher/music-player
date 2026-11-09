@@ -22,7 +22,7 @@ enum SchemaPart: String, CaseIterable {
     /// Each import's last play of a path, the one dated play of its counted plays (ADR 0105).
     /// A part of its own so adding it kept the import counts, which a second import needs.
     case importedLastPlays
-    /// Each path's hand-set play count, as how far it sits from the plays counted (ADR 0161).
+    /// Each path's hand-set play count, as how far it sits from the plays counted (ADR 0162).
     /// A part of its own for the same reason as `loved`. After `imports`, whose discard the
     /// offsets have to outlast: it counts them in, and this part's discard takes them out.
     case playCounts
@@ -535,8 +535,8 @@ private let importsSchema = """
 /// Takes the imports' plays and skips out of the counts before `imported_plays` is dropped, or
 /// the next import would add them again. Each play count becomes its history, the plays recorded
 /// here and synced, and its hand-set offset; skips have no history, so each loses the skips the
-/// imports recorded. It reads `play_count_offsets`, which a database from before that part
-/// lacks: one opened by a build that changes this part too fails to open, saying so.
+/// imports recorded. It reads `play_count_offsets`, so the `playCounts` part has to exist when
+/// this runs.
 private let importsDiscardSQL = """
     UPDATE plays SET
         play_count = (SELECT count(*) FROM history h WHERE h.path_id = plays.path_id)

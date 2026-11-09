@@ -13,7 +13,7 @@ enum SyncEvent: Equatable, Sendable {
     /// 0 clears the rating.
     case rating(path: String, stars: Int)
     /// A play count set by hand, as the plays it adds to those the path's plays and imports
-    /// count, below 0 for one set lower (ADR 0161). The latest wins, so the plays each machine
+    /// count, below 0 for one set lower (ADR 0162). The latest wins, so the plays each machine
     /// counts, the same once every log is read, stay under it.
     case playCount(path: String, offset: Int)
     /// Liked, or no opinion: the latest of this and `disliked` is the path's opinion.

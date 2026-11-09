@@ -15,7 +15,7 @@ let syncPlaylistSQL = "SELECT playlist_id FROM \(syncPlaylistsTable) WHERE id = 
 let insertSyncPlaylistSQL = "INSERT INTO \(syncPlaylistsTable) (id, playlist_id) VALUES (?, ?)"
 
 /// A field whose latest change wins (ADR 0038): a path's rating, opinion (`loved`, which
-/// `disliked` events share) or hand-set play count (ADR 0161), keyed by path ID, or a
+/// `disliked` events share) or hand-set play count (ADR 0162), keyed by path ID, or a
 /// playlist's name, rules or entries, keyed by playlist ID.
 enum SyncField: String {
     case rating, loved, playlistName, playlistRules, playlistEntries, playCount
