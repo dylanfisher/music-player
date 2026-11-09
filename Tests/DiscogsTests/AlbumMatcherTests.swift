@@ -688,6 +688,28 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(unmapped[3].fileTitle == "Bonus")
 }
 
+/// Files of the release's count with titles out of order are proposed on the tracks their
+/// titles fit, close titles included; the tier keeps the in-order score (ADR 0155).
+@Test func filesOutOfOrderArePairedWithTheTracksTheirTitlesFit() throws {
+    let files = album(["Kungsholm", "Gamla Stan", "Östermalm"], seconds: [300, 370, 285])
+    let result = try match(files, releases: release(10, tracks: stockholm))
+    #expect(result.mapping == [100: 2, 101: 1, 102: 0])
+    #expect(result.comparison(of: files).map(\.state) == [.matched, .matched, .matched])
+    #expect(result.tier == .incomplete)
+    #expect(result.reasons == [.outOfOrder(2), .foundByTitleOnly])
+}
+
+/// Files whose titles fit tracks equally stay in their places.
+@Test func filesWithTheSameTitlesKeepTheirPlaces() throws {
+    let result = try match(
+        album(["Untitled", "Untitled", "Outro"], title: "Stockholm"),
+        releases: release(
+            10,
+            tracks: [track("1", "Untitled"), track("2", "Untitled"), track("3", "Intro")]))
+    #expect(result.mapping == [100: 0, 101: 1, 102: 2])
+    #expect(result.reasons == [.titlesDiffer(1), .foundByTitleOnly])
+}
+
 @Test func aReleasesSummaryIsWhatTheWindowShows() async throws {
     let folder = try DumpFolder()
     try folder.write(

@@ -227,8 +227,9 @@ final class AlbumMatcher {
             }
         }
 
+        let shown = chosen.map { $0.paired(titles: titles, seconds: seconds) }
         var mapping: [Int64: Int] = [:]
-        if let chosen {
+        if let chosen = shown {
             for (track, index) in zip(album.tracks, chosen.mapping) {
                 if let index { mapping[track.fileID] = index }
             }
@@ -243,7 +244,7 @@ final class AlbumMatcher {
             albumID: album.id, tier: tier, release: chosen.flatMap { releases[$0.releaseID] },
             tracks: chosen?.tracks ?? [], mapping: mapping, candidates: others,
             reasons: NotExactReason.reasons(
-                tier, chosen, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
+                tier, shown, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
                 mixedIDs: !tagged.isEmpty && !isMatched),
             origin: chosen.map { fetched[$0.releaseID] != nil } == true ? .api : .catalog)
     }

@@ -61,6 +61,8 @@ extension NotExactReason {
             "\(tracks(count)) of the release \(count == 1 ? "has" : "have") no file"
         case .countDiffers(let files, let tracks):
             "\(count(files, "file")), the release has \(DisplayText.tracks(tracks))"
+        case .outOfOrder(let files):
+            "\(count(files, "file")) \(files == 1 ? "is" : "are") out of the release's order"
         case .titlesDiffer(let titles):
             "\(count(titles, "file title")) "
                 + (titles == 1 ? "differs from its track's" : "differ from their tracks'")

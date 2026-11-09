@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **See also:** [0128](0128-discogs-survey.md) (the owner's tags), [0129](0129-custom-tag-fields.md)
   (the ids in the index), [0130](0130-discogs-catalog.md) (the catalog and its folding)
+- **Amended by:** [0155](0155-pairing-files-out-of-order.md): the window pairs files out of
+  order by title
 
 ## Context
 

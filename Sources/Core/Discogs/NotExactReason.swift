@@ -7,6 +7,8 @@ public enum NotExactReason: Equatable, Sendable {
     case tracksWithoutFile(Int)
     /// The album's file count and the release's track count.
     case countDiffers(files: Int, tracks: Int)
+    /// With the same count, the files mapped to a track other than their place's, by title.
+    case outOfOrder(Int)
     /// With the same count, the files whose title isn't their track's.
     case titlesDiffer(Int)
     /// Files whose length isn't their track's within the tolerance the matcher used: this many
@@ -40,6 +42,7 @@ public enum NotExactReason: Equatable, Sendable {
                     reasons.append(.tracksWithoutFile(score.tracks.count - mapped))
                 }
             }
+            if score.outOfOrder > 0 { reasons.append(.outOfOrder(score.outOfOrder)) }
             if score.titlesDiffering > 0 { reasons.append(.titlesDiffer(score.titlesDiffering)) }
             let differing = score.durationsCompared - score.durationsAgreeing
             if differing > 0 {
