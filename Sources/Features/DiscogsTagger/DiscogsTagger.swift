@@ -101,7 +101,8 @@ public final class DiscogsTagger {
                     }
                 },
                 lookUp: { query, album in
-                    try await lookUpReleases(query, for: album, catalogAt: catalog, api: await api())
+                    try await lookUpReleases(
+                        query, for: album, catalogAt: catalog, api: await api())
                 }),
             mapping: mapping, savedMappings: savedMappings, choices: choices, source: source)
         model.hasToken = { api().hasToken }

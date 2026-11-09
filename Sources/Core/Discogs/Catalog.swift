@@ -114,8 +114,10 @@ public final class Catalog {
     func releaseIDs(catalogNumber: String, limit: Int) throws -> [Int] {
         guard let number = CatalogKey.catalogNumber(catalogNumber) else { return [] }
         return try database.prepare(
-            "SELECT DISTINCT release_id FROM catno_keys WHERE catno_key = ? ORDER BY release_id"
-                + " LIMIT ?"
+            """
+            SELECT DISTINCT release_id FROM catno_keys WHERE catno_key = ?
+            ORDER BY release_id LIMIT ?
+            """
         ).map(number, limit) { try $0.int(0) }
     }
 

@@ -149,7 +149,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             (importButton, #selector(chooseDumps)),
             (revealButton, #selector(revealCatalog)), (resumeButton, #selector(resumeImport)),
             (startOverButton, #selector(startImportOver)),
-            (otherReleasesButton, #selector(showOtherReleases)), (lookUpButton, #selector(showLookUp)),
+            (otherReleasesButton, #selector(showOtherReleases)),
+            (lookUpButton, #selector(showLookUp)),
             (changesButton, #selector(showChanges)), (rejectButton, #selector(toggleRejected)),
             (discogsButton, #selector(openReleasePage)),
             (applyButton, #selector(applyAll)),
@@ -231,7 +232,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
         revealButton.isHidden = true
-        reviewButtons.setViews([otherReleasesButton, lookUpButton, changesButton, rejectButton], in: .leading)
+        reviewButtons.setViews(
+            [otherReleasesButton, lookUpButton, changesButton, rejectButton], in: .leading)
         reviewButtons.setViews([discogsButton], in: .trailing)
         reviewButtons.spacing = 8
         let detail = NSStackView(views: [
@@ -338,7 +340,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Scrolls the other tracklist to where the one that moved is.
     @objc private func tracklistScrolled(_ notification: Notification) {
         guard !following, let moved = notification.object as? NSClipView else { return }
-        let other = (moved === fileTable.enclosingScrollView?.contentView
+        let other =
+            (moved === fileTable.enclosingScrollView?.contentView
             ? releaseTable : fileTable).enclosingScrollView?.contentView
         guard let other, other.bounds.origin.y != moved.bounds.origin.y else { return }
         following = true
@@ -469,8 +472,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     /// The writes running, beside the status bar's line: "Writing 120 tags to 20 files: 3 of
     /// 20 written", or a moving bar alone until a write reports, as a staged write never does.
-    private func showWriting(_ writing: (tags: Int, files: Int, written: Int?, fraction: Double?))
-    {
+    private func showWriting(_ writing: (tags: Int, files: Int, written: Int?, fraction: Double?)) {
         let what =
             "Writing \(number(writing.tags)) tags to \(count(writing.files, "file"))"
         if let written = writing.written, let fraction = writing.fraction {

@@ -924,7 +924,9 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     #expect(controller.statusLabel.stringValue == "Writing 12 tags to 3 files: 1 of 3 written")
     completion([])
     #expect(controller.progress.isHidden)
-    #expect(controller.statusLabel.stringValue == "Wrote 12 tags to 3 files; Undo Tag Edit puts them back")
+    #expect(
+        controller.statusLabel.stringValue
+            == "Wrote 12 tags to 3 files; Undo Tag Edit puts them back")
 }
 
 /// What the stand-in Look Up Release search was asked.
@@ -981,12 +983,15 @@ private final class Queries: @unchecked Sendable {
     #expect(sheet.shown.isEmpty && queries.all.isEmpty, "nothing asked before Search")
     sheet.catalogNumberField.stringValue = "SK 40"
     await sheet.runSearch()
-    #expect(queries.all.first?.0 == ReleaseQuery(
-        artist: "Persuader", title: "Nothing", catalogNumber: "SK 40"))
+    #expect(
+        queries.all.first?.0
+            == ReleaseQuery(
+                artist: "Persuader", title: "Nothing", catalogNumber: "SK 40"))
     #expect(queries.all.first?.1 == [300, 301])
     #expect(sheet.shown.map(\.summary.id) == [40, 41])
     #expect(sheet.text(0, .score) == "90%")
-    #expect(sheet.heading.stringValue == "The catalog has no match; the first 2 releases from Discogs")
+    #expect(
+        sheet.heading.stringValue == "The catalog has no match; the first 2 releases from Discogs")
     try snapshot(try #require(sheet.window), "discogs-look-up-release")
 
     sheet.table.selectRowIndexes([0], byExtendingSelection: false)

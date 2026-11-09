@@ -389,8 +389,12 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
 @MainActor
 @Test func aFileLeftOutIsMatchedReadAndWrittenWithout() async throws {
     let seen = Seen()
-    let doubled = album(7, "Stockholm", titles: ["Östermalm", "Östermalm", "Gamla Stan",
-        "Kungsholmen"])
+    let doubled = album(
+        7, "Stockholm",
+        titles: [
+            "Östermalm", "Östermalm", "Gamla Stan",
+            "Kungsholmen",
+        ])
     let tagger = await model(
         seen, albums: [doubled],
         matches: { album, _ in

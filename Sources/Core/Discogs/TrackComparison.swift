@@ -27,8 +27,7 @@ public struct TrackComparison: Equatable, Sendable {
 extension AlbumMatch {
     /// The release's tracks in order, each beside the file mapped to it, then the files mapped
     /// to none, those in `leftOut`, which the user left out of the match, last.
-    public func comparison(of album: DiscogsAlbum, leftOut: Set<Int64> = []) -> [TrackComparison]
-    {
+    public func comparison(of album: DiscogsAlbum, leftOut: Set<Int64> = []) -> [TrackComparison] {
         let all = rows(of: album)
         return all.filter { !($0.fileID.map(leftOut.contains) ?? false) }
             + all.filter { $0.fileID.map(leftOut.contains) ?? false }
