@@ -141,13 +141,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// before it shows, so it shows at its final layout.
     func show(after last: NSWindow?) {
         if !window.isVisible {
-            if let last {
-                window.setContentSize(last.contentRect(forFrameRect: last.frame).size)
-                let corner = NSPoint(x: last.frame.minX, y: last.frame.maxY)
-                window.setFrameTopLeftPoint(window.cascadeTopLeft(from: corner))
-            } else {
-                window.keepsFrame(as: Self.frameName)
-            }
+            window.keepsFrame(as: Self.frameName, cascadedFrom: last)
             window.layoutIfNeeded()
         }
         window.makeKeyAndOrderFront(nil)

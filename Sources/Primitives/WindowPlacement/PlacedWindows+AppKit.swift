@@ -59,4 +59,15 @@ extension NSWindow {
     /// window's screen the first time, and keeps its frame from then on (ADR 0158). Call it once
     /// the window has its size, before it first shows; later calls do nothing.
     public func keepsFrame(as name: String) { PlacedWindows.shared.place(self, as: name) }
+
+    /// As `keepsFrame(as:)` for the first window of a kind; while `last`, another of them, is
+    /// open, it opens cascaded from it instead, at its size when it resizes, and keeps no
+    /// frame, so the frame kept is the first one's.
+    public func keepsFrame(as name: String, cascadedFrom last: NSWindow?) {
+        guard let last else { return keepsFrame(as: name) }
+        if styleMask.contains(.resizable) {
+            setContentSize(last.contentRect(forFrameRect: last.frame).size)
+        }
+        setFrameTopLeftPoint(cascadeTopLeft(from: NSPoint(x: last.frame.minX, y: last.frame.maxY)))
+    }
 }

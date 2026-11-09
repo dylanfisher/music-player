@@ -24,18 +24,10 @@ public final class SpectrumWindows {
             self?.open.removeAll { $0 === controller }
         }
         guard let window = controller.window else { return }
-        if let last = open.last?.window {
-            window.setFrameTopLeftPoint(window.cascadeTopLeft(from: last.frame.topLeft))
-        } else {
-            // The first keeps its frame (ADR 0158); the rest cascade from the last one open.
-            window.keepsFrame(as: SpectrumWindow.title)
-        }
+        // The first keeps its frame (ADR 0158); the rest cascade from the last one open.
+        window.keepsFrame(as: SpectrumWindow.title, cascadedFrom: open.last?.window)
         open.append(controller)
         controller.showWindow(nil)
         model.start(analyze)
     }
-}
-
-extension NSRect {
-    fileprivate var topLeft: NSPoint { NSPoint(x: minX, y: maxY) }
 }

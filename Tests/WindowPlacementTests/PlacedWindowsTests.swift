@@ -75,6 +75,28 @@ private let secondary = CGRect(x: 1440, y: 0, width: 1920, height: 1055)
             == CGRect(x: 90, y: 0, width: 1100, height: 400))
 }
 
+/// A window opened while another of its kind is open cascades from it at its size, and the
+/// frame kept stays the first one's.
+@MainActor @Test func aSecondWindowCascadesFromTheLastAndKeepsNoFrame() throws {
+    func window(_ size: CGSize) -> NSWindow {
+        NSWindow(
+            contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .resizable],
+            backing: .buffered, defer: true)
+    }
+    let first = window(CGSize(width: 400, height: 300))
+    first.keepsFrame(as: "Cascade Test", cascadedFrom: nil)
+    first.setFrameTopLeftPoint(NSPoint(x: first.frame.minX + 10, y: first.frame.maxY))
+    let kept = first.frame
+    #expect(PlacedWindows.shared.frames["Cascade Test"] == kept)
+    let second = window(CGSize(width: 200, height: 100))
+    second.keepsFrame(as: "Cascade Test", cascadedFrom: first)
+    #expect(second.frame.size == first.frame.size)
+    #expect(second.frame.minX > first.frame.minX)
+    #expect(second.frame.maxY < first.frame.maxY)
+    second.setFrameTopLeftPoint(NSPoint(x: second.frame.minX + 30, y: second.frame.maxY))
+    #expect(PlacedWindows.shared.frames["Cascade Test"] == kept)
+}
+
 /// A window opened the first time is centered on its anchor's screen, the last screen here, and
 /// a later launch opens it where it was moved to.
 @MainActor @Test func aPlacedWindowSavesItsFrameAndOpensThereNextTime() throws {
