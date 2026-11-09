@@ -665,7 +665,7 @@ runs; restart it after) and its `docs/api.md` with it.
 - [ ] **Approve sheet:** redone calmer, with the same views the app uses elsewhere for the
       same data (DRY).
 
-Implementation plan, phase 59 (ADR 0160). The service's half shipped first (its ADR 0014):
+Implementation plan, phase 59 (ADR 0163). The service's half shipped first (its ADR 0014):
 `downloads/config` sends `slskd_url`, a job sends `search` while `searching`, and a
 `not_found` job's `reason` stays through its next search.
 
@@ -702,7 +702,7 @@ Parts, each its own commit or two, with a test that fails without it:
 5. **Status bar item:** `DownloadsStatusItem` in Downloads, put after the problems button
    by a new `LibraryBrowser.setStatusAccessory`; shown while a job is queued, searching or
    downloading; a click opens Downloads; a right-click picks its style, the setting
-   `downloads.statusStyle` (count, label, progress bar), declared in `Settings`.
+   `appearance.downloadsStatusStyle` (count, text, progress bar), declared in `Settings`.
 6. **Open with a selection:** File > Downloads… with library rows selected opens From
    Library Selection once the window can queue; a selection with no Discogs album opens
    nothing.

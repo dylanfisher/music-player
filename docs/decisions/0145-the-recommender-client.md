@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-08
 - **Status:** accepted
+- **Amended by:** [0163](0163-download-progress-and-the-status-item.md): the client reads
+  `downloads/config` for slskd's page
 - **See also:** [0025](0025-threat-model.md) (the threat model, row 65),
   [0039](0039-network-control.md) (local subnets, IP literals, `LocalHTTPClient`),
   [0144](0144-the-service-token.md) (the token and the settings),

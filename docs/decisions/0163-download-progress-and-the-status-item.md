@@ -1,4 +1,4 @@
-# 0160. Download progress, its speed, the status bar item and slskd's page
+# 0163. Download progress, its speed, the status bar item and slskd's page
 
 - **Date:** 2026-11-09
 - **Status:** accepted
