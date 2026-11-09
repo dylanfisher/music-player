@@ -807,3 +807,21 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     await tagger.model.finished()
     tagger.window?.close()
 }
+
+@MainActor
+@Test func theMatchedTabAppliesToAllAsExactAndLikelyDo() async throws {
+    let tagger = await model(
+        Seen(), albums: [album(1, "Stockholm", titles: stockholm)],
+        matches: { album, _ in
+            match(album, release(10, "Stockholm", titles: stockholm), tier: .matched)
+        })
+    tagger.analyze()
+    await tagger.finished()
+    tagger.tab = .matched
+    let controller = TaggerWindow(model: tagger)
+    #expect(!controller.applyButton.isHidden)
+    #expect(controller.applyButton.title == "Apply to All in Matched…")
+    #expect(controller.applyButton.isEnabled)
+    #expect(tagger.applicable(.matched).map(\.id) == [1])
+    controller.window?.close()
+}

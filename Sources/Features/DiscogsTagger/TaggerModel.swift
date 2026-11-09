@@ -261,7 +261,7 @@ final class TaggerModel {
     }
 
     /// The tiers Apply to All writes: those a match set can be trusted in after a review.
-    static let appliedTiers: [MatchTier] = [.exact, .likely]
+    static let appliedTiers: [MatchTier] = [.exact, .likely, .matched]
 
     // MARK: - The catalog
 
