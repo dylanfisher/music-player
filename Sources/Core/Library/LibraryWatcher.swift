@@ -286,6 +286,15 @@ public final class LibraryWatcher: @unchecked Sendable {
         scanQueue.async(execute: job)
     }
 
+    /// Stops watching, as `stop` does, and runs `job` on the scan queue once the running scan
+    /// has stopped, paused or not, rather than after it finishes: a restore, which replaces
+    /// the index and relaunches (ADR 0142). A cancelled scan keeps what it stored and removes
+    /// nothing. A running sync still finishes first, and a read a share holds up ends first.
+    public func stop(then job: @escaping @Sendable () -> Void) {
+        stop()
+        betweenScans(job)
+    }
+
     /// Stop Watching on the last folder: removes every file from the index, as `start` does for
     /// the files outside the folders when there are some. Its stats stay, by path.
     public func removeEveryFile() {

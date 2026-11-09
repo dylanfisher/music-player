@@ -599,6 +599,30 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(received.scanned.isEmpty && received.failedScans.isEmpty)
 }
 
+/// A restore stops the running scan, here a paused one, which would hold a job between scans
+/// until it was resumed, and runs once it has stopped.
+@Test func aJobAfterStoppingRunsOnceThePausedScanStops() async throws {
+    let library = try TestLibrary()
+    let access = GatedAccess(readsBeforeGate: 20)
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        scanner: LibraryScanner(
+            databaseURL: library.databaseURL, networkReaders: 4, access: access, batchSize: 1),
+        mounts: FakeMounts(), events: received.append)
+    watcher.start(
+        folders: [WatchedFolder(path: library.root, kind: .network)],
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
+    #expect(try await eventually(within: 20) { access.isHeld })
+    watcher.pauseScan()
+    #expect(try await eventually(within: 20) { received.paused == [true] })
+    access.open()
+    let runs = RunCount()
+    watcher.stop(then: runs.run)
+    #expect(try await eventually(within: 20) { runs.count == 1 })
+    #expect(received.stopped == [library.root])
+    #expect(received.scanned.isEmpty)
+}
+
 /// Counts the runs of a job from any thread.
 private final class RunCount: @unchecked Sendable {
     private let lock = NSLock()
