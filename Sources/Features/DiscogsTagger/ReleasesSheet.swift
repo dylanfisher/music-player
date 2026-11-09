@@ -1,6 +1,5 @@
 import AppKit
 import Discogs
-import DisplayText
 
 /// Other Releases… (51.11, after YATE's release list): the album's candidates with filters by
 /// artist, title, country, label and format, sorted by any column's header. Choosing one
@@ -193,14 +192,14 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
         guard let lookUp else { return }
         let query = query
         guard !query.isEmpty else {
-            heading.stringValue = "Type an artist, a title, a catalog number or a release ID"
+            heading.stringValue = TaggerText.lookUpEmpty
             return NSSound.beep()
         }
         searches += 1
         let mine = searches
         searchButton.isEnabled = false
         searching.startAnimation(nil)
-        heading.stringValue = "Searching…"
+        heading.stringValue = TaggerText.searching
         // A newer search owns the button, the spinner and the heading.
         defer {
             if mine == searches {
@@ -220,22 +219,8 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
         guard mine == searches else { return }
         origin = found.origin
         candidates = found.releases.map { (summary: $0.summary, score: Optional($0.score)) }
-        heading.stringValue =
-            Self.foundText(found)
-            + (query.ignoresOtherFields
-                ? " by the release ID alone; the other fields aren't searched" : "")
+        heading.stringValue = TaggerText.found(found, byIDAlone: query.ignoresOtherFields)
         showCandidates()
-    }
-
-    /// "12 releases in the catalog", "The catalog has no match; 8 releases from Discogs".
-    static func foundText(_ found: ReleaseLookup) -> String {
-        let count = found.releases.count
-        guard count > 0 else { return "Neither the catalog nor Discogs has a match" }
-        let releases = (found.isCut ? "the first " : "") + DisplayText.count(count, "release")
-        return switch found.origin {
-        case .catalog: sentence(releases) + " in the catalog"
-        case .api: "The catalog has no match; \(releases) from Discogs"
-        }
     }
 
     /// Keeps the candidates whose every filtered column holds its field's text, ignoring case

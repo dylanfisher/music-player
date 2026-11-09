@@ -6,6 +6,38 @@ import Settings
 
 // The tagger window's names for what it shows, each defined once.
 
+/// The tagger's words for its two tracklists, the files left out, and Look Up.
+enum TaggerText {
+    static let filesHeading = "Your Files"
+    static let releaseHeading = "Discogs Release"
+    /// A file left out's mark, and its tooltip.
+    static let leftOut = "Left out"
+    static let leftOutTip = "Left out of the match: not matched, read or written"
+    static let lookUp = "Look Up…"
+    static let lookUpEmpty = "Type an artist, a title, a catalog number or a release ID"
+    static let searching = "Searching…"
+
+    /// "120 tags to 20 files": what a write writes.
+    static func tagsToFiles(tags: Int, files: Int) -> String {
+        "\(DisplayText.count(tags, "tag")) to \(DisplayText.count(files, "file"))"
+    }
+
+    /// "12 releases in the catalog", "The catalog has no match; 8 releases from Discogs";
+    /// `byIDAlone` adds that the fields beside a release id weren't searched.
+    static func found(_ found: ReleaseLookup, byIDAlone: Bool = false) -> String {
+        let count = found.releases.count
+        guard count > 0 else { return "Neither the catalog nor Discogs has a match" }
+        let releases = (found.isCut ? "the first " : "") + DisplayText.count(count, "release")
+        let text =
+            switch found.origin {
+            case .catalog: sentence(releases) + " in the catalog"
+            case .api: "The catalog has no match; \(releases) from Discogs"
+            }
+        return text
+            + (byIDAlone ? " by the release ID alone; the other fields aren't searched" : "")
+    }
+}
+
 extension MatchTier {
     /// A tab's title, before its count.
     var title: String {

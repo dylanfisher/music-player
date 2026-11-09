@@ -965,14 +965,9 @@ final class TaggerModel {
         changed()
     }
 
-    /// "120 tags to 20 files": what a write writes.
-    nonisolated static func tagsToFiles(tags: Int, files: Int) -> String {
-        "\(DisplayText.count(tags, "tag")) to \(DisplayText.count(files, "file"))"
-    }
-
     /// The status line once a plan is written.
     static func wroteText(_ plan: ApplyPlan, staged: Bool = false) -> String {
-        "Wrote \(tagsToFiles(tags: plan.fieldCount, files: plan.files.count));"
+        "Wrote \(TaggerText.tagsToFiles(tags: plan.fieldCount, files: plan.files.count));"
             + (staged ? stagedWrite : " Undo Tag Edit puts them back")
     }
 
@@ -992,7 +987,7 @@ final class TaggerModel {
         /// "Writing 120 tags to 20 files: 3 of 20 written", or without the count before a
         /// report.
         var text: String {
-            let what = "Writing \(TaggerModel.tagsToFiles(tags: tags, files: files))"
+            let what = "Writing \(TaggerText.tagsToFiles(tags: tags, files: files))"
             guard let progress else { return what + "…" }
             return
                 "\(what): \(DisplayText.number(progress.written)) of \(DisplayText.number(files)) written"

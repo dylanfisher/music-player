@@ -54,11 +54,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// same rows, scrolled and selected together, so each column's source is plain.
     let fileTable = NSTableView()
     let releaseTable = NSTableView()
-    static let filesHeading = "Your Files"
-    static let releaseHeading = "Discogs Release"
     /// The selected album's files left out, which its rows list last, greyed.
     private(set) var leftOut: Set<Int64> = []
-    static let leftOutText = "Left out"
     /// Set while one tracklist follows the other's scroll or selection, so the other doesn't
     /// follow it back.
     private var following = false
@@ -67,8 +64,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Why a Likely or Incomplete album isn't Exact, under the release's lines.
     let reasonsLine = NSTextField(labelWithString: "")
     let otherReleasesButton = NSButton(title: "Other Releases…", target: nil, action: nil)
-    static let lookUpTitle = "Look Up…"
-    let lookUpButton = NSButton(title: TaggerWindow.lookUpTitle, target: nil, action: nil)
+    let lookUpButton = NSButton(title: TaggerText.lookUp, target: nil, action: nil)
     let changesButton = NSButton(title: "View Changes…", target: nil, action: nil)
     let discogsButton = NSButton(title: openOnDiscogsTitle, target: nil, action: nil)
     let rejectButton = NSButton(title: "Reject", target: nil, action: nil)
@@ -312,7 +308,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 self, selector: #selector(tracklistScrolled),
                 name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         }
-        let sides = [(Self.filesHeading, files), (Self.releaseHeading, release)].map {
+        let sides = [(TaggerText.filesHeading, files), (TaggerText.releaseHeading, release)].map {
             heading, scroll in
             let title = NSTextField(labelWithString: heading)
             title.font = .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
@@ -507,7 +503,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             releaseTitle.stringValue = album == nil ? "No album selected" : "No release"
             releaseLine.stringValue =
                 album == nil
-                ? "" : "\(Self.lookUpTitle) searches the catalog, then Discogs."
+                ? "" : "\(TaggerText.lookUp) searches the catalog, then Discogs."
         }
         reasonsLine.stringValue = album.flatMap { reasonsText($0.match, separator: " · ") } ?? ""
         leftOut = album?.leftOut ?? []
@@ -560,7 +556,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         if isLeftOut {
             cell.textColor = .tertiaryLabelColor
             if id == .state {
-                cell.toolTip = "Left out of the match: not matched, read or written"
+                cell.toolTip = TaggerText.leftOutTip
                 return cell
             }
         }
@@ -627,7 +623,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         case .include: return ""
         default:
             return comparison.fileID.map(leftOut.contains) == true
-                ? Self.leftOutText : comparison.stateText
+                ? TaggerText.leftOut : comparison.stateText
         }
     }
 

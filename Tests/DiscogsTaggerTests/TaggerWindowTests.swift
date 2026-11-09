@@ -115,8 +115,8 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
             == ["position", "releaseTitle", "releaseTime", "state"])
     #expect(files.tableColumns[2].title == tracks.tableColumns[1].title, "both Title")
     let labels = allViews(window.contentView!).compactMap { ($0 as? NSTextField)?.stringValue }
-    #expect(labels.contains(TaggerWindow.filesHeading))
-    #expect(labels.contains(TaggerWindow.releaseHeading))
+    #expect(labels.contains(TaggerText.filesHeading))
+    #expect(labels.contains(TaggerText.releaseHeading))
     #expect(files.numberOfRows == 3 && tracks.numberOfRows == 3)
     #expect(files.rowHeight == tracks.rowHeight)
     #expect(
@@ -1044,7 +1044,7 @@ private final class HeldSearch {
         id: 1, artist: "", title: "", label: "", catalogNumber: "", country: "", year: "",
         format: "", trackCount: 0)
     let found = { (count: Int, origin: MatchOrigin, cut: Bool) in
-        ReleasesSheet.foundText(
+        TaggerText.found(
             ReleaseLookup(
                 releases: Array(repeating: (summary, 1), count: count), origin: origin,
                 isCut: cut))
