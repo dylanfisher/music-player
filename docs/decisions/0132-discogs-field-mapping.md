@@ -31,9 +31,11 @@ genres, styles, media (`CD (Album)`, as the tie-break reads it), compilation (th
 artist is Various) and disc count. Track fields: title, artist, artist list, name variations
 (`canonical=ANV`), artist URLs, track and disc numbers, the track count of its disc, the
 position as Discogs writes it, the ordinal position (counted from 0, as YATE's is), the heading
-over it as the disc subtitle, and the credits. A track's artists are its own, else the
-release's. Its credits are its own and the release's that name no tracks or name it ("A1 to
-B2, C1"). Composer (Composed By, Written-By, Music By, Songwriter), lyricist (Lyrics By, Words
+over every track of its disc as the disc subtitle (amended 2026-11-08: a disc whose tracks sit
+under two or more headings, as "Michael Jackson" and "The Jackson 5" split *18 Greatest Hits*,
+has sections, not a title, and gets none), and the credits. A track's artists are its own,
+else the release's. Its credits are its own and the release's that name no tracks or name it
+("A1 to B2, C1"). Composer (Composed By, Written-By, Music By, Songwriter), lyricist (Lyrics By, Words
 By), conductor, remixer (Remix) and producer take their roles, whatever their notes in
 brackets; the involved people take every other role. A disc is the number before a dash in
 "CD2-4" or "2-4" when every track has one; otherwise the album is one disc, vinyl sides

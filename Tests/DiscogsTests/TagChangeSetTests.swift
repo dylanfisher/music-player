@@ -92,6 +92,19 @@ private func changed(
     #expect(changed(vinyl)[2]?["trackNumber"] == "2")
 }
 
+@Test func headingsThatSplitOneDiscArentItsSubtitle() {
+    let sections = CatalogRelease(
+        id: 2, title: "Hits",
+        tracks: [
+            CatalogTrack(kind: .heading, position: nil, title: "Michael Jackson"),
+            song("1", "Ben"),
+            CatalogTrack(kind: .heading, position: nil, title: "The Jackson 5"),
+            song("2", "ABC"), song("3", "Dancing Machine"),
+        ])
+    let all = changed(sections)
+    #expect((1...3).allSatisfy { all[$0]?["discSubtitle"] == nil })
+}
+
 @Test func artistsUseTheTracksOwnAndDiscogssJoins() {
     let closer = changed()[3]!
     #expect(closer["artist"] == "Guest & Host")

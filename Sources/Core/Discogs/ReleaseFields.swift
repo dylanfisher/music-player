@@ -14,7 +14,8 @@ struct ReleaseFields {
         /// Counted from 1 on its disc.
         var number: Int
         var discTrackCount: Int
-        /// The heading over the track, which names its side or disc.
+        /// The heading over every track of its disc, which names the disc; nil where the disc's
+        /// tracks sit under more than one heading, which name sections of it, or under none.
         var heading: String?
     }
 
@@ -29,6 +30,11 @@ struct ReleaseFields {
         let numbered = discs.allSatisfy { $0 != nil }
         let discOf = tracks.indices.map { numbered ? discs[$0]!.disc : 1 }
         let headings = Headings(release.tracks)
+        let trackHeadings = tracks.map { headings.take($0) }
+        let discHeading = { (disc: Int) -> String? in
+            let own = Set(tracks.indices.filter { discOf[$0] == disc }.map { trackHeadings[$0] })
+            return own.count == 1 ? own.first! : nil
+        }
         var places: [Place] = []
         for (index, track) in tracks.enumerated() {
             let disc = discOf[index]
@@ -37,7 +43,7 @@ struct ReleaseFields {
                     track: track, ordinal: index, disc: disc,
                     number: discOf[..<index].filter { $0 == disc }.count + 1,
                     discTrackCount: discOf.filter { $0 == disc }.count,
-                    heading: headings.take(track)))
+                    heading: discHeading(disc)))
         }
         self.places = places
         discCount = Set(discOf).count
