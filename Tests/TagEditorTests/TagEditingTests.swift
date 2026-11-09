@@ -733,12 +733,14 @@ private final class FileTitles: @unchecked Sendable {
     other.close()
 }
 
-/// Moves `/lib/a.flac` to `/lib/A/a.flac` and leaves the rest.
+/// Moves `/lib/a.flac` to `/lib/A/a.flac`, leaves the rest, and finds what isn't in `/lib`
+/// outside.
 private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths, _ in
     var result = FilesOrganized()
     result.moved = paths.filter { $0 == "/lib/a.flac" }.map {
         TrackMove(from: $0, to: "/lib/A/a.flac")
     }
+    result.outside = paths.filter { !$0.hasPrefix("/lib/") }
     return result
 }
 
@@ -756,17 +758,21 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
     }
     editing.organizingFolder = { "/lib" }
     editing.write(
-        [("/lib/a.flac", TagEdit(values: [.title: "A"])), ("/lib/b.flac", TagEdit())],
-        over: window)
+        [
+            ("/lib/a.flac", TagEdit(values: [.title: "A"])), ("/lib/b.flac", TagEdit()),
+            ("/elsewhere/c.flac", TagEdit()),
+        ], over: window)
     editing.undo(over: window, from: .discogsTagger)
     try await eventually { seen.work.count == 4 && !editing.isWriting }
     #expect(
         seen.work == [
-            "write /lib/a.flac /lib/b.flac", "organize /lib/a.flac /lib/b.flac in /lib",
+            "write /lib/a.flac /lib/b.flac /elsewhere/c.flac",
+            "organize /lib/a.flac /lib/b.flac /elsewhere/c.flac in /lib",
             "follow /lib/a.flac>/lib/A/a.flac", "undo",
         ])
-    #expect(seen.written.first == ["/lib/A/a.flac", "/lib/b.flac"])
+    #expect(seen.written.first == ["/lib/A/a.flac", "/lib/b.flac", "/elsewhere/c.flac"])
     #expect(organized.first??.moved == [TrackMove(from: "/lib/a.flac", to: "/lib/A/a.flac")])
+    #expect(organized.first??.outside == [])
 }
 
 /// With the setting off, a write renames nothing.

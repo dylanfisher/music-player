@@ -69,6 +69,8 @@ extension AppDelegate {
             if !report.changed.isEmpty {
                 self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
             }
+            // A write whose files were all in place has nothing to say.
+            guard !organized.moved.isEmpty || !organized.problemLines.isEmpty else { return }
             self?.browser?.finishOrganizing(organized, carried: carried, failure: failure)
         }
     }

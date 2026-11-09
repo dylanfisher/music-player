@@ -444,6 +444,9 @@ public final class TagEditing {
                 !target.paths.isEmpty
             {
                 var result = organize(target.paths, target.folder)
+                // The setting is limited to the library folder: an edit of a file elsewhere
+                // isn't a problem.
+                if organizing == nil { result.outside = [] }
                 result.problems += follow(result.moved).map {
                     "\($0.path): Undo Tag Edit can't find it at its new path: \($0.detail)"
                 }
