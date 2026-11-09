@@ -650,6 +650,41 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 - [ ] **Browse columns:** more than three columns in browse mode.
 - [ ] **Play count:** set by hand (Get Info, phase 57, holds the field).
 
+Plan:
+
+1. **Shift with Option-Up/Down:** two commands in `AppCommands`, Extend Selection Down and Up
+   10 Rows (`selection.extendTenRowsDown`/`Up`, ⇧⌥↓/⇧⌥↑), in `RowMove.commands` as the ten-row
+   moves with `extending`, and in Edit ▸ Selection. `ListSelection.moved` already extends any
+   move; a test drives it through the dispatcher's key routing.
+2. **Next and previous album:** `RowMove` gains `nextAlbum` and `previousAlbum`, which
+   `ListSelection.moved` resolves from an album ID per row, the one the art column and the
+   album lines group by (ADR 0088). Four commands: Select Next and Previous Album (⌃↓/⌃↑) and
+   Extend Selection to Next and Previous Album (⌃⇧↓/⌃⇧↑). Move 10 Rows drops its ⌃⇧ alternate
+   for them. The track table passes its rows' album IDs; the timeline, the queue and the panes
+   have none, so the album moves leave their selection alone. Mission Control's ⌃↑/⌃↓ take the
+   chords first while they're on: an ADR says so. Tests on `ListSelection`.
+3. **Typed palette search:** `PaletteQuery` in the Palette module reads a leading
+   `<kind>:` (`artist:`, `album:`, `song:` or `track:`, `genre:`, `playlist:`, `command:`,
+   `setting:`, `output:`) and `rankPalette` ranks only that kind on the rest of the text. A word
+   that isn't a kind's leaves the query as typed. Tests on `rankPalette`.
+4. **Edit menu:** Copy, Paste and a new Delete item stay standard items (⌘C and ⌘V are the
+   field editor's in a text field); the app delegate answers `copy:`, `paste:` and `delete:`
+   and validates them. Copy, in the track table, the timeline or the queue, writes one
+   "Artist – Title" line per track (`CopiedTrack`, Core/Library) as plain text only, and the
+   app keeps the copied files' paths with the pasteboard's change count. Paste, while the
+   pasteboard still holds that copy, adds them to the manual playlist shown (placed after the
+   selection when the playlist is in its own order) or to the queue (as Add to Playback Queue
+   does); nowhere else. Delete runs Remove from Queue or Playlist. Tests on the copied text, the
+   clipboard, the paste target and the browser's paste into a playlist.
+5. **Browse columns:** `BrowserColumn.counts` is 1 to 6; the config check, the state check and
+   `BrowserColumn.restored` take any count in it. `BrowserModel` sizes its entries from the
+   columns, and `PanesController` rebuilds its tables when the count changes. The header menu
+   gets Add Column (to the right, with the first grouping not shown) and Remove Column, through
+   `groupingsChosen` as a grouping choice goes. Tests on the model and the menu.
+6. **Play count:** not here. Phase 57, running at the same time, owns the field and its storage.
+7. ADR 0160 records the album moves' rules, the chords and Mission Control, the clipboard, and
+   the column limits.
+
 ### 57. Get Info
 
 - [ ] **No flashing:** the window opens at its final layout; its tabs don't resize after it
