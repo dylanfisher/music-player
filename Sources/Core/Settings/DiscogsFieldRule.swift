@@ -58,3 +58,12 @@ extension DiscogsFieldRule.Mode {
         }
     }
 }
+
+extension DiscogsFieldRule {
+    /// The rule's parts as the Field Mapping sheet's columns and Settings ▸ Tagging's rows
+    /// name them.
+    public static let modeTitle = "Mode"
+    public static let targetsTitle = "Tags"
+    public static let joinTitle = "Join"
+    public static let templateTitle = "Template"
+}

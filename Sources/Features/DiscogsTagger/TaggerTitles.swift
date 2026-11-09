@@ -154,10 +154,10 @@ enum TaggerColumn: String {
         case .year: TrackColumn.year.title
         case .format: DiscogsField.media.title
         case .tracks: "Tracks"
-        case .mode: "Mode"
-        case .targets: "Tags"
-        case .join: "Join"
-        case .template: "Template"
+        case .mode: DiscogsFieldRule.modeTitle
+        case .targets: DiscogsFieldRule.targetsTitle
+        case .join: DiscogsFieldRule.joinTitle
+        case .template: DiscogsFieldRule.templateTitle
         }
     }
 
