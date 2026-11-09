@@ -455,6 +455,19 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(count - offset == 5, "A's 2 plays and B's 3")
 }
 
+/// Setting a never-played track's count to 0 changes nothing, so it gains no stats, which
+/// would make it a lost path's or a move's.
+@Test func settingANeverPlayedTrackToNoPlaysAddsNoStats() throws {
+    let nas = try SimulatedNAS()
+    let machine = try machines(1, nas)[0]
+    let id = try machine.scanned("x.flac")
+    try machine.index.setPlayCount(0, trackIDs: [id])
+    let rows = try machine.index.database.prepare(
+        "SELECT \(hasStats("?1")), (SELECT count(*) FROM plays WHERE path_id = ?1)"
+    ).map(id) { (try $0.int(0), try $0.int(1)) }[0]
+    #expect(rows == (0, 0))
+}
+
 @Test func aMoveCarriesAHandSetCount() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair

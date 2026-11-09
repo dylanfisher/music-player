@@ -313,6 +313,9 @@ extension LibraryIndex {
     /// changes. Call inside a transaction.
     func setPlayCountOffset(_ offset: Int, of id: Int64) throws {
         let old = try statement(playCountOffsetSQL).map(id) { try $0.int(0) }.first ?? 0
+        // An unchanged offset writes nothing, so a never-played track set to 0 gets no plays
+        // row, which would count as stats for moves and Lost Stats.
+        guard offset != old else { return }
         try statement(addPlaysSQL).run(id, offset - old, 0, nil as Double?)
         if offset == 0 {
             try statement(deletePlayCountOffsetSQL).run(id)
