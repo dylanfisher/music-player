@@ -5,7 +5,7 @@ import CoreGraphics
 /// display it was on is gone. A window that isn't `resizable` keeps `size` there, with the
 /// saved top left, since its content sets its size. Otherwise, as the first time it opens,
 /// `size` centered on `anchorScreen`, shrunk to fit it when `resizable`.
-public func placedFrame(
+func placedFrame(
     saved: CGRect?, size: CGSize, resizable: Bool, screens: [CGRect], anchorScreen: CGRect
 ) -> CGRect {
     if let saved, screens.contains(where: { $0.intersects(saved) }) {

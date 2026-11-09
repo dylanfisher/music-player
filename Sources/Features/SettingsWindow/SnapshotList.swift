@@ -4,6 +4,8 @@ import DisplayText
 /// The Library section's list of snapshots: when each was written and its size, newest first.
 @MainActor
 final class SnapshotList: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+    /// The list's name, which its disclosure in the Library section shows too.
+    static let title = "Snapshots"
     private static let writtenColumn = NSUserInterfaceItemIdentifier("snapshotTaken")
     private static let rowsShown = 5.0
 
@@ -30,7 +32,7 @@ final class SnapshotList: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         table.delegate = self
         table.usesAlternatingRowBackgroundColors = true
         table.allowsEmptySelection = true
-        table.setAccessibilityLabel("Snapshots")
+        table.setAccessibilityLabel(Self.title)
         scroll.documentView = table
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder

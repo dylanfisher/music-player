@@ -334,7 +334,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         cell.orientation = .vertical
         cell.alignment = .leading
         cell.spacing = 6
-        grid.addRow(with: [NSGridCell.emptyContentView, disclosureLine("Snapshots", Self.snapshotsKey)])
+        grid.addRow(with: [
+            NSGridCell.emptyContentView, disclosureLine(SnapshotList.title, Self.snapshotsKey),
+        ])
         let row = grid.addRow(with: [NSTextField(labelWithString: "Snapshots:"), cell])
         row.isHidden = true
         fallbackRows[Self.snapshotsKey] = row

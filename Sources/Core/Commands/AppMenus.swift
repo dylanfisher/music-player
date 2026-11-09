@@ -61,7 +61,7 @@ public enum AppMenus {
     /// Where the Shortcuts pane and the palette list the setting commands no menu has: those
     /// the Settings window or the tagger shows, which would make the File menu too long
     /// (ADR 0159).
-    public static let settingsSectionTitle = "Settings"
+    static let settingsSectionTitle = "Settings"
 
     /// The context menu of the track table and the timeline, grouped as Swinsian groups it.
     /// Its items act on the selection, which a right-click sets.
@@ -119,7 +119,8 @@ public enum AppMenus {
                             .command(.resolveLostStats), .command(.restoreRemoved),
                             .command(.importMoves),
                         ], showsChords: true),
-                    .separator, .command(.revealInFinder), .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),
+                    .separator, .command(.revealInFinder), .command(.copyPath),
+                    .command(.addToPlaylist), .command(.removeTracks),
                     .command(.showInPlaylist), .command(.showAlbum), .command(.showArtist),
                     .separator, .command(.editTags), .command(.showSpectrum),
                     .command(.replaceArtwork), .command(.removeArtwork),
