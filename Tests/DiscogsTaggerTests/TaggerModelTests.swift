@@ -242,6 +242,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
         effects: .init(
             albums: { [one] }, reviews: { [:] }, review: { _, _ in },
             match: { albums, _, _, _, _ in albums.map { matches($0, nil) } },
+            choose: { _, previous, _, _ in previous },
             summaries: { _ in [] }, release: { _ in nil },
             read: { ids, _ in
                 seen.read(ids)
@@ -271,7 +272,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     let tagger = TaggerModel(
         effects: .init(
             albums: { [] }, reviews: { [:] }, review: { _, _ in },
-            match: { _, _, _, _, _ in [] }, summaries: { _ in [] }, release: { _ in nil },
+            match: { _, _, _, _, _ in [] }, choose: { _, previous, _, _ in previous },
+            summaries: { _ in [] }, release: { _ in nil },
             read: { _, _ in ([], []) },
             checkCatalog: {
                 checks.read([])
@@ -338,7 +340,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     tagger.setChoices(choices)
     #expect(seen.skips == [true, false], "the same choices change nothing")
     await tagger.choose(11, for: 1)
-    #expect(seen.skips == [true, false, false], "a choice is rescored with the skip too")
+    #expect(
+        seen.skips == [true, false], "a choice scores its one release, which no skip leaves out")
 }
 
 @MainActor

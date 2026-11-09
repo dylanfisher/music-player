@@ -66,6 +66,7 @@ extension TaggerModel {
                     for album in albums { matches.append(try await staged.match(album, release)) }
                     return matches
                 },
+                choose: { album, _, _, _ in try await staged.match(album, release) },
                 summaries: staged.summaries,
                 release: staged.release,
                 read: { ids, progress in

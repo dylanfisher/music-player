@@ -109,6 +109,10 @@ final class TaggerModel {
                 [DiscogsAlbum], [Int64: Int], Bool, DiscogsSource,
                 @escaping @Sendable (AlbumMatchProgress) -> Void
             ) async throws -> [AlbumMatch]
+        /// Matches the album with the release the user chose, after its match until now, from
+        /// the source given: that release alone, with no search (ADR 0170).
+        var choose:
+            @Sendable (DiscogsAlbum, AlbumMatch, Int, DiscogsSource) async throws -> AlbumMatch
         var summaries: @Sendable ([Int]) async throws -> [ReleaseSummary]
         /// A release as View Release shows it; nil when the catalog lacks it.
         var release: @Sendable (Int) async throws -> ReleaseDetail?
@@ -539,16 +543,19 @@ final class TaggerModel {
         return try await effects.lookUp(query, album)
     }
 
-    /// Makes `releaseID` the album's match, rescored against its files, and remembers it. A
-    /// release from the API, as Look Up Release can find, is matched with the API even when
-    /// the source is the catalog.
+    /// Makes `releaseID` the album's match, scored against its files, and remembers it. Only
+    /// that release is loaded, so no search runs again (ADR 0170). A release from the API, as
+    /// Look Up Release can find, is loaded from the API even when the source is the catalog.
     func choose(_ releaseID: Int, for albumID: Int64, from origin: MatchOrigin = .catalog) async {
         guard let album = albums.first(where: { $0.id == albumID }) else { return }
         let review = DiscogsReview.chosen(releaseID: releaseID)
         let effects = effects
+        let source = source(for: origin)
         await rematch(
-            albumID, leaving: album.leftOut, choosing: releaseID, from: origin,
-            failure: "The release couldn't be chosen",
+            albumID, leaving: album.leftOut, failure: "The release couldn't be chosen",
+            matching: { kept, previous in
+                try await effects.choose(kept, previous, releaseID, source)
+            },
             save: { try await effects.review(review, album.album.tracks.map(\.fileID)) },
             update: { chosen in
                 chosen.review = review
@@ -556,14 +563,14 @@ final class TaggerModel {
             })
     }
 
-    /// Matches the album again without the files in `leftOut`, with `release` chosen if any,
-    /// from the source a release of `origin` needs: one album at a time, and not while other
-    /// work runs. `save` runs once the match is made, before the album takes it, and `update`
-    /// changes what else goes with it. A failure is an alert of `failure`.
+    /// Matches the album again without the files in `leftOut`, through `matching`, which
+    /// hears the album without them and its match until now: one album at a time, and not
+    /// while other work runs. `save` runs once the match is made, before the album takes it,
+    /// and `update` changes what else goes with it. A failure is an alert of `failure`.
     private func rematch(
-        _ albumID: Int64, leaving leftOut: Set<Int64>, choosing release: Int?,
-        from origin: MatchOrigin, failure: String, save: () async throws -> Void = {},
-        update: (inout Album) -> Void = { _ in }
+        _ albumID: Int64, leaving leftOut: Set<Int64>, failure: String,
+        matching: (DiscogsAlbum, AlbumMatch) async throws -> AlbumMatch,
+        save: () async throws -> Void = {}, update: (inout Album) -> Void = { _ in }
     ) async {
         guard rematchingID == nil, !isBusy,
             let album = albums.first(where: { $0.id == albumID })
@@ -577,19 +584,16 @@ final class TaggerModel {
             changed()
         }
         do {
-            let match = try await effects.match(
-                [kept], release.map { [albumID: $0] } ?? [:], choices.skipVideo,
-                source(for: origin)
-            ) { _ in }
+            let match = try await matching(kept, album.match)
             try await save()
             guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
             leftOutFiles[albumID] = leftOut.isEmpty ? nil : leftOut
             albums[index].leftOut = leftOut
-            albums[index].match = match[0]
+            albums[index].match = match
             albums[index].excluded = []
             update(&albums[index])
             forgetChangeCounts(of: albumID)
-            if selectedID == albumID { tab = match[0].tier }
+            if selectedID == albumID { tab = match.tier }
         } catch {
             self.failed(failure, ["\(error)"])
         }
@@ -618,9 +622,15 @@ final class TaggerModel {
         else { return }
         var leftOut = album.leftOut
         if out { leftOut.insert(fileID) } else { leftOut.remove(fileID) }
+        let effects = effects
+        let chosen = album.chosen.map { [albumID: $0] } ?? [:]
+        let skipsVideo = choices.skipVideo
+        let source = source(for: album.match.origin)
         await rematch(
-            albumID, leaving: leftOut, choosing: album.chosen, from: album.match.origin,
-            failure: "The album couldn't be matched again")
+            albumID, leaving: leftOut, failure: "The album couldn't be matched again",
+            matching: { kept, _ in
+                try await effects.match([kept], chosen, skipsVideo, source) { _ in }[0]
+            })
     }
 
     /// Rejects the album, so Apply to All leaves it out, or takes the rejection back; both are

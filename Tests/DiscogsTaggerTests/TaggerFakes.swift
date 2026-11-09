@@ -67,6 +67,7 @@ final class Seen: @unchecked Sendable {
     private var _reads: [[Int64]] = []
     private var _skips: [Bool] = []
     private var _sources: [DiscogsSource] = []
+    private var _chosen: [(release: [Int64: Int], source: DiscogsSource)] = []
 
     var reviews: [(DiscogsReview?, [Int64])] { lock.withLock { _reviews } }
     /// The releases chosen each match was asked with.
@@ -76,6 +77,8 @@ final class Seen: @unchecked Sendable {
     var skips: [Bool] { lock.withLock { _skips } }
     /// The source each match was asked to look releases up in.
     var sources: [DiscogsSource] { lock.withLock { _sources } }
+    /// Each release chosen, by album id, and the source it was to be loaded from.
+    var chosen: [(release: [Int64: Int], source: DiscogsSource)] { lock.withLock { _chosen } }
 
     func review(_ review: DiscogsReview?, _ files: [Int64]) {
         lock.withLock { _reviews.append((review, files)) }
@@ -86,6 +89,9 @@ final class Seen: @unchecked Sendable {
             _skips.append(skipping)
             _sources.append(source)
         }
+    }
+    func choose(_ release: [Int64: Int], source: DiscogsSource) {
+        lock.withLock { _chosen.append((release, source)) }
     }
     func read(_ ids: [Int64]) { lock.withLock { _reads.append(ids) } }
 }
@@ -158,6 +164,12 @@ func model(
                     progress(AlbumMatchProgress(albumsDone: done.count, albumCount: albums.count))
                 }
                 return done
+            },
+            choose: { album, _, id, source in
+                seen.choose([album.id: id], source: source)
+                if let matchError { throw matchError }
+                gate?.wait()
+                return matches(album, id)
             },
             summaries: { ids in
                 ids.map {

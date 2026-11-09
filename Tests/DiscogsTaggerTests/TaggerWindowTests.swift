@@ -543,7 +543,8 @@ private final class Checks: @unchecked Sendable {
     let tagger = TaggerModel(
         effects: .init(
             albums: { [] }, reviews: { [:] }, review: { _, _ in },
-            match: { _, _, _, _, _ in [] }, summaries: { _ in [] }, release: { _ in nil },
+            match: { _, _, _, _, _ in [] }, choose: { _, previous, _, _ in previous },
+            summaries: { _ in [] }, release: { _ in nil },
             read: { _, _ in ([], []) },
             checkCatalog: {
                 if checks.next() > 1 { gate.wait() }
@@ -997,7 +998,7 @@ private final class Queries: @unchecked Sendable {
     sheet.table.selectRowIndexes([0], byExtendingSelection: false)
     sheet.table.sendAction(sheet.table.doubleAction, to: sheet.table.target)
     try await eventually { tagger.selected?.match.releaseID == 40 }
-    #expect(seen.sources.last == .both, "a release from Discogs is matched with the API")
+    #expect(seen.chosen.last?.source == .both, "a release from Discogs is loaded from the API")
     #expect(tagger.selected?.review == .chosen(releaseID: 40))
 }
 

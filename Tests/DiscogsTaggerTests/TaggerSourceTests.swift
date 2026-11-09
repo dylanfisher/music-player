@@ -134,7 +134,8 @@ private let fakeTokenText = "fakeTOKENfor3tests0nly"
                         waitingSeconds: 40))
                 gate.wait()
                 return albums.map { exact($0, nil) }
-            }, summaries: { _ in [] }, release: { _ in nil },
+            }, choose: { _, previous, _, _ in previous }, summaries: { _ in [] },
+            release: { _ in nil },
             read: { _, _ in ([], []) }, checkCatalog: { readyCatalog },
             unfinishedImport: { nil },
             importCatalog: { _, _, _ in throw CatalogImportError.stopped }),

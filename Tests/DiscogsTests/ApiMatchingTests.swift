@@ -267,3 +267,59 @@ private func renumbered(_ name: String, _ id: Int) -> [UInt8] {
         try await run([tiered[3]], .api, catalog: folder.catalog, api: alone.api())
     }
 }
+
+/// After an API run, the sheets and Choose ask Discogs nothing more (ADR 0170): Other
+/// Releases reads the cache, a cover fetches its image only, and choosing another release
+/// scores it alone, with the other candidates kept and no search.
+@Test func choosingAReleaseAfterAnAPIRunSendsNoSearch() async throws {
+    let folder = try DumpFolder()
+    let fake = FakeDiscogs()
+    let api = fake.api()
+    let stockholmAlbum = album(8, stockholm)
+    let first = try #require(
+        try await run([stockholmAlbum], .api, catalog: folder.catalog, api: api).first)
+    let other = try #require(first.candidates.first?.releaseID)
+    let before = fake.requests.count
+    #expect(fake.requests.contains { $0.url.path == "/database/search" }, "the run searched")
+
+    let ids = [try #require(first.releaseID)] + first.candidates.map(\.releaseID)
+    let summaries = try await releaseSummaries(ids, catalogAt: folder.catalog, api: api)
+    #expect(summaries.map(\.id) == ids)
+    _ = try? await api.cover(release: other)
+    #expect(
+        fake.requests.dropFirst(before).allSatisfy { $0.url.host == DiscogsAPI.imageHost },
+        "a cover fetches its image, nothing else")
+
+    let chosen = try await chooseRelease(
+        other, for: stockholmAlbum, after: first, catalogAt: folder.catalog, source: .api,
+        api: api)
+    #expect(chosen.releaseID == other)
+    #expect(chosen.origin == .api)
+    #expect(chosen.tier == .exact, "scored alone, so no longer tied")
+    #expect(Set(chosen.candidates.map(\.releaseID)) == Set(ids).subtracting([other]))
+    #expect(chosen.reasons.isEmpty)
+    #expect(
+        fake.requests.dropFirst(before).allSatisfy { $0.url.host == DiscogsAPI.imageHost },
+        "choosing sent no request")
+}
+
+/// With the catalog as the source, a chosen release comes from the catalog alone, and one it
+/// lacks is an error, not a fallback to the matcher's own choice.
+@Test func choosingFromTheCatalogReadsItAlone() async throws {
+    let folder = try fixtureCatalog()
+    let album = tiered[1]
+    let first = try #require(
+        try await run([album], .catalog, catalog: folder.catalog, api: nil).first)
+    let other = try #require(first.candidates.first?.releaseID)
+    let chosen = try await chooseRelease(
+        other, for: album, after: first, catalogAt: folder.catalog, source: .catalog, api: nil)
+    #expect(chosen.releaseID == other)
+    #expect(chosen.origin == .catalog)
+    #expect(chosen.candidates.contains { $0.releaseID == first.releaseID })
+    #expect(chosen.foundBy == .title, "found as the run found it")
+    await #expect(throws: ReleaseNotInCatalog(releaseID: 4040)) {
+        try await chooseRelease(
+            4040, for: album, after: first, catalogAt: folder.catalog, source: .catalog,
+            api: nil)
+    }
+}

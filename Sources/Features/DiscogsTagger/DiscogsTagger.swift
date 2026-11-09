@@ -73,6 +73,11 @@ public final class DiscogsTagger {
                         api: source == .catalog ? nil : await api(), choosing: chosen,
                         skippingVideo: skipping, progress: progress)
                 },
+                choose: { album, previous, id, source in
+                    try await chooseRelease(
+                        id, for: album, after: previous, catalogAt: catalog, source: source,
+                        api: source == .catalog ? nil : await api())
+                },
                 summaries: { try await releaseSummaries($0, catalogAt: catalog, api: await api()) },
                 release: { try await releaseDetail($0, catalogAt: catalog, api: await api()) },
                 read: { ids, progress in

@@ -66,7 +66,7 @@ private let stockholm = ["Östermalm", "Gamla Stan", "Kungsholmen"]
     await tagger.finished()
     tagger.selectedID = 8
     await tagger.choose(81, for: 8, from: .api)
-    #expect(seen.sources.last == .both)
+    #expect(seen.chosen.last?.source == .both)
     await tagger.setLeftOut(true, 801, of: 8)
     #expect(seen.matched.last == [8: 81])
     #expect(seen.sources.last == .both, "not the catalog alone, which lacks the release")
@@ -172,4 +172,27 @@ private let stockholm = ["Östermalm", "Gamla Stan", "Kungsholmen"]
     await choosing.value
     #expect(tagger.albums.first { $0.id == 8 }?.match.releaseID == 82)
     #expect(tagger.tab == .exact, "the user moved on, so the tab stays")
+}
+
+/// Choosing a release loads that one release, after the album's match until now, rather than
+/// matching the album again, whose searches would ask Discogs again (ADR 0170).
+@MainActor
+@Test func choosingAReleaseDoesntMatchTheAlbumAgain() async throws {
+    let seen = Seen()
+    let one = album(1, "Stockholm", titles: stockholm)
+    let tagger = await model(
+        seen, albums: [one],
+        matches: { album, chosen in
+            match(
+                album, release(chosen ?? 10, "Stockholm", titles: stockholm), tier: .likely,
+                candidates: [11])
+        }, source: .api)
+    tagger.analyze()
+    await tagger.finished()
+    #expect(seen.matched.count == 1)
+    await tagger.choose(11, for: 1)
+    #expect(seen.matched.count == 1, "no match ran for the choice")
+    #expect(seen.chosen.map(\.release) == [[1: 11]])
+    #expect(seen.chosen.first?.source == .api)
+    #expect(tagger.albums.first?.match.releaseID == 11)
 }

@@ -84,6 +84,39 @@ public func matchAlbums(
     }
 }
 
+/// `album` matched with release `id`, which the user chose, after `previous`, its match until
+/// now (ADR 0170). Only that release is loaded: from the catalog at `catalog` unless `source`
+/// is the API alone, else from `api` through its cache. Nothing is searched, so choosing among
+/// Other Releases asks Discogs nothing a run hasn't cached. Throws `ReleaseNotInCatalog` when
+/// the source is the catalog alone and it lacks the release.
+public func chooseRelease(
+    _ id: Int, for album: DiscogsAlbum, after previous: AlbumMatch, catalogAt catalog: URL,
+    source: DiscogsSource, api: DiscogsAPI?
+) async throws -> AlbumMatch {
+    let inCatalog: CatalogRelease? =
+        source == .api
+        ? nil
+        : try await Task.detached(priority: .userInitiated) {
+            try Catalog(at: catalog).release(id: id)
+        }.value
+    if let inCatalog {
+        return AlbumMatcher.choosing(inCatalog, origin: .catalog, for: album, after: previous)
+    }
+    guard source != .catalog, let api else {
+        throw ReleaseNotInCatalog(releaseID: id)
+    }
+    let fetched = try await api.release(id: id).release
+    return AlbumMatcher.choosing(fetched, origin: .api, for: album, after: previous)
+}
+
+/// A release chosen with the catalog as the source that the catalog doesn't have, as after an
+/// import of an older dump.
+struct ReleaseNotInCatalog: Error, Equatable, CustomStringConvertible {
+    var releaseID: Int
+
+    var description: String { "the catalog has no release \(releaseID)" }
+}
+
 /// A Both run whose API pass stopped, as for no connection or a refused token: every album
 /// matched as the catalog pass and the API pass so far had it, and why the API stopped. Only
 /// the API alone loses its run to such an error (ADR 0139).
@@ -218,12 +251,42 @@ final class AlbumMatcher {
         }
 
         let others = scores.filter { $0.releaseID != chosen?.releaseID }
-            .map { MatchCandidate(releaseID: $0.releaseID, score: $0, foundBy: foundBy[$0.releaseID]) }
+            .map {
+                MatchCandidate(releaseID: $0.releaseID, score: $0, foundBy: foundBy[$0.releaseID])
+            }
         return Self.made(
             album, tier: tier, chosen: chosen, release: chosen.flatMap { releases[$0.releaseID] },
             others: others, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
             titles: titles,
             origin: chosen.map { fetched[$0.releaseID] != nil } == true ? .api : .catalog)
+    }
+
+    /// `album`'s match with `release`, the one the user chose, scored alone and tiered by its
+    /// own score, with no search (ADR 0170). The other candidates are `previous`'s, its
+    /// match until now, with the release it had chosen scored again among them; `release`
+    /// keeps how `previous` found it.
+    static func choosing(
+        _ release: CatalogRelease, origin: MatchOrigin, for album: DiscogsAlbum,
+        after previous: AlbumMatch
+    ) -> AlbumMatch {
+        let titles = TitleSimilarity(album.tracks.map(\.title))
+        let seconds = album.tracks.map(\.seconds)
+        let score = ReleaseScore.best(release, seconds: seconds, titles: titles)
+        var others = previous.candidates.filter { $0.releaseID != release.id }
+        if let old = previous.release, old.id != release.id {
+            others.append(
+                MatchCandidate(
+                    releaseID: old.id,
+                    score: ReleaseScore.best(old, seconds: seconds, titles: titles),
+                    foundBy: previous.foundBy))
+        }
+        let foundBy =
+            previous.releaseID == release.id
+            ? previous.foundBy
+            : previous.candidates.first { $0.releaseID == release.id }?.foundBy
+        return made(
+            album, tier: chosenTier(score, album: album), chosen: score, release: release,
+            others: others, tied: false, foundBy: foundBy, titles: titles, origin: origin)
     }
 
     /// The release ids `album`'s tracks carry, and whether every track carries one, the same.
