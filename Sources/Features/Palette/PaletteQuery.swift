@@ -24,11 +24,24 @@ extension PaletteItem.Kind {
     /// frecency saved.
     public var name: String { "\(self)" }
     public var keyPrefix: String { name + ":" }
-    /// The other word a query may name tracks by.
-    static let songName = "song"
+    /// The short word a query may name the kind by instead (ADR 0161); none for the ⌘K
+    /// kinds.
+    var shortName: String? {
+        switch self {
+        case .album: "a"
+        case .artist: "ar"
+        case .track: "t"
+        case .playlist: "p"
+        case .genre: "g"
+        case .command, .setting, .output: nil
+        }
+    }
 
     /// The words a query names this kind by, before its colon.
-    var queryNames: [String] { self == .track ? [Self.songName, name] : [name] }
+    var queryNames: [String] { [name] + (shortName.map { [$0] } ?? []) }
+
+    /// "album: or a:", as the placeholder names them.
+    var queryPrefixes: String { queryNames.map { $0 + ":" }.joined(separator: " or ") }
 
     /// The kind `name` names, whatever its case; nil for any other word.
     init?(queryName name: Substring) {

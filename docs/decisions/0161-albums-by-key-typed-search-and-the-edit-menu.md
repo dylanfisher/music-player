@@ -4,6 +4,7 @@
 - **Status:** accepted
 - **Amends:** [0012](0012-searcher-conventions.md) (Move 10 Rows loses its ⌃⇧↓ / ⌃⇧↑
   alternate), [0106](0106-column-groupings-in-the-config-file.md) (the columns' count)
+- **Amended:** 2026-11-09, phase 62: the short prefixes, and `song:` removed.
 - **See also:** [0088](0088-table-lines-and-navigation.md) (where an album ends),
   [0141](0141-copy-only-drag-out-of-the-app.md) (a drag out offers a copy only)
 
@@ -36,10 +37,13 @@ track, and that Paste and Delete work in playlists and the queue only. Each left
   Control, or gives the commands other chords in the Shortcuts pane. ⌃⇧↑ and ⌃⇧↓ aren't system
   shortcuts, so extending works either way.
 - **Typed palette search:** a query that starts with a kind's name and a colon lists only that
-  kind, matched on the rest: `artist:`, `album:`, `song:` or `track:`, `genre:`, `playlist:`,
-  and in ⌘K `command:`, `setting:` and `output:`. Any case, spaces after the colon ignored. A
-  word before a colon that names no kind leaves the query as typed, so a title with a colon in
-  it still matches.
+  kind, matched on the rest: `artist:`, `album:`, `track:`, `genre:`, `playlist:`, and in ⌘K
+  `command:`, `setting:` and `output:`. The library kinds also have a short prefix: `ar:`,
+  `a:`, `t:`, `g:` and `p:`. Any case, spaces after the colon ignored. A word before a colon
+  that names no kind leaves the query as typed, so a title with a colon in it still matches.
+  The word is "track" everywhere, the placeholder included; `song:`, which phase 56 had as a
+  second name, went in phase 62, at the owner's ask, so a title starting "Song:" matches as
+  typed.
 - **Copy** writes the text only, so pasting in Finder or a mail can't copy a library file. The
   app keeps the copied files' paths with the pasteboard's change count; Paste uses them only
   while the pasteboard still holds that copy, and is off otherwise. A pasted list of names

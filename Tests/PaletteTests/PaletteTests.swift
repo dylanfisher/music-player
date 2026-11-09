@@ -379,8 +379,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
     let albums = rankPalette(items, query: "album: dream", frecency: [:], limit: 5)
     #expect(albums.map(\.item.title) == ["Dreamland"])
     #expect(albums[0].highlights == [NSRange(location: 0, length: 5)])
-    let songs = rankPalette(items, query: "Song:windowlicker", frecency: [:], limit: 5)
-    #expect(songs.map(\.item.kind) == [.track])
+    let tracks = rankPalette(items, query: "T:windowlicker", frecency: [:], limit: 5)
+    #expect(tracks.map(\.item.kind) == [.track])
     #expect(
         rankPalette(items, query: "track: dream", frecency: [:], limit: 5).map(\.item.title)
             == ["Dream Baby Dream"])
@@ -391,4 +391,21 @@ private func waitFor(_ condition: () -> Bool) async throws {
     // A word that isn't a kind's is part of the query.
     #expect(PaletteQuery("re: dream").kind == nil)
     #expect(PaletteQuery("re: dream").text == "re: dream")
+}
+
+/// Each library kind has a short prefix beside its name; "song" is no longer one (ADR 0161).
+@Test func theShortPrefixesNameTheirKinds() {
+    let short: [(String, PaletteItem.Kind)] = [
+        ("a", .album), ("ar", .artist), ("t", .track), ("p", .playlist), ("g", .genre),
+    ]
+    for (prefix, kind) in short {
+        #expect(PaletteQuery("\(prefix): dream").kind == kind)
+        #expect(PaletteQuery("\(prefix.uppercased()):dream").text == "dream")
+    }
+    for kind in [PaletteItem.Kind.command, .setting, .output] {
+        #expect(kind.shortName == nil)
+    }
+    #expect(PaletteQuery("song: dream").kind == nil)
+    #expect(PaletteQuery("song: dream").text == "song: dream")
+    #expect(PaletteItem.Kind.track.queryPrefixes == "track: or t:")
 }
