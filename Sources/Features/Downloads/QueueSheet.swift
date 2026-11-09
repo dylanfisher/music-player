@@ -48,21 +48,12 @@ final class QueueSheet: NSWindowController, NSTableViewDataSource, NSTableViewDe
         let noteLabel = NSTextField(wrappingLabelWithString: note)
         noteLabel.textColor = .secondaryLabelColor
         for (column, width) in [(Column.tick, 24.0), (.title, 300.0), (.detail, 260.0)] {
-            let tableColumn = NSTableColumn(
-                identifier: NSUserInterfaceItemIdentifier(column.rawValue))
-            tableColumn.width = width
-            tableColumn.title = column == .title ? DownloadColumn.album.title : ""
-            tableColumn.resizingMask = column == .title ? [.autoresizingMask] : .userResizingMask
-            table.addTableColumn(tableColumn)
+            addColumn(
+                to: table, column.rawValue,
+                title: column == .title ? DownloadColumn.album.title : "", width: width,
+                stretches: column == .title)
         }
-        table.dataSource = self
-        table.delegate = self
-        table.usesAlternatingRowBackgroundColors = true
-        table.style = .fullWidth
-        let scroll = NSScrollView()
-        scroll.documentView = table
-        scroll.hasVerticalScroller = true
-        scroll.borderType = .bezelBorder
+        let scroll = listTable(table, source: self)
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
         cancel.keyEquivalent = "\u{1b}"
         queueButton.target = self

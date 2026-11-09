@@ -115,27 +115,15 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         bar.addArrangedSubview(addButton)
 
         for column in DownloadColumn.allCases {
-            let tableColumn = NSTableColumn(
-                identifier: NSUserInterfaceItemIdentifier(column.rawValue))
-            tableColumn.title = column.title
-            tableColumn.width = column.width
-            tableColumn.resizingMask =
-                column == .album ? [.autoresizingMask, .userResizingMask] : .userResizingMask
-            table.addTableColumn(tableColumn)
+            addColumn(
+                to: table, column.rawValue, title: column.title, width: column.width,
+                stretches: column == .album)
         }
-        table.dataSource = self
-        table.delegate = self
-        table.usesAlternatingRowBackgroundColors = true
-        table.style = .fullWidth
-        table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         table.rowHeight = 20
         let menu = NSMenu()
         menu.delegate = self
         table.menu = menu
-        let scroll = NSScrollView()
-        scroll.documentView = table
-        scroll.hasVerticalScroller = true
-        scroll.borderType = .bezelBorder
+        let scroll = listTable(table, source: self)
 
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
