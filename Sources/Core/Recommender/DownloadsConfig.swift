@@ -1,15 +1,8 @@
 import Foundation
 import LocalNetwork
 
-/// `downloads/config`'s reply: whether the downloads are on, and where slskd's web page is.
+/// `downloads/config`'s reply, of which the player reads where slskd's web page is.
 package struct DownloadsConfig: Equatable, Sendable, Decodable {
-    package var enabled: Bool
-    /// Why the downloads are off, in words; nil while they're on.
-    var offReason: String?
-    var formatPolicies: [FormatPolicy]
-    var defaultFormatPolicy: FormatPolicy
-    /// The last component of the service's staging folder; nil while the downloads are off.
-    var stagingDirName: String?
     /// slskd's web page as the service reaches it; nil while the downloads are off.
     var slskdURL: String?
 
@@ -24,28 +17,45 @@ package struct DownloadsConfig: Equatable, Sendable, Decodable {
 
     package init(from decoder: any Decoder) throws {
         let container = try strictContainer(decoder, CodingKeys.self)
-        enabled = try container.decode(Bool.self, forKey: .enabled)
-        offReason = try container.decode(String?.self, forKey: .offReason)
-        formatPolicies = try container.decode([FormatPolicy].self, forKey: .formatPolicies)
-        defaultFormatPolicy = try container.decode(FormatPolicy.self, forKey: .defaultFormatPolicy)
-        stagingDirName = try container.decode(String?.self, forKey: .stagingDirName)
+        // Decoded only to hold the reply to its shape: a missing or mistyped field fails it.
+        _ = try container.decode(Bool.self, forKey: .enabled)
+        _ = try container.decode(String?.self, forKey: .offReason)
+        _ = try container.decode([FormatPolicy].self, forKey: .formatPolicies)
+        _ = try container.decode(FormatPolicy.self, forKey: .defaultFormatPolicy)
+        _ = try container.decode(String?.self, forKey: .stagingDirName)
         slskdURL = try container.decode(String?.self, forKey: .slskdURL)
     }
 
-    /// The hosts that mean slskd runs on the service's own Mac.
-    static let loopbackHosts: Set<String> = ["127.0.0.1", "localhost", "::1", "[::1]"]
+    /// Whether `host` is slskd on the service's own Mac: `localhost`, any 127.0.0.0/8 address,
+    /// `::1`, or the unspecified `0.0.0.0` and `::`, which a server listening on every
+    /// interface reports.
+    static func isLoopback(_ host: String) -> Bool {
+        let name = host.lowercased()
+        if name == "localhost" || name == "localhost." { return true }
+        let literal =
+            name.hasPrefix("[") && name.hasSuffix("]") ? String(name.dropFirst().dropLast()) : name
+        switch IPAddress(literal) {
+        case .v4(let bytes): return bytes[0] == 127 || bytes.allSatisfy { $0 == 0 }
+        case .v6(let bytes, _):
+            return bytes.dropLast().allSatisfy { $0 == 0 } && bytes[15] <= 1
+        case nil: return false
+        }
+    }
 
     /// slskd's page as this Mac opens it: a loopback host is the service's Mac, so `service`,
     /// the address the player reaches the service at, takes its place, with the scheme and port
-    /// kept. Nil without a URL, or for one that isn't http or https with a host.
+    /// kept. Any user, password, query or fragment is dropped, so none is opened, shown or
+    /// logged. Nil without a URL, or for one that isn't http or https with a host.
     package func slskdPage(reachedAt service: IPAddress) -> URL? {
         guard let text = slskdURL, var parts = URLComponents(string: text),
             let scheme = parts.scheme?.lowercased(), scheme == "http" || scheme == "https",
             let host = parts.host, !host.isEmpty
         else { return nil }
-        if Self.loopbackHosts.contains(host.lowercased()) {
-            parts.percentEncodedHost = service.urlHost
-        }
+        parts.user = nil
+        parts.password = nil
+        parts.query = nil
+        parts.fragment = nil
+        if Self.isLoopback(host) { parts.percentEncodedHost = service.urlHost }
         return parts.url
     }
 }

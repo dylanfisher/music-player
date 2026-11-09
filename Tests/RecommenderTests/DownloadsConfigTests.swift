@@ -25,6 +25,25 @@ private func page(_ slskd: String?, reachedAt service: String) throws -> String?
     #expect(try page("http://127.0.0.1:5030", reachedAt: "fe80::1") == "http://[fe80::1]:5030")
 }
 
+@Test func everyLoopbackAndUnspecifiedAddressIsTheServicesMac() throws {
+    for url in [
+        "http://127.0.0.2:5030", "http://127.255.0.1:5030", "http://0.0.0.0:5030",
+        "http://LOCALHOST:5030", "http://localhost.:5030", "http://[::]:5030",
+    ] {
+        #expect(try page(url, reachedAt: "192.168.1.20") == "http://192.168.1.20:5030", "\(url)")
+    }
+    #expect(try page("http://128.0.0.1:5030", reachedAt: "192.168.1.20") == "http://128.0.0.1:5030")
+}
+
+@Test func theUserPasswordQueryAndFragmentAreDropped() throws {
+    #expect(
+        try page("http://admin:hunter2@127.0.0.1:5030/ui?apiKey=x#top", reachedAt: "192.168.1.20")
+            == "http://192.168.1.20:5030/ui")
+    #expect(
+        try page("https://me:pw@192.168.1.30:5031/?k=v", reachedAt: "192.168.1.20")
+            == "https://192.168.1.30:5031/")
+}
+
 @Test func anotherHostIsOpenedAsTheServiceReportsIt() throws {
     #expect(
         try page("http://192.168.1.30:5030", reachedAt: "192.168.1.20")
