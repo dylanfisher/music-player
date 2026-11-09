@@ -71,6 +71,40 @@ private let stockholm = ["Östermalm", "Gamla Stan", "Kungsholmen"]
     #expect(seen.sources.last == .both, "not the catalog alone, which lacks the release")
 }
 
+/// A count that can't be known, as with a file gone, isn't read again on every redraw, and no
+/// count is read while other work runs.
+@MainActor
+@Test func aCountThatCantBeKnownIsntReadAgain() async throws {
+    let seen = Seen()
+    let gate = Gate()
+    let one = album(1, "Stockholm", titles: stockholm)
+    let tagger = await model(
+        seen, albums: [one],
+        matches: { album, _ in
+            match(album, release(10, "Stockholm", titles: stockholm), tier: .exact)
+        },
+        files: { ids in [file(one, 0)].filter { ids.contains($0.id) } }, gate: gate)
+    tagger.countDelayNanoseconds = 0
+    tagger.analyze()
+    gate.open()
+    await tagger.finished()
+    tagger.selectedID = 1
+    tagger.countChanges()
+    try await eventually { seen.reads.count == 1 }
+    try await Task.sleep(nanoseconds: 50_000_000)
+    for _ in 0..<3 { tagger.countChanges() }
+    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(seen.reads.count == 1, "the missing files aren't read for again")
+    #expect(tagger.changeCounts[1] == nil)
+
+    tagger.analyze()
+    tagger.countChanges()
+    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(seen.reads.count == 1, "nothing is read while Analyze runs")
+    gate.open()
+    await tagger.finished()
+}
+
 /// One album is matched again at a time: a release chosen while a file's rematch runs is
 /// ignored, and a rematch that ends after the user moved to another album leaves the tab.
 @MainActor

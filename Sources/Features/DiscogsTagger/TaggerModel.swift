@@ -180,6 +180,9 @@ final class TaggerModel {
     /// read: the tags Apply writes, the cover aside. Forgotten when an album, the mapping or
     /// the choices change.
     private(set) var changeCounts: [Int64: Int] = [:]
+    /// The albums whose count couldn't be known, as when a file can't be read, which aren't
+    /// read again until their counts are forgotten.
+    private var uncounted: Set<Int64> = []
     /// How long an album stays selected before its files are read for its count, so moving
     /// through the list reads only the album stopped on.
     var countDelayNanoseconds: UInt64 = 300_000_000
@@ -720,15 +723,17 @@ final class TaggerModel {
     private func forgetChangeCounts() {
         countGeneration += 1
         changeCounts = [:]
+        uncounted = []
         counting?.task.cancel()
         counting = nil
     }
 
     /// Reads the selected album's files, after `countDelayNanoseconds`, for its count of
-    /// changes, unless it's known, being read, written already, rejected or without a release.
+    /// changes, unless it's known, can't be known, is being read, written already, rejected
+    /// or without a release, or other work runs.
     func countChanges() {
-        guard let album = selected, album.match.release != nil, !album.isRejected,
-            !album.applied, changeCounts[album.id] == nil
+        guard !isBusy, let album = selected, album.match.release != nil, !album.isRejected,
+            !album.applied, changeCounts[album.id] == nil, !uncounted.contains(album.id)
         else { return }
         if let counting, counting.albumID == album.id, counting.generation == countGeneration {
             return
@@ -745,10 +750,14 @@ final class TaggerModel {
                 let (files, problems) = try await read(ids) { _ in }
                 guard generation == countGeneration, !Task.isCancelled else { return }
                 counting = nil
-                // A file that can't be read leaves the count unknown: View Changes says why.
+                // A file that can't be read leaves the count unknown, until the album changes:
+                // View Changes says why.
                 guard problems.isEmpty, files.count == ids.count,
                     let album = albums.first(where: { $0.id == albumID })
-                else { return }
+                else {
+                    uncounted.insert(albumID)
+                    return
+                }
                 changeCounts[albumID] = keptChanges(changeSet(files, album), album)
                 changed()
             } catch is CancellationError {
@@ -757,6 +766,7 @@ final class TaggerModel {
                 // Only the button's count is lost; View Changes reads the files again and
                 // shows the error.
                 logger.notice("the changes of album \(albumID) weren't counted: \(error)")
+                if generation == countGeneration { uncounted.insert(albumID) }
             }
         }
         counting = (task, albumID, generation)
