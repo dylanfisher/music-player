@@ -121,17 +121,21 @@ public final class Catalog {
         ).map(number, limit) { try $0.int(0) }
     }
 
-    /// The masters, and the releases with no master, whose artist folds as `artist`'s, or
-    /// with `artist` nil, whose title folds as `title`'s, at most `limit`, masters first. By
-    /// title alone this reads every key, as Look Up Release asks for.
-    func titleMatches(artist: String?, title: String?, limit: Int) throws -> [TitleMatch] {
-        let column: String
-        let key: String
-        if let artist {
-            (column, key) = ("artist_key", CatalogKey.fold(artist))
-        } else {
-            (column, key) = ("title_key", CatalogKey.fold(title ?? "", title: true))
-        }
+    /// The masters, and the releases with no master, whose artist folds as `artist`'s, at most
+    /// `limit`, masters first.
+    func titleMatches(byArtist artist: String, limit: Int) throws -> [TitleMatch] {
+        try titleMatches(column: "artist_key", key: CatalogKey.fold(artist), limit: limit)
+    }
+
+    /// The masters, and the releases with no master, whose title folds as `title`'s, at most
+    /// `limit`, masters first. The keys are indexed by artist first, so this reads every one,
+    /// as only Look Up asks for.
+    func titleMatches(byTitle title: String, limit: Int) throws -> [TitleMatch] {
+        try titleMatches(
+            column: "title_key", key: CatalogKey.fold(title, title: true), limit: limit)
+    }
+
+    private func titleMatches(column: String, key: String, limit: Int) throws -> [TitleMatch] {
         guard !key.isEmpty else { return [] }
         return try database.prepare(
             """

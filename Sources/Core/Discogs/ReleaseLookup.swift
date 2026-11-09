@@ -114,35 +114,22 @@ private func catalogReleases(_ query: ReleaseQuery, in catalog: Catalog) throws 
     let limit = lookedUpCatalogReads
     let artist = query.artist.trimmingCharacters(in: .whitespaces)
     let title = query.title.trimmingCharacters(in: .whitespaces)
-    var ids: [Int] = []
-    var seen: Set<Int> = []
-    func add(_ found: [Int]) {
-        for id in found where seen.insert(id).inserted { ids.append(id) }
-    }
+    var found: [Int] = []
     if !query.catalogNumber.trimmingCharacters(in: .whitespaces).isEmpty {
-        add(try catalog.releaseIDs(catalogNumber: query.catalogNumber, limit: limit + 1))
-    } else if !artist.isEmpty || !title.isEmpty {
-        var matches: [Catalog.TitleMatch] = []
-        if artist.isEmpty {
-            matches = try catalog.titleMatches(artist: nil, title: title, limit: limit + 1)
-        } else {
-            for name in artistNames(artist) {
-                if title.isEmpty {
-                    matches += try catalog.titleMatches(artist: name, title: nil, limit: limit + 1)
-                } else {
-                    for variant in [title] + CatalogKey.titleVariants(title) {
-                        matches += try catalog.titleMatches(artist: name, title: variant)
-                    }
-                }
-            }
+        found = try catalog.releaseIDs(catalogNumber: query.catalogNumber, limit: limit + 1)
+    } else if !artist.isEmpty, !title.isEmpty {
+        found = try releaseIDs(of: titleMatches(artist, title, in: catalog), in: catalog)
+    } else if !artist.isEmpty {
+        let matches = try artistNames(artist).flatMap {
+            try catalog.titleMatches(byArtist: $0, limit: limit + 1)
         }
-        for match in matches where ids.count <= limit {
-            switch match {
-            case .master(let id): add(try catalog.releaseIDs(master: id))
-            case .release(let id): add([id])
-            }
-        }
+        found = try releaseIDs(of: matches, in: catalog)
+    } else if !title.isEmpty {
+        found = try releaseIDs(
+            of: catalog.titleMatches(byTitle: title, limit: limit + 1), in: catalog)
     }
+    var seen: Set<Int> = []
+    let ids = found.filter { seen.insert($0).inserted }
     // Filtered before they're cut, so the release wanted isn't dropped for others the fields
     // rule out.
     var kept: [CatalogRelease] = []

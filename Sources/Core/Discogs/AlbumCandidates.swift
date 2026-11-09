@@ -20,19 +20,37 @@ func candidateIDs(for album: DiscogsAlbum, in catalog: Catalog?) throws
             add(try catalog.releaseIDs(label: name, catalogNumber: number), .labelAndCatalogNumber)
         }
     }
-    var masters: Set<Int> = []
-    for artist in artistNames(album.artist) {
-        for title in [album.title] + CatalogKey.titleVariants(album.title) {
-            for match in try catalog.titleMatches(artist: artist, title: title) {
-                switch match {
-                case .master(let id):
-                    if masters.insert(id).inserted { add(try catalog.releaseIDs(master: id)) }
-                case .release(let id): add([id])
-                }
-            }
+    add(try releaseIDs(of: titleMatches(album.artist, album.title, in: catalog), in: catalog))
+    return found
+}
+
+/// The masters and master-less releases of `title` and its variants by each name `artist`
+/// can be credited as, in that order.
+func titleMatches(_ artist: String?, _ title: String, in catalog: Catalog) throws
+    -> [Catalog.TitleMatch]
+{
+    var matches: [Catalog.TitleMatch] = []
+    for name in artistNames(artist) {
+        for variant in [title] + CatalogKey.titleVariants(title) {
+            matches += try catalog.titleMatches(artist: name, title: variant)
         }
     }
-    return found
+    return matches
+}
+
+/// The releases `matches` stand for, in order: each master's releases, a master once, and each
+/// release with no master.
+func releaseIDs(of matches: [Catalog.TitleMatch], in catalog: Catalog) throws -> [Int] {
+    var masters: Set<Int> = []
+    var ids: [Int] = []
+    for match in matches {
+        switch match {
+        case .master(let id):
+            if masters.insert(id).inserted { ids += try catalog.releaseIDs(master: id) }
+        case .release(let id): ids.append(id)
+        }
+    }
+    return ids
 }
 
 /// The release ids `album`'s tracks carry, in track order, each once.
