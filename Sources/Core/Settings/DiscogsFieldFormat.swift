@@ -4,7 +4,7 @@ import Metadata
 /// one left out takes the first case named below.
 public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
     /// Which of an artist's names is written.
-    public enum Names: String, Codable, Sendable {
+    public enum Names: String, Codable, CaseIterable, Sendable {
         /// The artist's name on Discogs.
         case canonical
         /// The name as the release prints it (its ANV), where it has one.
@@ -13,24 +13,24 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
 
     /// Whether Discogs's number after a name shared by several artists, as in "Artist (2)", is
     /// kept.
-    public enum Suffixes: String, Codable, Sendable {
+    public enum Suffixes: String, Codable, CaseIterable, Sendable {
         case keep, drop
     }
 
     /// Whether a label Discogs lists more than once, once for each of its catalog numbers, is
     /// written each time, as YATE writes "Columbia & Columbia" (ADR 0128).
-    public enum Repeats: String, Codable, Sendable {
+    public enum Repeats: String, Codable, CaseIterable, Sendable {
         case keep, drop
     }
 
-    public enum DateForm: String, Codable, Sendable {
+    public enum DateForm: String, Codable, CaseIterable, Sendable {
         /// As Discogs writes it: "1999", "1999-03-00" or "1999-03-15".
         case full
         case year
     }
 
     /// How a credit is written as one value.
-    public enum CreditStyle: String, Codable, Sendable {
+    public enum CreditStyle: String, Codable, CaseIterable, Sendable {
         /// "Name (Role)", as YATE writes `INVOLVEDPEOPLE` in FLAC.
         case nameRole
         /// "Role;;;Name,Name", as YATE writes it in MP4, and as ID3's involved people list
@@ -67,10 +67,20 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
         self.credits = credits
     }
 
+    /// The names written: `names`, or the canonical ones when it's left out.
+    public var namesWritten: Names { names ?? .canonical }
+    /// Whether the "(2)" is kept: `suffixes`, or kept when it's left out.
+    public var suffixesWritten: Suffixes { suffixes ?? .keep }
+    /// Whether a repeated label is written again: `repeats`, or dropped when it's left out.
+    public var repeatsWritten: Repeats { repeats ?? .drop }
+    /// How the date is written: `date`, or in full when it's left out.
+    public var dateWritten: DateForm { date ?? .full }
+    /// How credits are written in each format: `credits`, or "Name (Role)" in every format
+    /// when it's left out.
+    var creditsWritten: PerTagFormat<CreditStyle> { credits ?? PerTagFormat(.nameRole) }
+
     /// How a credit is written in `format`.
-    public func creditStyle(in format: TagFormat) -> CreditStyle {
-        credits?[format] ?? .nameRole
-    }
+    public func creditStyle(in format: TagFormat) -> CreditStyle { creditsWritten[format] }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case join, names, suffixes, repeats, date, template, credits

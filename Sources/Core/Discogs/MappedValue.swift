@@ -27,7 +27,7 @@ enum MappedValue: Equatable {
         case .list(let values): values
         case .names(let names):
             names.map { name($0, nil, format) }.filter(
-                format.repeats == .keep ? { _ in true } : once())
+                format.repeatsWritten == .keep ? { _ in true } : once())
         case .artists(let artists):
             artists.map { name($0.name, $0.nameVariation, format) }
         case .people(let people):
@@ -65,8 +65,8 @@ private func once() -> (String) -> Bool {
 /// An artist's name as `format` writes it: the canonical one or the release's variation, and
 /// with or without Discogs's "(2)".
 func name(_ canonical: String, _ variation: String?, _ format: DiscogsFieldFormat) -> String {
-    let name = format.names == .variation ? (variation ?? canonical) : canonical
-    return format.suffixes == .drop ? CatalogKey.withoutNumberSuffix(name) : name
+    let name = format.namesWritten == .variation ? (variation ?? canonical) : canonical
+    return format.suffixesWritten == .drop ? CatalogKey.withoutNumberSuffix(name) : name
 }
 
 /// The people as `style` writes each: "Name (Role)" for each, or each role once with its

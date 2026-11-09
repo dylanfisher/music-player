@@ -284,7 +284,7 @@ private func render(
     }
     // No tag format reads a day or month of 00, and ID3v2.3 can't hold a month alone, so a
     // date Discogs knows only in part is its year.
-    return format.date == .year || date.contains("-00") ? String(date.prefix(4)) : date
+    return format.dateWritten == .year || date.contains("-00") ? String(date.prefix(4)) : date
 }
 
 /// `template` with each field's token replaced by its value in `format`, and the first genre's
