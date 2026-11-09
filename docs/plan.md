@@ -49,7 +49,9 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 
 1. Phases 51, 52 and 53, set by the owner on 2026-11-07, are done.
 2. Phase 54 runs on its own branch (set on 2026-11-08), and waits there for the owner's review.
-3. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+3. Phases 55 to 61, the owner's feedback of 2026-11-09, run next: 55 and 58 first, then 56,
+   57 and 59, then 60 and 61. Each merges to `main` when its gate passes.
+4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -630,6 +632,108 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
+
+### 55. Windows and Settings
+
+Feedback round of 2026-11-09. Every window keeps its place, and Settings fits a short screen.
+
+- [ ] **Window frames:** every window (main, Settings, Downloads, Get Info, Tagger, the rest)
+      remembers its position and size across restarts. A window opened for the first time
+      opens centered on the screen the main window is on, not the primary screen; Downloads
+      now opens at the bottom left of the primary screen.
+- [ ] **Settings height:** a pane taller than the screen's visible frame scrolls instead of
+      running off it. General > Library is too long: the snapshots group collapses (a
+      disclosure, closed by default) or moves somewhere shorter.
+- [ ] **Restore during a scan:** Restore Snapshot while a scan runs now does nothing. It
+      stops the scan and restores, if the scan can be stopped safely; otherwise it shows a
+      dialog saying the scan has to finish first.
+- [ ] **Service address:** the Downloads service address field gets a Save button (users
+      don't know to press Return) and the format as a placeholder (`192.168.1.10:8787`). An
+      address the app refuses says why in the pane, as `config.json` does now ("isn't an IPv4
+      or IPv6 address; host names aren't taken").
+- [ ] **File menu:** shorter. Commands that are also in Settings, or rarely used, leave it;
+      Separate Releases becomes a setting and leaves the menu.
+- [ ] **Separate Releases order:** with it on, an album's releases sort earliest date first.
+
+### 56. Browsing and the keyboard
+
+- [ ] **Shift with Option-Up/Down:** extends the selection over the rows it jumps.
+- [ ] **Next and previous album:** Control-Down and Control-Up move the selection to the first
+      track of the next or previous album, a rebindable command; with Shift they extend it.
+- [ ] **Typed palette search:** in the Command-P palette, `album: dream` searches albums only
+      and `song: windowlicker` songs only; also `artist:`, and any other kind the palette
+      lists.
+- [ ] **Edit menu:** Copy, Paste and Delete enabled. Copy puts text only on the pasteboard
+      (one "Artist – Title" line per track); Paste and Delete work in playlists and the queue
+      only, never on the library.
+- [ ] **Browse columns:** more than three columns in browse mode.
+- [ ] **Play count:** set by hand (Get Info, phase 57, holds the field).
+
+### 57. Get Info
+
+- [ ] **No flashing:** the window opens at its final layout; its tabs don't resize after it
+      shows.
+- [ ] **Resizable,** and it remembers its size and position (phase 55).
+- [ ] **Discogs tab always shown,** so a release id can be set where none is; the earlier
+      choice to hide it without one is reversed.
+- [ ] **Play count** field, editable, for the count phase 56 lets the user set.
+
+### 58. Tagger
+
+- [ ] **Look Up Release:** search for a release by artist, title, catalog number or id, in
+      the local Discogs catalog first and the Discogs API when the catalog has no match or no
+      catalog is present (tests use the stand-in transport, AGENTS.md).
+- [ ] **Exclude tracks:** files can be left out of a match (duplicates of another release),
+      so the rest match the release's track count and can be tagged.
+- [ ] **Two tables:** our files and the release's tracks in two tables side by side that read
+      as one row each, so it's clear where each column comes from. The match mark gets a word
+      ("Exact", "Close", …) beside the symbol.
+- [ ] **Counts in buttons:** "9 other releases…" and "44 changes" where the number is known.
+- [ ] **Progress in the window:** the tagger shows its write progress as well as the status
+      bar, with whatever detail it has (album or file n of m), else a plain bar.
+- [ ] **Saved field mappings:** can be removed from the "Start from" menu, or by a button.
+
+### 59. Downloads
+
+Some items change the service (`~/projects/music-recommender`, edited on mbp2021, where it
+runs; restart it after) and its `docs/api.md` with it.
+
+- [ ] **Copy into staging:** a downloaded job shows "Copying to staging, 5 of 14 files" from
+      the `progress` the service already sends with `downloaded`, and "Copying to staging…"
+      before the copy starts.
+- [ ] **Speed and ETA** for downloading and copying jobs, from successive `progress` bytes.
+      Computed only while the window or the status item shows it.
+- [ ] **Search state over time:** a long search says more than "Searching": the attempt, when
+      the next search runs, and whatever else the service can report (a service change if
+      needed).
+- [ ] **Open with a selection:** opening Downloads with library rows selected opens the From
+      Library sheet for them.
+- [ ] **Reveal in Finder** for a staged or approved job.
+- [ ] **Open in slskd:** a command that opens slskd's web page, at an address the service
+      reports (a service change).
+- [ ] **Status bar item:** while a download is in progress, an item at the bottom right of the
+      status bar; a click opens Downloads, a right-click picks its style (count, label,
+      progress bar).
+- [ ] **Approve sheet:** redone calmer, with the same views the app uses elsewhere for the
+      same data (DRY).
+
+### 60. Keep Files Organized
+
+Asked by the owner on 2026-11-09, with the boundary change: "record the new move in an ADR and
+in the AGENTS.md boundary".
+
+- [ ] **Setting:** Keep Files Organized, limited to the library folder. After each tag write
+      the user confirms, the edited files are renamed to their `libraryFolderPath` layout with
+      `renamex_np(RENAME_EXCL)`, as Approve does, and stats and playlists carry over through
+      the move list (`importMoves`/`TrackMove`). A taken target name skips the file and lists
+      it in Problems.
+- [ ] **Organize Selected Files:** the same for selected tracks already in the library folder.
+- [ ] **ADR and AGENTS.md boundary** for the new move.
+
+### 61. Tagging preferences in Settings
+
+- [ ] **Editor:** the tagging preferences now set only in `config.json` (suffixes to drop,
+      formats, the mappings) get an editor in Settings. Secrets stay out of it (AGENTS.md).
 
 ### 10. Web remote
 
