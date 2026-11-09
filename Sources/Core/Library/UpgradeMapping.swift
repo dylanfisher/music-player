@@ -1,3 +1,5 @@
+import Foundation
+
 /// One of an upgrade's old files, found in the index by its path on the share (ADR 0147).
 package struct UpgradeOldFile: Equatable, Sendable {
     /// As the job lists it, relative to the share.
@@ -45,6 +47,33 @@ package struct UpgradeMapping: Equatable, Sendable {
     }
 }
 
+extension UpgradeMapping {
+    /// The old files of `old` whose new file goes to their own path, given where each new
+    /// file goes by name, `destinations`: each is set aside before its new file moves in, and
+    /// its stats stay with the path. Throws when a new file goes to an old file's path but
+    /// isn't paired with it, since that old file's stats would go to the wrong track.
+    package func replacedInPlace(_ old: [UpgradeOldFile], destinations: [String: String]) throws
+        -> [UpgradeOldFile]
+    {
+        let key = { (path: String) in path.precomposedStringWithCanonicalMapping }
+        let paired = Dictionary(
+            pairs.compactMap { pair in destinations[pair.new].map { (pair.old, key($0)) } },
+            uniquingKeysWith: { one, _ in one })
+        let taken = Set(destinations.values.map(key))
+        var inPlace: [UpgradeOldFile] = []
+        var crossed: [String] = []
+        for file in old where taken.contains(key(file.path)) {
+            if paired[file.sharePath] == key(file.path) {
+                inPlace.append(file)
+            } else {
+                crossed.append(file.path)
+            }
+        }
+        guard crossed.isEmpty else { throw MoveRefusal.collisions(crossed) }
+        return inPlace
+    }
+}
+
 /// Why an upgrade's old files can't be replaced.
 package enum UpgradeRefusal: Error, Equatable, CustomStringConvertible {
     /// The job lists a file the index doesn't have.
@@ -86,6 +115,67 @@ extension LibraryIndex {
             return UpgradeOldFile(
                 sharePath: sharePath, path: path, position: nil,
                 hasStats: try pathHasStats(found.0))
+        }
+    }
+}
+
+extension LibraryIndex {
+    /// The files of the library album that `paths` are tracks of, relative to the share
+    /// mounted at `shareRoot`, in disc and track order, when every one of `paths` is a track
+    /// of that one album and carries `release`, and all its files are on the share; nil
+    /// otherwise.
+    func album(holding paths: [String], release: Int, shareRoot: String) throws -> [String]? {
+        let lookup = try statement(
+            """
+            SELECT t.album_id, t.discogs_release_id FROM tracks t
+            JOIN files f ON f.id = t.file_id WHERE f.path = ?
+            """)
+        var albums: Set<Int> = []
+        for path in paths {
+            guard
+                let found = try lookup.map(
+                    path.precomposedStringWithCanonicalMapping,
+                    row: { ($0.optionalInt(0), $0.optionalText(1)) }
+                ).first,
+                let album = found.0, found.1 == String(release)
+            else { return nil }
+            albums.insert(album)
+        }
+        guard albums.count == 1, let album = albums.first else { return nil }
+        let files = try statement(
+            """
+            SELECT f.path FROM tracks t JOIN files f ON f.id = t.file_id WHERE t.album_id = ?
+            ORDER BY t.disc_number IS NULL, t.disc_number, t.track_number IS NULL,
+                t.track_number, f.path
+            """
+        ).map(album) { try $0.text(0) }
+        guard files.allSatisfy({ isPath($0, under: shareRoot) }) else { return nil }
+        return files.map { String($0.dropFirst(stem(shareRoot).count + 1)) }
+    }
+}
+
+extension LibraryFolderMove {
+    /// The files `sharePaths`, relative to the share, as the paths `destinations` compares.
+    package func libraryPaths(_ sharePaths: [String]) -> Set<String> {
+        Set(sharePaths.map { (stem(shareRoot) + "/" + $0).precomposedStringWithCanonicalMapping })
+    }
+
+    /// For a new album whose destinations are taken only by the tracks of one library album
+    /// of its release `release`: that album's files, relative to the share, which Approve
+    /// replaces as an upgrade does. Nil when no destination is taken; the move's refusal when
+    /// any is taken otherwise.
+    package func albumToReplace(
+        folder: String, files: [(name: String, sizeBytes: Int)], release: Int,
+        index: LibraryIndex
+    ) throws -> [String]? {
+        do {
+            _ = try destinations(folder: folder, files: files)
+            return nil
+        } catch MoveRefusal.collisions(let taken) {
+            guard
+                let album = try index.album(holding: taken, release: release, shareRoot: shareRoot)
+            else { throw MoveRefusal.collisions(taken) }
+            return album
         }
     }
 }

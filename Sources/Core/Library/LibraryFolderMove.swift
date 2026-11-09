@@ -60,26 +60,30 @@ package struct LibraryFolderMove: Sendable {
 
     /// Where each of `files` of the staged folder `folder` goes, in the files' order, for the
     /// Approve sheet to list: a first run's checks, refusing as it would, with nothing moved.
-    package func destinations(folder: String, files: [(name: String, sizeBytes: Int)]) throws
-        -> [String]
-    {
-        try plan(folder: folder, files: files, try checkedRoots()).map(\.destination)
+    /// A destination taken by one of `replacing`, an upgrade's old files, isn't refused.
+    package func destinations(
+        folder: String, files: [(name: String, sizeBytes: Int)], replacing: Set<String> = []
+    ) throws -> [String] {
+        try plan(folder: folder, files: files, replacing: replacing, try checkedRoots())
+            .map(\.destination)
     }
 
     /// Moves the files `files` of the staged folder `folder` into the library folder, for the
     /// job `job` of the release `release`, and returns their new paths in the files' order.
     /// A first run works out every destination first and refuses the whole album, moving
     /// nothing, when any is taken; a run after that takes the destinations from the ledger and
-    /// does what's left.
+    /// does what's left. A destination that's a key of `asides`, an upgrade's old file the new
+    /// one replaces at its own path, isn't taken: the old file is renamed to its value first.
     func moveIn(
         job: Int, release: Int, folder: String, files: [(name: String, sizeBytes: Int)],
-        ledger index: LibraryIndex
+        asides: [String: String] = [:], ledger index: LibraryIndex
     ) throws -> [String] {
         let roots = try checkedRoots()
         let ledgered = try index.importSteps(job: job).filter { $0.kind == .moved }
         let planned: [Planned]
         if ledgered.isEmpty {
-            planned = try plan(folder: folder, files: files, roots)
+            planned = try plan(
+                folder: folder, files: files, replacing: Set(asides.keys.map(nfc)), roots)
             try index.database.transaction {
                 for move in planned {
                     try index.recordImportStep(
@@ -92,7 +96,9 @@ package struct LibraryFolderMove: Sendable {
         } else {
             planned = try resumed(folder: folder, files: files, ledgered)
         }
-        for move in planned { try take(move, roots) }
+        let asides = Dictionary(
+            asides.map { (nfc($0.key), $0.value) }, uniquingKeysWith: { one, _ in one })
+        for move in planned { try take(move, aside: asides[nfc(move.destination)], roots) }
         return planned.map(\.destination)
     }
 
@@ -112,10 +118,10 @@ package struct LibraryFolderMove: Sendable {
         return (staging, library)
     }
 
-    /// Each file's move on a first run, refused whole when a destination is taken, two files
-    /// share one, or a file isn't what was staged.
+    /// Each file's move on a first run, refused whole when a destination is taken by a file
+    /// not in `replacing`, two files share one, or a file isn't what was staged.
     private func plan(
-        folder: String, files: [(name: String, sizeBytes: Int)],
+        folder: String, files: [(name: String, sizeBytes: Int)], replacing: Set<String>,
         _ roots: (staging: String, library: String)
     ) throws -> [Planned] {
         var planned: [Planned] = []
@@ -138,8 +144,10 @@ package struct LibraryFolderMove: Sendable {
                 throw MoveRefusal.unreadable(source, "\(error)")
             }
             let destination = libraryFolder + "/" + libraryFolderPath(for: tags, of: source)
-            let key = destination.precomposedStringWithCanonicalMapping
-            if pathExists(destination) || seen.contains(key) { taken.append(destination) }
+            let key = nfc(destination)
+            if (pathExists(destination) && !replacing.contains(key)) || seen.contains(key) {
+                taken.append(destination)
+            }
             seen.insert(key)
             planned.append(
                 Planned(
@@ -166,12 +174,18 @@ package struct LibraryFolderMove: Sendable {
         }
     }
 
-    /// Renames `move`'s file unless it's already where it goes, as the file system says.
-    private func take(_ move: Planned, _ roots: (staging: String, library: String))
-        throws(MoveRefusal)
-    {
+    /// Renames `move`'s file unless it's already where it goes, as the file system says. With
+    /// `aside`, a file at the destination is the old one it replaces, renamed there first.
+    private func take(
+        _ move: Planned, aside: String?, _ roots: (staging: String, library: String)
+    ) throws(MoveRefusal) {
         let sourceThere = pathExists(move.source)
-        let destinationThere = pathExists(move.destination)
+        var destinationThere = pathExists(move.destination)
+        if sourceThere, destinationThere, let aside, !pathExists(aside) {
+            try checkDestination((aside as NSString).deletingLastPathComponent, roots.library)
+            try rename(move.destination, to: aside)
+            destinationThere = false
+        }
         switch (sourceThere, destinationThere) {
         case (false, true):
             // Moved by a run before.
@@ -297,6 +311,8 @@ enum MoveRefusal: Error, Equatable, CustomStringConvertible {
         }
     }
 }
+
+private func nfc(_ path: String) -> String { path.precomposedStringWithCanonicalMapping }
 
 /// Whether anything is at `path`, a symbolic link included.
 func pathExists(_ path: String) -> Bool {

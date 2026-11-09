@@ -18,12 +18,12 @@ private func oldFile(_ name: String, _ position: String?, stats: Bool = false) -
 
 private func plan(
     upgrade: Bool = false, resuming: Bool = false, movesProblem: String? = nil,
-    origins: [StagedOrigin] = []
+    origins: [StagedOrigin] = [], replacesAlbum: Bool = false
 ) -> ApprovalPlan {
     let old = [oldFile("01.mp3", "1"), oldFile("02.mp3", "2"), oldFile("03.mp3", nil, stats: true)]
     let staged = job(5, resuming ? .importing : .staged) {
         $0.tagging.status = .clean
-        if upgrade {
+        if upgrade && !replacesAlbum {
             $0.source = .upgrade
             $0.upgrade = DownloadJob.Upgrade(
                 currentQuality: "MP3 320 kbps", oldPaths: old.map(\.sharePath))
@@ -36,7 +36,7 @@ private func plan(
         unmatched: upgrade
             ? UpgradeMapping(old: old, new: staged.files.map { ($0.name, $0.position) }).unmatched
             : [],
-        upgradeProblem: nil, origins: origins, originsProblem: nil)
+        upgradeProblem: nil, origins: origins, originsProblem: nil, replacesAlbum: replacesAlbum)
 }
 
 private let lossy = StagedOrigin(
@@ -80,6 +80,21 @@ private let lossy = StagedOrigin(
         plan.approved(ticked: ["library/03.mp3", "library/01.mp3"], acknowledgedOrigins: false))
     #expect(approved.upgrade?.old.count == 3)
     #expect(approved.upgrade?.acknowledged == ["library/03.mp3"], "only the unmatched count")
+}
+
+@MainActor
+@Test func aNewAlbumThatReplacesOneInTheLibraryIsApprovedAsAnUpgrade() throws {
+    let plan = plan(upgrade: true, replacesAlbum: true)
+    #expect(plan.job.upgrade == nil)
+    #expect(plan.isUpgrade)
+    let approved = try #require(
+        plan.approved(ticked: ["library/03.mp3"], acknowledgedOrigins: false))
+    #expect(approved.upgrade?.old.count == 3)
+    let sheet = ApproveSheet(plan: plan, album: "A - B")
+    let page = try #require(sheet.window?.contentView as? NSStackView)
+    let texts = page.arrangedSubviews.compactMap { ($0 as? NSTextField)?.stringValue }
+    #expect(texts.contains(ApproveSheet.replacesAlbumNote))
+    #expect(texts.contains(ApproveSheet.deleteWarning))
 }
 
 @MainActor

@@ -7,6 +7,9 @@ struct ImportStep: Equatable, Sendable {
         case moved
         /// An upgrade's old file given to `moveToTrash`.
         case trashed
+        /// An upgrade's old file at the path its new file takes, renamed beside itself under a
+        /// hidden name first, which scans skip, and given to `moveToTrash` from there.
+        case setAside
         /// An upgrade's old file's stats carried to its new one.
         case carried
         /// A staged file's size after the player's own tag write, which can grow the file when
@@ -22,7 +25,8 @@ struct ImportStep: Equatable, Sendable {
     /// For `moved` and `tagged`, the file's path relative to the staging folder; otherwise the old file's,
     /// relative to the library's share.
     var path: String
-    /// For `moved` and `carried`, the new file's path relative to the library's share.
+    /// For `moved` and `carried`, the new file's path relative to the library's share; for
+    /// `setAside`, the hidden name's.
     var destination: String? = nil
     /// For `moved`, the size the file must have where it went; for `tagged`, the size it has
     /// since the tag write.

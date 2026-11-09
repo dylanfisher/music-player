@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import Library
+@testable import Metadata
 
 /// A temporary share with a `staging` folder holding the job `job-7`'s two tagged FLACs and a
 /// `library` folder beside it, and an index for the ledger.
@@ -103,6 +104,54 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     #expect(!exists(folders.destinations[0]))
     #expect(try Data(contentsOf: URL(fileURLWithPath: folders.destinations[1])) == other)
     #expect(try folders.index.importSteps(job: 7).isEmpty)
+}
+
+@Test func aFileItReplacesIsSetAsideBeforeItsNewOneTakesThePath() throws {
+    let folders = try MoveFolders()
+    try FileManager.default.createDirectory(
+        atPath: folders.library + "/Artist/Album", withIntermediateDirectories: true)
+    let old = Data("the old copy".utf8)
+    try old.write(to: URL(fileURLWithPath: folders.destinations[0], isDirectory: false))
+    let aside = folders.library + "/Artist/Album/.upgrade-7-0"
+    #expect(
+        try folders.mover().destinations(
+            folder: "job-7", files: try folders.files(), replacing: [folders.destinations[0]])
+            == folders.destinations)
+
+    #expect(
+        try folders.mover().moveIn(
+            job: 7, release: 77, folder: "job-7", files: try folders.files(),
+            asides: [folders.destinations[0]: aside], ledger: folders.index)
+            == folders.destinations)
+    #expect(try Data(contentsOf: URL(fileURLWithPath: aside)) == old)
+    #expect(try folders.staged().isEmpty)
+    #expect(folders.destinations.allSatisfy(exists))
+}
+
+@Test func aMoveCutShortAfterItsSetAsideResumes() throws {
+    let folders = try MoveFolders()
+    try FileManager.default.createDirectory(
+        atPath: folders.library + "/Artist/Album", withIntermediateDirectories: true)
+    try Data("old".utf8).write(
+        to: URL(fileURLWithPath: folders.destinations[0], isDirectory: false))
+    let aside = folders.library + "/Artist/Album/.upgrade-7-0"
+    var calls = MoveCalls()
+    calls.renameExclusive = { from, to in
+        from.hasSuffix("01.flac")
+            ? EIO : (renamex_np(from, to, UInt32(RENAME_EXCL)) == 0 ? 0 : errno)
+    }
+    let move = { (calls: MoveCalls) in
+        try folders.mover(calls).moveIn(
+            job: 7, release: 77, folder: "job-7", files: try folders.files(),
+            asides: [folders.destinations[0]: aside], ledger: folders.index)
+    }
+    #expect(throws: MoveRefusal.self) { try move(calls) }
+    #expect(exists(aside))
+    #expect(!exists(folders.destinations[0]))
+
+    #expect(try move(MoveCalls()) == folders.destinations)
+    #expect(exists(aside))
+    #expect(try folders.staged().isEmpty)
 }
 
 @Test func twoFilesWithOneDestinationRefuseTheAlbum() throws {
@@ -269,4 +318,47 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
         try folders.moveIn(files: files)
     }
     #expect(try folders.staged() == ["02.flac"])
+}
+
+/// The library album of release 77 at the album's destinations, with a third track the
+/// download doesn't have, on disk and in the index; `release` tags the first file.
+private func libraryAlbum(_ folders: MoveFolders, firstRelease release: String = "77") throws {
+    try FileManager.default.createDirectory(
+        atPath: folders.library + "/Artist/Album", withIntermediateDirectories: true)
+    let paths = folders.destinations + [folders.library + "/Artist/Album/03 Third.flac"]
+    for path in paths {
+        #expect(FileManager.default.createFile(atPath: path, contents: Data("old".utf8)))
+    }
+    try folders.index.store(
+        paths.enumerated().map { offset, path in
+            Crafted(
+                path: path, title: "Old \(offset)", album: "Album", number: offset + 1,
+                custom: [DiscogsKey.releaseID: offset == 0 ? release : "77"]
+            ).scanned
+        })
+}
+
+@Test func aNewAlbumWhosePathsAnAlbumOfItsReleaseTakesReplacesThatAlbum() throws {
+    let folders = try MoveFolders()
+    #expect(
+        try folders.mover().albumToReplace(
+            folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
+            == nil)
+    try libraryAlbum(folders)
+    #expect(
+        try folders.mover().albumToReplace(
+            folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
+            == [
+                "library/Artist/Album/01 First.flac", "library/Artist/Album/02 Second.flac",
+                "library/Artist/Album/03 Third.flac",
+            ])
+}
+
+@Test func pathsTakenByAnotherReleaseAreStillRefused() throws {
+    let folders = try MoveFolders()
+    try libraryAlbum(folders, firstRelease: "78")
+    #expect(throws: MoveRefusal.collisions(folders.destinations)) {
+        try folders.mover().albumToReplace(
+            folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
+    }
 }

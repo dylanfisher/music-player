@@ -12,6 +12,11 @@ final class ApproveSheet: NSWindowController {
     static let deleteWarning =
         "These old files are deleted. On a share with no Trash, such as the NAS, they're deleted"
         + " permanently."
+    /// For a job queued as a new album whose release is in the library already.
+    static let replacesAlbumNote =
+        "This release is already in the library, at the paths these files take. Approve replaces"
+        + " that album, as an upgrade does, and keeps its tracks' plays, ratings, loves and"
+        + " playlist entries."
 
     let plan: ApprovalPlan
     let approveButton: NSButton
@@ -67,6 +72,9 @@ final class ApproveSheet: NSWindowController {
         }
 
         if plan.isUpgrade {
+            if plan.replacesAlbum {
+                views.append(NSTextField(wrappingLabelWithString: Self.replacesAlbumNote))
+            }
             if let problem = plan.upgradeProblem {
                 views.append(warning(problem))
             } else {

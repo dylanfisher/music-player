@@ -129,26 +129,28 @@ package struct ImportRun {
 
         let destinations: [String]
         let sizes: [DownloadJob.File]
+        let old: OldFiles
         do {
             sizes = try job.sizedAfterTagging(by: index)
+            old = try ledgerOldFiles(job, sizes)
             destinations = try move.moveIn(
                 job: job.jobID, release: job.releaseID, folder: job.folder,
-                files: sizes.map { ($0.name, $0.sizeBytes) }, ledger: index)
+                files: sizes.map { ($0.name, $0.sizeBytes) },
+                asides: Dictionary(
+                    old.asides.map { (move.shareRoot + "/" + $0.key, $0.value) },
+                    uniquingKeysWith: { one, _ in one }),
+                ledger: index)
         } catch {
             return fail(.move, "\(error)", job)
         }
         var directories = Set(destinations.map(parentOf))
-        if let upgrade = job.upgrade {
-            if let problem = verify(destinations, sizes) { return fail(.move, problem, job) }
-            let old: [ImportStep]
-            do {
-                old = try ledgerOldFiles(upgrade, destinations, job)
-            } catch {
-                return fail(.move, "\(error)", job)
+        if !old.steps.isEmpty {
+            if let problem = verify(destinations, sizes) {
+                return fail(.move, problem + old.keptAside, job)
             }
             if let problem = await delete(old, job) { return fail(.delete, problem, job) }
-            if let problem = await carryStats(old) { return fail(.carry, problem, job) }
-            directories.formUnion(old.map { parentOf(move.shareRoot + "/" + $0.path) })
+            if let problem = await carryStats(old.steps) { return fail(.carry, problem, job) }
+            directories.formUnion(old.steps.map { parentOf(move.shareRoot + "/" + $0.path) })
         }
         rescan(directories.sorted())
         do {
@@ -200,32 +202,75 @@ package struct ImportRun {
         return nil
     }
 
-    /// The old files to delete, each with the new file its stats go to, from the ledger, or
-    /// put there from the sheet's choice on the first run that gets this far.
-    private func ledgerOldFiles(
-        _ upgrade: ApprovedImport.Upgrade, _ destinations: [String], _ job: ApprovedImport
-    ) throws -> [ImportStep] {
+    /// An upgrade's old files, as the ledger holds them.
+    struct OldFiles {
+        /// One `trashed` step each, with the new file its stats go to as `destination`; nil
+        /// for a file replaced at its own path, whose stats stay with the path.
+        var steps: [ImportStep]
+        /// The old files set aside before their new ones take their paths: each one's path
+        /// relative to the share, and where it's kept until the Trash takes it.
+        var asides: [String: String]
+
+        /// Said after a failure that leaves set-aside files where they are.
+        var keptAside: String {
+            asides.isEmpty
+                ? ""
+                : "; the old files it replaces at their own paths are kept beside them as "
+                    + asides.values.sorted().joined(separator: ", ")
+        }
+    }
+
+    /// The old files to delete, from the ledger, or put there from the sheet's choice before
+    /// the first file moves, so a run after a failure finds them whatever the sheet says. None
+    /// for a new album.
+    private func ledgerOldFiles(_ job: ApprovedImport, _ sizes: [DownloadJob.File]) throws
+        -> OldFiles
+    {
         let ledgered = try index.importSteps(job: job.jobID)
         if ledgered.contains(where: { $0.kind == .trashed }) {
             let carried = Dictionary(
                 ledgered.filter { $0.kind == .carried }.map { ($0.path, $0.destination) },
                 uniquingKeysWith: { one, _ in one })
-            return ledgered.filter { $0.kind == .trashed }.map { step in
-                var step = step
-                step.destination = carried[step.path] ?? nil
-                return step
-            }
+            return OldFiles(
+                steps: ledgered.filter { $0.kind == .trashed }.map { step in
+                    var step = step
+                    step.destination = carried[step.path] ?? nil
+                    return step
+                },
+                asides: Dictionary(
+                    ledgered.filter { $0.kind == .setAside }.compactMap { step in
+                        step.destination.map { (step.path, move.shareRoot + "/" + $0) }
+                    }, uniquingKeysWith: { one, _ in one }))
         }
+        guard let upgrade = job.upgrade else { return OldFiles(steps: [], asides: [:]) }
+        let planned =
+            ledgered.contains(where: { $0.kind == .moved })
+            ? try destinations(job)
+            : try move.destinations(
+                folder: job.folder, files: sizes.map { ($0.name, $0.sizeBytes) },
+                replacing: Set(upgrade.old.map { $0.path.precomposedStringWithCanonicalMapping }))
         let newByName = Dictionary(
-            zip(job.files.map(\.name), destinations), uniquingKeysWith: { one, _ in one })
+            zip(job.files.map(\.name), planned), uniquingKeysWith: { one, _ in one })
         let mapping = UpgradeMapping(old: upgrade.old, new: newPositions(job))
+        let inPlace = try mapping.replacedInPlace(upgrade.old, destinations: newByName)
+        // Each is checked now, while the index has it at its path; the Trash takes it from
+        // its hidden name later, which the index never has.
+        _ = try index.upgradeOldFiles(
+            inPlace.map(\.sharePath), release: job.releaseID, shareRoot: move.shareRoot)
+        let inPlacePaths = Set(inPlace.map(\.sharePath))
         let pairs = Dictionary(
             mapping.pairs.map { ($0.old, $0.new) }, uniquingKeysWith: { one, _ in one })
         let steps = try upgrade.old.map { file in
             ImportStep(
                 jobID: job.jobID, releaseID: job.releaseID, kind: .trashed, path: file.sharePath,
-                destination: try pairs[file.sharePath].flatMap { newByName[$0] }.map(
-                    shareRelative))
+                destination: inPlacePaths.contains(file.sharePath)
+                    ? nil
+                    : try pairs[file.sharePath].flatMap { newByName[$0] }.map(shareRelative))
+        }
+        var asides: [String: String] = [:]
+        for (offset, file) in inPlace.enumerated() {
+            asides[file.sharePath] =
+                parentOf(file.path) + "/.upgrade-\(job.jobID)-\(offset)"
         }
         try index.database.transaction {
             for step in steps {
@@ -239,20 +284,30 @@ package struct ImportRun {
                     try index.recordImportStep(carried)
                 }
             }
+            for (path, aside) in asides {
+                try index.recordImportStep(
+                    ImportStep(
+                        jobID: job.jobID, releaseID: job.releaseID, kind: .setAside, path: path,
+                        destination: try shareRelative(aside)))
+            }
         }
-        return steps
+        return OldFiles(steps: steps, asides: asides)
     }
 
-    /// Gives the old files still there to the Trash. A file counts as gone when it's no longer
-    /// at its path (ADR 0125), which on a share with no Trash is a permanent delete. Each must
-    /// still be the release's track in the index. Nil when they're all gone.
-    private func delete(_ old: [ImportStep], _ job: ApprovedImport) async -> String? {
-        let left = old.map { move.shareRoot + "/" + $0.path }.filter(pathExists)
+    /// Gives the old files still there to the Trash, a set-aside one from its hidden name. A
+    /// file counts as gone when it's no longer at its path (ADR 0125), which on a share with
+    /// no Trash is a permanent delete. Each one not set aside must still be the release's track
+    /// in the index; a set-aside one was checked before it was. Nil when they're all gone.
+    private func delete(_ old: OldFiles, _ job: ApprovedImport) async -> String? {
+        let atPaths = old.steps.filter { old.asides[$0.path] == nil }.map(\.path)
+            .filter { pathExists(move.shareRoot + "/" + $0) }
+        let left =
+            atPaths.map { move.shareRoot + "/" + $0 }
+            + old.asides.values.sorted().filter(pathExists)
         guard !left.isEmpty else { return nil }
         do {
             _ = try index.upgradeOldFiles(
-                left.map { String($0.dropFirst(stem(move.shareRoot).count + 1)) },
-                release: job.releaseID, shareRoot: move.shareRoot)
+                atPaths, release: job.releaseID, shareRoot: move.shareRoot)
         } catch {
             return "\(error)"
         }

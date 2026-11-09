@@ -48,8 +48,11 @@ struct ApprovalPlan: Sendable {
     /// The staged files analyzed, each with what it shows.
     var origins: [StagedOrigin]
     var originsProblem: String?
+    /// The job was queued as a new album, but its files' paths are taken by the tracks of one
+    /// library album of its release, so Approve replaces that album as an upgrade does.
+    var replacesAlbum = false
 
-    var isUpgrade: Bool { job.upgrade != nil }
+    var isUpgrade: Bool { job.upgrade != nil || replacesAlbum }
 
     /// Whether the lossy-origin check asks the owner to acknowledge what it found.
     var originsBlock: Bool { originsProblem != nil || origins.contains(where: \.blocks) }
@@ -101,19 +104,30 @@ struct ApprovalPlan: Sendable {
             plan.movesProblem = "the service listed the job with no staged folder"
             return plan
         }
+        var oldPaths = job.upgrade?.oldPaths
         if !resuming {
             let found = await blockingFileWork {
-                Result { () throws -> [String] in
+                Result { () throws -> (old: [String]?, destinations: [String]) in
+                    let index = try LibraryIndex(at: databaseURL)
                     // The files are held to their sizes since the player's tag write.
-                    let sized = try LibraryIndex(at: databaseURL).sizedAfterTagging(
-                        job.files, job: job.id, folder: folder)
-                    return try places.move.destinations(
-                        folder: folder, files: sized.map { ($0.name, $0.sizeBytes) })
+                    let files = try index.sizedAfterTagging(job.files, job: job.id, folder: folder)
+                        .map { ($0.name, $0.sizeBytes) }
+                    let old =
+                        try job.upgrade?.oldPaths
+                        ?? places.move.albumToReplace(
+                            folder: folder, files: files, release: job.release.releaseID,
+                            index: index)
+                    let destinations = try places.move.destinations(
+                        folder: folder, files: files,
+                        replacing: places.move.libraryPaths(old ?? []))
+                    return (old, destinations)
                 }
             }
             switch found {
-            case .success(let destinations):
-                plan.moves = zip(job.files.map(\.name), destinations).map { ($0, $1) }
+            case .success(let found):
+                plan.moves = zip(job.files.map(\.name), found.destinations).map { ($0, $1) }
+                plan.replacesAlbum = oldPaths == nil && found.old != nil
+                oldPaths = found.old
             case .failure(let error):
                 plan.movesProblem = "\(error)"
             }
@@ -124,15 +138,26 @@ struct ApprovalPlan: Sendable {
                 plan.originsProblem = "\(error)"
             }
         }
-        if let upgrade = job.upgrade {
+        if let oldPaths {
             do {
                 let old = try await positioned(
-                    upgrade.oldPaths, release: job.release.releaseID, places: places,
+                    oldPaths, release: job.release.releaseID, places: places,
                     databaseURL: databaseURL, catalog: catalog)
                 plan.old = old
-                plan.unmatched =
-                    UpgradeMapping(old: old, new: job.files.map { ($0.name, $0.position) })
-                    .unmatched
+                let mapping = UpgradeMapping(
+                    old: old, new: job.files.map { ($0.name, $0.position) })
+                plan.unmatched = mapping.unmatched
+                if !plan.moves.isEmpty {
+                    do {
+                        _ = try mapping.replacedInPlace(
+                            old,
+                            destinations: Dictionary(
+                                plan.moves.map { ($0.name, $0.destination) },
+                                uniquingKeysWith: { one, _ in one }))
+                    } catch {
+                        plan.movesProblem = "\(error)"
+                    }
+                }
             } catch {
                 plan.upgradeProblem = "The old album's files: \(error)"
             }

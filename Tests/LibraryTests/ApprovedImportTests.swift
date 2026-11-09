@@ -9,37 +9,39 @@ import Testing
 
 private let share = "smb://HAL9000/music"
 
-/// `MoveFolders`'s share, its `library` folder found on `share`, and for an upgrade an MP3
-/// album of release 77 in the library: "01 First.mp3", played, rated, loved and in "Mix", and
-/// "02 Second.mp3", both on disk and in the index.
+/// `MoveFolders`'s share, its `library` folder found on `share`, and for an upgrade an album of
+/// release 77 in the library: "01 First.mp3", played, rated, loved and in "Mix", and
+/// "02 Second.mp3", both on disk and in the index; or, with `names`, files of those names.
 private final class ImportFolders {
     let folders: MoveFolders
+    let names: [String]
     let playlist: Int64
     let played: Int64
     /// The directories each run asked to rescan.
     let rescanned = Rescans()
 
-    init() throws {
+    init(names: [String] = ImportFolders.oldNames) throws {
         let folders = try MoveFolders()
         self.folders = folders
+        self.names = names
         let old = { (name: String) in folders.library + "/Artist/Album/" + name }
         let index = folders.index
         try index.relocate(share: share, path: "library", to: folders.library)
         try FileManager.default.createDirectory(
             atPath: folders.library + "/Artist/Album", withIntermediateDirectories: true)
-        for name in Self.oldNames {
+        for name in names {
             #expect(
                 FileManager.default.createFile(atPath: old(name), contents: Data("mp3".utf8)))
         }
         try index.store(
-            Self.oldNames.map { name in
+            names.map { name in
                 Crafted(
                     path: old(name), title: name, album: "Album", codec: .mp3,
                     custom: [DiscogsKey.releaseID: "77"]
                 ).scanned
             })
-        played = try #require(try index.track(path: old(Self.oldNames[0]))).id
-        try index.recordPlay(old(Self.oldNames[0]), at: 1_700_000_000)
+        played = try #require(try index.track(path: old(names[0]))).id
+        try index.recordPlay(old(names[0]), at: 1_700_000_000)
         try index.setRating(4, trackIDs: [played])
         try index.toggle(.liked, trackIDs: [played])
         playlist = try index.createPlaylist(named: "Mix")
@@ -59,7 +61,7 @@ private final class ImportFolders {
             DownloadJob.File(
                 name: file.name, sizeBytes: file.sizeBytes, position: positions[offset])
         }
-        let old = Self.oldNames.enumerated().map { offset, name in
+        let old = names.enumerated().map { offset, name in
             UpgradeOldFile(
                 sharePath: "library/Artist/Album/" + name, path: oldPath(name),
                 position: String(offset + 1), hasStats: offset == 0)
@@ -304,7 +306,7 @@ private let newAlbumReports = ["approved", "importing", "imported"]
 
 /// Whether both old files are still on disk.
 private func oldFilesThere(_ setup: ImportFolders) -> Bool {
-    ImportFolders.oldNames.map(setup.oldPath).allSatisfy {
+    setup.names.map(setup.oldPath).allSatisfy {
         FileManager.default.fileExists(atPath: $0)
     }
 }
@@ -410,4 +412,88 @@ final class Heard: @unchecked Sendable {
 
     func record(_ reports: [String]?) { lock.withLock { all.append(reports ?? []) } }
     var seen: [[String]] { lock.withLock { all } }
+}
+
+/// The files the album's new files have names of: "01 First.flac" and "02 Second.flac".
+private let samePathNames = ["01 First.flac", "02 Second.flac"]
+
+/// The old files' hidden names while their new files take their paths.
+private func asides(_ setup: ImportFolders) -> [String] {
+    [0, 1].map { setup.folders.library + "/Artist/Album/.upgrade-7-\($0)" }
+}
+
+@Test func anUpgradeAtTheOldFilesPathsReplacesThemAndKeepsTheirStats() async throws {
+    let setup = try ImportFolders(names: samePathNames)
+    let oldBytes = try Data(contentsOf: URL(fileURLWithPath: setup.folders.destinations[0]))
+    let carried = Rescans()
+    let outcome = await setup.run(carry: { lines in
+        carried.add(lines.map(\.from))
+        return MoveListImport(problems: [])
+    }).run(try setup.job(upgrade: true))
+    #expect(outcome == .imported(setup.folders.destinations))
+    #expect(try setup.folders.staged().isEmpty)
+    #expect(asides(setup).allSatisfy { !FileManager.default.fileExists(atPath: $0) })
+    #expect(try Data(contentsOf: URL(fileURLWithPath: setup.folders.destinations[0])) != oldBytes)
+    // The stats stay with the path, so nothing is carried.
+    #expect(carried.all.isEmpty)
+    try setup.index.store(
+        setup.folders.destinations.map { Crafted(path: $0, title: "new", album: "Album").scanned })
+    let track = try #require(try setup.index.track(path: setup.folders.destinations[0]))
+    #expect(track.id == setup.played)
+    #expect(track.playCount == 1)
+    #expect(track.rating == 4)
+    #expect(try setup.index.playlistTrackIDs(setup.playlist) == [setup.played])
+    #expect(try setup.reports() == newAlbumReports)
+}
+
+@Test func aTruncatedFileAtAnOldPathKeepsTheOldFileAside() async throws {
+    let setup = try ImportFolders(names: samePathNames)
+    var calls = MoveCalls()
+    calls.renameExclusive = { from, to in
+        guard renamex_np(from, to, UInt32(RENAME_EXCL)) == 0 else { return errno }
+        if from.hasSuffix("02.flac") { truncate(to, 10) }
+        return 0
+    }
+    let outcome = await setup.run(calls: calls).run(try setup.job(upgrade: true))
+    guard case .failed(.move, let reason) = outcome else {
+        Issue.record("\(outcome)")
+        return
+    }
+    #expect(reason.contains("02 Second.flac is 10 bytes"))
+    #expect(reason.contains(".upgrade-7-1"))
+    #expect(asides(setup).allSatisfy { FileManager.default.fileExists(atPath: $0) })
+}
+
+@Test func aResumeWithoutTheSheetsUpgradeStillDeletesTheSetAsideFiles() async throws {
+    let setup = try ImportFolders(names: samePathNames)
+    let job = try setup.job(upgrade: true)
+    guard case .failed(.delete, _) = await setup.run(trash: { _ in "refused" }).run(job) else {
+        Issue.record("the delete didn't fail")
+        return
+    }
+    #expect(asides(setup).allSatisfy { FileManager.default.fileExists(atPath: $0) })
+    // A sheet built for the resume doesn't know the job replaces an album; the ledger does.
+    var resumed = job
+    resumed.state = .importing
+    resumed.upgrade = nil
+    #expect(await setup.run().run(resumed) == .imported(setup.folders.destinations))
+    #expect(asides(setup).allSatisfy { !FileManager.default.fileExists(atPath: $0) })
+    #expect(setup.folders.destinations.allSatisfy { FileManager.default.fileExists(atPath: $0) })
+}
+
+@Test func aNewFileAtAnOldPathOfAnotherTrackRefusesTheUpgrade() async throws {
+    let setup = try ImportFolders(names: samePathNames)
+    // The old "01 First.flac" is placed second on the release, so the new first file would
+    // take its path with the wrong track's stats.
+    var job = try setup.job(upgrade: true)
+    job.upgrade?.old[0].position = "2"
+    job.upgrade?.old[1].position = "1"
+    let outcome = await setup.run().run(job)
+    guard case .failed(.move, let reason) = outcome else {
+        Issue.record("\(outcome)")
+        return
+    }
+    #expect(reason.hasPrefix("already in the library"))
+    #expect(oldFilesThere(setup))
+    #expect(try setup.folders.staged() == ["01.flac", "02.flac"])
 }
