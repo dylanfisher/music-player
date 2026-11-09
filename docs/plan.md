@@ -655,6 +655,65 @@ Feedback round of 2026-11-09. Every window keeps its place, and Settings fits a 
       Separate Releases becomes a setting and leaves the menu.
 - [ ] **Separate Releases order:** with it on, an album's releases sort earliest date first.
 
+Implementation plan, phase 55 (ADRs 0158, 0159; phase 58 holds 0157):
+
+What exists, found by search (map.md recipes):
+
+- The main window keeps its frame in `state.json` (`AppState.windowFrame`, saved by
+  `MainWindow.saveFrame`, checked on screen by `restoredFrame`). Downloads, the tagger and Year
+  in Review call `setFrameAutosaveName`, which writes user defaults (ADR 0055 rejected those
+  for layout), and Downloads then calls `center()`, which moves it to the screen the window
+  was made on, the primary. Settings, Library Health and the bar builder `center()` once.
+- `GeneralPane` lays a pane out as a stack the window sizes to (`fitWindow`); nothing scrolls.
+  Its Library section adds the database and snapshot rows in `addSnapshotRows`, and it has
+  a disclosure triangle for fallback rows (`disclosureLine`).
+- Restore… runs `prepareRestore` through `betweenScans`, which queues behind a running scan,
+  paused ones too. `LibraryWatcher.stop()` cancels a running scan (`ScanControl.cancel`),
+  which keeps what it stored and removes nothing.
+- Text rows save on end of editing (`controlTextDidEndEditing`), and a refused value's error
+  shows in the pane's one `errorLabel`, at its foot. `IPAddressSetting.problem()` words the
+  refusal.
+- Every Boolean and choice setting is a command, and `everyCommandIsInTheMenus` holds every
+  command to a menu, so the File menu lists 13 settings that the Settings window or the tagger
+  already show. Separate Releases already has a checkbox in General > Library.
+- The track table's fallback order breaks a tie of album title on `t.album_id`, the order
+  releases were added (ADR 0143); the Album pane already sorts a title's releases by year.
+
+Parts, in order, each its own commit or two:
+
+1. **55.1 Window frames** (ADR 0158). A primitive, `Sources/Primitives/WindowPlacement`:
+   `placedFrame`, pure, picks a window's frame from its saved frame and the screens (the
+   saved one when a screen shows part of it; the size alone for a window that doesn't resize;
+   else centered on the anchor's screen); `PlacedWindows` (AppKit file) applies it and hears
+   each move and resize, with one call, `window.keepsFrame(as: name)`. The app sets the
+   frames saved at the last launch, the main window as the anchor, and the save, at launch;
+   `AppState` gains `window.frames`, a name-to-frame map. Settings, Downloads, the tagger,
+   Year in Review, Library Health, the bar builder and the first Spectrum window adopt it;
+   the autosave names and `center()` calls go. Get Info keeps its own place until phase 57.
+   Tests: `placedFrame`'s cases, and a window remembered, moved and placed again.
+2. **55.2 Settings height.** Each pane sits in a scroll view no taller than its screen's
+   visible frame less the title bar and toolbar; `fitWindow` sizes to that. Library's
+   snapshot list and Restore… go under a disclosure, Snapshots, closed by default; Last
+   Snapshot and Back Up Now stay. Tests: a pane taller than a short screen scrolls; the
+   snapshot rows hidden until opened.
+3. **55.3 Restore during a scan.** `LibraryWatcher.stop(then:)` stops watching, cancels the
+   running scan, paused or not, and runs the job once it has stopped; Restore… uses it, and
+   restarts the watcher if the restore fails. The confirmation says a running scan stops. A
+   share that hangs a read keeps the scan until the read returns, as a quit does. Test: a job
+   given to `stop(then:)` runs while a paused scan would have held `betweenScans`.
+4. **55.4 Service address.** IP address rows get a Save button, a placeholder
+   (`192.168.1.10`, since the port has its own row), and their refusal on a line under the
+   field. Tests: the button saves; a host name is refused under the field.
+5. **55.5 File menu** (ADR 0159). Setting commands no longer have to be in a menu: those not
+   in one are the Shortcuts pane's and the palette's section Settings. The File menu drops the
+   13 settings, and its rarely used commands go into two submenus, Import from Other Players
+   (Swinsian, iTunes) and Moved and Removed Files (Resolve Lost Stats, Restore Removed Tracks,
+   Import Moves). Tests: the File menu lists no setting; every command is in a menu or the
+   Settings section.
+6. **55.6 Separate Releases order.** With the option on, the track table breaks a tie of
+   album title by the album's earliest date, then the album id, undated albums last. Test: an
+   original added after its remaster lists first, on and off.
+
 ### 56. Browsing and the keyboard
 
 - [ ] **Shift with Option-Up/Down:** extends the selection over the rows it jumps.
