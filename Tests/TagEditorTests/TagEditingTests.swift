@@ -389,6 +389,41 @@ private final class Titles: @unchecked Sendable {
     #expect(heard == progress)
 }
 
+/// The status bar counts every batch queued and running, so a batch queued mid-write raises
+/// the total at once; a finished batch leaves the count, as in the tagger's window.
+@MainActor
+@Test func theSavingStatusCountsEveryQueuedBatch() async throws {
+    var step = TagWriteProgress(total: 1)
+    var progress: [TagWriteProgress] = []
+    for stage in [\TagWriteProgress.read, \.written] {
+        step[keyPath: stage] += 1
+        progress.append(step)
+    }
+    let gate = Gate()
+    let editing = makeEditing(
+        Seen(),
+        write: { _, paths in
+            if paths == ["/a.flac"] { gate.wait() }
+            var report = TagWriteReport()
+            report.changed = paths
+            return report
+        }, progress: progress)
+    var shown: [String?] = []
+    editing.saving = { shown.append($0?.text) }
+    let edit = TagEdit(values: [.title: "New"])
+    editing.write([("/a.flac", edit)], over: window)
+    try await eventually { shown.last == "Saving tags: 1 of 1" }
+    editing.write([("/b.flac", edit), ("/c.flac", edit)], over: window)
+    #expect(shown.last == "Saving tags: 1 of 3")
+    gate.open()
+    try await eventually { !editing.isWriting }
+    #expect(
+        shown == [
+            "Saving tags: 0 of 1", "Saving tags: 1 of 1", "Saving tags: 1 of 3",
+            "Saving tags: 0 of 2", "Saving tags: 1 of 2", nil,
+        ])
+}
+
 /// Back and Forward step the key info window's tabs, wrapping at the ends, and leave anything
 /// else to the main window.
 @MainActor

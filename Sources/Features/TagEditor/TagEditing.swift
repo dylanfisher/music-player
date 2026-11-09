@@ -25,7 +25,8 @@ public final class TagEditing {
     /// undo the user asked for is queued (ADR 0164).
     public var organizingFolder: () -> String? = { nil }
     /// Called on the main thread as a save goes, for the status bar: "Saving tags: 3 of 20" and
-    /// how far along, from 0 to 1; nil once no write is left (ADR 0108).
+    /// how far along, from 0 to 1, over every write queued and running (ADR 0167); nil once no
+    /// write is left (ADR 0108).
     public var saving: (_ progress: (text: String, fraction: Double)?) -> Void = { _ in }
     /// Runs one of the registry's tag commands as its menu item does: an info window's Undo
     /// Tag Edit, Replace Artwork… and Remove Artwork buttons.
@@ -126,6 +127,9 @@ public final class TagEditing {
     private var completions: [Int: (Set<String>) -> Void] = [:]
     /// What to tell a Discogs write's caller of its progress, by write number.
     private var progresses: [Int: (TagWriteProgress) -> Void] = [:]
+    /// The writes queued and running, by write number: how many files each writes, and its
+    /// last report, nil before its first.
+    private var batches: [Int: (files: Int, progress: TagWriteProgress?)] = [:]
     private var lastWrite = 0
     /// Each open window's latest read, so an earlier read that comes back late is dropped.
     private var reads: [ObjectIdentifier: ReadStop] = [:]
@@ -382,13 +386,17 @@ public final class TagEditing {
         let files = paths.map { (path: $0, edit: edit) }
         guard paths.count > 1 else {
             close()
-            enqueue("write the tags", over: window) { write(files, .tagEditor, $0) }
+            enqueue("write the tags", over: window, files: files.count) {
+                write(files, .tagEditor, $0)
+            }
             return
         }
         effects.confirm(.writing(paths.count), editor.window) { [weak self] yes in
             guard yes, let self else { return }
             close()
-            self.enqueue("write the tags", over: window) { write(files, .tagEditor, $0) }
+            self.enqueue("write the tags", over: window, files: files.count) {
+                write(files, .tagEditor, $0)
+            }
         }
     }
 
@@ -407,7 +415,9 @@ public final class TagEditing {
         let write = effects.write
         completions[lastWrite + 1] = completion
         progresses[lastWrite + 1] = progress
-        enqueue("write the tags", over: window) { write(files, .discogsTagger, $0) }
+        enqueue("write the tags", over: window, files: files.count) {
+            write(files, .discogsTagger, $0)
+        }
     }
 
     /// Runs `work` on the write queue, after the writes, undos and renames queued before it and
@@ -431,11 +441,12 @@ public final class TagEditing {
         }
     }
 
-    /// Queues `work`, which is handed what to tell of its progress. With Keep Files Organized
-    /// on, or `organizing` given, the files are then renamed on the same queue, and the journal
+    /// Queues `work`, which is handed what to tell of its progress, and which writes `files`
+    /// files, nil for an undo or an organize, which tell none. With Keep Files Organized on, or
+    /// `organizing` given, the files are then renamed on the same queue, and the journal
     /// follows them before any later write or undo can look for them (ADR 0164).
     private func enqueue(
-        _ action: String, over window: NSWindow,
+        _ action: String, over window: NSWindow, files: Int? = nil,
         organizing: (plan: FilesOrganized, folder: String)? = nil,
         _ work:
             @escaping @Sendable (@escaping @Sendable (TagWriteProgress) -> Void) ->
@@ -445,6 +456,11 @@ public final class TagEditing {
         let number = lastWrite
         alertWindows[number] = (action, window)
         pendingWrites += 1
+        if let files {
+            batches[number] = (files, nil)
+            // While a save shows, its total takes in this batch at once.
+            if let all = savingProgress { saving(Self.savingStatus(all)) }
+        }
         let keepingIn = organizing == nil ? organizingFolder() : nil
         let layout = effects.layout
         let move = effects.move
@@ -453,7 +469,8 @@ public final class TagEditing {
             var report = work { progress in
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
-                        self.saving(Self.savingStatus(progress))
+                        self.batches[number]?.progress = progress
+                        if let all = self.savingProgress { self.saving(Self.savingStatus(all)) }
                         self.progresses[number]?(progress)
                     }
                 }
@@ -482,6 +499,14 @@ public final class TagEditing {
         }
     }
 
+    /// The writes queued and running as one batch, as the tagger's window counts its own;
+    /// nil until one of them reports.
+    private var savingProgress: TagWriteProgress? {
+        let reports = batches.values.compactMap(\.progress)
+        guard !reports.isEmpty else { return nil }
+        return .combined(reports, total: batches.values.map(\.files).reduce(0, +))
+    }
+
     /// "Saving tags: 3 of 20", by the files written, and how far along.
     static func savingStatus(_ progress: TagWriteProgress) -> (text: String, fraction: Double) {
         let count = { (value: Int) in
@@ -498,6 +523,7 @@ public final class TagEditing {
         if pendingWrites == 0 { saving(nil) }
         readCanUndo()
         progresses.removeValue(forKey: number)
+        batches.removeValue(forKey: number)
         completions.removeValue(forKey: number)?(
             Set(report.failures.map(\.path) + report.notWritten))
         guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }
