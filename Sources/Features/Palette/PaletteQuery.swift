@@ -18,12 +18,17 @@ struct PaletteQuery: Equatable {
 }
 
 extension PaletteItem.Kind {
-    /// The words a query names this kind by, before its colon: the case's name, and for a
-    /// track, song.
-    var queryNames: [String] {
-        let name = "\(self)"
-        return self == .track ? ["song", name] : [name]
-    }
+    /// The kind's name, as a query types it before a colon, and with one the start of a
+    /// command's, a setting's and a track's key (`command:…`). It's the case's name; a test
+    /// holds the spellings, so renaming a case can't change what users type or the keys
+    /// frecency saved.
+    public var name: String { "\(self)" }
+    public var keyPrefix: String { name + ":" }
+    /// The other word a query may name tracks by.
+    static let songName = "song"
+
+    /// The words a query names this kind by, before its colon.
+    var queryNames: [String] { self == .track ? [Self.songName, name] : [name] }
 
     /// The kind `name` names, whatever its case; nil for any other word.
     init?(queryName name: Substring) {

@@ -149,7 +149,8 @@ extension AppDelegate {
             }
         }.map {
             PaletteItem(
-                kind: .setting, key: "setting:\($0.key)", title: $0.title, detail: "Setting")
+                kind: .setting, key: PaletteItem.Kind.setting.keyPrefix + $0.key, title: $0.title,
+                detail: "Setting")
         }
         return settingItems
             + bindings.registry.commands.compactMap { command in
@@ -164,7 +165,8 @@ extension AppDelegate {
                         title, isOn: settings.isOn(key))
                 }
                 return PaletteItem(
-                    kind: .command, key: "command:\(command.id)", title: title,
+                    kind: .command, key: PaletteItem.Kind.command.keyPrefix + command.id.rawValue,
+                    title: title,
                     detail: section[command.id],
                     chord: command.chords.first?.symbols,
                     isEnabled: dispatcher.isEnabled(command.id))
@@ -177,7 +179,7 @@ extension AppDelegate {
         guard let browser, let dispatcher else { return }
         switch item.kind {
         case .command:
-            let id = CommandID(String(item.key.dropFirst("command:".count)))
+            let id = CommandID(String(item.key.dropFirst(PaletteItem.Kind.command.keyPrefix.count)))
             if !dispatcher.run(id) { NSSound.beep() }
         case .genre, .artist, .album:
             guard let (pane, id) = paletteEntries[item.key] else { return }
@@ -203,7 +205,8 @@ extension AppDelegate {
             guard let choice = OutputChoice(text: item.key) else { return }
             chooseOutput(choice)
         case .setting:
-            settingsWindowController()?.show(setting: String(item.key.dropFirst("setting:".count)))
+            settingsWindowController()?.show(
+                setting: String(item.key.dropFirst(PaletteItem.Kind.setting.keyPrefix.count)))
         }
     }
 
@@ -227,7 +230,7 @@ extension AppDelegate {
 }
 
 /// The palette key of Show All Music.
-let showAllMusicKey = "command:\(CommandID.showAllTracks)"
+let showAllMusicKey = PaletteItem.Kind.command.keyPrefix + CommandID.showAllTracks.rawValue
 
 /// ⌘K's commands, without Show All Music while the table already lists the whole library:
 /// it's there to get back to the library from a playlist, a pane or a search. ⌘P lists it
@@ -312,7 +315,7 @@ func goToTrackID(_ key: String) -> Int64? {
     return Int64(key.dropFirst(trackKeyPrefix.count))
 }
 
-private let trackKeyPrefix = "track:"
+private let trackKeyPrefix = PaletteItem.Kind.track.keyPrefix
 
 /// The palette rows for the playlists, by name.
 func playlistItems(_ playlists: [Playlist]) -> [PaletteItem] {

@@ -16,7 +16,8 @@ public enum PlayQuery: Equatable, Sendable {
 }
 
 extension BrowserModel.Pane {
-    /// How the palette's keys and `PlayQuery` start an entry of this pane.
+    /// How the palette's keys and `PlayQuery` start an entry of this pane: the palette kind's
+    /// `keyPrefix`, which this feature can't import, as a test in MusicPlayerTests holds.
     public var keyPrefix: String {
         switch self {
         case .genre: "genre:"

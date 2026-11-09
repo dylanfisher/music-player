@@ -105,3 +105,19 @@ import Testing
     #expect(paletteCommands(items, showsAllMusic: true).map(\.key) == ["command:view.other"])
     #expect(showAllMusicKey == "command:view.showAllTracks")
 }
+
+/// What users type before a colon, and the keys frecency saved, spelled once by the palette's
+/// kinds; the command line's play prefixes are the same.
+@Test func thePaletteKindsKeepTheirNamesAndThePlayPrefixesMatch() {
+    #expect(
+        PaletteItem.Kind.allCases.map(\.name) == [
+            "command", "setting", "output", "playlist", "genre", "artist", "album", "track",
+        ])
+    let kinds: [BrowserModel.Pane: PaletteItem.Kind] = [
+        .genre: .genre, .artist: .artist, .album: .album,
+    ]
+    for pane in BrowserModel.Pane.allCases {
+        #expect(pane.keyPrefix == kinds[pane]?.keyPrefix)
+    }
+    #expect(showAllMusicKey == "command:view.showAllTracks")
+}

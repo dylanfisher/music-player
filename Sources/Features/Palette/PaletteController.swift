@@ -88,7 +88,8 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         field.placeholderString =
             mode == .commands
             ? "Commands, settings, outputs, playlists, genres"
-            : "Artists, albums, tracks; album: or song: for one kind"
+            : "Artists, albums, tracks; \(PaletteItem.Kind.album.keyPrefix) or "
+                + "\(PaletteItem.Kind.songName): for one kind"
         panel.setAccessibilityTitle(mode == .commands ? "Command Palette" : "Go to Item")
         let screen = (window.screen ?? NSScreen.main)?.visibleFrame ?? window.frame
         let frame = Self.frame(size: panel.frame.size, on: screen, place: place)
