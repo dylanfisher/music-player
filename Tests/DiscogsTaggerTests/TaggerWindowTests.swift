@@ -1001,6 +1001,43 @@ private final class Queries: @unchecked Sendable {
     #expect(tagger.selected?.review == .chosen(releaseID: 40))
 }
 
+/// The first Look Up search, held until the test answers it.
+@MainActor
+private final class HeldSearch {
+    var first: CheckedContinuation<ReleaseLookup, any Error>?
+    var calls = 0
+}
+
+/// Only the latest search's answer shows: an older one that ends after it, here with the error
+/// a cancelled request gives, changes neither the heading nor the button.
+@MainActor
+@Test func anOlderSearchEndingLateChangesNothing() async throws {
+    let held = HeldSearch()
+    let summary = ReleaseSummary(
+        id: 2, artist: "Persuader", title: "Found", label: "Svek", catalogNumber: "SK 2",
+        country: "Sweden", year: "2000", format: "CD", trackCount: 3)
+    let sheet = ReleasesSheet(
+        candidates: [], chosen: nil, title: "Stockholm",
+        lookUp: { _ in
+            held.calls += 1
+            if held.calls == 1 {
+                return try await withCheckedThrowingContinuation { held.first = $0 }
+            }
+            return ReleaseLookup(releases: [(summary, 0.5)], origin: .catalog, isCut: false)
+        },
+        query: ReleaseQuery(title: "Stockholm"))
+    let first = Task { await sheet.runSearch() }
+    try await eventually { held.first != nil }
+    await sheet.runSearch()
+    #expect(sheet.heading.stringValue == "1 release in the catalog")
+    #expect(sheet.searchButton.isEnabled)
+    held.first?.resume(throwing: URLError(.cancelled))
+    await first.value
+    #expect(sheet.heading.stringValue == "1 release in the catalog")
+    #expect(sheet.searchButton.isEnabled)
+    #expect(sheet.shown.map(\.summary.id) == [2])
+}
+
 @MainActor
 @Test func lookUpReleaseSaysWhereWhatItFoundCameFrom() {
     let summary = ReleaseSummary(

@@ -63,6 +63,8 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
     let searching = NSProgressIndicator()
     /// The search running, which a new one or Cancel stops.
     private var search: Task<Void, Never>?
+    /// Counts the searches started, so only the latest one's answer is shown.
+    private var searches = 0
 
     /// Other Releases… over `candidates`, or with `lookUp`, Look Up Release, which lists what
     /// its search finds, its fields filled from `query`.
@@ -193,23 +195,28 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
             heading.stringValue = "Type an artist, a title, a catalog number or a release ID"
             return NSSound.beep()
         }
+        searches += 1
+        let mine = searches
         searchButton.isEnabled = false
         searching.startAnimation(nil)
         heading.stringValue = "Searching…"
+        // A newer search owns the button, the spinner and the heading.
         defer {
-            searchButton.isEnabled = true
-            searching.stopAnimation(nil)
+            if mine == searches {
+                searchButton.isEnabled = true
+                searching.stopAnimation(nil)
+            }
         }
         let found: ReleaseLookup
         do {
             found = try await lookUp(query)
-        } catch is CancellationError {
-            return
         } catch {
-            heading.stringValue = "The search stopped: \(error)"
+            if mine == searches, !(error is CancellationError) {
+                heading.stringValue = "The search stopped: \(error)"
+            }
             return
         }
-        guard !Task.isCancelled else { return }
+        guard mine == searches else { return }
         origin = found.origin
         candidates = found.releases.map { (summary: $0.summary, score: Optional($0.score)) }
         heading.stringValue =

@@ -62,7 +62,7 @@ let lookedUpCatalogReads = 5_000
 public func lookUpReleases(
     _ query: ReleaseQuery, for album: DiscogsAlbum, catalogAt catalog: URL, api: DiscogsAPI?
 ) async throws -> ReleaseLookup {
-    let found = try await Task.detached(priority: .userInitiated) {
+    let reading = Task.detached(priority: .userInitiated) {
         () throws -> (releases: [CatalogRelease], isCut: Bool) in
         let opened: Catalog
         do {
@@ -73,7 +73,14 @@ public func lookUpReleases(
             return ([], false)
         }
         return try catalogReleases(query, in: opened)
-    }.value
+    }
+    // The detached read doesn't hear this task's cancel unless it's passed on.
+    let found = try await withTaskCancellationHandler {
+        try await reading.value
+    } onCancel: {
+        reading.cancel()
+    }
+    try Task.checkCancellation()
     guard found.releases.isEmpty, let api else {
         return scored(found.releases, album, origin: .catalog, isCut: found.isCut)
     }
@@ -140,6 +147,7 @@ private func catalogReleases(_ query: ReleaseQuery, in catalog: Catalog) throws 
     // rule out.
     var kept: [CatalogRelease] = []
     for id in ids.prefix(limit) where kept.count <= lookedUpCatalogReleases {
+        try Task.checkCancellation()
         if let release = try catalog.release(id: id), holds(query, release) {
             kept.append(release)
         }
