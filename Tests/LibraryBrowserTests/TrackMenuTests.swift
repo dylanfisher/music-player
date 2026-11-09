@@ -237,7 +237,7 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
 }
 
 /// Copy reads the selected rows' names and files; Paste adds to a manual playlist only, after
-/// the selection, and never to the library (ADR 0160).
+/// the selection, and never to the library (ADR 0161).
 @MainActor @Test func pasteAddsCopiedTracksToTheManualPlaylistAfterTheSelection() async throws {
     let (browser, index) = try await browser(selecting: [4, 7])
     let window = NSWindow(

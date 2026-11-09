@@ -3,7 +3,7 @@ import Foundation
 /// A row movement command, as Searcher's 0029 defines them, apart from any table.
 public enum RowMove: Sendable, Equatable {
     case down, up, tenDown, tenUp, first, last, pageDown, pageUp
-    /// The first row of the next album, or of the one before the cursor's (ADR 0160).
+    /// The first row of the next album, or of the one before the cursor's (ADR 0161).
     case nextAlbum, previousAlbum
 
     /// The selection commands' moves, each with whether it extends the selection.

@@ -682,7 +682,7 @@ Plan:
    gets Add Column (to the right, with the first grouping not shown) and Remove Column, through
    `groupingsChosen` as a grouping choice goes. Tests on the model and the menu.
 6. **Play count:** not here. Phase 57, running at the same time, owns the field and its storage.
-7. ADR 0160 records the album moves' rules, the chords and Mission Control, the clipboard, and
+7. ADR 0161 records the album moves' rules, the chords and Mission Control, the clipboard, and
    the column limits.
 
 ### 57. Get Info

@@ -207,7 +207,7 @@ public enum AppCommands {
             Command(
                 .extendTenRowsDown, "Extend Selection Down 10 Rows", [.init(.down, [opt, shift])]),
             Command(.extendTenRowsUp, "Extend Selection Up 10 Rows", [.init(.up, [opt, shift])]),
-            // Mission Control takes ⌃↑ and ⌃↓ first while its shortcuts are on (ADR 0160).
+            // Mission Control takes ⌃↑ and ⌃↓ first while its shortcuts are on (ADR 0161).
             Command(.nextAlbum, "Select Next Album", [.init(.down, ctrl)]),
             Command(.previousAlbum, "Select Previous Album", [.init(.up, ctrl)]),
             Command(

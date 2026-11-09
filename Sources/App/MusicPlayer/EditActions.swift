@@ -4,7 +4,7 @@ import Library
 
 /// The files Edit ▸ Copy last copied, and the pasteboard's change count once it wrote their
 /// text. The pasteboard holds text only, so Paste finds the files here, and only while the
-/// pasteboard still holds that copy (ADR 0160).
+/// pasteboard still holds that copy (ADR 0161).
 struct TrackClipboard: Equatable {
     var paths: [String]
     var changeCount: Int

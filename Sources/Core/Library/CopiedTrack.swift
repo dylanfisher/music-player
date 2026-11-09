@@ -1,6 +1,6 @@
 /// A track Edit ▸ Copy took: its file, for a paste, and the names its line of text shows. The
 /// pasteboard gets the text only, never the file, so nothing pasted elsewhere copies or moves
-/// a library file (ADR 0160).
+/// a library file (ADR 0161).
 public struct CopiedTrack: Equatable, Sendable {
     public var path: String
     public var artist: String?

@@ -1564,7 +1564,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Whether Edit ▸ Paste can add tracks here: the track table has the keys and shows a
-    /// manual playlist. Never the library (ADR 0160).
+    /// manual playlist. Never the library (ADR 0161).
     public var canPaste: Bool {
         focusedList == .tracks && model.shownPlaylist?.isManual == true
     }

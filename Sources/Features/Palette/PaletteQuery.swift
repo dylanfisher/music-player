@@ -1,5 +1,5 @@
 /// What the palette's field asks for: the text to match, and the one kind to list when it
-/// starts with a kind's name and a colon, as `album: dream` does (ADR 0160).
+/// starts with a kind's name and a colon, as `album: dream` does (ADR 0161).
 struct PaletteQuery: Equatable {
     var text: String
     var kind: PaletteItem.Kind?
