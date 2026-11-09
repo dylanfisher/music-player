@@ -28,7 +28,8 @@ private final class Flag: @unchecked Sendable {
     let tagger = await model(
         Seen(), albums: [one],
         matches: { album, _ in
-            match(album, DiscogsTaggerTests.release(10, "Stockholm", titles: stockholm), tier: .exact)
+            match(
+                album, DiscogsTaggerTests.release(10, "Stockholm", titles: stockholm), tier: .exact)
         },
         files: { ids in
             entered.set()
