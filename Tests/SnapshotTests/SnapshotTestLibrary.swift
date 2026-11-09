@@ -13,10 +13,33 @@ private let sourceMusic = Result { () throws -> URL in
     return root
 }
 
+/// Stand-ins for the two secrets, never real ones.
+let fakeDiscogsToken = "fakeDISCOGSfor3snapshot0nly"
+let fakeServiceToken = "fake-service-token-for-snapshot-tests"
+
+/// A config file with both secrets set, one of them twice, an old one commented out, and a
+/// setting beside them.
+let configWithTokens = """
+    {
+      // The Discogs token. Was "\(fakeDiscogsToken)-old".
+      "discogs.token": "\(fakeDiscogsToken)",
+      "library.groupByAlbumArtist": false,
+      "recommender.token": "\(fakeServiceToken)",
+      /* A copy: "\(fakeServiceToken)" */
+      "discogs.token": "\(fakeDiscogsToken)",
+    }
+
+    """
+
+/// A state file, as the app writes it.
+let stateText = #"{"window.sidebarWidth": 240}"#
+
 /// A data folder of its own in a fresh temporary directory, its index scanned from a copy of
-/// the fixtures, with one play recorded, and a snapshot folder beside it.
+/// the fixtures, with one play recorded, a state file and a config file holding both secrets,
+/// and a snapshot folder beside it.
 struct SnapshotTestLibrary {
     let directory: URL
+    let paths: AppPaths
     let databaseURL: URL
     let snapshotFolder: URL
     /// The file whose play is recorded.
@@ -31,6 +54,9 @@ struct SnapshotTestLibrary {
         let music = directory.appendingPathComponent("Music", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: try sourceMusic.get(), to: music)
+        paths = AppPaths(home: directory)
+        try Data(stateText.utf8).write(to: paths.stateFile)
+        try Data(configWithTokens.utf8).write(to: paths.configFile)
         databaseURL = libraryFileURL(in: directory)
         snapshotFolder = directory.appendingPathComponent("Backups", isDirectory: true)
         _ = try LibraryScanner(databaseURL: databaseURL).scan(

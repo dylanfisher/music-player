@@ -5,7 +5,7 @@ import Testing
 
 @Test func theDailySnapshotIsWrittenOnceADay() throws {
     let library = try SnapshotTestLibrary()
-    let scheduler = SnapshotScheduler(databaseURL: library.databaseURL)
+    let scheduler = SnapshotScheduler(paths: library.paths)
     let morning = try #require(
         Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 1, hour: 9)))
     #expect(scheduler.writeIfDue(into: library.snapshotFolder, now: morning))
@@ -20,7 +20,7 @@ import Testing
 
 @Test func aSecondAskWhileOneWaitsQueuesNothing() throws {
     let library = try SnapshotTestLibrary()
-    let scheduler = SnapshotScheduler(databaseURL: library.databaseURL)
+    let scheduler = SnapshotScheduler(paths: library.paths)
     let job = try #require(scheduler.dailyJob(into: library.snapshotFolder))
     #expect(scheduler.dailyJob(into: library.snapshotFolder) == nil)
     job()
@@ -31,7 +31,7 @@ import Testing
 
 @Test func aFailedSnapshotSaysWhyUntilOneIsWritten() throws {
     let library = try SnapshotTestLibrary()
-    let scheduler = SnapshotScheduler(databaseURL: library.databaseURL)
+    let scheduler = SnapshotScheduler(paths: library.paths)
     // A file where the folder should be.
     try Data().write(to: library.snapshotFolder)
     #expect(!scheduler.write(into: library.snapshotFolder, now: Date()))
@@ -55,7 +55,7 @@ import Testing
     }
     try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: stuck.path)
     defer { try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: stuck.path) }
-    let scheduler = SnapshotScheduler(databaseURL: library.databaseURL)
+    let scheduler = SnapshotScheduler(paths: library.paths)
     #expect(scheduler.write(into: folder, now: Date()))
     #expect(try snapshots(in: folder).contains { $0.day == SnapshotName(of: Date()).day })
     let problem = try #require(scheduler.lastProblem)
@@ -66,7 +66,7 @@ import Testing
 @Test func anUnreadableEntryIsLeftOutOfTheList() throws {
     let library = try SnapshotTestLibrary()
     let folder = library.snapshotFolder
-    try writeSnapshot(of: library.index(), into: folder, on: Date())
+    try writeSnapshot(of: library.index(), keeping: library.paths, into: folder, on: Date())
     // A folder has no file size to read.
     try FileManager.default.createDirectory(
         at: folder.appendingPathComponent("library-2000-01-01.sqlite.gz"),

@@ -1,9 +1,11 @@
 import Foundation
+import Settings
 
 /// A snapshot's file name, by the local day it was written (ADR 0142): the day's,
 /// `library-YYYY-MM-DD.sqlite.gz`, one a day, a second replacing the first; or one a restore
 /// writes of the index it replaces, `library-YYYY-MM-DD-before-restore-HHMMSS.sqlite.gz`,
-/// which never takes a day's name.
+/// which never takes a day's name. The state and config files a snapshot keeps take the same
+/// name with a prefix of their own, `state-` and `config-`, and `.json` (ADR 0181).
 struct SnapshotName: Hashable, Comparable, Sendable {
     /// `YYYY-MM-DD`, which sorts as the days do.
     let day: String
@@ -14,7 +16,7 @@ struct SnapshotName: Hashable, Comparable, Sendable {
     private static let suffix = ".sqlite.gz"
     private static let beforeRestore = "-before-restore-"
     /// What a snapshot's file is called while it's written, before the rename that finishes it.
-    private static let partialSuffix = ".partial"
+    static let partialSuffix = ".partial"
 
     /// The name for the local day `date` falls on, or with `beforeRestore`, for its second.
     init(of date: Date, beforeRestore: Bool = false, calendar: Calendar = .current) {
@@ -41,14 +43,23 @@ struct SnapshotName: Hashable, Comparable, Sendable {
         beforeRestoreTime = parts.count == 2 ? parts[1] : nil
     }
 
-    var fileName: String {
-        Self.prefix + day + (beforeRestoreTime.map { Self.beforeRestore + $0 } ?? "") + Self.suffix
-    }
+    var fileName: String { Self.prefix + stem + Self.suffix }
+
+    /// The file `part`'s copy is kept in, beside the index's.
+    func fileName(of part: SnapshotPart) -> String { part.prefix + stem + ".json" }
+
+    /// The day, and the time for a snapshot before a restore.
+    private var stem: String { day + (beforeRestoreTime.map { Self.beforeRestore + $0 } ?? "") }
 
     /// The gzip file while one write, `token`, writes it. Hidden, as Finder shows the folder,
     /// and the write's own, so two writes never share a file.
     func partialFileName(_ token: String) -> String {
         "." + Self.prefix + day + "-" + token + Self.suffix + Self.partialSuffix
+    }
+
+    /// `part`'s copy while one write, `token`, writes it.
+    func partialFileName(_ token: String, of part: SnapshotPart) -> String {
+        "." + Self.prefix + day + "-" + token + "-" + part.prefix + "json" + Self.partialSuffix
     }
 
     /// The index's copy for one write, `token`, before it's compressed.
@@ -89,6 +100,29 @@ struct SnapshotName: Hashable, Comparable, Sendable {
         formatter.timeZone = timeZone
         formatter.dateFormat = format
         return formatter
+    }
+}
+
+/// A file a snapshot keeps a copy of beside the index's (ADR 0181).
+enum SnapshotPart: CaseIterable, Sendable {
+    /// The state file: the window layout and the rest of what the app remembers.
+    case state
+    /// The config file, kept without its secrets.
+    case config
+
+    fileprivate var prefix: String {
+        switch self {
+        case .state: "state-"
+        case .config: "config-"
+        }
+    }
+
+    /// The app's own file, which the copy is of and a restore puts it back as.
+    func liveFile(_ paths: AppPaths) -> URL {
+        switch self {
+        case .state: paths.stateFile
+        case .config: paths.configFile
+        }
     }
 }
 

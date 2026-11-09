@@ -63,10 +63,11 @@ extension AppDelegate {
     /// Puts a prepared restore in place, then holds the index in use for as long as the app
     /// runs. What happened is told once the window is up, since `fail` quits a launch that has
     /// none. An index a failed restore couldn't move back throws, so none is opened.
-    func applyRestoreAtLaunch(databaseURL: URL) throws {
+    func applyRestoreAtLaunch() throws {
+        let databaseURL = libraryFileURL(in: paths.dataDirectory)
         let outcome: Result<PendingRestore, any Error>
         do {
-            outcome = .success(try applyPendingRestore(databaseURL: databaseURL))
+            outcome = .success(try applyPendingRestore(paths: paths))
         } catch let error as Snapshot.SnapshotError {
             if case .indexNotPutBack = error { throw error }
             outcome = .failure(error)
@@ -86,8 +87,8 @@ extension AppDelegate {
         case .success(.applied(let name)):
             alert.messageText = "The library was restored from \(name)"
             alert.informativeText =
-                "The library as it was before is in the snapshot folder, as the snapshot marked"
-                + " “before a restore”."
+                "The library, layout and settings as they were before are in the snapshot folder,"
+                + " as the snapshot marked “before a restore”."
         case .success(.waiting(let reason)):
             alert.messageText = "The snapshot wasn't restored yet"
             alert.informativeText =
@@ -132,8 +133,10 @@ extension AppDelegate {
         let alert = NSAlert()
         alert.messageText = "Replace the library with the snapshot of \(snapshot.day)?"
         alert.informativeText =
-            "Plays, ratings and playlists in it replace the current ones. The library as it is"
-            + " now is snapshotted first, and the app quits and opens again to make the change."
+            "Plays, ratings and playlists in it replace the current ones, and so do the window"
+            + " layout and settings it kept; the Discogs and service tokens stay as they are now."
+            + " The library, layout and settings as they are now are snapshotted first, and the"
+            + " app quits and opens again to make the change."
             + (browser?.isScanning == true ? " The scan running now stops first." : "")
         alert.addButton(withTitle: "Restore and Relaunch")
         alert.addButton(withTitle: "Cancel")
@@ -145,12 +148,12 @@ extension AppDelegate {
 
     private func restore(_ snapshot: LibraryDatabase.Snapshot) {
         guard let folder = snapshotFolder else { return }
-        let databaseURL = libraryFileURL(in: paths.dataDirectory)
+        let paths = self.paths
         let source = URL(fileURLWithPath: snapshot.path, isDirectory: false)
         let job: @Sendable () -> Void = { [weak self] in
             let prepared = Result {
                 try prepareRestore(
-                    of: source, databaseURL: databaseURL, snapshotFolder: folder, now: Date())
+                    of: source, paths: paths, snapshotFolder: folder, now: Date())
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {

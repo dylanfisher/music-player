@@ -167,7 +167,7 @@ let package = Package(
         ),
         .target(
             name: "Snapshot",
-            dependencies: ["Library", "Log", "SQLite"],
+            dependencies: ["Library", "Log", "Settings", "SQLite"],
             path: "Sources/Core/Snapshot",
             swiftSettings: strictSwift,
             // The system library, which the SDK's zlib module declares.

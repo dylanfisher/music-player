@@ -56,6 +56,8 @@ struct ConfigContents: Sendable {
 /// writes. docs/decisions/0015-config-file.md.
 public enum ConfigFile {
     public static let shortcutsKey = "shortcuts"
+    /// A file whose JSON is something other than an object.
+    static let notAnObject = ConfigProblem(line: nil, message: "must be a JSON object of settings")
     static let shortcutsComment = [
         "The shortcuts you changed, by command ID. \"primary\" and \"alternate\" each take a",
         "shortcut such as \"cmd+shift+k\", or \"\" for none. A slot left out keeps its default.",
@@ -90,9 +92,7 @@ public enum ConfigFile {
             ])
         }
         guard let entries = object as? [String: Any] else {
-            throw ConfigErrorList([
-                ConfigProblem(line: nil, message: "must be a JSON object of settings")
-            ])
+            throw ConfigErrorList([notAnObject])
         }
         let top: ConfigText.Object
         let duplicates: [(key: String, offset: Int)]

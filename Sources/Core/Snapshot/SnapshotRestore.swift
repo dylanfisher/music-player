@@ -3,39 +3,61 @@ import Foundation
 import Library
 import Log
 import SQLite
+import Settings
 
 private let logger = moduleLogger()
 
-/// Restore…: unpacks `snapshot` beside the index at `databaseURL`, checks that SQLite reads
-/// it whole, snapshots the current index into `snapshotFolder`, and leaves a marker naming the
-/// snapshot, so the next launch puts the unpacked file in the index's place before it opens
-/// (ADR 0142). A snapshot that doesn't unpack, or unpacks damaged, throws with nothing
-/// replaced. The current index's snapshot has a name of its own, so it never replaces the
-/// day's, which may be the one chosen.
+/// Restore…: unpacks `snapshot` beside the index in `paths`, checks that SQLite reads it
+/// whole, copies the snapshot's state and config files beside theirs, snapshots the current
+/// index and files into `snapshotFolder`, and leaves a marker naming the snapshot, so the next
+/// launch puts them all in place before any is read (ADR 0142, 0181). A snapshot that doesn't
+/// unpack, or unpacks damaged, or a config file whose secrets can't be kept, throws with
+/// nothing replaced. The current index's snapshot has a name of its own, so it never replaces
+/// the day's, which may be the one chosen.
 public func prepareRestore(
-    of snapshot: URL, databaseURL: URL, snapshotFolder: URL, now: Date
+    of snapshot: URL, paths: AppPaths, snapshotFolder: URL, now: Date
 ) throws {
+    let databaseURL = libraryFileURL(in: paths.dataDirectory)
     let restoring = restoringFileURL(databaseURL)
+    guard let name = SnapshotName(fileName: snapshot.lastPathComponent) else {
+        throw SnapshotError.file(snapshot.path, "it isn't named as a snapshot is")
+    }
     // An earlier restore's marker goes first: left beside no unpacked file, it would read as
-    // a restore made at the next launch.
+    // a restore made at the next launch. Its copies go too, so a snapshot without one
+    // doesn't restore another's.
     try removeIfThere(restoreMarkerURL(databaseURL))
     for suffix in ["", Database.walSuffix, Database.shmSuffix] {
         try removeIfThere(URL(fileURLWithPath: restoring.path + suffix, isDirectory: false))
     }
+    func removeRestoring() throws {
+        try removeIfThere(restoring)
+        try removeRestoringCopies(paths)
+    }
+    try removeRestoringCopies(paths)
     do {
         try GzipFile.decompress(snapshot, to: restoring)
         try checkWhole(restoring, name: snapshot.lastPathComponent)
+        for part in SnapshotPart.allCases {
+            let kept = snapshot.deletingLastPathComponent().appendingPathComponent(
+                name.fileName(of: part), isDirectory: false)
+            guard let data = try readIfThere(kept) else { continue }
+            // Here as well as at launch, so a config file that can't keep its secrets stops
+            // the restore before the app quits for it.
+            if part == .config { _ = try keepingSecrets(data, of: paths.configFile) }
+            try replacePrivate(data, at: restoringFileURL(part.liveFile(paths)))
+        }
     } catch {
-        try removeIfThere(restoring)
+        try removeRestoring()
         throw error
     }
     do {
         try writeSnapshot(
-            of: LibraryIndex(at: databaseURL), into: snapshotFolder, on: now, beforeRestore: true)
+            of: LibraryIndex(at: databaseURL), keeping: paths, into: snapshotFolder, on: now,
+            beforeRestore: true)
     } catch SnapshotError.notRotated(let detail) {
         logger.error("snapshotted the index before the restore, but \(detail)")
     } catch {
-        try removeIfThere(restoring)
+        try removeRestoring()
         throw error
     }
     try Data((snapshot.lastPathComponent + "\n").utf8).write(
@@ -54,21 +76,26 @@ public enum PendingRestore: Equatable, Sendable {
 /// The moved-aside index's reason, as `library.sqlite.replaced-<stamp>`.
 private let replacedReason = "replaced"
 
-/// At launch, before the index opens: when a restore was prepared, moves the index aside, as
-/// `library.sqlite.replaced-<stamp>`, and the unpacked snapshot into its place (ADR 0142). It
-/// waits while another copy of the app holds the index (`IndexInUse`). When the move into
+/// At launch, before the index opens and the state and config files are read: when a restore
+/// was prepared, moves the index aside, as `library.sqlite.replaced-<stamp>`, and the
+/// unpacked snapshot into its place, then the snapshot's state and config files over theirs,
+/// the config file's with the secrets the live one has (ADR 0142, 0181). It waits while
+/// another copy of the app holds the index (`IndexInUse`). A config file whose secrets can't
+/// be kept throws before anything moves, and the restore waits. When the index's move into
 /// place fails, the index goes back and the restore waits, throwing why; when it can't go
 /// back, `SnapshotError.indexNotPutBack` says where it is, and nothing should open an index.
-/// The replaced indexes are pruned only once the restore is in place, so a failed one never
-/// prunes the index it moved.
-public func applyPendingRestore(databaseURL: URL) throws -> PendingRestore {
-    try applyPendingRestore(databaseURL: databaseURL, move: LibraryIndex.move)
+/// When a file's move fails after the index's, the restore waits too, and the next launch
+/// moves the files left. The replaced indexes are pruned only once the restore is in place,
+/// so a failed one never prunes the index it moved.
+public func applyPendingRestore(paths: AppPaths) throws -> PendingRestore {
+    try applyPendingRestore(paths: paths, move: LibraryIndex.move)
 }
 
-/// `applyPendingRestore(databaseURL:)` moving files with `move`, which tests fail.
+/// `applyPendingRestore(paths:)` moving the index with `move`, which tests fail.
 func applyPendingRestore(
-    databaseURL: URL, move: (URL, URL) throws -> Void
+    paths: AppPaths, move: (URL, URL) throws -> Void
 ) throws -> PendingRestore {
+    let databaseURL = libraryFileURL(in: paths.dataDirectory)
     let marker = restoreMarkerURL(databaseURL)
     let named: String
     do {
@@ -81,13 +108,23 @@ func applyPendingRestore(
         return .waiting("another copy of the app has the library open")
     }
     defer { withExtendedLifetime(swapping) {} }
+    // Before anything moves, so a config file that can't keep its secrets leaves all as it was.
+    let config = restoringFileURL(paths.configFile)
+    if let restored = try readIfThere(config) {
+        try replacePrivate(try keepingSecrets(restored, of: paths.configFile), at: config)
+    }
     let restoring = restoringFileURL(databaseURL)
     let index = FileManager.default.fileExists(atPath: databaseURL.path)
     guard FileManager.default.fileExists(atPath: restoring.path) else {
-        try FileManager.default.removeItem(at: marker)
         // Only the move into place takes the unpacked file away: the launch that moved it
-        // stopped before it deleted the marker.
-        guard index else { throw SnapshotError.restoreMissing(restoring.path) }
+        // stopped before it moved the files or deleted the marker.
+        guard index else {
+            try FileManager.default.removeItem(at: marker)
+            try removeRestoringCopies(paths)
+            throw SnapshotError.restoreMissing(restoring.path)
+        }
+        try moveRestoringCopies(paths)
+        try FileManager.default.removeItem(at: marker)
         return .applied(named)
     }
     let aside =
@@ -104,6 +141,7 @@ func applyPendingRestore(
         }
         throw error
     }
+    try moveRestoringCopies(paths)
     try FileManager.default.removeItem(at: marker)
     logger.notice(
         "restored the library from \(named), moving the index it replaced to \(aside?.path ?? "nowhere, as there was none")"
@@ -158,9 +196,43 @@ public final class IndexInUse {
     }
 }
 
-/// `library.sqlite.restoring`: the snapshot unpacked, until the next launch puts it in place.
-private func restoringFileURL(_ databaseURL: URL) -> URL {
-    URL(fileURLWithPath: databaseURL.path + ".restoring", isDirectory: false)
+/// `library.sqlite.restoring`, `state.json.restoring` and `config.json.restoring` beside the
+/// file at `url`: the snapshot's, until the next launch puts it in place.
+private func restoringFileURL(_ url: URL) -> URL {
+    URL(fileURLWithPath: url.path + ".restoring", isDirectory: false)
+}
+
+/// Deletes the snapshot's state and config files a restore copied beside theirs.
+private func removeRestoringCopies(_ paths: AppPaths) throws {
+    for part in SnapshotPart.allCases {
+        try removeIfThere(restoringFileURL(part.liveFile(paths)))
+    }
+}
+
+/// Renames each of the snapshot's state and config files a restore copied over the app's own.
+/// Each one left is moved, so a launch stopped partway finishes at the next.
+private func moveRestoringCopies(_ paths: AppPaths) throws {
+    for part in SnapshotPart.allCases {
+        let restoring = restoringFileURL(part.liveFile(paths))
+        guard FileManager.default.fileExists(atPath: restoring.path) else { continue }
+        try rename(restoring, to: part.liveFile(paths))
+        logger.notice("restored \(part.liveFile(paths).path) from the snapshot")
+    }
+}
+
+/// `restored`, a snapshot's copy of the config file, with the secrets the config file at
+/// `live` sets now, and only those (ADR 0181).
+private func keepingSecrets(_ restored: Data, of live: URL) throws -> Data {
+    let current = try readIfThere(live)
+    do {
+        return Data(
+            try ConfigSecrets.kept(
+                from: current.map { String(decoding: $0, as: UTF8.self) },
+                in: String(decoding: restored, as: UTF8.self)
+            ).utf8)
+    } catch {
+        throw SnapshotError.configNotKept(live.path, "\(error)")
+    }
 }
 
 /// The marker a prepared restore leaves beside the index, naming the snapshot.

@@ -14,8 +14,10 @@ was the live file. Phase 53.6 and 53.7 ask for a dated copy each day and a way b
 
 ## Decision
 
-- **What is kept.** Only the library index. The Discogs catalog is imported again from the dumps
-  instead: it is several GB, and nothing in it is the owner's own.
+- **What is kept.** The library index, and beside it copies of the state file and of the
+  config file without its secrets, which a restore puts back with it
+  ([0181](0181-snapshots-keep-the-state-and-config-files.md)). The Discogs catalog is imported
+  again from the dumps instead: it is several GB, and nothing in it is the owner's own.
 - **The copy.** `VACUUM INTO` a temporary file in the snapshot folder, on a connection of its
   own (`LibraryIndex.copy(to:)`). A file copy of a live WAL database can take the main file and
   the log at different moments, and misses commits still in the log; `VACUUM INTO` reads one

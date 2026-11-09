@@ -56,9 +56,11 @@ private func noon(_ day: Int) -> Date {
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let other = folder.appendingPathComponent("notes.txt", isDirectory: false)
     try Data("mine".utf8).write(to: other)
-    let index = try SnapshotTestLibrary().index()
+    let library = try SnapshotTestLibrary()
+    let index = try library.index()
     for day in 0..<60 {
-        try writeSnapshot(of: index, into: folder, on: noon(day), calendar: utcCalendar)
+        try writeSnapshot(
+            of: index, keeping: library.paths, into: folder, on: noon(day), calendar: utcCalendar)
     }
     let kept = try snapshots(in: folder).map(\.day)
     // Day 59 is Sunday 2026-03-01; its week started on Monday 02-23.
@@ -67,6 +69,15 @@ private func noon(_ day: Int) -> Date {
             "2026-03-01", "2026-02-28", "2026-02-27", "2026-02-26", "2026-02-25", "2026-02-24",
             "2026-02-23", "2026-02-22", "2026-02-15", "2026-02-08", "2026-02-01",
         ])
+    // The state and config copies go with their day's snapshot.
+    let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+    #expect(
+        Set(names)
+            == Set(
+                kept.flatMap {
+                    ["library-\($0).sqlite.gz", "state-\($0).json", "config-\($0).json"]
+                }
+                    + ["notes.txt"]))
     #expect(try String(contentsOf: other, encoding: .utf8) == "mine")
 }
 
@@ -83,12 +94,13 @@ private func noon(_ day: Int) -> Date {
     let before = try counts(library.index())
     #expect(before.tracks > 0 && before.plays == 1)
     let snapshot = try writeSnapshot(
-        of: library.index(), into: library.snapshotFolder, on: noon(304))
-    #expect(snapshot.lastPathComponent == SnapshotName(of: noon(304)).fileName)
-    // Only the snapshot is left in the folder.
+        of: library.index(), keeping: library.paths, into: library.snapshotFolder, on: noon(304))
+    let name = SnapshotName(of: noon(304))
+    #expect(snapshot.lastPathComponent == name.fileName)
+    // Only the snapshot and its copies are left in the folder.
     #expect(
-        try FileManager.default.contentsOfDirectory(atPath: library.snapshotFolder.path)
-            == [snapshot.lastPathComponent])
+        try FileManager.default.contentsOfDirectory(atPath: library.snapshotFolder.path).sorted()
+            == [name.fileName(of: .config), name.fileName, name.fileName(of: .state)])
     let unpacked = library.directory.appendingPathComponent("unpacked.sqlite")
     try GzipFile.decompress(snapshot, to: unpacked)
     let after = try counts(LibraryIndex(at: unpacked))
@@ -99,9 +111,11 @@ private func noon(_ day: Int) -> Date {
 
 @Test func aSecondSnapshotTheSameDayReplacesTheFirst() throws {
     let library = try SnapshotTestLibrary()
-    let first = try writeSnapshot(of: library.index(), into: library.snapshotFolder, on: noon(1))
+    let first = try writeSnapshot(
+        of: library.index(), keeping: library.paths, into: library.snapshotFolder, on: noon(1))
     try library.index().recordPlay(library.played, at: SnapshotTestLibrary.playedAt + 60)
-    let second = try writeSnapshot(of: library.index(), into: library.snapshotFolder, on: noon(1))
+    let second = try writeSnapshot(
+        of: library.index(), keeping: library.paths, into: library.snapshotFolder, on: noon(1))
     #expect(first == second)
     #expect(try snapshots(in: library.snapshotFolder).count == 1)
     let unpacked = library.directory.appendingPathComponent("unpacked.sqlite")
@@ -173,22 +187,26 @@ private func noon(_ day: Int) -> Date {
     let before = try counts(library.index())
     let folder = library.snapshotFolder
     let path = library.databaseURL
+    let paths = library.paths
     let failures = Failures()
     // Each opens its index first, so the writes themselves start together.
     let indexes = try (0..<8).map { _ in try LibraryIndex(at: path) }
     let shared = UnsafeIndexes(indexes)
     DispatchQueue.concurrentPerform(iterations: indexes.count) { position in
         do {
-            try writeSnapshot(of: shared.indexes[position], into: folder, on: noon(304))
+            try writeSnapshot(
+                of: shared.indexes[position], keeping: paths, into: folder, on: noon(304))
         } catch {
             failures.add("\(error)")
         }
     }
     #expect(failures.all.isEmpty)
     let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
-    #expect(names == [SnapshotName(of: noon(304)).fileName])
+    let name = SnapshotName(of: noon(304))
+    #expect(
+        names.sorted() == [name.fileName(of: .config), name.fileName, name.fileName(of: .state)])
     let unpacked = library.directory.appendingPathComponent("unpacked.sqlite")
-    try GzipFile.decompress(folder.appendingPathComponent(names[0]), to: unpacked)
+    try GzipFile.decompress(folder.appendingPathComponent(name.fileName), to: unpacked)
     #expect(try counts(LibraryIndex(at: unpacked)) == before)
 }
 

@@ -1,23 +1,24 @@
 import Foundation
 import Library
 import Log
+import Settings
 
 private let logger = moduleLogger()
 
-/// Writes a snapshot of the index once a day, and when asked, and rotates the folder after
-/// each (ADR 0142). The app runs its jobs between scans, on the watcher's scan queue, so never
+/// Writes a snapshot of the index, with the state and config files, once a day, and when
+/// asked, and rotates the folder after each (ADR 0142, 0181). The app runs its jobs between scans, on the watcher's scan queue, so never
 /// during a scan or sync. What it knows of the last snapshot comes from the folder, so nothing
 /// is stored, except why the last try failed, which lasts as long as the app runs.
 public final class SnapshotScheduler: @unchecked Sendable {
-    private let databaseURL: URL
+    private let paths: AppPaths
     /// Guards the fields below it.
     private let lock = NSLock()
     private var problem: String?
     /// Whether a daily job is waiting to run, so a second ask doesn't queue another.
     private var queued = false
 
-    public init(databaseURL: URL) {
-        self.databaseURL = databaseURL
+    public init(paths: AppPaths) {
+        self.paths = paths
     }
 
     /// What went wrong with the last snapshot, as Settings says it, or nil when nothing did.
@@ -56,7 +57,9 @@ public final class SnapshotScheduler: @unchecked Sendable {
     @discardableResult
     public func write(into folder: URL, now: Date) -> Bool {
         do {
-            try writeSnapshot(of: try LibraryIndex(at: databaseURL), into: folder, on: now)
+            try writeSnapshot(
+                of: try LibraryIndex(at: libraryFileURL(in: paths.dataDirectory)), keeping: paths,
+                into: folder, on: now)
             lock.withLock { problem = nil }
             return true
         } catch SnapshotError.notRotated(let detail) {

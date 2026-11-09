@@ -16,6 +16,9 @@ public enum SnapshotError: Error, Equatable, CustomStringConvertible {
     case networkFolder(String)
     /// The snapshot was written, but older ones rotation deletes couldn't be: why.
     case notRotated(String)
+    /// A restore can't keep the secrets in the config file at this path, as it or the
+    /// snapshot's copy doesn't read as a JSON object: why.
+    case configNotKept(String, String)
 
     public var description: String {
         switch self {
@@ -30,6 +33,9 @@ public enum SnapshotError: Error, Equatable, CustomStringConvertible {
                 + " which a restore needs too, since it snapshots the library first"
         case .notRotated(let detail):
             "the snapshot was written, but older ones couldn't be deleted: \(detail)"
+        case .configNotKept(let path, let detail):
+            "the tokens in \(path) can't be kept, as it or the snapshot's copy of it doesn't read"
+                + " as a JSON object (\(detail)); fix the file first"
         case .indexNotPutBack(let path, let detail):
             "the library was moved to \(path) for a restore, which failed, and it couldn't be"
                 + " moved back (\(detail)); move it back to library.sqlite before opening the app"

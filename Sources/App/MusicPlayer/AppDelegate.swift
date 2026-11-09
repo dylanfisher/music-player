@@ -199,6 +199,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
+            // Before any connection opens the index and the state and config files are read,
+            // which a restore replaces (ADR 0142, 0181).
+            try applyRestoreAtLaunch()
             let settings = try signposted(.launchSettings) {
                 ConfigStore(
                     AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(),
@@ -277,8 +280,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keepWindowFrames(state, saver)
         let layout = WindowSettings(settings, state: state)
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
-        // Before any connection opens the index, which a restore replaces (ADR 0142).
-        try applyRestoreAtLaunch(databaseURL: databaseURL)
         do {
             try Database.readAhead(at: databaseURL)
         } catch {
@@ -295,7 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             separateReleases: settings[\.separateReleases])
         separatesReleases = index.separateReleases
-        snapshotScheduler = SnapshotScheduler(databaseURL: databaseURL)
+        snapshotScheduler = SnapshotScheduler(paths: paths)
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,
