@@ -1176,9 +1176,67 @@ private final class HeldSearch {
     #expect(fitted.height < small.height)
 
     let controller = TaggerWindow(model: await analyzed())
-    for index in MatchTier.allCases.indices {
-        controller.tabs.setLabel("\(MatchTier.allCases[index].title) (12,345)", forSegment: index)
+    for (index, tab) in TaggerTab.allCases.enumerated() {
+        controller.tabs.setLabel("\(tab.title) (12,345)", forSegment: index)
     }
     #expect(controller.tabs.fittingSize.width < wide.width - 28, "the page's margins")
     controller.window?.close()
+}
+
+/// Safe, after Likely, lists the Likely albums whose only reasons are a tie and being found by
+/// title, which Likely lists too, and applies to all as the other tabs do; the album list
+/// shows each match's confidence between Files and Review (ADR 0170).
+@MainActor
+@Test func theSafeTabListsTheLikelyAlbumsWhoseEveryTitleFits() async throws {
+    let albums = [
+        album(1, "Tied", titles: stockholm),
+        album(2, "Off", artist: "Abba", titles: stockholm),
+        album(3, "Exact", titles: stockholm),
+        album(4, "Unknown", artist: "Zed", titles: stockholm),
+    ]
+    let tagger = await model(
+        Seen(), albums: albums,
+        matches: { album, _ in
+            let release = release(Int(album.id) * 10, album.title, titles: stockholm)
+            return switch album.id {
+            case 1:
+                match(
+                    album, release, tier: .likely,
+                    reasons: [.tiedAfterTieBreak, .foundByTitleOnly], confidence: 90)
+            case 2:
+                match(
+                    album, release, tier: .likely, reasons: [.titlesDiffer(1), .foundByTitleOnly],
+                    confidence: 89)
+            case 3: match(album, release, tier: .exact, confidence: 100)
+            default: match(album, nil, tier: .noCandidate)
+            }
+        })
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.albums(in: .safe).map(\.id) == [1])
+    #expect(tagger.albums(in: .likely).map(\.id) == [2, 1], "Likely keeps them")
+
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    #expect(
+        controller.albumTable.tableColumns.map(\.title) == [
+            "Album", "Files", "Confidence", "Review",
+        ])
+    #expect(controller.tabs.label(forSegment: 1) == "Likely (2)")
+    #expect(controller.tabs.label(forSegment: 2) == "Safe (1)")
+    #expect(controller.text(controller.albumTable, .confidence, 0) == "100%")
+
+    controller.tabs.selectedSegment = 2
+    controller.tabs.sendAction(controller.tabs.action, to: controller.tabs.target)
+    #expect(tagger.tab == .safe)
+    #expect(controller.shownAlbums.map(\.id) == [1])
+    #expect(controller.text(controller.albumTable, .confidence, 0) == "90%")
+    #expect(!controller.applyButton.isHidden)
+    #expect(controller.applyButton.title == "Apply to All in Safe…")
+    #expect(controller.applyButton.isEnabled)
+    #expect(tagger.applicable(.safe).map(\.id) == [1])
+
+    tagger.tab = .noCandidate
+    controller.refresh()
+    #expect(controller.text(controller.albumTable, .confidence, 0) == "", "no release, none")
 }

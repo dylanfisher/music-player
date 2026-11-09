@@ -51,6 +51,20 @@ extension MatchTier {
     }
 }
 
+extension TaggerTab {
+    /// A tab's title, before its count.
+    var title: String {
+        switch self {
+        case .exact: MatchTier.exact.title
+        case .likely: MatchTier.likely.title
+        case .safe: "Safe"
+        case .incomplete: MatchTier.incomplete.title
+        case .noCandidate: MatchTier.noCandidate.title
+        case .matched: MatchTier.matched.title
+        }
+    }
+}
+
 extension TaggerModel.Scope {
     var title: String {
         switch self {
@@ -117,7 +131,7 @@ func openOnDiscogs(_ id: Int, through open: (URL) -> Void = { NSWorkspace.shared
 /// A column of the tagger's tables: its identifier is the case's name.
 enum TaggerColumn: String {
     // The album list.
-    case album, files, review
+    case album, files, confidence, review
     // The tracklists side by side.
     case number, fileTitle, fileTime, position, releaseTitle, releaseTime, state
     // View Changes.
@@ -133,6 +147,7 @@ enum TaggerColumn: String {
         switch self {
         case .album: TrackColumn.album.title
         case .files: "Files"
+        case .confidence: "Confidence"
         case .review: "Review"
         case .number: TrackColumn.rowNumber.title
         case .fileTitle, .releaseTitle: TrackColumn.title.title

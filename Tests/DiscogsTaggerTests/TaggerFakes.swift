@@ -38,10 +38,11 @@ func release(_ id: Int, _ title: String, titles: [String]) -> CatalogRelease {
         })
 }
 
-/// `album` matched in `tier` to `release`, each file on its track in order.
+/// `album` matched in `tier` to `release`, each file on its track in order, with `reasons`
+/// and `confidence`.
 func match(
     _ album: DiscogsAlbum, _ release: CatalogRelease?, tier: MatchTier,
-    candidates: [Int] = []
+    candidates: [Int] = [], reasons: [NotExactReason] = [], confidence: Int? = nil
 ) -> AlbumMatch {
     AlbumMatch(
         albumID: album.id, tier: tier, release: release, tracks: release?.tracks ?? [],
@@ -55,7 +56,7 @@ func match(
                 score: ReleaseScore(
                     releaseID: $0, tracks: [], mapping: [], sameCount: true, tracklist: 0.7,
                     titlesInOrder: false, durationsCompared: 0, durationsAgreeing: 0))
-        })
+        }, reasons: reasons, confidence: confidence)
 }
 
 /// What the stand-ins saw, from any thread.

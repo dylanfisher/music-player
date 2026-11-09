@@ -168,16 +168,16 @@ final class TaggerModel {
     private(set) var albums: [Album] = [] {
         didSet { tierOrder = [:] }
     }
-    /// Each tier's albums as places in `albums`, in list order, once sorted: the window lists
+    /// Each tab's albums as places in `albums`, in list order, once sorted: the window lists
     /// them on every progress report, and sorting thousands each time stalls it.
-    private var tierOrder: [MatchTier: [Int]] = [:]
+    private var tierOrder: [TaggerTab: [Int]] = [:]
     /// The files left out of each album, by album id, kept for the session so a new Analyze
     /// leaves them out too (ADR 0157).
     private var leftOutFiles: [Int64: Set<Int64>] = [:]
     /// The album being matched again, for a release chosen or a file left out or put back;
     /// one at a time.
     private(set) var rematchingID: Int64?
-    var tab = MatchTier.exact
+    var tab = TaggerTab.exact
     var selectedID: Int64?
     var mapping: DiscogsMapping {
         didSet { forgetChangeCounts() }
@@ -313,21 +313,21 @@ final class TaggerModel {
         changed()
     }
 
-    /// The albums of `tier`, by artist and then title.
-    func albums(in tier: MatchTier) -> [Album] {
-        if let order = tierOrder[tier] { return order.map { albums[$0] } }
-        let order = albums.indices.filter { albums[$0].match.tier == tier }.sorted { a, b in
+    /// The albums `tab` lists, by artist and then title.
+    func albums(in tab: TaggerTab) -> [Album] {
+        if let order = tierOrder[tab] { return order.map { albums[$0] } }
+        let order = albums.indices.filter { tab.lists(albums[$0].match) }.sorted { a, b in
             let (a, b) = (albums[a].album, albums[b].album)
             let artist = (a.artist ?? "").localizedStandardCompare(b.artist ?? "")
             return artist != .orderedSame
                 ? artist == .orderedAscending
                 : a.title.localizedStandardCompare(b.title) == .orderedAscending
         }
-        tierOrder[tier] = order
+        tierOrder[tab] = order
         return order.map { albums[$0] }
     }
 
-    func count(_ tier: MatchTier) -> Int { albums.count { $0.match.tier == tier } }
+    func count(_ tab: TaggerTab) -> Int { albums.count { tab.lists($0.match) } }
 
     var selected: Album? { albums.first { $0.id == selectedID } }
 
@@ -337,8 +337,8 @@ final class TaggerModel {
         return tier == .likely || tier == .incomplete
     }
 
-    /// The tiers Apply to All writes: those a match set can be trusted in after a review.
-    static let appliedTiers: [MatchTier] = [.exact, .likely, .matched]
+    /// The tabs Apply to All writes: those a match set can be trusted in after a review.
+    static let appliedTabs: [TaggerTab] = [.exact, .likely, .safe, .matched]
 
     // MARK: - The catalog
 
@@ -473,7 +473,7 @@ final class TaggerModel {
                 }
                 forgetChangeCounts()
                 // A staged job's one album opens on its tier's tab, whichever it is.
-                if staged != nil, let only = self.albums.first { tab = only.match.tier }
+                if staged != nil, let only = self.albums.first { tab = TaggerTab(only.match.tier) }
                 if selected == nil { selectedID = self.albums(in: tab).first?.id }
                 status = String(
                     format: "Analyzed %@ albums in %.1f s", number(albums.count),
@@ -593,7 +593,7 @@ final class TaggerModel {
             albums[index].excluded = []
             update(&albums[index])
             forgetChangeCounts(of: albumID)
-            if selectedID == albumID { tab = match.tier }
+            if selectedID == albumID { tab = TaggerTab(match.tier) }
         } catch {
             self.failed(failure, ["\(error)"])
         }
@@ -818,9 +818,9 @@ final class TaggerModel {
 
     // MARK: - Apply
 
-    /// The albums Apply to All in `tier` writes: those not rejected and not written already.
-    func applicable(_ tier: MatchTier) -> [Album] {
-        albums(in: tier).filter { !$0.isRejected && !$0.applied && $0.match.release != nil }
+    /// The albums Apply to All in `tab` writes: those not rejected and not written already.
+    func applicable(_ tab: TaggerTab) -> [Album] {
+        albums(in: tab).filter { !$0.isRejected && !$0.applied && $0.match.release != nil }
     }
 
     /// Reads the files of `albumIDs` and works out what Apply writes to them, with progress;

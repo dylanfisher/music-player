@@ -207,13 +207,14 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         headerRows = [catalogBox, bar, choices, resumeBox]
 
         tabs.segmentStyle = .automatic
-        tabs.segmentCount = MatchTier.allCases.count
+        tabs.segmentCount = TaggerTab.allCases.count
         tabs.trackingMode = .selectOne
         tabs.target = self
         tabs.action = #selector(tabChosen)
 
         let albums = taggerTable(
-            albumTable, [(.album, 200), (.files, 36), (.review, 64)], source: self)
+            albumTable, [(.album, 200), (.files, 36), (.confidence, 70), (.review, 64)],
+            source: self)
         let tracks = tracklists()
 
         releaseTitle.font = .boldSystemFont(ofSize: NSFont.systemFontSize + 2)
@@ -447,11 +448,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         analyzeButton.title = stoppable || indexing ? "Stop" : "Analyze"
         analyzeButton.isEnabled = stoppable || model.canAnalyze
 
-        for (index, tier) in MatchTier.allCases.enumerated() {
-            tabs.setLabel("\(tier.title) (\(number(model.count(tier))))", forSegment: index)
+        for (index, tab) in TaggerTab.allCases.enumerated() {
+            tabs.setLabel("\(tab.title) (\(number(model.count(tab))))", forSegment: index)
         }
-        tabs.selectedSegment = MatchTier.allCases.firstIndex(of: model.tab)!
-        let canApply = TaggerModel.appliedTiers.contains(model.tab)
+        tabs.selectedSegment = TaggerTab.allCases.firstIndex(of: model.tab)!
+        let canApply = TaggerModel.appliedTabs.contains(model.tab)
         applyButton.isHidden = !canApply
         applyButton.title = "Apply to All in \(model.tab.title)…"
         applyButton.isEnabled = canApply && !model.isBusy && !model.applicable(model.tab).isEmpty
@@ -603,6 +604,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             switch id {
             case .album: return albumTitle(album.album)
             case .files: return number(album.album.tracks.count)
+            case .confidence: return album.match.confidence.map { "\($0)%" } ?? ""
             default:
                 if album.applied { return "Written" }
                 switch album.review {
@@ -703,7 +705,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     }
 
     @objc private func tabChosen() {
-        model.tab = MatchTier.allCases[tabs.selectedSegment]
+        model.tab = TaggerTab.allCases[tabs.selectedSegment]
         model.selectedID = model.albums(in: model.tab).first?.id
         refresh()
     }
