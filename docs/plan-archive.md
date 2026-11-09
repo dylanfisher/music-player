@@ -147,3 +147,73 @@ calls, 3 min.
 
 **Owner check:** queue a large tag write and quit: each of the three answers; queue a second
 batch mid-run and watch the status bar's total rise at once; `a:` and `t:` in Go to Item.
+
+### 65. Tagger: confidence and the safe set
+
+Asked by the owner on 2026-11-09.
+
+- [x] **Confidence:** each album's match carries a confidence, 0 to 100%, from the chosen
+      release's `ReleaseScore` (title fit, durations, count, how it was found, ties), shown as
+      a column between Files and Review. Every title the same (above `sameTitle`) scores high
+      even when found by title only; one title differing slightly lowers it a little. The
+      formula and its thresholds are in an ADR.
+- [x] **Safe to apply:** a filter, or a tab after Likely, listing the albums whose every title
+      matches, with the counts and durations fitting, whose only reason is "found by title
+      only". Select All and Apply work on it as on the other tabs.
+- [x] **No extra API requests:** choosing a release in Other Releases loads that release
+      (`release(id:)`, cached) and scores it, instead of rerunning the album's searches. Other
+      Releases and View Changes already send none beyond the cover the apply would fetch; a
+      test with a counting stand-in transport holds both to that.
+
+Implementation plan, phase 65 (ADR 0170):
+
+What exists, found by search (map.md recipes): the matcher (`AlbumMatcher.match`) scores every
+candidate (`ReleaseScore`), picks and tiers one, and keeps of the chosen score only the reasons
+(`NotExactReason.reasons`) and the mapping. How a release was found is `CandidateKey`, dropped
+after the reasons. The window's tabs are `MatchTier.allCases`, with `model.tab` a tier, and
+Apply to All writes `applicable(tab)`. Choose goes through `rematch`, which runs
+`effects.match`, so in API or Both mode it repeats `ApiCandidates.found`'s searches.
+
+- 65.1 Confidence (`Core/Discogs/MatchConfidence.swift`): the percent from the shown score, the
+  album's title similarities, the tie and how the release was found, with its weights in that
+  file, not `MatchThreshold`, which the golden file pins. `AlbumMatch` gains `confidence`
+  (nil with no release scored) and keeps `foundBy`; `MatchCandidate` keeps its `foundBy` too,
+  so choosing it later can say how it was found. Ranking, tiers and reasons don't change.
+- 65.2 Choosing without searching (`Core/Discogs/AlbumMatcher.swift`): `chooseRelease` loads
+  the one release, from the catalog when the source has one and it holds it, else
+  `api.release(id:)` (cached), and scores it alone with the choice branch's tiering, which
+  becomes one function both paths call. The other candidates are the previous match's, with the
+  previously chosen release rescored among them. `TaggerModel.Effects.choose` wraps it;
+  `TaggerModel.choose` calls it in place of `effects.match`. A staged tagger keeps its own
+  match (default effect unused there: its release is fixed).
+- 65.3 Confidence column headed "Match", between Files and Review: "92%", blank with none.
+- 65.4 Safe tab (`TaggerTab`, after Likely): the Likely albums whose every title is the same,
+  in order, with the counts the same and every known length agreeing; by the matcher's rules
+  their reasons are at most "other releases fit as well" and "found by title only". It is a view
+  of Likely, which keeps them; Apply to All in Safe writes them as the other tabs do.
+- 65.5 ADR 0170: the formula, its weights, why a tab, the safe rule and the choose path;
+  0131 and 0136 get see-also lines.
+
+Tests: confidence of an exact, a title-only, a tied, a one-title-off and a bonus-track album
+(`AlbumMatcherTests`); choosing scores the release alone, keeps the candidates and sends no
+search, with `FakeDiscogs` counting (`ApiMatchingTests`), and Other Releases' summaries and View
+Changes' cover send none beyond the cover; the model's choose doesn't call `match`
+(`TaggerRematchTests`); the column and the Safe tab, its count and Apply to All
+(`TaggerWindowTests`).
+
+Result, phase 65: shipped all three items (ADR 0170; 0131 and 0136 see-also lines). Each album
+match carries a confidence from its chosen release's score, shown as a column headed Match: an
+exact match found by barcode is 100%, by title only 95%, a tied Likely found by title 90%. The
+Safe tab, after Likely, lists the Likely albums whose only reasons are the tie and "found by
+title only" (the plan's "only reason" would leave it always empty, since every title fitting
+with agreeing lengths and counts is Exact unless tied); they stay in Likely too. Choosing in
+Other Releases loads that release alone, from the catalog or the API cache, with no search, held
+by a counting stand-in transport. Deferred: leaving a file out and a full Analyze still run the
+album's searches; the confidence isn't recomputed when a file is dragged to another track.
+`rank-golden.json` unchanged. The gate found no bug. `./scripts/check format typecheck arch
+dupes surface links test` passed, and format, typecheck and test again after the rebase onto
+phase 62; no bench row covers the matcher. Cost: implementer (Opus) 255k tokens, 125 tool calls,
+26 min; gate (Sonnet) 73k tokens, 16 tool calls, 3 min.
+
+**Owner check:** the Match column and the Safe tab on the real library, with Apply to All in
+Safe; choose another release in API mode and see no search in the log.
