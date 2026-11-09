@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Library
 @testable import Metadata
 @testable import TagEditor
@@ -62,13 +63,13 @@ private func track(_ path: String, plays: Int?, readOnly: String? = nil) -> Edit
     editor.playCountField.stringValue = "x"
     editor.controlTextDidChange(
         Notification(name: NSControl.textDidChangeNotification, object: editor.playCountField))
-    editor.saveButton.performClick(nil)
+    click(editor.saveButton)
     #expect(saved.isEmpty)
     #expect(editor.problemLabel.stringValue.contains("isn't a whole number"))
     editor.playCountField.stringValue = "9"
     editor.controlTextDidChange(
         Notification(name: NSControl.textDidChangeNotification, object: editor.playCountField))
-    editor.saveButton.performClick(nil)
+    click(editor.saveButton)
     #expect(saved.count == 1)
     #expect(editor.model?.playCountChange == 9)
 }

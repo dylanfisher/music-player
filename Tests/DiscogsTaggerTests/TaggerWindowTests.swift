@@ -393,13 +393,13 @@ private final class Imports: @unchecked Sendable {
     #expect(window.sortArtistBox.state == .off)
     #expect(window.mappingButton.superview === window.keepBox.superview, "beside Field Mapping…")
 
-    window.keepBox.performClick(nil)
+    click(window.keepBox)
     #expect(tagger.choices.keepExistingValues)
     #expect(
         saved == [TaggerChoices(keepExistingValues: true, skipVideo: true, fillSortArtist: false)])
-    window.sortArtistBox.performClick(nil)
+    click(window.sortArtistBox)
     #expect(saved.last?.fillSortArtist == true)
-    window.skipVideoBox.performClick(nil)
+    click(window.skipVideoBox)
     #expect(saved.last?.skipVideo == false)
     #expect(!window.skipVideoBox.isEnabled, "off while the rescore runs")
     await tagger.finished()

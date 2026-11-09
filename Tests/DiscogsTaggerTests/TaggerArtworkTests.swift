@@ -4,6 +4,7 @@ import Testing
 
 @testable import Discogs
 @testable import DiscogsTagger
+@testable import Fixtures
 @testable import Settings
 
 @MainActor
@@ -21,7 +22,7 @@ import Testing
     #expect(with.artworkPopUp.indexOfSelectedItem == 1)
     with.artworkPopUp.selectItem(at: 2)
     _ = with.artworkPopUp.target?.perform(with.artworkPopUp.action, with: with.artworkPopUp)
-    with.okButton.performClick(nil)
+    click(with.okButton)
     #expect(with.result != nil)
     #expect(with.artwork == .replace)
     without.window?.close()

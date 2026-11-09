@@ -106,8 +106,7 @@ func theEditorReadsEveryPicture(
             bytesPerRow: 0, bitsPerPixel: 0
         )?.representation(using: .png, properties: [:]))
     editor.choosePictures = { $0([(png, pngMIMEType)], []) }
-    editor.addPictureButton.sendAction(
-        editor.addPictureButton.action, to: editor.addPictureButton.target)
+    click(editor.addPictureButton)
     #expect(editor.artworkList.table.numberOfRows == 2)
 
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("tageditor-\(UUID())"))
@@ -120,7 +119,6 @@ func theEditorReadsEveryPicture(
 
     editor.artworkList.table.selectRowIndexes([0, 2], byExtendingSelection: false)
     #expect(editor.removePictureButton.isEnabled)
-    editor.removePictureButton.sendAction(
-        editor.removePictureButton.action, to: editor.removePictureButton.target)
+    click(editor.removePictureButton)
     #expect(editor.model?.shownPictures.map(\.image) == [png])
 }
