@@ -75,3 +75,28 @@ private func moved(_ url: URL) throws -> URL {
     let failures = writer.follow([("/nowhere/a.flac", "/nowhere/b.flac")])
     #expect(failures.count == 1)
 }
+
+/// Counts the drive flushes, from any thread.
+private final class Flushes: @unchecked Sendable {
+    // `count` is guarded by `lock`.
+    private let lock = NSLock()
+    private var count = 0
+    func add() { lock.withLock { count += 1 } }
+    var total: Int { lock.withLock { count } }
+}
+
+@Test func aBatchOfMovesIsFollowedWithOneFlush() throws {
+    let urls = try [Sample.flac, .mp3v24, .mp4].map { try $0.copy() }
+    var journal = TagUndoJournal(dataDirectory: scratchFolder())
+    let flushes = Flushes()
+    journal.driveFlushed = { flushes.add() }
+    let writer = TagWriter(journal: journal)
+    expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: urls.map(\.path)), urls)
+    let moves = try urls.map { url in (url, try moved(url)) }
+    let before = flushes.total
+    #expect(writer.follow(moves.map { ($0.0.path, $0.1.path) }).isEmpty)
+    #expect(flushes.total - before == 1)
+    let undone = writer.undoLast()
+    #expect(undone.failures.isEmpty)
+    #expect(Set(undone.changed) == Set(moves.map(\.1.path)))
+}

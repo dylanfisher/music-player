@@ -218,14 +218,23 @@ public struct TagWriter: Sendable {
     /// records couldn't follow; its edits then can't be undone.
     public func follow(_ moves: [(from: String, to: String)]) -> [TagWriteError] {
         var failures: [TagWriteError] = []
+        var found: [(from: String, to: String, identity: FileIdentity)] = []
         for move in moves {
             do throws(TagWriteError) {
-                try journal.follow(from: move.from, to: move.to, moved: try identity(move.to))
+                found.append((move.from, move.to, try identity(move.to)))
             } catch {
-                logger.error("\(error.description)")
                 failures.append(error)
             }
         }
+        do throws(TagWriteError) {
+            try journal.follow(found)
+        } catch {
+            // The journal stopped partway, so any of these may still name its old path.
+            failures += found.map {
+                TagWriteError(path: $0.to, kind: error.kind, detail: error.detail)
+            }
+        }
+        for failure in failures { logger.error("\(failure.description)") }
         return failures
     }
 

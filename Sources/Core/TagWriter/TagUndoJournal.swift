@@ -388,12 +388,23 @@ public struct TagUndoJournal: Sendable {
         return records
     }
 
-    /// Points every record of the file `from`, in every edit kept, at `to`, where Keep Files
-    /// Organized renamed it (ADR 0164), so undo finds it there and an older edit still follows
-    /// a newer one. A record whose edited size and mtime are `moved`'s takes its identity too,
-    /// since a rename changes neither but a share may give the file a new inode. A record that
-    /// doesn't read is left alone; `latest` reports and deletes it when undo reaches its edit.
-    func follow(from: String, to: String, moved: FileIdentity) throws(TagWriteError) {
+    /// Points every record of each moved file, in every edit kept, at its new path, where Keep
+    /// Files Organized renamed it (ADR 0164), so undo finds it there and an older edit still
+    /// follows a newer one: one pass over the records and one flush through the drive for all
+    /// of `moves`. A record whose edited size and mtime are its file's `identity` takes that
+    /// identity too, since a rename changes neither but a share may give the file a new inode.
+    /// That is the newest record of the file: an older one's edited identity is compared only
+    /// with the newer record's original one, which was taken before the move as well, so it
+    /// keeps the old inode, and undoing the newer edit hands it the restored file's. A record
+    /// that doesn't read is left alone; `latest` reports and deletes it when undo reaches its
+    /// edit.
+    func follow(_ moves: [(from: String, to: String, identity: FileIdentity)])
+        throws(TagWriteError)
+    {
+        let byPath = Dictionary(
+            moves.map { ($0.from.precomposedStringWithCanonicalMapping, $0) },
+            uniquingKeysWith: { one, _ in one })
+        guard !byPath.isEmpty else { return }
         var changed = false
         for sequence in try sequences(in: directory) {
             let entry = Entry(
@@ -403,14 +414,13 @@ public struct TagUndoJournal: Sendable {
                 guard
                     var record = try? decodeExactly(
                         FileRecord.self, from: Data(contentsOf: handle.record)),
-                    record.path.precomposedStringWithCanonicalMapping
-                        == from.precomposedStringWithCanonicalMapping
+                    let move = byPath[record.path.precomposedStringWithCanonicalMapping]
                 else { continue }
-                record.path = to
-                if record.editedSize == moved.size,
-                    record.editedModifiedNanoseconds == moved.modifiedNanoseconds
+                record.path = move.to
+                if record.editedSize == move.identity.size,
+                    record.editedModifiedNanoseconds == move.identity.modifiedNanoseconds
                 {
-                    record.setEdited(moved)
+                    record.setEdited(move.identity)
                 }
                 try update(record, at: handle, drive: false)
                 changed = true
