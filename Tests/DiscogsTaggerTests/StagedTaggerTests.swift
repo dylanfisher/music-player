@@ -232,7 +232,9 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     missing.model.failed = { message, details in failures.append([message] + details) }
     try await eventually { !failures.isEmpty }
     #expect(
-        failures == [["The staged album wasn't analyzed", "there's no Discogs catalog on this Mac"]])
+        failures == [
+            ["The staged album wasn't analyzed", "there's no Discogs catalog on this Mac"]
+        ])
     #expect(missing.model.albums.isEmpty)
     missing.window?.close()
 }
