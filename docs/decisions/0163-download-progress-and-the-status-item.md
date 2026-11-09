@@ -34,30 +34,41 @@ thread.
   readings, over at least 8 s, so a 2 s poll of a value written every 5 s doesn't swing it. A
   reading that stops changing keeps its speed for 120 s, longer than a search's stall, then
   shows none; it never shows 0 B/s. The time left is the bytes left at that speed, rounded up
-  to the minute. The copy into staging starts its own readings.
+  to the minute. The copy into staging starts its own readings. A gap between readings
+  doesn't restart them: slskd goes on downloading while a search holds the job's progress
+  still, so the first reading after a stall carries the bytes got meanwhile, and the speed
+  across it is the true one.
 - **Polling.** 2 s while the window is open and a job moves, as before; 5 s while the status bar
   is in view and a job is on its way to staging (queued, searching, downloading, copying), the
   pace the service writes progress at; 60 s otherwise, as before. The 60 s poll never stops: the
   background tagging and import run from it, and a job queued on another Mac appears through
   it. Hiding the status bar returns to it after the wait running.
 - **The status bar item** is at the bar's right end, after the problems button, put there by
-  `LibraryBrowser.setStatusAccessory` and drawn by the Downloads feature. It shows while a job
+  `LibraryBrowser.setStatusAccessory` and drawn by the Downloads feature. While the window is
+  closed, a poll updates the item alone, not the window's table. It shows while a job
   is on its way, in one of three styles, the setting `appearance.downloadsStatusStyle`: a
-  symbol and the count, "Downloading 3 albums, 50%", or a 48 pt bar and the count (the
+  symbol and the count, text ("Downloading 3 albums, 50%"), or a 48 pt bar and the count (the
   default). The bar and the percentage average the albums: a search counts as none, a download
   by its bytes, the copy as the download done. The tooltip lists each album's state. A click
   opens Downloads; a right-click lists the styles with the current one ticked. The setting is
   also in Settings > Toolbar under Status Bar, and is a command (ADR 0159).
 - **Opening with a selection.** File > Downloads… with library tracks selected opens From
   Library Selection once the window can queue, after the catalog check and the service's first
-  answer. A selection with no album to queue opens nothing, and the status item's click opens
-  the window without the offer.
+  answer. It offers the tracks selected when the window opened, not a later selection. Any
+  other sheet on the window drops the offer, so it never comes up over or after one; closing
+  the window drops it too. A selection with no album to queue opens nothing, and the status
+  item's click opens the window without an offer of its own, leaving one that waits.
 - **Reveal in Finder** shows a job's staged folder from `staged` until the import, failed jobs
-  too. It doesn't need the service, so it works while the service is down.
+  too. It doesn't need the service, so it works while the service is down. The service's
+  `staged_path` is used only when it's one folder name (`DownloadJob.stagedFolder`): no `/`,
+  not empty, `.` or `..`; and a folder that is a link out of the staging folder isn't shown.
+  The plan, the approved import and the tagger take `stagedFolder` too.
 - **Open slskd** opens `slskd_url`, asked each time the window opens. A loopback host
-  (`127.0.0.1`, `localhost`, `::1`) means slskd runs on the service's Mac, so the address the
-  player reaches the service at takes its place, with the scheme and port kept. Only an http or
-  https URL with a host is opened, and only when the owner clicks.
+  (any 127.0.0.0/8 address, `::1`, `localhost` or `localhost.`, and the unspecified `0.0.0.0`
+  and `::`) means slskd runs on the service's Mac, so the address the player reaches the
+  service at takes its place, with the scheme and port kept. A user, password, query or
+  fragment is dropped before the page is opened, shown or logged. Only an http or https URL
+  with a host is opened, and only when the owner clicks.
 - **The Approve sheet** takes the tagger's sheet layout: a heading and a line under it, a table
   of the staged files (where each goes, relative to the library folder, and what the
   lossy-origin check found), and for an upgrade a table of the old files with a box in the row
@@ -67,6 +78,9 @@ thread.
 
 ## Alternatives considered
 
+- **Restarting the readings after a long gap.** Rejected: it would blank the speed for 8 s or
+  more after every search, to correct only a peer that really stopped, whose average catches
+  up within the six readings kept.
 - **The speed from the last two readings.** Rejected: with 2 s polls of a value written every
   5 s, it swings by half from one poll to the next.
 - **The service's own transfer speed**, which slskd knows. Rejected for now: the contract
