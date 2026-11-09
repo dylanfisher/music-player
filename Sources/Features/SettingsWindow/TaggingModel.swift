@@ -2,9 +2,9 @@ import Foundation
 import Settings
 
 /// Settings ▸ Tagging's field mapping as the user edits it, with no AppKit (ADR 0165): the
-/// Discogs tagger's mapping in use, each field a key with its rule as the value, including the
-/// parts of a rule the Field Mapping sheet doesn't show, a tag spelled per format or numbered
-/// and how each value is written. The draft is checked as the config file's mapping is, and
+/// Discogs tagger's mapping in use, a rule for each field, including the parts of a rule the
+/// Field Mapping sheet doesn't show, a tag spelled per format or numbered and how each value
+/// is written. The draft is checked as the config file's mapping is, and
 /// nothing is written until Save.
 @MainActor
 final class TaggingModel {

@@ -706,7 +706,8 @@ decodes and checks a value as the file's is, then patches only that key's text, 
   format's spelling, numbered), join, template and each format part; the problem from
   `discogs.mapping`'s own `value(fromText:)`; Save through the model's `set`, Revert, and a
   reload that takes the file's value unless the draft is edited.
-- 61.3 `TaggingPane` and `Pane.tagging`: a table of field and rule, the selected rule's form
+- 61.3 `TaggingPane` and `Pane.tagging`: a table of each field, by its title (`Discogs`'s
+  `DiscogsField.title`) with its key as the tooltip, and its rule, the selected rule's form
   under it, the problem line, Revert and Save; `show(setting:)` opens it for the mapping;
   `--snapshot-of tagging`.
 - 61.4 Tests: the model's edits and problems; the pane's table, form and Save; over a real

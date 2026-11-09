@@ -1,11 +1,12 @@
 import AppKit
+import Discogs
 import Log
 import Settings
 
 private let logger = moduleLogger()
 
 /// Settings ▸ Tagging (ADR 0165): the Discogs tagger's field mapping in use, a table of each
-/// field, its key in the config file, and its rule; under it the selected field's rule, with
+/// field, by its title with its key in the config file as the tooltip, and its rule; under it the selected field's rule, with
 /// its tags spelled per format and how its value is written. The problem the config file would
 /// find shows under the rule as it's edited, and Save writes the mapping; Revert puts the
 /// file's back.
@@ -18,6 +19,11 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         + " “\(TaggingModel.setting.key)”: each field and its rule. The tagger's Field Mapping"
         + " sheet edits the same mapping, and saves and chooses named ones."
     static let fieldTitle = "Field"
+
+    /// A field's tooltip in the table: its key in the config file.
+    static func keyTip(_ field: DiscogsField) -> String {
+        "“\(field.rawValue)” in config.json"
+    }
     static let ruleTitle = "Rule"
     static let numberedTitle = "Numbered Keys"
     private static let fieldsHeight = 200.0
@@ -196,7 +202,7 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     private func refresh() {
         let field = field
         let rule = model.draft[field]
-        ruleHeading.stringValue = "\(Self.ruleTitle) for “\(field.rawValue)”"
+        ruleHeading.stringValue = "\(Self.ruleTitle) for “\(field.title)”"
         modePopUp.selectItem(at: DiscogsFieldRule.Mode.shown.firstIndex(of: rule.mode) ?? -1)
         let texts = [(rule.format.join, joinField), (rule.format.template, templateField)]
         for (text, control) in texts where control.currentEditor() == nil {
@@ -310,10 +316,10 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         guard let id = tableColumn?.identifier.rawValue else { return nil }
         if tableView === fieldsTable {
             let field = TaggingModel.fields[row]
-            let text = id == Self.fieldTitle ? field.rawValue : model.ruleText(field)
+            let text = id == Self.fieldTitle ? field.title : model.ruleText(field)
             let label = NSTextField(labelWithString: text)
             label.lineBreakMode = .byTruncatingTail
-            label.toolTip = text
+            label.toolTip = id == Self.fieldTitle ? Self.keyTip(field) : text
             return label
         }
         let target = model.tags(tagsField)[row]

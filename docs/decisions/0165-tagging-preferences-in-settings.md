@@ -25,10 +25,11 @@ the sheet shows but won't edit.
 - **A Tagging pane of its own** in Settings, after Watched Folders. General's Library section
   was just shortened, and the mapping is a table, not a row.
 - **It edits the mapping in use, every part of every rule.** A table lists each field by its
-  key in the file, with its rule as the value. Under it, the selected rule: the mode, the tags
-  as a list (add, remove, edit) with a column per format's spelling, `vorbis`, `mp4` and `id3`
-  as the file names them, and a box for numbered keys, then the join, the template and a pop-up
-  for each format part. A part left out shows what it writes (`DiscogsFieldFormat`'s
+  title, as the Field Mapping sheet names it, with its key in the file as the tooltip, and its
+  rule as the value. Under it, the selected rule: the mode, the tags as a list (add, remove,
+  edit) with a column per format's spelling, `vorbis`, `mp4` and `id3` as the file names
+  them, and a box for numbered keys, then the join, the template and a pop-up for each format
+  part. A part left out shows what it writes (`DiscogsFieldFormat`'s
   `…Written`, which the writer reads too).
 - **One check, the file's.** The draft is written as the file holds the setting and read back
   with the setting's own `value(fromText:)`, so the problem the pane shows is the file's word
@@ -52,8 +53,9 @@ the sheet shows but won't edit.
 - **Format columns in the Field Mapping sheet.** Seven more columns in a sheet already at its
   width, and the owner asked for the preferences in Settings.
 - **A text view of the mapping's JSON.** The file already is one; the owner asked for an editor.
-- **Field titles ("Album Artist") in the table.** They're `Discogs`'s, a module the Settings
-  window doesn't import, and the keys are what the file holds.
+- **The fields' keys ("albumArtist") in the table.** They're what the file holds, but the
+  Field Mapping sheet and View Changes name the fields by their titles, which the Settings
+  window takes from `Discogs`, a core module, so the key is the tooltip.
 
 ## Consequences
 

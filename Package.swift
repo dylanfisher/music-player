@@ -242,7 +242,8 @@ let package = Package(
         .target(
             name: "SettingsWindow",
             dependencies: [
-                "Commands", "DisplayText", "KeyChord", "Log", "Settings", "WindowPlacement",
+                "Commands", "Discogs", "DisplayText", "KeyChord", "Log", "Settings",
+                "WindowPlacement",
             ],
             path: "Sources/Features/SettingsWindow",
             swiftSettings: strictSwift
@@ -542,7 +543,8 @@ let package = Package(
         .testTarget(
             name: "SettingsWindowTests",
             dependencies: [
-                "Commands", "Fixtures", "KeyChord", "Settings", "SettingsWindow", "WindowPlacement",
+                "Commands", "Discogs", "Fixtures", "KeyChord", "Settings", "SettingsWindow",
+                "WindowPlacement",
             ],
             swiftSettings: strictSwift
         ),

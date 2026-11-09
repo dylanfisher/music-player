@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import Discogs
 import Foundation
 import Testing
 
@@ -40,7 +41,9 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
     #expect(pane.fieldsTable.numberOfRows == DiscogsField.allCases.count)
     #expect(pane.fieldsTable.tableColumns.map(\.title) == ["Field", "Rule"])
     let artist = try #require(TaggingModel.fields.firstIndex(of: .artist))
-    #expect(text(pane.fieldsTable, TaggingPane.fieldTitle, artist) == "artist")
+    #expect(text(pane.fieldsTable, TaggingPane.fieldTitle, artist) == DiscogsField.artist.title)
+    let cell = pane.fieldsTable.view(atColumn: 0, row: artist, makeIfNecessary: true)
+    #expect(cell?.toolTip == "“artist” in config.json")
     #expect(text(pane.fieldsTable, TaggingPane.ruleTitle, artist) == "Replace Tag · artist")
     #expect(pane.saveButton.isEnabled == false)
     #expect(pane.revertButton.isEnabled == false)
@@ -50,7 +53,7 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
 @MainActor @Test func choosingAPartEditsTheSelectedRuleAndSaveWritesIt() throws {
     let (pane, values) = pane()
     select(.albumArtist, in: pane)
-    #expect(pane.ruleHeading.stringValue == "Rule for “albumArtist”")
+    #expect(pane.ruleHeading.stringValue == "Rule for “\(DiscogsField.albumArtist.title)”")
     #expect(text(pane.tagsTable, "vorbis", 0) == "albumArtist")
     let suffixes = try #require(pane.partPopUps[.suffixes])
     #expect(suffixes.indexOfSelectedItem == 0)
