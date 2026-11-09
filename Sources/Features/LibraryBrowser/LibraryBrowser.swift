@@ -1968,6 +1968,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         edit("couldn't count the skip of \(path)") { try await self.model.recordSkip(path) }
     }
 
+    /// Sets the play count of the tracks at `paths` by hand, as Get Info's Save does.
+    public func setPlayCount(_ count: Int, paths: [String]) {
+        edit("couldn't set the play count") {
+            try await self.model.setPlayCount(count, paths: paths)
+        }
+    }
+
     /// Runs an edit, then lists the playlists and selects the source as they now are. A failure
     /// is logged and shown in the status bar. `entriesChange` says the edit can add or drop
     /// playlist entries, which the health report counts.

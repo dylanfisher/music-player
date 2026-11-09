@@ -33,6 +33,12 @@ public final class TagEditing {
     /// launch and after every write and undo finishes, from any window. Until the first read,
     /// and after a read that failed, it's true: Undo Tag Edit stays on and a click shows why.
     public private(set) var canUndo = true
+    /// The play count the index has for each path, nil for one it has no track for, for the
+    /// File tab's Plays field.
+    public var playCounts: @MainActor ([String]) -> [Int?] = { $0.map { _ in nil } }
+    /// Stores a play count typed in an info window for the tracks at the paths, in the index,
+    /// once the window's Save goes ahead (ADR 0161).
+    public var setPlayCount: @MainActor (Int, [String]) -> Void = { _, _ in }
     /// Reads a release from the local catalog for an info window's Discogs tab: nil when the
     /// catalog doesn't have it, and `CatalogError.missing` when there's no catalog.
     public var release: @MainActor (Int) async throws -> ReleaseDetail? = { _ in nil }
@@ -238,9 +244,12 @@ public final class TagEditing {
         let read = effects.read
         let paths = editor.paths
         Task { [weak self, weak editor] in
-            let (tracks, problems) = await blockingFileWork { read(paths) { stop.isStopped } }
+            var (tracks, problems) = await blockingFileWork { read(paths) { stop.isStopped } }
             guard let self, let editor, self.reads[key] === stop else { return }
             self.reads[key] = nil
+            for (index, count) in self.playCounts(tracks.map(\.path)).enumerated() {
+                tracks[index].playCount = count
+            }
             if let model = editor.model {
                 guard problems.isEmpty, tracks.map(\.path) == model.tracks.map(\.path) else {
                     logger.error(
@@ -338,27 +347,29 @@ public final class TagEditing {
 
     /// Writes one file at once; a batch asks first, in a sheet on the info window, which stays
     /// open with what was typed if the answer is no. The window closes once the write is
-    /// queued. Only the files whose tags can be written are written or counted; the window
-    /// said which can't.
+    /// queued, and a play count typed is stored then, with no question of its own: it's the
+    /// index's, not the files'. Only the files whose tags can be written are written or
+    /// counted; the window said which can't.
     private func save(_ edit: TagEdit, from editor: TagEditorWindow, over window: NSWindow) {
         guard let model = editor.model else { return }
-        guard model.canSave else { return NSSound.beep() }
+        guard model.canSaveAnything else { return NSSound.beep() }
         if let note = model.collapseNote { logger.notice("\(note)") }
-        let paths = model.writable.map(\.path)
-        guard !edit.isEmpty else {
-            editor.close()
-            return
+        let close = { [weak self, weak editor] in
+            editor?.close()
+            if let count = model.playCountChange { self?.setPlayCount(count, model.countedPaths) }
         }
+        let paths = model.writable.map(\.path)
+        guard !edit.isEmpty else { return close() }
         let write = effects.write
         let files = paths.map { (path: $0, edit: edit) }
         guard paths.count > 1 else {
-            editor.close()
+            close()
             enqueue("write the tags", over: window) { write(files, .tagEditor, $0) }
             return
         }
-        effects.confirm(.writing(paths.count), editor.window) { [weak self, weak editor] yes in
+        effects.confirm(.writing(paths.count), editor.window) { [weak self] yes in
             guard yes, let self else { return }
-            editor?.close()
+            close()
             self.enqueue("write the tags", over: window) { write(files, .tagEditor, $0) }
         }
     }

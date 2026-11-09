@@ -281,11 +281,13 @@ extension LibraryIndex {
         }
     }
 
+    /// The highest play count `setPlayCount` takes, the most a sync log carries.
+    package static let maximumPlayCount = Int(SyncRecord.countRange.upperBound)
+
     /// Sets the play count of the tracks `ids` to `count` by hand. Each keeps it as how far it
     /// sits from the plays counted, so a play here or on another Mac adds to it (ADR 0161).
     public func setPlayCount(_ count: Int, trackIDs ids: [Int64]) throws {
-        precondition(
-            SyncRecord.countRange.contains(Int64(count)), "a play count of \(count)")
+        precondition((0...Self.maximumPlayCount).contains(count), "a play count of \(count)")
         try statsTransaction {
             let roots = try syncRoots()
             let counted = try statement(

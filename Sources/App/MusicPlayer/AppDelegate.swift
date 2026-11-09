@@ -675,6 +675,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editing.run = { [weak self] in self?.dispatcher?.run($0) }
         editing.isEnabled = { [weak self] in self?.dispatcher?.isEnabled($0) == true }
         editing.saving = { [weak self] progress in self?.browser?.showSaving(progress) }
+        editing.playCounts = { [weak self] paths in
+            paths.map { path in
+                do {
+                    return try self?.trackLookup?(path)?.playCount
+                } catch {
+                    logger.error("couldn't read the play count of \(path): \(error)")
+                    return nil
+                }
+            }
+        }
+        editing.setPlayCount = { [weak self] count, paths in
+            self?.browser?.setPlayCount(count, paths: paths)
+        }
         // The local catalog only: the tab is what an import of the dumps holds.
         editing.release = { [weak self] id in
             guard let self, let settings else { throw NoSettings() }

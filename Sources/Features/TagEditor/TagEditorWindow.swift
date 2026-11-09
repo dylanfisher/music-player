@@ -3,6 +3,7 @@ import Artwork
 import Commands
 import Discogs
 import DisplayText
+import Library
 import Metadata
 import Settings
 import TagWriter
@@ -54,6 +55,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// The buttons that run a registry command, each with its command.
     private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
+    /// The File tab's play count, kept in the index, not the file (ADR 0161).
+    let playCountField = NSTextField()
+    private let playCountLabel = NSTextField(labelWithString: "")
     /// The Extras tab's keys and values, a row each; a value is typed in as a field is.
     let extrasTable = NSTableView()
     /// The rows `extrasTable` shows, as the model last gave them.
@@ -700,8 +704,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         return scroll
     }
 
+    /// The file's facts, then its play count, which can be typed in.
     private func fileView() -> NSView {
-        let rows = FileRow.allCases.map { row -> [NSView] in
+        var rows = FileRow.allCases.map { row -> [NSView] in
             let title = NSTextField(labelWithString: row.title)
             title.textColor = .secondaryLabelColor
             let value = NSTextField(labelWithString: "")
@@ -711,6 +716,13 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             fileValues[row] = value
             return [title, value]
         }
+        playCountField.delegate = self
+        playCountField.alignment = .right
+        playCountField.cell?.usesSingleLineMode = true
+        playCountField.widthAnchor.constraint(equalToConstant: Self.shortWidth).isActive = true
+        playCountField.toolTip = "Kept in the library, not the files; Undo Tag Edit leaves it"
+        showLabel(playCountLabel, TrackColumn.playCount.title, edited: false)
+        rows.append([playCountLabel, playCountField])
         let grid = NSGridView(views: rows)
         grid.rowSpacing = 6
         grid.column(at: 0).xPlacement = .trailing
@@ -737,7 +749,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         for view in areas.values { view.isEditable = editable }
         compilationBox.isEnabled = editable
         releaseIDField.isEditable = editable
-        saveButton.isEnabled = editable
+        playCountField.isEditable = model.map { !$0.countedPaths.isEmpty } ?? false
+        saveButton.isEnabled = model?.canSaveAnything == true
         showExtrasEditable()
         commandsChanged()
     }
@@ -761,6 +774,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             releaseIDField.stringValue = model.releaseIDText
         }
         releaseIDField.placeholderString = model.isReleaseIDMixed ? mixedPlaceholder : nil
+        if playCountField.stringValue != model.playCountText {
+            playCountField.stringValue = model.playCountText
+        }
+        playCountField.placeholderString = model.isPlayCountMixed ? mixedPlaceholder : nil
         if !model.isTyped(.compilation) {
             compilationBox.state =
                 model.isMixed(.compilation)
@@ -816,6 +833,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         for (field, views) in labels {
             for view in views { showLabel(view, field.title, edited: model.isEdited(field)) }
         }
+        showLabel(playCountLabel, TrackColumn.playCount.title, edited: model.isPlayCountEdited)
         let note = model.collapseNote
         collapseLabel.stringValue = note ?? ""
         collapseLabel.isHidden = note == nil
@@ -863,6 +881,11 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         }
         if notification.object as? NSTextField === releaseIDField {
             return releaseIDChanged()
+        }
+        if notification.object as? NSTextField === playCountField {
+            model?.setPlayCount(playCountField.stringValue)
+            playCountField.placeholderString = nil
+            return showEdited()
         }
         guard let view = notification.object as? NSTextField,
             let field = fields.first(where: { $0.value.contains { $0 === view } })?.key
@@ -916,10 +939,11 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         guard let model else { return }
         do {
             let edit = try model.edit()
+            try model.checkPlayCount()
             clearSaveError()
             saved(edit)
         } catch {
-            showNote(error.description, color: .systemRed)
+            showNote("\(error)", color: .systemRed)
             showsSaveError = true
             NSSound.beep()
         }

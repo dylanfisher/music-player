@@ -1,5 +1,7 @@
 import Foundation
+import Library
 import Metadata
+import Settings
 import TagWriter
 
 /// A track as the editor opens it: its tags and art read from the file, not from the index, so
@@ -15,10 +17,13 @@ package struct EditableTrack: Equatable, Sendable {
     /// Why its tags can't be written, as for a DSF file, which the window shows read-only; nil
     /// when they can.
     var readOnly: String?
+    /// Its play count in the index, not the file; nil when the index has no track at its path
+    /// or it wasn't read.
+    var playCount: Int?
 
     init(
         path: String, tags: TrackTags, art: Data?, multiValued: Set<TagEditField> = [],
-        file: FileFacts? = nil, readOnly: String? = nil
+        file: FileFacts? = nil, readOnly: String? = nil, playCount: Int? = nil
     ) {
         self.path = path
         self.tags = tags
@@ -26,6 +31,7 @@ package struct EditableTrack: Equatable, Sendable {
         self.multiValued = multiValued
         self.file = file
         self.readOnly = readOnly
+        self.playCount = playCount
     }
 }
 
@@ -58,6 +64,8 @@ public struct TagEditorModel: Equatable, Sendable {
     private(set) var typedExtras: [String: String] = [:]
     /// Keys the user deleted in Extras that some track holds.
     private(set) var deletedExtras: Set<String> = []
+    /// What the user typed as the play count, which isn't a tag (ADR 0161).
+    private(set) var typedPlayCount: String?
 
     init(tracks: [EditableTrack]) {
         precondition(!tracks.isEmpty, "the editor opens on at least one track")
@@ -78,6 +86,45 @@ public struct TagEditorModel: Equatable, Sendable {
 
     /// Whether any track can be saved, which turns the fields, the art buttons and Save on.
     var canSave: Bool { !writable.isEmpty }
+
+    /// The tracks a play count typed goes to: those the index has a track for, read-only files
+    /// included, since it's stored in the index, not the file.
+    var countedPaths: [String] { tracks.filter { $0.playCount != nil }.map(\.path) }
+
+    /// Whether Save can store anything: tags, or a play count.
+    var canSaveAnything: Bool { canSave || !countedPaths.isEmpty }
+
+    /// The play count every counted track has, or nil when they differ; empty with none.
+    private var sharedPlayCount: String? {
+        let counts = Set(tracks.compactMap(\.playCount))
+        return counts.count > 1 ? nil : counts.first.map(String.init) ?? ""
+    }
+
+    /// What the Plays field shows: the count typed, else the one the tracks share.
+    var playCountText: String { typedPlayCount ?? sharedPlayCount ?? "" }
+
+    var isPlayCountMixed: Bool { typedPlayCount == nil && sharedPlayCount == nil }
+
+    /// Whether saving would change the play count: it was typed differently from what it showed.
+    var isPlayCountEdited: Bool { typedPlayCount.map { $0 != sharedPlayCount } ?? false }
+
+    mutating func setPlayCount(_ text: String) { typedPlayCount = text }
+
+    /// The play count Save stores for `countedPaths`; nil when it isn't edited. Call after
+    /// `checkPlayCount`.
+    var playCountChange: Int? {
+        guard isPlayCountEdited, let typed = typedPlayCount else { return nil }
+        return Int(typed)
+    }
+
+    /// Throws unless the play count typed, if edited, is a whole number from 0 to the most a
+    /// sync log takes. Empty isn't a count.
+    func checkPlayCount() throws(PlayCountError) {
+        guard isPlayCountEdited, let typed = typedPlayCount else { return }
+        guard typed.allSatisfy({ $0.isASCII && $0.isNumber }), let count = Int(typed),
+            count <= LibraryIndex.maximumPlayCount
+        else { throw PlayCountError(text: typed) }
+    }
 
     /// Why some tracks can't be saved, and, when others can, how many Save writes; nil when
     /// every track can.
@@ -290,6 +337,15 @@ public struct TagEditorModel: Equatable, Sendable {
 /// Whether `text` is a Discogs release id: a whole number above 0, in ASCII digits.
 private func isReleaseID(_ text: String) -> Bool {
     text.allSatisfy { $0.isASCII && $0.isNumber } && (Int(text) ?? 0) > 0
+}
+
+/// A play count typed that isn't one.
+struct PlayCountError: Error, Equatable, CustomStringConvertible {
+    var text: String
+
+    var description: String {
+        "\(TrackColumn.playCount.title) \"\(text)\" isn't a whole number from 0 to \(LibraryIndex.maximumPlayCount)"
+    }
 }
 
 /// A row of the Extras tab: a key and its value, nil where the tracks differ.

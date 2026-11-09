@@ -446,6 +446,17 @@ private func syncAll(_ machines: [Machine]) throws {
 
 /// Rebuilding the imports keeps a hand-set count; rebuilding the play counts part takes its
 /// offsets out of the counts with it, leaving the plays counted.
+/// Get Info sets a count by path; a path with no track in the index is left out.
+@Test func theReaderSetsACountByPath() async throws {
+    let nas = try SimulatedNAS()
+    let machine = try machines(1, nas)[0]
+    try machine.scanned("x.flac")
+    let reader = try LibraryReader(databaseURL: machine.databaseURL)
+    try await reader.setPlayCount(3, paths: [machine.path("x.flac"), machine.path("gone.flac")])
+    #expect(try machine.track("x.flac")?.playCount == 3)
+    #expect(try machine.index.existingPathID(machine.path("gone.flac")) == nil)
+}
+
 @Test func aRebuildKeepsOrTakesOutTheOffsets() throws {
     let nas = try SimulatedNAS()
     var machine = try machines(1, nas)[0]
