@@ -50,7 +50,15 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     private(set) var headerRows: [NSStackView] = []
     let tabs = NSSegmentedControl()
     let albumTable = NSTableView()
-    let trackTable = NSTableView()
+    /// The album's files, and beside them the release's tracks they're on: two tables of the
+    /// same rows, scrolled and selected together, so each column's source is plain.
+    let fileTable = NSTableView()
+    let releaseTable = NSTableView()
+    static let filesHeading = "Your Files"
+    static let releaseHeading = "Discogs Release"
+    /// Set while one tracklist follows the other's scroll or selection, so the other doesn't
+    /// follow it back.
+    private var following = false
     let releaseTitle = NSTextField(labelWithString: "")
     let releaseLine = NSTextField(labelWithString: "")
     /// Why a Likely or Incomplete album isn't Exact, under the release's lines.
@@ -201,15 +209,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
         let albums = taggerTable(
             albumTable, [(.album, 200), (.files, 36), (.review, 64)], source: self)
-        let tracks = taggerTable(
-            trackTable,
-            [
-                (.number, 24), (.fileTitle, 170), (.fileTime, 48), (.position, 56),
-                (.releaseTitle, 170), (.releaseTime, 48), (.state, 20),
-            ],
-            source: self)
-        trackTable.registerForDraggedTypes([Self.fileRowType])
-        trackTable.setDraggingSourceOperationMask(.move, forLocal: true)
+        let tracks = tracklists()
 
         releaseTitle.font = .boldSystemFont(ofSize: NSFont.systemFontSize + 2)
         releaseTitle.lineBreakMode = .byTruncatingTail
@@ -276,6 +276,64 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     private func label(_ text: String) -> NSTextField {
         NSTextField(labelWithString: text)
+    }
+
+    /// The files' table and the release's side by side, each under its heading. Only the
+    /// release's shows a scroller; the files' scrolls with it.
+    private func tracklists() -> NSStackView {
+        let files = taggerTable(
+            fileTable, [(.number, 24), (.fileTitle, 170), (.fileTime, 48)], source: self)
+        let release = taggerTable(
+            releaseTable,
+            [(.position, 56), (.releaseTitle, 170), (.releaseTime, 48), (.state, 84)],
+            source: self)
+        files.hasVerticalScroller = false
+        for table in [fileTable, releaseTable] {
+            table.registerForDraggedTypes([Self.fileRowType])
+            table.allowsMultipleSelection = false
+        }
+        fileTable.setDraggingSourceOperationMask(.move, forLocal: true)
+        for scroll in [files, release] {
+            scroll.contentView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(tracklistScrolled),
+                name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        }
+        let sides = [(Self.filesHeading, files), (Self.releaseHeading, release)].map {
+            heading, scroll in
+            let title = NSTextField(labelWithString: heading)
+            title.font = .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
+            title.textColor = .secondaryLabelColor
+            let side = NSStackView(views: [title, scroll])
+            side.orientation = .vertical
+            side.alignment = .leading
+            side.spacing = 4
+            scroll.widthAnchor.constraint(equalTo: side.widthAnchor).isActive = true
+            scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
+            scroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+            return side
+        }
+        let both = NSStackView(views: sides)
+        both.orientation = .horizontal
+        both.distribution = .fillEqually
+        both.alignment = .top
+        both.spacing = 6
+        for side in sides {
+            side.heightAnchor.constraint(equalTo: both.heightAnchor).isActive = true
+        }
+        return both
+    }
+
+    /// Scrolls the other tracklist to where the one that moved is.
+    @objc private func tracklistScrolled(_ notification: Notification) {
+        guard !following, let moved = notification.object as? NSClipView else { return }
+        let other = (moved === fileTable.enclosingScrollView?.contentView
+            ? releaseTable : fileTable).enclosingScrollView?.contentView
+        guard let other, other.bounds.origin.y != moved.bounds.origin.y else { return }
+        following = true
+        other.setBoundsOrigin(NSPoint(x: other.bounds.origin.x, y: moved.bounds.origin.y))
+        other.enclosingScrollView?.reflectScrolledClipView(other)
+        following = false
     }
 
     // MARK: - Showing the model
@@ -418,7 +476,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         }
         reasonsLine.stringValue = album.flatMap { reasonsText($0.match, separator: " · ") } ?? ""
         rows = album.map { $0.match.comparison(of: $0.album) } ?? []
-        trackTable.reloadData()
+        fileTable.reloadData()
+        releaseTable.reloadData()
         let reviewing = album != nil && !model.isBusy
         let others = album?.match.candidates.count ?? 0
         otherReleasesButton.title = Self.otherReleasesTitle(others)
@@ -457,13 +516,14 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             }
             cell.toolTip = reasonsText(shownAlbums[row].match, separator: "\n")
         }
-        if tableView === trackTable, id == .state {
+        if tableView === releaseTable, id == .state {
             cell.textColor =
                 switch rows[row].state {
                 case .matched: .systemGreen
                 case .different: .systemOrange
                 case .missing: .systemRed
                 }
+            cell.toolTip = rows[row].stateTip
         }
         return cell
     }
@@ -497,12 +557,21 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         case .position: return comparison.position ?? ""
         case .releaseTitle: return comparison.releaseTitle ?? ""
         case .releaseTime: return comparison.releaseSeconds.map { clock(Double($0)) } ?? ""
-        default: return comparison.state.mark
+        default: return comparison.stateText
         }
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        guard notification.object as? NSTableView === albumTable else { return }
+        guard let changed = notification.object as? NSTableView else { return }
+        guard changed === albumTable else {
+            // A row of one tracklist is a row of the other.
+            guard !following else { return }
+            following = true
+            (changed === fileTable ? releaseTable : fileTable).selectRowIndexes(
+                changed.selectedRowIndexes, byExtendingSelection: false)
+            following = false
+            return
+        }
         let row = albumTable.selectedRow
         let id = row >= 0 && row < shownAlbums.count ? shownAlbums[row].id : nil
         guard id != model.selectedID else { return }
@@ -513,7 +582,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
         -> (any NSPasteboardWriting)?
     {
-        guard tableView === trackTable, model.canRemap, let fileID = rows[row].fileID else {
+        guard tableView === fileTable, model.canRemap, let fileID = rows[row].fileID else {
             return nil
         }
         let item = NSPasteboardItem()
@@ -525,7 +594,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         _ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int,
         proposedDropOperation dropOperation: NSTableView.DropOperation
     ) -> NSDragOperation {
-        guard tableView === trackTable, model.canRemap, row < rows.count else { return [] }
+        guard tableView !== albumTable, model.canRemap, row < rows.count else { return [] }
         tableView.setDropRow(row, dropOperation: .on)
         return .move
     }

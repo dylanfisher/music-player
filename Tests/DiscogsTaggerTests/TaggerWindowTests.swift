@@ -82,7 +82,7 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(controller.releaseTitle.stringValue == "Persuader – Stockholm")
     #expect(controller.releaseLine.stringValue == "Svek · SK 10 · Sweden · 2000 · CD · Release 10")
     #expect(controller.rows.map(\.state) == [.matched, .matched, .matched])
-    #expect(controller.text(controller.trackTable, .state, 0) == "✓")
+    #expect(controller.text(controller.releaseTable, .state, 0) == "✓ Same")
     #expect(!controller.drop(100, onRow: 2), "an Exact album's rows stay")
     try snapshot(window, "discogs-tagger")
 
@@ -94,6 +94,67 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(controller.rows.map(\.fileID) == [200, nil, 201])
     #expect(controller.rows.map(\.state) == [.matched, .missing, .different])
     window.close()
+}
+
+/// The files and the release's tracks are two tables of the same rows, each under its heading,
+/// the match's mark spelled out, scrolled and selected together.
+@MainActor
+@Test func theFilesAndTheReleaseAreTwoTablesOfTheSameRows() async throws {
+    let tagger = await analyzed()
+    tagger.tab = .likely
+    tagger.selectedID = 2
+    let controller = TaggerWindow(model: tagger)
+    let window = try #require(controller.window)
+    defer { window.close() }
+    let (files, tracks) = (controller.fileTable, controller.releaseTable)
+    #expect(files.tableColumns.map(\.identifier.rawValue) == ["number", "fileTitle", "fileTime"])
+    #expect(
+        tracks.tableColumns.map(\.identifier.rawValue)
+            == ["position", "releaseTitle", "releaseTime", "state"])
+    #expect(files.tableColumns[1].title == tracks.tableColumns[1].title, "both Title")
+    let labels = allViews(window.contentView!).compactMap { ($0 as? NSTextField)?.stringValue }
+    #expect(labels.contains(TaggerWindow.filesHeading))
+    #expect(labels.contains(TaggerWindow.releaseHeading))
+    #expect(files.numberOfRows == 3 && tracks.numberOfRows == 3)
+    #expect(files.rowHeight == tracks.rowHeight)
+    #expect(
+        (0..<3).map { controller.text(tracks, .state, $0) } == [
+            "✓ Same", "≠ Differs", "– No file",
+        ])
+    #expect(controller.text(files, .fileTitle, 2) == "", "the track without a file")
+    #expect(controller.text(tracks, .releaseTitle, 2) == "Kungsholmen")
+    #expect(controller.drop(201, onRow: 2))
+    #expect(controller.text(tracks, .state, 1) == "– No file")
+
+    files.selectRowIndexes([1], byExtendingSelection: false)
+    #expect(tracks.selectedRowIndexes == [1])
+    tracks.selectRowIndexes([2], byExtendingSelection: false)
+    #expect(files.selectedRowIndexes == [2])
+
+    try snapshot(window, "discogs-tagger-tracklists")
+
+    let titles = (1...60).map { "Track \($0)" }
+    let long = await model(
+        Seen(), albums: [album(5, "Long", titles: titles)],
+        matches: { album, _ in match(album, release(50, "Long", titles: titles), tier: .exact) })
+    long.analyze()
+    await long.finished()
+    let tall = TaggerWindow(model: long)
+    defer { tall.window?.close() }
+    tall.window?.setContentSize(NSSize(width: 1000, height: 480))
+    tall.window?.contentView?.layoutSubtreeIfNeeded()
+    let moved = try #require(tall.releaseTable.enclosingScrollView?.contentView)
+    moved.scroll(to: NSPoint(x: 0, y: 120))
+    #expect(moved.bounds.origin.y == 120)
+    #expect(tall.fileTable.enclosingScrollView?.contentView.bounds.origin.y == 120)
+    tall.fileTable.enclosingScrollView?.contentView.scroll(to: NSPoint(x: 0, y: 40))
+    #expect(moved.bounds.origin.y == 40, "and back")
+}
+
+/// `view` and every view under it.
+@MainActor
+private func allViews(_ view: NSView) -> [NSView] {
+    [view] + view.subviews.flatMap(allViews)
 }
 
 @MainActor
@@ -626,7 +687,7 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     window.setContentSize(NSSize(width: 1060, height: 700))
 
     func expectFilled(_ when: String) {
-        let tracks = frame(controller.trackTable.enclosingScrollView!)
+        let tracks = frame(controller.releaseTable.enclosingScrollView!)
         let albums = frame(controller.albumTable.enclosingScrollView!)
         #expect(abs(tracks.minY - frame(controller.reviewButtons).maxY) <= 12, "\(when)")
         #expect(abs(albums.minY - frame(controller.bottom).maxY) <= 12, "\(when)")
@@ -653,11 +714,11 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     window.contentView?.layoutSubtreeIfNeeded()
     expectFilled("after reopening")
 
-    let before = frame(controller.trackTable.enclosingScrollView!).height
+    let before = frame(controller.releaseTable.enclosingScrollView!).height
     window.setContentSize(NSSize(width: 1060, height: 900))
     window.contentView?.layoutSubtreeIfNeeded()
     expectFilled("after a resize")
-    #expect(frame(controller.trackTable.enclosingScrollView!).height >= before + 190)
+    #expect(frame(controller.releaseTable.enclosingScrollView!).height >= before + 190)
     window.close()
 }
 

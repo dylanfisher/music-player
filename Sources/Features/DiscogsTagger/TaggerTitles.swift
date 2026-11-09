@@ -103,11 +103,11 @@ enum TaggerColumn: String {
         case .files: "Files"
         case .review: "Review"
         case .number: TrackColumn.rowNumber.title
-        case .fileTitle: TrackColumn.title.title
+        case .fileTitle, .releaseTitle: TrackColumn.title.title
         case .fileTime, .releaseTime: TrackColumn.duration.title
         case .position: DiscogsField.position.title
-        case .releaseTitle: "Release Track"
-        case .state, .include: ""
+        case .state: "Match"
+        case .include: ""
         case .fileName: TrackColumn.fileName.title
         case .field, .discogsField: "Discogs Field"
         case .tag: "Tag"
@@ -177,13 +177,23 @@ extension DiscogsFieldRule.Mode {
     }
 }
 
-extension TrackComparison.State {
-    /// The mark at the end of a row of the tracklists.
-    var mark: String {
-        switch self {
-        case .matched: "✓"
-        case .different: "≠"
-        case .missing: "–"
+extension TrackComparison {
+    /// The mark at the end of a row of the tracklists, with the word that says what it means.
+    var stateText: String {
+        switch state {
+        case .matched: "✓ Same"
+        case .different: "≠ Differs"
+        case .missing: fileID == nil ? "– No file" : "– No track"
+        }
+    }
+
+    /// The mark's tooltip.
+    var stateTip: String {
+        switch state {
+        case .matched: "The file's title and length fit the track's"
+        case .different: "The file's title or length differs from the track's"
+        case .missing:
+            fileID == nil ? "No file is on this track" : "This file is on none of the tracks"
         }
     }
 }
