@@ -86,7 +86,8 @@ private func makeEditing(
     organize: @escaping @Sendable ([String], String) -> FilesOrganized = { _, _ in
         FilesOrganized()
     },
-    askQuit: @escaping @MainActor (Int, @escaping @MainActor (TagEditing.QuitAnswer) -> Void) ->
+    askQuit:
+        @escaping @MainActor (Int, @escaping @MainActor (TagEditing.QuitAnswer) -> Void) ->
         Void = { _, _ in Issue.record("asked to quit") }
 ) -> TagEditing {
     let editing = TagEditing(
