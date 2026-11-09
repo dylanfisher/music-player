@@ -56,7 +56,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private let playback: GeneralPane
     private let appearance: GeneralPane
     private let toolbarPane: GeneralPane
-    private let folders: FoldersPane
+    private let folders: LibraryPane
     /// Made as it's first shown, since its model reads the mapping then.
     private(set) var tagging: TaggingPane?
     private let shortcuts: ShortcutsPane
@@ -87,7 +87,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             model: general, configPath: nil, actions: actions, sections: Pane.appearance.sections)
         toolbarPane = GeneralPane(
             model: general, configPath: nil, actions: actions, sections: Pane.toolbar.sections)
-        folders = FoldersPane(model: general, actions: actions)
+        folders = LibraryPane(model: general, actions: actions)
         self.shortcuts = ShortcutsPane(model: shortcuts)
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: GeneralPane.width, height: 400),

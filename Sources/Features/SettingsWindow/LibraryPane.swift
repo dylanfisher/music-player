@@ -10,7 +10,7 @@ private let logger = moduleLogger()
 /// folders or Rescan All, from buttons or the table's context menu. Under them, the network
 /// folders' settings in a box, as Swinsian has its watched folders' settings.
 @MainActor
-final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
+final class LibraryPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuItemValidation
 {
     private enum Column: String, CaseIterable {

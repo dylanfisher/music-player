@@ -189,7 +189,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 
 @MainActor @Test func theRescansColumnSetsANetworkFoldersInterval() throws {
     let (model, folders) = modelWithFoldersAndValues()
-    let pane = FoldersPane(model: model, actions: actions())
+    let pane = LibraryPane(model: model, actions: actions())
     _ = pane.view
     let column = try #require(pane.table.tableColumns.firstIndex { $0.title == "Rescans" })
     let local = pane.table.delegate?.tableView?(
@@ -220,7 +220,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 @MainActor @Test func theWatchedFoldersHaveAPaneOfTheirOwn() throws {
     var removed: [Int] = []
     var added = 0
-    let pane = FoldersPane(
+    let pane = LibraryPane(
         model: modelWithFolders(),
         actions: actions(addFolder: { added += 1 }, removeFolder: { removed.append($0) }))
     _ = pane.view
@@ -241,7 +241,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 @MainActor @Test func theSelectedFoldersAreRescannedFromAButtonOrTheContextMenu() throws {
     var rescanned: [[Int]] = []
     var all = 0
-    let pane = FoldersPane(
+    let pane = LibraryPane(
         model: modelWithFolders(),
         actions: actions(rescanNow: { all += 1 }, rescanFolders: { rescanned.append($0) }))
     _ = pane.view
