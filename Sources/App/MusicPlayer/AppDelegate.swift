@@ -136,6 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var ruleEditor: RuleEditorSheet?
     /// The tag editor, which writes music files only after the user saves an edit (ADR 0020).
     private(set) lazy var tagEditing = makeTagEditing()
+    /// The tag editor once made, so a quit doesn't make one to ask it.
+    private var madeTagEditing: TagEditing?
     /// The Discogs tagger, once first shown.
     var discogsTagger: DiscogsTagger?
     /// The tagger open on a staged download's discrepancy, while it's open.
@@ -530,10 +532,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyVolumeKeys()
     }
 
-    /// Saves the play state before quitting, waiting up to `resumeWaitSeconds` for the engine's
-    /// place.
+    /// Asks first while tag writes are queued (ADR 0167), then saves the play state before
+    /// quitting, waiting up to `resumeWaitSeconds` for the engine's place.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let resumeSaver else { return .terminateNow }
+        let held = madeTagEditing?.holdQuit { [weak self] quit in
+            guard quit, let self else { return sender.reply(toApplicationShouldTerminate: quit) }
+            if !saveResumeThenQuit(sender) { replyToQuit(sender) }
+        }
+        if held == true { return .terminateLater }
+        return saveResumeThenQuit(sender) ? .terminateLater : .terminateNow
+    }
+
+    /// Saves the play state, then quits; false, doing nothing, without a saver.
+    private func saveResumeThenQuit(_ sender: NSApplication) -> Bool {
+        guard let resumeSaver else { return false }
         Task { [weak self] in
             await resumeSaver.save()
             self?.replyToQuit(sender)
@@ -544,7 +556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logger.error("the play state wasn't read within \(Self.resumeWaitSeconds) s; quitting")
             replyToQuit(sender)
         }
-        return .terminateLater
+        return true
     }
 
     private func replyToQuit(_ sender: NSApplication) {
@@ -715,6 +727,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return try await releaseDetail(
                 id, catalogAt: paths.discogsCatalogFile(settings[\.discogsCatalogPath]))
         }
+        madeTagEditing = editing
         return editing
     }
 

@@ -85,7 +85,9 @@ private func makeEditing(
     progress: [TagWriteProgress] = [],
     organize: @escaping @Sendable ([String], String) -> FilesOrganized = { _, _ in
         FilesOrganized()
-    }
+    },
+    askQuit: @escaping @MainActor (Int, @escaping @MainActor (TagEditing.QuitAnswer) -> Void) ->
+        Void = { _, _ in Issue.record("asked to quit") }
 ) -> TagEditing {
     let editing = TagEditing(
         effects: .init(
@@ -126,7 +128,7 @@ private func makeEditing(
             follow: { moves in
                 seen.ran("follow \(moves.map { "\($0.from)>\($0.to)" }.joined(separator: " "))")
                 return []
-            }))
+            }, askQuit: askQuit))
     editing.written = { report, _ in seen.wrote(report.changed) }
     return editing
 }
@@ -422,6 +424,71 @@ private final class Titles: @unchecked Sendable {
             "Saving tags: 0 of 1", "Saving tags: 1 of 1", "Saving tags: 1 of 3",
             "Saving tags: 0 of 2", "Saving tags: 1 of 2", nil,
         ])
+}
+
+/// Quitting with nothing queued goes ahead unasked; with writes queued it asks, and each
+/// answer quits or not as it says. Wait and Quit waits for the writes queued meanwhile too
+/// (ADR 0167).
+@MainActor
+@Test func quittingWithWritesQueuedAsksFirst() async throws {
+    let idle = makeEditing(Seen())
+    #expect(!idle.holdQuit { _ in Issue.record("quit answered") })
+
+    let edit = TagEdit(values: [.title: "New"])
+    for (answer, quits) in [(TagEditing.QuitAnswer.cancel, false), (.quitAnyway, true)] {
+        let gate = Gate()
+        var asked: [Int] = []
+        let editing = makeEditing(
+            Seen(),
+            write: { _, paths in
+                gate.wait()
+                var report = TagWriteReport()
+                report.changed = paths
+                return report
+            },
+            askQuit: { count, reply in
+                asked.append(count)
+                reply(answer)
+            })
+        editing.write([("/a.flac", edit)], over: window)
+        editing.write([("/b.flac", edit)], over: window)
+        var quit: Bool?
+        #expect(editing.holdQuit { quit = $0 })
+        #expect(quit == nil, "it answers after returning")
+        try await eventually { quit != nil }
+        #expect(quit == quits)
+        #expect(asked == [2])
+        #expect(editing.isWriting)
+        gate.open()
+        gate.open()
+        try await eventually { !editing.isWriting }
+    }
+
+    let gate = Gate()
+    let editing = makeEditing(
+        Seen(),
+        write: { _, paths in
+            gate.wait()
+            var report = TagWriteReport()
+            report.changed = paths
+            return report
+        },
+        askQuit: { _, reply in reply(.waitAndQuit) })
+    var unwritten: [Set<String>] = []
+    editing.write([("/a.flac", edit)], over: window, completion: { unwritten.append($0) })
+    var quit: Bool?
+    #expect(editing.holdQuit { quit = $0 })
+    try await Task.sleep(nanoseconds: 50_000_000)
+    editing.write([("/b.flac", edit)], over: window, completion: { unwritten.append($0) })
+    gate.open()
+    try await eventually { unwritten.count == 1 }
+    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(quit == nil, "a write queued while waiting is waited for")
+    gate.open()
+    try await eventually { quit != nil }
+    #expect(quit == true)
+    #expect(unwritten.count == 2)
+    #expect(!editing.isWriting)
 }
 
 /// Back and Forward step the key info window's tabs, wrapping at the ends, and leave anything

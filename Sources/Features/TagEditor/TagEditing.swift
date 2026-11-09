@@ -83,6 +83,17 @@ public final class TagEditing {
         /// Points the journal's records of each renamed file at its new path, giving what
         /// couldn't be.
         var follow: @Sendable ([TrackMove]) -> [TagWriteError]
+        /// Asks what to do about quitting with the given number of writes and undos not
+        /// finished, then calls back with the answer.
+        var askQuit: @MainActor (Int, @escaping @MainActor (QuitAnswer) -> Void) -> Void
+    }
+
+    /// What the user chose when quitting with tag writes not finished (ADR 0167).
+    enum QuitAnswer {
+        /// Quit once the queue is empty.
+        case waitAndQuit
+        case quitAnyway
+        case cancel
     }
 
     /// A question the user answers before the editor writes a batch of files.
@@ -146,7 +157,8 @@ public final class TagEditing {
             alert: showProblems,
             layout: { layoutMoves($0, libraryFolder: $1) },
             move: { moveToLayout($0, libraryFolder: $1, checkingAgain: $2, ledger: ledger) },
-            follow: { writer.follow($0.map { ($0.from, $0.to) }) })
+            follow: { writer.follow($0.map { ($0.from, $0.to) }) },
+            askQuit: askToQuit)
         // A write in place a crash cut short is finished before anything reads the file
         // again; the writer logs what it found (ADR 0107).
         writes.async { [weak self] in
@@ -187,6 +199,50 @@ public final class TagEditing {
 
     var isOpen: Bool { !editors.isEmpty }
     var isWriting: Bool { pendingWrites > 0 }
+
+    /// Called once the queue is empty, after Wait and Quit.
+    private var quitWhenDone: (@MainActor () -> Void)?
+
+    /// Holds a quit while tag writes or undos are queued or running (ADR 0167): false, with
+    /// nothing asked, when there are none. Otherwise it asks, after returning, and calls
+    /// `quit` with whether to go ahead: at once for Quit Anyway and Cancel, and for Wait and
+    /// Quit once the last of them finishes, those queued meanwhile included.
+    public func holdQuit(_ quit: @escaping @MainActor (Bool) -> Void) -> Bool {
+        guard isWriting else { return false }
+        if quitWhenDone != nil {
+            // Already waiting to quit: the new quit goes ahead with it.
+            quitWhenDone = { quit(true) }
+            return true
+        }
+        let askQuit = effects.askQuit
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                guard self.isWriting else { return quit(true) }
+                askQuit(self.pendingWrites) { answer in
+                    switch answer {
+                    case .cancel: quit(false)
+                    case .quitAnyway: quit(true)
+                    case .waitAndQuit:
+                        guard self.isWriting else { return quit(true) }
+                        self.quitWhenDone = { quit(true) }
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    /// Lowers the count of writes and undos not finished, and quits if that was the last and
+    /// Wait and Quit is waiting.
+    private func writeEnded() {
+        pendingWrites -= 1
+        guard pendingWrites == 0 else { return }
+        saving(nil)
+        quitWhenDone.map { quit in
+            quitWhenDone = nil
+            quit()
+        }
+    }
 
     /// The info window the art commands act on: the one whose button runs one, else the key
     /// one, else the last opened.
@@ -347,8 +403,8 @@ public final class TagEditing {
             let newest = Result { () throws(TagWriteError) in try newestEdit() }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    self.pendingWrites -= 1
-                    if self.pendingWrites == 0 { self.saving(nil) }
+                    // After the undo is queued, so a quit waiting on the queue waits for it.
+                    defer { self.writeEnded() }
                     switch newest {
                     case .success(let edit):
                         let run = {
@@ -519,8 +575,8 @@ public final class TagEditing {
     }
 
     private func finished(_ number: Int, _ report: TagWriteReport, _ organized: FilesOrganized?) {
-        pendingWrites -= 1
-        if pendingWrites == 0 { saving(nil) }
+        // Last, so a quit waiting on it goes ahead after the rescan is asked for.
+        defer { writeEnded() }
         readCanUndo()
         progresses.removeValue(forKey: number)
         batches.removeValue(forKey: number)
@@ -559,6 +615,30 @@ private final class ReadStop: @unchecked Sendable {
 
     func stop() { lock.withLock { stopped = true } }
     var isStopped: Bool { lock.withLock { stopped } }
+}
+
+/// "3 tag writes haven't finished.", asked app-modal, since a quit may come with no window.
+@MainActor
+private func askToQuit(
+    _ count: Int, _ answer: @escaping @MainActor (TagEditing.QuitAnswer) -> Void
+) {
+    let alert = NSAlert()
+    alert.messageText =
+        count == 1
+        ? "1 tag write hasn't finished."
+        : "\(NumberFormatter.localizedString(from: NSNumber(value: count), number: .decimal))"
+            + " tag writes haven't finished."
+    alert.informativeText =
+        "Wait and Quit quits once they're written. With Quit Anyway, files not yet written"
+        + " keep their old tags, and one cut short is put right at the next launch."
+    alert.addButton(withTitle: "Wait and Quit")
+    alert.addButton(withTitle: "Quit Anyway")
+    alert.addButton(withTitle: "Cancel")
+    switch alert.runModal() {
+    case .alertFirstButtonReturn: answer(.waitAndQuit)
+    case .alertSecondButtonReturn: answer(.quitAnyway)
+    default: answer(.cancel)
+    }
 }
 
 /// The problems in an alert, the first few in full.
