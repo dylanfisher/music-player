@@ -681,7 +681,7 @@ in the AGENTS.md boundary".
 - [ ] **Editor:** the tagging preferences now set only in `config.json` (suffixes to drop,
       formats, the mappings) get an editor in Settings. Secrets stay out of it (AGENTS.md).
 
-Implementation plan, phase 61 (ADR 0160):
+Implementation plan, phase 61 (ADR 0165):
 
 What exists, found by search (map.md recipes): the tagger reads `discogs.mapping`,
 `discogs.savedMappings`, `discogs.keepExistingValues`, `discogs.skipVideo`,
