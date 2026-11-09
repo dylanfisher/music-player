@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 import Recommender
 
@@ -46,7 +47,9 @@ struct DownloadRow: Equatable, Sendable {
     var replaces: String?
     /// The state in words.
     var state: String
-    /// From 0 to 1 while downloading, for the progress bar.
+    /// More about the state, for its tooltip: the search's query and the attempt.
+    var stateDetail: String?
+    /// From 0 to 1 while downloading or copying into staging, for the progress bar.
     var progress: Double?
     var tagging: Tagging
     var added: Date
@@ -58,8 +61,12 @@ struct DownloadRow: Equatable, Sendable {
     var canApprove: Bool
 
     /// `job`'s row on the Mac named `machine`; nil for a terminal job, which isn't listed.
-    /// `answering` is false while the service doesn't answer, which dims every row.
-    init?(_ job: DownloadJob, machine: String, answering: Bool = true) {
+    /// `answering` is false while the service doesn't answer, which dims every row; `formatted`
+    /// words the time of the next search.
+    init?(
+        _ job: DownloadJob, machine: String, answering: Bool = true,
+        formatted: (Date) -> String = DownloadRow.shortTime
+    ) {
         guard let group = Self.group(job.state) else { return nil }
         id = job.id
         source = job.source
@@ -68,8 +75,9 @@ struct DownloadRow: Equatable, Sendable {
         format = Self.format(job)
         candidate = Self.candidate(job)
         replaces = job.upgrade.map { "Replaces \($0.currentQuality)" }
-        state = Self.state(job)
-        progress = job.state == .downloading ? job.progress.map(Self.fraction) : nil
+        state = Self.state(job, formatted: formatted)
+        stateDetail = Self.stateDetail(job)
+        progress = Self.isTransferring(job.state) ? job.progress.map(Self.fraction) : nil
         tagging = Self.tagging(job.tagging, state: job.state)
         added = Date(timeIntervalSince1970: TimeInterval(job.createdAt))
         style = Self.style(
@@ -146,19 +154,55 @@ struct DownloadRow: Equatable, Sendable {
             status: tagging.status, reasons: tagging.reasons, label: tagged ? label : "")
     }
 
-    /// The state in words, with the service's reason where it gave one.
-    static func state(_ job: DownloadJob) -> String {
+    /// "Nov 10, 4:42 PM": how a row words the time of the next search.
+    static func shortTime(_ date: Date) -> String {
+        DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)
+    }
+
+    /// Whether `state` moves bytes the service reports in `progress`: slskd's download, or the
+    /// copy into staging.
+    static func isTransferring(_ state: JobState) -> Bool {
+        state == .downloading || state == .downloaded
+    }
+
+    /// The state in words, with the service's reason where it gave one. A search says how far
+    /// its query has got, and a search after a miss says what the last one found; a job not
+    /// found says when it searches next, through `formatted`.
+    static func state(_ job: DownloadJob, formatted: (Date) -> String = shortTime) -> String {
+        let lastTime = job.reason.map { "; last time: \($0)" } ?? ""
+        let again = job.attempt > 1
         let words: String
         switch job.state {
-        case .queued: words = "Queued"
-        case .searching: words = "Searching"
-        case .notFound: words = "Not found"
+        case .queued:
+            return again ? "Queued to search again" + lastTime : "Queued"
+        case .searching:
+            guard let search = job.search else {
+                return (again ? "Searching again…" : "Searching…") + lastTime
+            }
+            let query =
+                search.queryCount > 1
+                ? ", query \(search.queryNumber) of \(search.queryCount)" : ""
+            let answers =
+                search.peers == 0
+                ? "no answers yet"
+                : "\(count(search.peers, "peer")), \(count(search.files, "file"))"
+            return (again ? "Searching again" : "Searching") + query + ": " + answers + lastTime
+        case .notFound:
+            let next =
+                job.nextAttemptAt.map {
+                    "; searching again \(formatted(Date(timeIntervalSince1970: TimeInterval($0))))"
+                } ?? "; Retry searches again"
+            return "Not found" + (job.reason.map { ": \($0)" } ?? "") + next
         case .candidateFound: words = "Found, starting the download"
         case .downloading:
             words =
                 job.progress.map { "Downloading, \($0.filesDone) of \($0.filesTotal) files" }
                 ?? "Downloading"
-        case .downloaded: words = "Downloaded"
+        case .downloaded:
+            words =
+                job.progress.map {
+                    "Copying to staging, \($0.filesDone) of \($0.filesTotal) files"
+                } ?? "Copying to staging…"
         case .staged: words = "Staged"
         case .approved: words = "Approved"
         case .importing: words = "Importing"
@@ -169,6 +213,19 @@ struct DownloadRow: Equatable, Sendable {
         case .cancelled: words = "Cancelled"
         }
         return job.reason.map { "\(words): \($0)" } ?? words
+    }
+
+    /// The running query and, from the second search on, the attempt, for the state's
+    /// tooltip; nil when there's neither.
+    static func stateDetail(_ job: DownloadJob) -> String? {
+        var lines: [String] = []
+        if job.state == .searching, let search = job.search {
+            lines.append("Searching Soulseek for \"\(search.query)\"")
+        }
+        if [.queued, .searching, .notFound].contains(job.state), job.attempt > 1 {
+            lines.append("Attempt \(job.attempt)")
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     /// The policy until a folder is chosen, then what it holds: "FLAC 16/44.1, 12 files".

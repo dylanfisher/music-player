@@ -24,7 +24,7 @@ enum DownloadColumn: String, CaseIterable {
         case .source: 56
         case .album: 260
         case .format: 150
-        case .state: 220
+        case .state: 340
         case .tagging: 90
         case .candidate: 150
         case .added: 120
@@ -279,7 +279,10 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         case .tagging:
             return shown.tagging.reasons.isEmpty
                 ? nil : shown.tagging.reasons.joined(separator: "\n")
-        case .state, .format, .candidate: return text(column, row)
+        case .state:
+            return ([text(column, row)] + [shown.stateDetail].compactMap { $0 })
+                .joined(separator: "\n")
+        case .format, .candidate: return text(column, row)
         case .added: return nil
         }
     }

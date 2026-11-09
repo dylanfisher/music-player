@@ -142,6 +142,86 @@ func theTaggingColumnNamesTheStatusOnceThereAreFiles(
     #expect(failedRow.progress == nil)
 }
 
+private func progress(_ done: Int, of total: Int, bytes: Int = 25) -> DownloadJob.Progress {
+    DownloadJob.Progress(filesDone: done, filesTotal: total, bytesDone: bytes, bytesTotal: 100)
+}
+
+private let search = DownloadJob.Search(
+    query: "made up artist made up album", queryNumber: 1, queryCount: 2, peers: 14, files: 389,
+    startedAt: 1_794_060_030)
+
+@Test(arguments: [
+    (job(1, .queued), "Queued"),
+    (
+        job(1, .queued) {
+            $0.attempt = 2
+            $0.reason = "only MP3 found"
+        }, "Queued to search again; last time: only MP3 found"
+    ),
+    (job(1, .searching), "Searching…"),
+    (job(1, .searching) { $0.search = search }, "Searching, query 1 of 2: 14 peers, 389 files"),
+    (
+        job(1, .searching) {
+            $0.search = search
+            $0.search?.queryCount = 1
+            $0.search?.peers = 0
+        }, "Searching: no answers yet"
+    ),
+    (
+        job(1, .searching) {
+            $0.attempt = 2
+            $0.reason = "only MP3 found"
+            $0.search = search
+        }, "Searching again, query 1 of 2: 14 peers, 389 files; last time: only MP3 found"
+    ),
+    (
+        job(1, .searching) {
+            $0.attempt = 3
+            $0.reason = "only MP3 found"
+        }, "Searching again…; last time: only MP3 found"
+    ),
+    (
+        job(1, .notFound) {
+            $0.reason = "FLAC, 9 of 12 tracks"
+            $0.nextAttemptAt = 1_794_081_600
+        }, "Not found: FLAC, 9 of 12 tracks; searching again at 1794081600"
+    ),
+    (
+        job(1, .notFound) {
+            $0.attempt = 8
+            $0.reason = "nothing answered"
+        }, "Not found: nothing answered; Retry searches again"
+    ),
+    (job(1, .downloaded), "Copying to staging…"),
+    (
+        job(1, .downloaded) { $0.progress = progress(5, of: 14) },
+        "Copying to staging, 5 of 14 files"
+    ),
+])
+func aStateSaysHowFarItHasGot(job: DownloadJob, words: String) throws {
+    let row = try #require(
+        DownloadRow(job, machine: "Studio") { "at \(Int($0.timeIntervalSince1970))" })
+    #expect(row.state == words)
+}
+
+@Test func theSearchsQueryAndTheAttemptAreInTheStatesTooltip() throws {
+    let searching = job(1, .searching) {
+        $0.attempt = 2
+        $0.search = search
+    }
+    #expect(
+        DownloadRow.stateDetail(searching)
+            == "Searching Soulseek for \"made up artist made up album\"\nAttempt 2")
+    #expect(DownloadRow.stateDetail(job(1, .searching)) == nil)
+    #expect(DownloadRow.stateDetail(job(1, .downloading) { $0.attempt = 2 }) == nil)
+}
+
+@Test func theCopyIntoStagingHasAProgressBarOnceItStarts() throws {
+    #expect(try #require(DownloadRow(job(1, .downloaded), machine: "Studio")).progress == nil)
+    let copying = job(1, .downloaded) { $0.progress = progress(5, of: 14, bytes: 40) }
+    #expect(try #require(DownloadRow(copying, machine: "Studio")).progress == 0.4)
+}
+
 @Test func rowsAreListedBySectionThenNewestFirst() {
     let jobs = [
         job(1, .queued, created: 100), job(2, .staged, created: 100),
