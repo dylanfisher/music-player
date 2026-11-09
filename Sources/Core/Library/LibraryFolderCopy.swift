@@ -51,8 +51,6 @@ public func copyIntoLibraryFolder(_ source: String, libraryFolder: String)
     return destination
 }
 
-private func errorText(_ code: Int32) -> String { String(cString: strerror(code)) }
-
 /// Why a dropped file wasn't copied into the library folder.
 public enum CopyError: Error, Equatable, CustomStringConvertible {
     /// Its tags didn't read, so it has no place in the folder.

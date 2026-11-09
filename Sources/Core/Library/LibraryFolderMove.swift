@@ -143,7 +143,8 @@ package struct LibraryFolderMove: Sendable {
             } catch {
                 throw MoveRefusal.unreadable(source, "\(error)")
             }
-            let destination = try asListed(libraryFolderPath(for: tags, of: source))
+            let destination = try listedPath(
+                libraryFolderPath(for: tags, of: source), in: libraryFolder)
             let key = nfc(destination)
             if (pathExists(destination) && !replacing.contains(key)) || seen.contains(key) {
                 taken.append(destination)
@@ -172,31 +173,6 @@ package struct LibraryFolderMove: Sendable {
                 stagedPath: stagedPath, source: stagingRoot + "/" + stagedPath,
                 destination: shareRoot + "/" + destination, sizeBytes: step.sizeBytes ?? -1)
         }
-    }
-
-    /// `relative`, a path in the library folder, with each part that's there named as its
-    /// folder lists it. On a volume that ignores case, such as the NAS, a part the tags spell
-    /// in another case is the same file or folder, and the index and the move list know it by
-    /// the name it has.
-    private func asListed(_ relative: String) throws -> String {
-        let ignoresCase = pathconf(libraryFolder, _PC_CASE_SENSITIVE) == 0
-        var path = libraryFolder
-        var listing = true
-        for part in relative.split(separator: "/").map(String.init) {
-            if listing, ignoresCase {
-                let names = try FileManager.default.contentsOfDirectory(atPath: path)
-                if let listed = names.first(where: {
-                    $0.compare(part, options: .caseInsensitive) == .orderedSame
-                }) {
-                    path += "/" + listed
-                    listing = pathIsDirectory(path)
-                    continue
-                }
-                listing = false
-            }
-            path += "/" + part
-        }
-        return path
     }
 
     /// Renames `move`'s file unless it's already where it goes, as the file system says. With
@@ -236,28 +212,13 @@ package struct LibraryFolderMove: Sendable {
         try rename(move.source, to: move.destination)
     }
 
-    /// Renames `source` to `destination`, never over a file. A share that refuses
-    /// `RENAME_EXCL` gets an `lstat` and a plain rename: the app is the library folder's only
-    /// writer and runs one import at a time, so nothing of its own comes between them.
+    /// Renames `source` to `destination`, never over a file.
     private func rename(_ source: String, to destination: String) throws(MoveRefusal) {
-        var code = calls.renameExclusive(source, destination)
-        if code == ENOTSUP || code == EINVAL {
-            logger.notice(
-                "the volume refused RENAME_EXCL for \(destination); checking with lstat and renaming"
-            )
-            var info = stat()
-            if lstat(destination, &info) == 0 { throw .collisions([destination]) }
-            let missing = errno
-            guard missing == ENOENT else {
-                throw .failed(source, destination, errorText(missing))
-            }
-            code = calls.rename(source, destination)
-        }
-        switch code {
+        switch renameNeverOver(source, to: destination, calls) {
         case 0: return
         case EEXIST: throw .collisions([destination])
         case EXDEV: throw .otherVolume(staging: stagingRoot, library: libraryFolder)
-        default: throw .failed(source, destination, errorText(code))
+        case let code: throw .failed(source, destination, errorText(code))
         }
     }
 
@@ -268,16 +229,9 @@ package struct LibraryFolderMove: Sendable {
         }
     }
 
-    /// Refuses the folder `parent` unless the part of it that exists, its links followed, is
-    /// the library folder or inside it. The rest are names `libraryFolderPath` made, which hold
-    /// no `..`.
+    /// Refuses the folder `parent` unless it's in the library folder `library`.
     private func checkDestination(_ parent: String, _ library: String) throws(MoveRefusal) {
-        var existing = parent
-        while !pathExists(existing), existing != "/" {
-            existing = (existing as NSString).deletingLastPathComponent
-        }
-        guard let real = resolved(existing), real == library || isPath(real, under: library)
-        else { throw .outsideLibrary(parent) }
+        guard isFolder(parent, in: library) else { throw .outsideLibrary(parent) }
     }
 
     /// `path` relative to the share's mount point.
@@ -337,9 +291,68 @@ enum MoveRefusal: Error, Equatable, CustomStringConvertible {
     }
 }
 
-private func nfc(_ path: String) -> String { path.precomposedStringWithCanonicalMapping }
+/// Held around the check and the rename where a share refuses `RENAME_EXCL`, so the app's two
+/// writers of the library folder, Approve and Keep Files Organized, can't both find a name free.
+private let fallbackRenames = NSLock()
 
-private func pathIsDirectory(_ path: String) -> Bool {
+/// Renames `source` to `destination` with `calls`, never over a file: 0, else the `errno`, with
+/// `EEXIST` for a file in the way. A share that refuses `RENAME_EXCL` (`ENOTSUP` or `EINVAL`)
+/// gets an `lstat` and a plain rename under a lock: the app is the library folder's only
+/// writer, so nothing of its own comes between them (ADR 0147, ADR 0160).
+func renameNeverOver(_ source: String, to destination: String, _ calls: MoveCalls) -> Int32 {
+    let code = calls.renameExclusive(source, destination)
+    guard code == ENOTSUP || code == EINVAL else { return code }
+    logger.notice(
+        "the volume refused RENAME_EXCL for \(destination); checking with lstat and renaming")
+    return fallbackRenames.withLock {
+        var info = stat()
+        if lstat(destination, &info) == 0 { return EEXIST }
+        let missing = errno
+        guard missing == ENOENT else { return missing }
+        return calls.rename(source, destination)
+    }
+}
+
+/// `relative`, a path in `libraryFolder`, with each part that's there named as its folder
+/// lists it. On a volume that ignores case, such as the NAS, a part the tags spell in another
+/// case is the same file or folder, and the index and the move list know it by the name it
+/// has.
+func listedPath(_ relative: String, in libraryFolder: String) throws -> String {
+    let ignoresCase = pathconf(libraryFolder, _PC_CASE_SENSITIVE) == 0
+    var path = libraryFolder
+    var listing = true
+    for part in relative.split(separator: "/").map(String.init) {
+        if listing, ignoresCase {
+            let names = try FileManager.default.contentsOfDirectory(atPath: path)
+            if let listed = names.first(where: {
+                $0.compare(part, options: .caseInsensitive) == .orderedSame
+            }) {
+                path += "/" + listed
+                listing = pathIsDirectory(path)
+                continue
+            }
+            listing = false
+        }
+        path += "/" + part
+    }
+    return path
+}
+
+/// Whether the part of the folder `folder` that exists, its links followed, is `library` (the
+/// library folder, resolved) or inside it. The rest are names `libraryFolderPath` made, which
+/// hold no `..`.
+func isFolder(_ folder: String, in library: String) -> Bool {
+    var existing = folder
+    while !pathExists(existing), existing != "/" {
+        existing = (existing as NSString).deletingLastPathComponent
+    }
+    guard let real = resolved(existing) else { return false }
+    return real == library || isPath(real, under: library)
+}
+
+func nfc(_ path: String) -> String { path.precomposedStringWithCanonicalMapping }
+
+func pathIsDirectory(_ path: String) -> Bool {
     var info = stat()
     return lstat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR
 }
@@ -350,16 +363,16 @@ func pathExists(_ path: String) -> Bool {
     return lstat(path, &info) == 0
 }
 
-private func sizeOf(_ path: String) -> Int? {
+func sizeOf(_ path: String) -> Int? {
     var info = stat()
     return lstat(path, &info) == 0 ? Int(info.st_size) : nil
 }
 
 /// `path` with every symbolic link followed and `.` and `..` gone; nil when it doesn't exist.
-private func resolved(_ path: String) -> String? {
+func resolved(_ path: String) -> String? {
     guard let real = realpath(path, nil) else { return nil }
     defer { free(real) }
     return String(cString: real)
 }
 
-private func errorText(_ code: Int32) -> String { String(cString: strerror(code)) }
+func errorText(_ code: Int32) -> String { String(cString: strerror(code)) }
