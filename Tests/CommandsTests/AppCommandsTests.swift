@@ -33,7 +33,8 @@ import Testing
     #expect(
         titles(AppMenus.trackMenu) == [
             "Play Next", "Add to Playback Queue", "Play Now", "-", "Show Album", "Show Artist",
-            "Show in All Music", "Open Discogs Release", "-", "Like", "Dislike", "-", "Rating ▸ 6",
+            "Show in All Music", "Open Discogs Release", "Get Discogs Artwork…", "-", "Like",
+            "Dislike", "-", "Rating ▸ 6",
             "-", "Get Info", "Show Spectrum",
             "Reveal in Finder", "-",
             "Remove…", "-", "New Playlist with Selected Tracks", "Add to Playlist ▸",
