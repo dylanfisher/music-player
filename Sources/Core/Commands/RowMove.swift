@@ -4,10 +4,11 @@ import Foundation
 public enum RowMove: Sendable, Equatable {
     case down, up, tenDown, tenUp, first, last, pageDown, pageUp
 
-    /// The selection commands' moves; the extending ones are `.down` and `.up` with `extending`.
+    /// The selection commands' moves, each with whether it extends the selection.
     public static let commands: [CommandID: (move: RowMove, extending: Bool)] = [
         .selectNext: (.down, false), .selectPrevious: (.up, false), .extendDown: (.down, true),
         .extendUp: (.up, true), .tenRowsDown: (.tenDown, false), .tenRowsUp: (.tenUp, false),
+        .extendTenRowsDown: (.tenDown, true), .extendTenRowsUp: (.tenUp, true),
         .selectFirst: (.first, false), .selectLast: (.last, false),
         .pageDown: (.pageDown, false), .pageUp: (.pageUp, false),
     ]

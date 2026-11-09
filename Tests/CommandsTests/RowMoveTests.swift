@@ -1,4 +1,5 @@
 import Foundation
+import KeyChord
 import Testing
 
 @testable import Commands
@@ -48,4 +49,17 @@ private func at(_ row: Int) -> ListSelection {
     // A command with no handler is off.
     #expect(dispatcher.key([.init("k", .command)]) == .refused)
     #expect(ran == [.playPause])
+}
+
+@MainActor @Test func shiftWithOptionArrowsExtendOverTheRowsTheyJump() throws {
+    let bindings = try KeyBindings(AppCommands.all(), overrides: [:], rules: ChordRules())
+    let down = try #require(bindings.registry.command(for: KeyChord(.down, [.option, .shift])))
+    let up = try #require(bindings.registry.command(for: KeyChord(.up, [.option, .shift])))
+    let jumpDown = try #require(RowMove.commands[down])
+    let jumpUp = try #require(RowMove.commands[up])
+    let jumped = at(2).moved(
+        jumpDown.move, extending: jumpDown.extending, rowCount: 20, pageRows: 3)
+    #expect(jumped == ListSelection(rows: IndexSet(2...12), cursor: 12, anchor: 2))
+    let back = jumped.moved(jumpUp.move, extending: jumpUp.extending, rowCount: 20, pageRows: 3)
+    #expect(back == ListSelection(rows: [2], cursor: 2, anchor: 2))
 }

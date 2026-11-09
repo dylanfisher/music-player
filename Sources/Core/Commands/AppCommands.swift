@@ -15,6 +15,8 @@ extension CommandID {
     public static let extendUp = CommandID("selection.extendUp")
     public static let tenRowsDown = CommandID("selection.tenRowsDown")
     public static let tenRowsUp = CommandID("selection.tenRowsUp")
+    public static let extendTenRowsDown = CommandID("selection.extendTenRowsDown")
+    public static let extendTenRowsUp = CommandID("selection.extendTenRowsUp")
     public static let selectFirst = CommandID("selection.first")
     public static let selectLast = CommandID("selection.last")
     public static let pageDown = CommandID("selection.pageDown")
@@ -200,6 +202,9 @@ public enum AppCommands {
                 .tenRowsDown, "Move Down 10 Rows",
                 [.init(.down, opt), .init(.down, [ctrl, shift])]),
             Command(.tenRowsUp, "Move Up 10 Rows", [.init(.up, opt), .init(.up, [ctrl, shift])]),
+            Command(
+                .extendTenRowsDown, "Extend Selection Down 10 Rows", [.init(.down, [opt, shift])]),
+            Command(.extendTenRowsUp, "Extend Selection Up 10 Rows", [.init(.up, [opt, shift])]),
             Command(.selectFirst, "Select First Row", [.init(.home), .init(.up, [opt, cmd])]),
             Command(.selectLast, "Select Last Row", [.init(.end), .init(.down, [opt, cmd])]),
             Command(.pageDown, "Page Down", [.init(.pageDown)]),

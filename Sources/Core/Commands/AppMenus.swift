@@ -148,7 +148,9 @@ public enum AppMenus {
                         [
                             .command(.selectNext), .command(.selectPrevious),
                             .command(.extendDown), .command(.extendUp), .command(.tenRowsDown),
-                            .command(.tenRowsUp), .command(.selectFirst), .command(.selectLast),
+                            .command(.tenRowsUp), .command(.extendTenRowsDown),
+                            .command(.extendTenRowsUp), .command(.selectFirst),
+                            .command(.selectLast),
                             .command(.pageDown), .command(.pageUp),
                         ], showsChords: false),
                     .separator, .command(.find), .separator, .command(.removeFromQueue),
