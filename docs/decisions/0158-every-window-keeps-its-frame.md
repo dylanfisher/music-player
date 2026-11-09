@@ -5,6 +5,8 @@
 - **See also:** [0055](0055-customizable-toolbar.md) (window layout in `state.json`, not user
   defaults), [0136](0136-asking-before-a-rescan-and-undoing-a-tagger-write.md) (the tagger's
   sheets' sizes)
+- **Amended by:** [0160](0160-get-info-opens-as-it-stays.md): Get Info joins, as "Get Info
+  Window", and `tagEditor.place` goes.
 
 ## Context
 

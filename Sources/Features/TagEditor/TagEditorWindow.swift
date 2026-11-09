@@ -7,10 +7,12 @@ import Metadata
 import Settings
 import TagWriter
 import UniformTypeIdentifiers
+import WindowPlacement
 
 /// An info window: tabs of fields as `TagEditorTab` lays them out, the art with Replace and
-/// Remove, the file's format, and Undo Tag Edit, Cancel and Save. It opens at once, before its files are read,
-/// at the size it keeps, saying so, and fills in the fields once `load` hands it the tracks.
+/// Remove, the file's format, and Undo Tag Edit, Cancel and Save. It opens at once, before its
+/// files are read, laid out as it stays, saying so, and fills in the fields once `load` hands
+/// it the tracks. It resizes, and keeps its frame (ADR 0160).
 /// Fields where the tracks differ show "Mixed" until typed in, and a field typed differently
 /// from what it showed has a dot by its label. It edits a `TagEditorModel` and hands back the
 /// checked edit. Several can be open at once.
@@ -27,8 +29,6 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     var saved: (TagEdit) -> Void = { _ in }
     /// Called once when the window closes, by Cancel, its close button or `close()`.
     var closed: () -> Void = {}
-    /// Called with the window's top left corner when the user moves it.
-    var moved: (NSPoint) -> Void = { _ in }
     /// Runs one of the registry's tag commands as its menu item does, for the window's Undo
     /// Tag Edit and art buttons.
     var run: (CommandID) -> Void = { _ in }
@@ -46,7 +46,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private var labels: [TagEditField: [NSTextField]] = [:]
     private let compilationBox = NSButton(
         checkboxWithTitle: TagEditField.compilation.title, target: nil, action: nil)
-    private let tabs = NSTabView()
+    let tabs = NSTabView()
     private let artView = NSImageView()
     private let largeArtView = NSImageView()
     private let artNote = NSTextField(labelWithString: "")
@@ -86,42 +86,42 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
     private var isClosed = false
-    /// The top left corner the window was last put at or moved to, so a resize that keeps the
-    /// corner isn't reported as a move.
-    private var placedAt: NSPoint?
 
-    static let width = 660.0
     static let artPoints = 120.0
     static let largeArtPoints = 300.0
-    /// The tab view's height, which the tallest tab fills.
-    private static let tabsHeight = 440.0
+    /// The tab view's least height, which the tallest tab, Info, fits in. The window takes its
+    /// size from the content before a tab's view is in the tab view, which sizes its views by
+    /// their frames, so a tab taller than this would make the window grow as it shows.
+    private static let tabsHeight = 470.0
     private static let numberWidth = 44.0
     private static let shortWidth = 80.0
     /// The tab last chosen, which the next window opens on.
     private static var lastTab = TagEditorTab.info
-    /// How far from the main window's top left corner a window opens with no place saved.
-    private static let parentOffset = 40.0
-    /// How many steps down and to the right a window goes, at most, past windows already open
-    /// where it would open.
-    private static let cascadeSteps = 20
+    /// The name its frame is kept by (ADR 0158); its title is its files'.
+    static let frameName = "Get Info Window"
 
     init(paths: [String]) {
         precondition(!paths.isEmpty, "Get Info opens on at least one track")
         self.paths = paths
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 120),
-            styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 120),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
+            defer: false)
         super.init()
         askExtraKey = { [weak self] in self?.askForExtraKey($0) }
         window.isReleasedWhenClosed = false
         window.title = heading
         window.delegate = self
-        // The whole layout is made now, at the size it keeps, so nothing moves when the
-        // fields fill in.
+        // The whole layout is made now, every tab there from the start, so nothing moves
+        // when the fields fill in.
         window.contentView = makeContent()
-        if let content = window.contentView { window.setContentSize(content.fittingSize) }
         build(Self.lastTab)
         tabs.selectTabViewItem(withIdentifier: Self.lastTab.rawValue)
+        // It opens the first time at its least size, which fits every tab's label.
+        if let content = window.contentView {
+            window.contentMinSize = content.fittingSize
+            window.setContentSize(content.fittingSize)
+        }
         showEditable()
     }
 
@@ -132,36 +132,21 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     public var isLoaded: Bool { model != nil }
 
-    /// The window's top left corner, as `moved` reports it.
-    var corner: NSPoint { NSPoint(x: window.frame.minX, y: window.frame.maxY) }
-
-    /// Shows the window in front. One not yet on screen opens with its top left corner at
-    /// `place`, where the user last moved an info window, or else near `parent`'s top left; a
-    /// step down and to the right for each window in `taken` already at that corner.
-    func show(beside parent: NSWindow, at place: NSPoint?, avoiding taken: [NSPoint]) {
+    /// Shows the window in front. One not yet on screen opens at the frame the info windows
+    /// keep (ADR 0158), or, while `last` is open, cascaded from it at its size. It's laid out
+    /// before it shows, so it shows at its final layout.
+    func show(after last: NSWindow?) {
         if !window.isVisible {
-            let start = Self.start(
-                place: place, parent: parent.frame, screens: NSScreen.screens.map(\.frame))
-            var next = window.cascadeTopLeft(from: start)
-            for _ in 0..<Self.cascadeSteps where taken.contains(corner) {
-                next = window.cascadeTopLeft(from: next)
+            if let last {
+                window.setContentSize(last.contentRect(forFrameRect: last.frame).size)
+                let corner = NSPoint(x: last.frame.minX, y: last.frame.maxY)
+                window.setFrameTopLeftPoint(window.cascadeTopLeft(from: corner))
+            } else {
+                window.keepsFrame(as: Self.frameName)
             }
-            placedAt = corner
+            window.layoutIfNeeded()
         }
         window.makeKeyAndOrderFront(nil)
-    }
-
-    /// `place` while it's on one of `screens`, which a screen unplugged since may not be;
-    /// otherwise a little inside `parent`'s top left corner.
-    static func start(place: NSPoint?, parent: NSRect, screens: [NSRect]) -> NSPoint {
-        if let place,
-            screens.contains(where: {
-                ($0.minX..<$0.maxX).contains(place.x) && $0.minY < place.y && place.y <= $0.maxY
-            })
-        {
-            return place
-        }
-        return NSPoint(x: parent.minX + parentOffset, y: parent.maxY - parentOffset)
     }
 
     /// Shows the fields for `model`. A second call, after the files were read again, keeps what
@@ -272,13 +257,6 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     public func windowDidBecomeKey(_ notification: Notification) { commandsChanged() }
 
-    /// Placing the window happens before it shows, so a move before then is the app's own.
-    public func windowDidMove(_ notification: Notification) {
-        guard window.isVisible, corner != placedAt else { return }
-        placedAt = corner
-        moved(corner)
-    }
-
     private func windowClosed() {
         guard !isClosed else { return }
         isClosed = true
@@ -308,7 +286,12 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         // After the tabs are added, since adding the first selects it, which isn't a choice.
         tabs.delegate = self
         tabs.translatesAutoresizingMaskIntoConstraints = false
-        tabs.heightAnchor.constraint(equalToConstant: Self.tabsHeight).isActive = true
+        // Every tab's label fits at the least width, so the tab bar never squeezes them.
+        tabs.widthAnchor.constraint(greaterThanOrEqualToConstant: tabs.minimumSize.width)
+            .isActive = true
+        tabs.heightAnchor.constraint(greaterThanOrEqualToConstant: Self.tabsHeight).isActive = true
+        // The tabs take the height the window is given past its least.
+        tabs.setContentHuggingPriority(.init(1), for: .vertical)
 
         spinner.style = .spinning
         spinner.controlSize = .small
@@ -334,6 +317,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         collapseLabel.isHidden = true
         let stack = NSStackView(views: [heading, tabs, collapseLabel, buttons])
         stack.orientation = .vertical
+        // The room a resize gives goes to the tabs, not between the rows.
+        stack.distribution = .fill
         stack.alignment = .leading
         stack.spacing = 12
         stack.edgeInsets = NSEdgeInsets(
@@ -345,7 +330,6 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
                 equalTo: stack.widthAnchor, constant: -2 * DialogMargin.value
             ).isActive = true
         }
-        stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
         return stack
     }
 

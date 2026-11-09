@@ -25,7 +25,7 @@ private final class Seen: @unchecked Sendable {
     private var _written: [[String]] = []
     private var _work: [String] = []
     private var _reads: [[String]] = []
-    private var _places: [NSPoint?] = []
+    private var _cascades: [String?] = []
     private var _edits: [[TagEdit]] = []
     private var _origins: [TagEditOrigin] = []
 
@@ -36,17 +36,17 @@ private final class Seen: @unchecked Sendable {
     /// The writes and undos, in the order they ran.
     var work: [String] { lock.withLock { _work } }
     var reads: [[String]] { lock.withLock { _reads } }
-    /// Where each window was asked to open.
-    var places: [NSPoint?] { lock.withLock { _places } }
+    /// The title of the window each one was asked to cascade from, nil for none.
+    var cascades: [String?] { lock.withLock { _cascades } }
     /// Each write's edits, a file's each.
     var edits: [[TagEdit]] { lock.withLock { _edits } }
     /// Each write's origin.
     var origins: [TagEditOrigin] { lock.withLock { _origins } }
 
-    func present(_ paths: [String], at place: NSPoint?) {
+    func present(_ paths: [String], after last: String?) {
         lock.withLock {
             _presented.append(paths)
-            _places.append(place)
+            _cascades.append(last)
         }
     }
     func alert(_ message: String) { lock.withLock { _alerts.append(message) } }
@@ -103,7 +103,7 @@ private func makeEditing(
                 return undo()
             },
             newestEdit: newestEdit,
-            present: { editor, _, place, _ in seen.present(editor.paths, at: place) },
+            present: { editor, last in seen.present(editor.paths, after: last?.title) },
             confirm: { message, _, answer in
                 seen.confirm(message.message)
                 answer(confirm)
@@ -309,21 +309,18 @@ private final class Titles: @unchecked Sendable {
     #expect(!none.isOpen, "nothing to edit, so the window closes")
 }
 
-/// A window opens where the user last moved one, and a move is passed on to be saved.
+/// A window opened while another is open cascades from the last one open; with none open it
+/// opens at the frame the info windows keep.
 @MainActor
-@Test func aWindowOpensWhereTheLastOneWasMoved() throws {
+@Test func aWindowCascadesFromTheLastOneOpen() throws {
     let seen = Seen()
     let editing = makeEditing(seen)
-    var saved: [NSPoint] = []
-    editing.placeChanged = { saved.append($0) }
     editing.open(["/a.flac"], over: window)
-    #expect(seen.places == [nil], "nothing saved yet")
-    let moved = NSPoint(x: 300, y: 700)
-    try #require(editor(editing, ["/a.flac"])).moved(moved)
-    #expect(editing.place == moved)
-    #expect(saved == [moved])
+    #expect(seen.cascades == [nil])
+    try #require(editor(editing, ["/a.flac"])).window.orderFront(nil)
     editing.open(["/b.flac"], over: window)
-    #expect(seen.places == [nil, moved])
+    #expect(seen.cascades.last == "a.flac")
+    for editor in editing.editors { editor.close() }
 }
 
 /// A save tells the status bar how far it's got, file by file, and that it's done (ADR 0108).

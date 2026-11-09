@@ -210,7 +210,7 @@ let package = Package(
             name: "TagEditor",
             dependencies: [
                 "Artwork", "Commands", "Discogs", "DisplayText", "Library", "Log", "Metadata",
-                "Settings", "TagWriter",
+                "Settings", "TagWriter", "WindowPlacement",
             ],
             path: "Sources/Features/TagEditor",
             swiftSettings: strictSwift
@@ -555,6 +555,7 @@ let package = Package(
             name: "TagEditorTests",
             dependencies: [
                 "Commands", "Discogs", "Fixtures", "Metadata", "TagEditor", "TagWriter",
+                "WindowPlacement",
             ],
             swiftSettings: strictSwift
         ),

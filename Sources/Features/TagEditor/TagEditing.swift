@@ -33,11 +33,6 @@ public final class TagEditing {
     /// launch and after every write and undo finishes, from any window. Until the first read,
     /// and after a read that failed, it's true: Undo Tag Edit stays on and a click shows why.
     public private(set) var canUndo = true
-    /// The top left corner the user last moved an info window to, where the next one opens;
-    /// nil opens it near the main window's top left.
-    public var place: NSPoint?
-    /// Called when the user moves an info window, with its new top left corner, to save it.
-    public var placeChanged: (NSPoint) -> Void = { _ in }
     /// Reads a release from the local catalog for an info window's Discogs tab: nil when the
     /// catalog doesn't have it, and `CatalogError.missing` when there's no catalog.
     public var release: @MainActor (Int) async throws -> ReleaseDetail? = { _ in nil }
@@ -61,9 +56,9 @@ public final class TagEditing {
         var undo: @Sendable (JournaledEdit?) -> TagWriteReport
         /// The newest edit, nil with none to undo.
         var newestEdit: @Sendable () throws(TagWriteError) -> JournaledEdit?
-        /// Shows an info window in front, beside the main window: at the place given, past the
-        /// other info windows' top left corners.
-        var present: @MainActor (TagEditorWindow, NSWindow, NSPoint?, [NSPoint]) -> Void
+        /// Shows an info window in front: at the frame info windows keep, or cascaded from the
+        /// last other one open.
+        var present: @MainActor (TagEditorWindow, NSWindow?) -> Void
         /// Asks before a batch write, then calls back with the answer.
         var confirm:
             @MainActor (Confirmation, NSWindow, @escaping @MainActor (Bool) -> Void) -> Void
@@ -122,7 +117,7 @@ public final class TagEditing {
             write: { writer.write($0, origin: $1, progress: $2) },
             undo: { writer.undoLast(ifNewestIs: $0) },
             newestEdit: { () throws(TagWriteError) in try writer.newestEdit() },
-            present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask,
+            present: { $0.show(after: $1) }, confirm: ask,
             alert: showProblems)
         // A write in place a crash cut short is finished before anything reads the file
         // again; the writer logs what it found (ADR 0107).
@@ -192,7 +187,7 @@ public final class TagEditing {
     public func open(_ paths: [String], over window: NSWindow) {
         guard !paths.isEmpty else { return }
         if let open = editors.first(where: { $0.paths == paths }) {
-            present(open, over: window)
+            present(open)
             return
         }
         let editor = TagEditorWindow(paths: paths)
@@ -216,12 +211,8 @@ public final class TagEditing {
             self.reads.removeValue(forKey: ObjectIdentifier(editor))?.stop()
             self.refreshCommands()
         }
-        editor.moved = { [weak self] corner in
-            self?.place = corner
-            self?.placeChanged(corner)
-        }
         editors.append(editor)
-        present(editor, over: window)
+        present(editor)
         refreshCommands()
         read(into: editor, over: window)
     }
@@ -232,9 +223,9 @@ public final class TagEditing {
         for editor in editors { editor.refreshCommands() }
     }
 
-    private func present(_ editor: TagEditorWindow, over window: NSWindow) {
-        let taken = editors.filter { $0 !== editor && $0.window.isVisible }.map(\.corner)
-        effects.present(editor, window, place, taken)
+    private func present(_ editor: TagEditorWindow) {
+        let last = editors.last { $0 !== editor && $0.window.isVisible }
+        effects.present(editor, last?.window)
     }
 
     /// Reads the window's files and shows them in it; a window that already shows them keeps
