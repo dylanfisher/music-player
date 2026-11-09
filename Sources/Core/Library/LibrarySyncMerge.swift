@@ -359,15 +359,13 @@ extension LibraryIndex {
     /// the count `kept` shows stays theirs added; the later of the two sets' clocks goes with
     /// it.
     private func absorbPlayCount(_ gone: Int64, into kept: Int64) throws {
-        let offset = try statement("SELECT plays FROM \(playCountOffsetsTable) WHERE path_id = ?")
+        let offset = try statement(playCountOffsetSQL)
         guard let goneOffset = try offset.map(gone, row: { try $0.int(0) }).first else {
             return try deleteStamp(.playCount, gone)
         }
         let keptOffset = try offset.map(kept, row: { try $0.int(0) }).first ?? 0
-        try statement("DELETE FROM \(playCountOffsetsTable) WHERE path_id = ?").run(gone)
-        try statement(
-            "INSERT OR REPLACE INTO \(playCountOffsetsTable) (path_id, plays) VALUES (?, ?)"
-        ).run(kept, keptOffset + goneOffset)
+        try statement(deletePlayCountOffsetSQL).run(gone)
+        try statement(setPlayCountOffsetSQL).run(kept, keptOffset + goneOffset)
         if let goneStamp = try stamp(.playCount, gone),
             try stamp(.playCount, kept).map({ goneStamp > $0 }) ?? true
         {

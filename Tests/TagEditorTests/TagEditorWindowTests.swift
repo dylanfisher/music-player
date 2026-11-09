@@ -30,7 +30,7 @@ private func track(_ path: String, title: String? = nil, release: String? = nil)
                 .sorted { ($0.minY, $0.minX) < ($1.minY, $1.minX) }
         }
         let window = editor.window.frame
-        let tabs = editor.tabs.frame; print("PROBE", (editor.window.contentView as! NSStackView).arrangedSubviews.map { ($0.className, $0.frame) }, editor.window.contentMinSize, editor.window.frame, editor.window.contentView!.frame, editor.window.contentLayoutRect)
+        let tabs = editor.tabs.frame
         let fields = frames()
         #expect(!fields.isEmpty, "the fields are there before the files are read")
 

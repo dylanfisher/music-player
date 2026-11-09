@@ -12,6 +12,11 @@ let deleteDislikedSQL = "DELETE FROM \(dislikedTable) WHERE path_id = ?"
 let isDislikedSQL = "SELECT 1 FROM \(dislikedTable) WHERE path_id = ?"
 let setRatingSQL = "INSERT OR REPLACE INTO ratings (path_id, rating) VALUES (?, ?)"
 let deleteRatingSQL = "DELETE FROM ratings WHERE path_id = ?"
+/// A path's hand-set play count offset (ADR 0161).
+let playCountOffsetSQL = "SELECT plays FROM \(playCountOffsetsTable) WHERE path_id = ?"
+let setPlayCountOffsetSQL =
+    "INSERT OR REPLACE INTO \(playCountOffsetsTable) (path_id, plays) VALUES (?, ?)"
+let deletePlayCountOffsetSQL = "DELETE FROM \(playCountOffsetsTable) WHERE path_id = ?"
 /// Adds a track to a playlist, unless it's there already.
 let insertEntrySQL =
     "INSERT OR IGNORE INTO playlist_entries (playlist_id, path_id, position) VALUES (?, ?, ?)"
@@ -307,17 +312,12 @@ extension LibraryIndex {
     /// Gives the path `id` the hand-set offset `offset`, changing its play count by what it
     /// changes. Call inside a transaction.
     func setPlayCountOffset(_ offset: Int, of id: Int64) throws {
-        let old =
-            try statement("SELECT plays FROM \(playCountOffsetsTable) WHERE path_id = ?").map(id) {
-                try $0.int(0)
-            }.first ?? 0
+        let old = try statement(playCountOffsetSQL).map(id) { try $0.int(0) }.first ?? 0
         try statement(addPlaysSQL).run(id, offset - old, 0, nil as Double?)
         if offset == 0 {
-            try statement("DELETE FROM \(playCountOffsetsTable) WHERE path_id = ?").run(id)
+            try statement(deletePlayCountOffsetSQL).run(id)
         } else {
-            try statement(
-                "INSERT OR REPLACE INTO \(playCountOffsetsTable) (path_id, plays) VALUES (?, ?)"
-            ).run(id, offset)
+            try statement(setPlayCountOffsetSQL).run(id, offset)
         }
     }
 

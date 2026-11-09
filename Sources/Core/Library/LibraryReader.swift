@@ -223,7 +223,8 @@ public actor LibraryReader {
     /// Sets the play count of the tracks at `paths` by hand; a path the index has no track
     /// for is left out.
     public func setPlayCount(_ count: Int, paths: [String]) throws {
-        try index.setPlayCount(count, trackIDs: try index.trackIDs(atPaths: paths).compactMap { $0 })
+        let ids = try index.trackIDs(atPaths: paths).compactMap { $0 }
+        try index.setPlayCount(count, trackIDs: ids)
     }
 
     public func toggle(_ opinion: TrackOpinion, trackIDs: [Int64]) throws {
