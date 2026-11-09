@@ -66,9 +66,10 @@ extension LibraryIndex {
         let libraryTracks = try trackCount()
         var undated = 0
         if span == nil {
-            let counted = try statement("SELECT ifnull(sum(play_count), 0) FROM plays").map {
-                try $0.int(0)
-            }[0]
+            // Per row, as the table shows a count set below plays yet to arrive (ADR 0162).
+            let counted = try statement(
+                "SELECT ifnull(sum(max(0, play_count)), 0) FROM plays"
+            ).map { try $0.int(0) }[0]
             undated = max(0, counted - paths.reduce(0) { $0 + $1.plays })
         }
         return PeriodScan(

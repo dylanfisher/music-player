@@ -270,6 +270,22 @@ private func scan(
     #expect(again.plays == 5)
 }
 
+/// A count set below the plays this Mac has yet to read counts as none among the undated
+/// plays, as the table shows it, not as plays taken from another track's (ADR 0162).
+@Test func aCountBelowZeroAddsNoUndatedPlays() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    try index.database.execute(
+        """
+        INSERT INTO plays (path_id, play_count, skip_count) VALUES
+            (\(rows[0].id), 4, 0), (\(rows[1].id), -2, 0)
+        """)
+    let scan = try index.periodScan(nil, groupByAlbumArtist: false, bucketSeconds: 86_400)
+    #expect(scan.undatedPlays == 4)
+}
+
 @Test func eachImportsLastPlayIsOneDatedPlayAndTheRestStayUndated() async throws {
     let library = try TestLibrary()
     _ = try library.scan()
