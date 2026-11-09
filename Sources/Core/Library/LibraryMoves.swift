@@ -213,25 +213,21 @@ struct MovablePath {
     var title: String?
 }
 
-/// The gone and free paths that match one to one: alone in sharing their audio facts, or,
-/// where several share them, alone in sharing their path but for the extension (a file
-/// converted in place), and of those left, alone in sharing their title. In the gone paths' ID
-/// order.
+/// The gone and free paths that match one to one: sharing their audio facts, and of those,
+/// alone in sharing their path but for the extension (a file converted in place), then, of
+/// those left, alone in sharing a title. Audio facts alone never match: lengths repeat across a
+/// large library, and a lost track's stats on another song are worse than stats waiting in
+/// Lost Stats (ADR 0154). In the gone paths' ID order.
 func movePairs(gone: [MovablePath], free: [MovablePath]) -> [(MovablePath, MovablePath)] {
     let goneByAudio = Dictionary(grouping: gone, by: \.audio)
     var pairs: [(MovablePath, MovablePath)] = []
     for (audio, news) in Dictionary(grouping: free, by: \.audio) {
         guard let olds = goneByAudio[audio] else { continue }
-        if olds.count == 1, news.count == 1 {
-            pairs.append((olds[0], news[0]))
-            continue
-        }
         let byStem = uniquePairs(olds, news, by: { withoutExtension($0.path) })
         pairs += byStem
         let paired = Set(byStem.flatMap { [$0.0.id, $0.1.id] })
-        pairs += uniquePairs(
-            olds.filter { !paired.contains($0.id) }, news.filter { !paired.contains($0.id) },
-            by: \.title)
+        let titled = { (path: MovablePath) in !paired.contains(path.id) && path.title != nil }
+        pairs += uniquePairs(olds.filter(titled), news.filter(titled), by: \.title)
     }
     return pairs.sorted { $0.0.id < $1.0.id }
 }

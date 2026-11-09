@@ -5,6 +5,8 @@
 - **Amends:** [0022](0022-stable-track-identity-and-play-timeline.md)
 - **Amended:** 2026-11-07 (lossless codecs match each other; a move list is a second source of
   moves)
+- **Amended by:** [0154](0154-a-move-needs-more-than-a-length.md): audio facts alone never
+  match; a move also needs the same path but for the extension, or the same title.
 
 ## Context
 
@@ -41,13 +43,13 @@ machine.
   length in frames and title (in NFC), set by each read that succeeds, because a gone file
   can't be read again. A path a play created without a read has none of them and is never a
   candidate. Only a scan whose walk finished, and that read or removed something, matches.
-- **Matching:** a gone path and a stat-less track match when codec, sample rate and length in
-  frames are equal and no other gone path or stat-less track shares them. FLAC, ALAC and PCM
+- **Matching:** a gone path and a stat-less track are candidates when codec, sample rate and
+  length in frames are equal. Alone in sharing those is no longer enough to match (ADR 0154). FLAC, ALAC and PCM
   (WAV, AIFF) count as one codec (amended 2026-11-07): converting between lossless codecs keeps
   every frame, so an ALAC `.m4a` converted to FLAC keeps its stats. A lossy codec only matches
-  itself. Where several share those, a gone and a new path that are alone in being the same path
+  itself. Of the candidates, a gone and a new path that are alone in being the same path
   but for the extension match (a file converted in place), and then, of those left, a gone and a new path
-  that are alone in also sharing a title (no title on both counts as the same). Anything
+  that are alone in also sharing a title (no title on either side never matches). Anything
   else isn't guessed.
 - **Lost Stats**, a library health check (phase 19), lists every gone path with stats that no
   scan matched, and as its tracks every track without stats whose codec, rate and length

@@ -257,11 +257,11 @@ private func index(under root: String, names: [String] = ["a.flac", "Caf\u{e9}/b
 
 @Test func aMoveOntoAPathWithAnImportCountOfNothingSucceeds() throws {
     let index = try craftedIndex([])
-    try index.store([Crafted(path: "/M/a.flac", seconds: 77).scanned])
+    try index.store([Crafted(path: "/M/a.flac", title: "Song", seconds: 77).scanned])
     try index.recordPlay("/M/a.flac", at: 1)
     let id = try #require(try index.track(path: "/M/a.flac")).id
     try index.remove([id])
-    try index.store([Crafted(path: "/M/b.flac", seconds: 77).scanned])
+    try index.store([Crafted(path: "/M/b.flac", title: "Song", seconds: 77).scanned])
     let new = try #require(try index.track(path: "/M/b.flac")).id
     try index.database.execute(
         "INSERT INTO \(importedPlaysTable) (player, path_id, play_count, skip_count) VALUES ('itunes', \(new), 0, 0)"

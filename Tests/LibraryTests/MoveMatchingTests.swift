@@ -83,23 +83,38 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     return id
 }
 
-@Test func aMoveWithARetagMatchesOnItsAudio() throws {
+/// A file renamed and retitled at once shares only its audio with its old path, which other
+/// songs share too, so it waits in Lost Stats rather than move (ADR 0154).
+@Test func aMoveWithARetagWaitsInLostStats() throws {
     let index = try craftedIndex([])
     let old = try gone(Crafted(path: "/M/a.flac", title: "Old Title", seconds: 123), in: index)
     try index.store([Crafted(path: "/M/b.flac", title: "New Title", seconds: 123).scanned])
-    let moves = try index.matchMoves()
-    #expect(moves == [TrackMove(from: "/M/a.flac", to: "/M/b.flac")])
-    let after = try #require(try index.track(path: "/M/b.flac"))
-    #expect(after.id == old)
-    #expect(after.title == "New Title")
-    #expect(after.playCount == 1)
+    #expect(try index.matchMoves().isEmpty)
+    #expect(
+        try index.lostFiles().map { [$0.id] + $0.candidates }
+            == [[old] + (try ids(index, ["/M/b.flac"]))])
+    #expect(try index.track(path: "/M/b.flac")?.playCount == 0)
 }
 
-@Test func anOlderTrackAloneInItsLengthTakesTheStats() throws {
-    let index = try craftedIndex([Crafted(path: "/M/old.flac", seconds: 50).scanned])
-    let id = try gone(Crafted(path: "/M/a.flac", seconds: 50), in: index)
+/// On 8 Nov a scan that missed half the library gave 624 lost tracks' plays to other songs
+/// that only shared their length (ADR 0154): a track alone in its length with another title
+/// never takes the stats.
+@Test func aTrackAloneInItsLengthWithAnotherTitleDoesntTakeTheStats() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/N/other.mp3", title: "Way Back When", seconds: 50).scanned
+    ])
+    _ = try gone(Crafted(path: "/M/a.mp3", title: "Carrier", seconds: 50), in: index)
+    #expect(try index.matchMoves().isEmpty)
+    #expect(try index.track(path: "/N/other.mp3")?.playCount == 0)
+}
+
+@Test func anOlderTrackAloneInItsLengthWithTheSameTitleTakesTheStats() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/N/old.flac", title: "Song", seconds: 50).scanned
+    ])
+    let id = try gone(Crafted(path: "/M/a.flac", title: "Song", seconds: 50), in: index)
     #expect(try index.matchMoves().count == 1)
-    #expect(try index.track(path: "/M/old.flac")?.id == id)
+    #expect(try index.track(path: "/N/old.flac")?.id == id)
 }
 
 @Test func aTrackSharingItsLengthWithAnotherIsntGuessed() throws {
@@ -213,10 +228,17 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
             title: title)
     }
     let pairs = movePairs(
-        gone: [path(1, 10, "A"), path(2, 20, "B"), path(3, 20, "B"), path(4, 30, nil)],
-        free: [path(5, 10, "Z"), path(6, 20, "B"), path(7, 30, nil), path(8, 40, "A")])
-    // 1 and 5 are alone at 10 frames; 2 and 3 tie on title too; 4 and 7 are alone at 30.
-    #expect(pairs.map { [$0.0.id, $0.1.id] } == [[1, 5], [4, 7]])
+        gone: [
+            path(1, 10, "A"), path(2, 20, "B"), path(3, 20, "B"), path(4, 30, nil),
+            path(9, 50, "C"),
+        ],
+        free: [
+            path(5, 10, "A"), path(6, 20, "B"), path(7, 30, nil), path(8, 40, "A"),
+            path(10, 50, "Z"),
+        ])
+    // 1 and 5 share 10 frames and a title; 2 and 3 tie on title; 4 and 7 have no title to
+    // share and 9 and 10 different ones, so audio alone pairs neither (ADR 0154).
+    #expect(pairs.map { [$0.0.id, $0.1.id] } == [[1, 5]])
 }
 
 @Test func aLosslessFileConvertedToAnotherLosslessCodecKeepsItsStats() throws {

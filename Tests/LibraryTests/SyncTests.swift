@@ -66,10 +66,13 @@ private final class Machine {
         try index.sync(folder: folderName, at: nas.syncFolder, pushOnly: pushOnly)
     }
 
-    /// Stores a scanned track at `name`, as a scan of the share would.
+    /// Stores a scanned track at `name`, titled `title` or else its name, as a scan of the
+    /// share would.
     @discardableResult
-    func scanned(_ name: String, seconds: Double = 200) throws -> Int64 {
-        try index.store([Crafted(path: path(name), title: name, seconds: seconds).scanned])
+    func scanned(_ name: String, title: String? = nil, seconds: Double = 200) throws -> Int64 {
+        try index.store([
+            Crafted(path: path(name), title: title ?? name, seconds: seconds).scanned
+        ])
         return try #require(try index.track(path: path(name))).id
     }
 
@@ -301,13 +304,13 @@ private func syncAll(_ machines: [Machine]) throws {
 @Test func aMoveWaitsForTheScanOfAMachineThatStillHasTheOldFile() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair
-    let old = try a.scanned("Album/x.flac")
-    try b.scanned("Album/x.flac")
+    let old = try a.scanned("Album/x.flac", title: "Song")
+    try b.scanned("Album/x.flac", title: "Song")
     try a.index.recordPlay(a.path("Album/x.flac"), at: 1_700_000_000)
     try syncAll([a, b])
     // A's scan finds the file moved; B hasn't scanned since.
     try a.index.remove([old])
-    try a.scanned("Renamed/x.flac")
+    try a.scanned("Renamed/x.flac", title: "Song")
     #expect(try a.index.matchMoves().count == 1)
     try a.sync()
     let report = try b.sync()
@@ -315,7 +318,7 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try b.track("Album/x.flac")?.playCount == 1)
     // B's scan finds the move itself, and A's move, read again, does nothing more.
     try b.index.remove([try #require(try b.track("Album/x.flac")).id])
-    try b.scanned("Renamed/x.flac")
+    try b.scanned("Renamed/x.flac", title: "Song")
     #expect(try b.index.matchMoves().count == 1)
     #expect(try b.track("Renamed/x.flac")?.playCount == 1)
     #expect(try b.index.lostFiles().isEmpty)
@@ -324,16 +327,16 @@ private func syncAll(_ machines: [Machine]) throws {
 @Test func aMoveOfAPathThisMachineNeverScannedTakesTheRowAlong() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair
-    let old = try a.scanned("Album/x.flac")
+    let old = try a.scanned("Album/x.flac", title: "Song")
     try a.index.recordPlay(a.path("Album/x.flac"), at: 1_700_000_000)
     try syncAll([a, b])
     try a.index.remove([old])
-    try a.scanned("Renamed/x.flac")
+    try a.scanned("Renamed/x.flac", title: "Song")
     #expect(try a.index.matchMoves().count == 1)
     // B never had the file, so its row for the old path, from A's play, takes the new one.
     try a.sync()
     try b.sync()
-    try b.scanned("Renamed/x.flac")
+    try b.scanned("Renamed/x.flac", title: "Song")
     #expect(try b.track("Renamed/x.flac")?.playCount == 1)
     #expect(try b.index.existingPathID(b.path("Album/x.flac")) == nil)
 }
@@ -341,7 +344,7 @@ private func syncAll(_ machines: [Machine]) throws {
 @Test func aMoveAfterTheNewPathWasPlayedMergesTheStats() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair
-    let old = try a.scanned("x.flac")
+    let old = try a.scanned("x.flac", title: "Song")
     let rated = try a.index.track(path: a.path("x.flac"))!.id
     try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
     try a.index.setRating(4, trackIDs: [rated])
@@ -349,10 +352,10 @@ private func syncAll(_ machines: [Machine]) throws {
     let playlist = try a.index.createPlaylist(named: "Mix")
     _ = try a.index.addToPlaylist(playlist, trackIDs: [rated])
     try a.index.remove([old])
-    try a.scanned("renamed.flac")
+    try a.scanned("renamed.flac", title: "Song")
     #expect(try a.index.matchMoves().count == 1)
     // B scanned after the move, so it only has the new path, and played it.
-    try b.scanned("renamed.flac")
+    try b.scanned("renamed.flac", title: "Song")
     try b.index.recordPlay(b.path("renamed.flac"), at: 1_700_000_500)
     try a.sync()
     #expect(try b.sync().problems.isEmpty)
