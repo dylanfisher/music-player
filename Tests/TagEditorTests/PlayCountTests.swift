@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 
+@testable import Library
 @testable import Metadata
 @testable import TagEditor
 @testable import TagWriter
@@ -97,8 +98,9 @@ private func makeEditing(_ seen: Seen, confirm: Bool = true) -> TagEditing {
                 seen.confirmations += 1
                 answer(confirm)
             },
-            alert: { _, _, _ in }))
-    editing.written = { seen.written.append($0.changed) }
+            alert: { _, _, _ in }, layout: { _, _ in FilesOrganized() },
+            move: { plan, _, _ in plan }, follow: { _ in [] }))
+    editing.written = { report, _ in seen.written.append(report.changed) }
     editing.playCounts = { paths in paths.map { $0 == "/none.flac" ? nil : 5 } }
     editing.setPlayCount = { seen.counts.append(($0, $1)) }
     return editing
