@@ -18,18 +18,11 @@ struct PaletteQuery: Equatable {
 }
 
 extension PaletteItem.Kind {
-    /// The words a query names this kind by, before its colon; a track is a song too.
+    /// The words a query names this kind by, before its colon: the case's name, and for a
+    /// track, song.
     var queryNames: [String] {
-        switch self {
-        case .command: ["command"]
-        case .setting: ["setting"]
-        case .output: ["output"]
-        case .playlist: ["playlist"]
-        case .genre: ["genre"]
-        case .artist: ["artist"]
-        case .album: ["album"]
-        case .track: ["song", "track"]
-        }
+        let name = "\(self)"
+        return self == .track ? ["song", name] : [name]
     }
 
     /// The kind `name` names, whatever its case; nil for any other word.
