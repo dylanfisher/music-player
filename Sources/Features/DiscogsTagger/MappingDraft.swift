@@ -71,7 +71,7 @@ struct MappingDraft: Equatable {
         mapping[field].targets = text.split(separator: ",").compactMap { part in
             let name = part.trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { return nil }
-            return TagEditField(rawValue: name).map(DiscogsTarget.field) ?? .key(name)
+            return DiscogsTarget(names: PerTagFormat(name))
         }
     }
 

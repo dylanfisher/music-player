@@ -13,6 +13,18 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
     /// A custom key spelled the same in every format.
     public static func key(_ name: String) -> DiscogsTarget { .key(PerTagFormat(name)) }
 
+    /// The target `names` and `numbered` spell, as the config file reads a target: a field
+    /// when every format spells one field's name and it isn't numbered, else a custom key.
+    public init(names: PerTagFormat<String>, numbered: PerTagFormat<String>? = nil) {
+        if numbered == nil, names == PerTagFormat(names.vorbis),
+            let field = TagEditField(rawValue: names.vorbis)
+        {
+            self = .field(field)
+        } else {
+            self = .key(names, numbered: numbered)
+        }
+    }
+
     /// The key names `numbered` is followed by before a value's number: "DISCOGS_LABEL_URL-2".
     static let numberSeparator = "-"
 
@@ -52,7 +64,7 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
     /// numbered: `{"key": {"vorbis": …, "mp4": …, "id3": …}, "numbered": …}`.
     public init(from decoder: any Decoder) throws {
         if let name = try? decoder.singleValueContainer().decode(String.self) {
-            self = TagEditField(rawValue: name).map(DiscogsTarget.field) ?? .key(name)
+            self = DiscogsTarget(names: PerTagFormat(name))
             return
         }
         try rejectUnknownKeys(decoder, CodingKeys.self)

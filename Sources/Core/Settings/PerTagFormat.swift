@@ -15,7 +15,7 @@ public struct PerTagFormat<Value: Codable & Equatable & Sendable>: Codable, Equa
     }
 
     /// The same value in every format.
-    init(_ value: Value) { self.init(vorbis: value, mp4: value, id3: value) }
+    public init(_ value: Value) { self.init(vorbis: value, mp4: value, id3: value) }
 
     subscript(format: TagFormat) -> Value {
         switch format {
