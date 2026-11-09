@@ -53,8 +53,15 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// The buttons that run a registry command, each with its command.
     private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
-    /// The Extras tab's keys and values, one a line.
-    let extrasText = readOnlyText()
+    /// The Extras tab's keys and values, a row each; a value is typed in as a field is.
+    let extrasTable = NSTableView()
+    /// The rows `extrasTable` shows, as the model last gave them.
+    private(set) var extraRows: [ExtraRow] = []
+    let addExtraButton = NSButton()
+    let removeExtraButton = NSButton()
+    /// Asks for the name of a key to add to Extras, then calls back with what was typed; not
+    /// called when the user cancels.
+    var askExtraKey: (@escaping (String) -> Void) -> Void = { _ in }
     /// The Discogs tab's release, or why it isn't shown.
     let discogsText = readOnlyText()
     /// The release the Discogs tab shows, once the files are read; nil when they have none.
@@ -70,7 +77,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// Save failed.
     let problemLabel = NSTextField(labelWithString: "Reading tags…")
     let saveButton = NSButton(title: "Save", target: nil, action: nil)
-    /// Whether the line shows why Save failed, in place of its note.
+    /// Whether the line shows why Save, or adding a key to Extras, failed, in place of its note.
     private var showsSaveError = false
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
@@ -101,6 +108,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 120),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         super.init()
+        askExtraKey = { [weak self] in self?.askForExtraKey($0) }
         window.isReleasedWhenClosed = false
         window.title = heading
         window.delegate = self
@@ -360,7 +368,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             case .artwork: artworkView()
             case .file: fileView()
             case .lyrics: areaView(.lyrics)
-            case .extras: readOnlyTextView(extrasText)
+            case .extras: extrasView()
             case .discogs: discogsView()
             default: grid(tab.rows)
             }
@@ -469,13 +477,13 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         view.setContentCompressionResistancePriority(.required, for: .horizontal)
         view.setContentHuggingPriority(.required, for: .horizontal)
         labels[field, default: []].append(view)
-        showLabel(view, field, edited: false)
+        showLabel(view, field.title, edited: false)
         return view
     }
 
-    /// The label with a dot before it when the field is edited. The dot is there, clear,
+    /// The label with a dot before it when the field or key is edited. The dot is there, clear,
     /// otherwise, so the label doesn't move.
-    private func showLabel(_ view: NSTextField, _ field: TagEditField, edited: Bool) {
+    private func showLabel(_ view: NSTextField, _ title: String, edited: Bool) {
         let text = NSMutableAttributedString(
             string: "● ",
             attributes: [
@@ -484,7 +492,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             ])
         text.append(
             NSAttributedString(
-                string: field.title, attributes: [.font: NSFont.systemFont(ofSize: 0)]))
+                string: title, attributes: [.font: NSFont.systemFont(ofSize: 0)]))
         view.attributedStringValue = text
     }
 
@@ -591,6 +599,110 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         return stack
     }
 
+    /// The Extras table, a column of keys and one of values, over + and − buttons.
+    private func extrasView() -> NSView {
+        for (id, title, width) in [
+            (Self.extraKeyColumn, "Key", 220.0), (Self.extraValueColumn, "Value", 360.0),
+        ] {
+            let column = NSTableColumn(identifier: id)
+            column.title = title
+            column.width = width
+            extrasTable.addTableColumn(column)
+        }
+        extrasTable.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        extrasTable.allowsMultipleSelection = true
+        extrasTable.usesAlternatingRowBackgroundColors = true
+        extrasTable.dataSource = self
+        extrasTable.delegate = self
+        let scroll = NSScrollView()
+        scroll.borderType = .bezelBorder
+        scroll.hasVerticalScroller = true
+        scroll.documentView = extrasTable
+        for (button, image, action) in [
+            (addExtraButton, NSImage.addTemplateName, #selector(addExtraClicked)),
+            (removeExtraButton, NSImage.removeTemplateName, #selector(removeExtrasClicked)),
+        ] {
+            button.bezelStyle = .smallSquare
+            button.image = NSImage(named: image)
+            button.target = self
+            button.action = action
+        }
+        addExtraButton.toolTip = "Add a key to every file"
+        removeExtraButton.toolTip = "Remove the selected keys from every file"
+        let stack = NSStackView(views: [
+            scroll, NSStackView(views: [addExtraButton, removeExtraButton]),
+        ])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 0
+        scroll.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        showExtrasEditable()
+        return stack
+    }
+
+    static let extraKeyColumn = NSUserInterfaceItemIdentifier("key")
+    static let extraValueColumn = NSUserInterfaceItemIdentifier("value")
+
+    /// The sheet + shows: a field for the new key's name.
+    private func askForExtraKey(_ answer: @escaping (String) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "Add a Key to Extras"
+        alert.informativeText =
+            "Every file gets the key once you type its value and save. A field's name can't be"
+            + " used: it would read back as that field."
+        let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 22))
+        name.placeholderString = "Name"
+        alert.accessoryView = name
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = name
+        alert.beginSheetModal(for: window) {
+            if $0 == .alertFirstButtonReturn { answer(name.stringValue) }
+        }
+    }
+
+    @objc private func addExtraClicked() { askExtraKey { [weak self] in self?.addExtra($0) } }
+
+    /// Adds key `name` to Extras and starts typing its value, or says on the window's line
+    /// why it can't be added.
+    func addExtra(_ name: String) {
+        guard var current = model else { return }
+        let problem = current.addExtra(name)
+        model = current
+        if let problem {
+            showNote(problem, color: .systemRed)
+            showsSaveError = true
+            NSSound.beep()
+            return
+        }
+        showExtras()
+        showEdited()
+        let key = name.uppercased()
+        guard let row = extraRows.firstIndex(where: { $0.key == key }) else { return }
+        extrasTable.selectRowIndexes([row], byExtendingSelection: false)
+        extrasTable.scrollRowToVisible(row)
+        extrasTable.editColumn(1, row: row, with: nil, select: true)
+    }
+
+    /// Takes the selected keys out of Extras, and out of every file when saved.
+    @objc func removeExtrasClicked() {
+        guard model?.canSave == true else { return }
+        window.endEditing(for: nil)
+        for row in extrasTable.selectedRowIndexes where row < extraRows.count {
+            model?.deleteExtra(extraRows[row].key)
+        }
+        extrasTable.deselectAll(nil)
+        showExtras()
+        showEdited()
+    }
+
+    /// + while any file can be saved, and − while a key is selected too.
+    private func showExtrasEditable() {
+        let editable = model?.canSave == true
+        addExtraButton.isEnabled = editable
+        removeExtraButton.isEnabled = editable && !extrasTable.selectedRowIndexes.isEmpty
+    }
+
     @objc func openOnDiscogs() {
         guard let discogsReleaseID else { return }
         openURL(discogsPage(discogsReleaseID))
@@ -642,6 +754,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         for view in areas.values { view.isEditable = editable }
         compilationBox.isEnabled = editable
         saveButton.isEnabled = editable
+        showExtrasEditable()
         commandsChanged()
     }
 
@@ -671,41 +784,25 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         showEdited()
     }
 
-    /// The Extras tab: a line a key, its value after a tab, or "Mixed" where the tracks differ.
+    /// The Extras tab: a row a key, its value, or "Mixed" where the tracks differ, and a dot
+    /// by an edited key. Only a change reloads the table, so a value being typed keeps its
+    /// cursor.
     private func showExtras() {
-        guard let model else { return }
-        let rows = model.extras
-        let plain: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
-            .foregroundColor: NSColor.labelColor, .paragraphStyle: Self.extrasParagraph,
-        ]
-        var dimmed = plain
-        dimmed[.foregroundColor] = NSColor.secondaryLabelColor
-        let text = NSMutableAttributedString()
-        if rows.isEmpty {
-            text.append(
-                NSAttributedString(string: "The files hold no other tags.", attributes: dimmed))
-        }
-        for (index, row) in rows.enumerated() {
-            if index > 0 { text.append(NSAttributedString(string: "\n", attributes: plain)) }
-            text.append(NSAttributedString(string: row.key + "\t", attributes: dimmed))
-            text.append(
-                NSAttributedString(
-                    string: row.value ?? mixedPlaceholder,
-                    attributes: row.value == nil ? dimmed : plain))
-        }
-        extrasText.textStorage?.setAttributedString(text)
+        guard let model, model.extras != extraRows else { return }
+        extraRows = model.extras
+        extrasTable.reloadData()
+        showExtrasEditable()
     }
 
-    /// The values start at one tab stop, and a long value's later lines start there too.
-    private static let extrasParagraph: NSParagraphStyle = {
-        let style = NSMutableParagraphStyle()
-        let column = 220.0
-        style.tabStops = [NSTextTab(textAlignment: .left, location: column)]
-        style.headIndent = column
-        style.paragraphSpacing = 3
-        return style
-    }()
+    /// A value typed in Extras, which goes to every track.
+    private func extraChanged(_ view: NSTextField, row: Int) {
+        guard model != nil, extraRows.indices.contains(row) else { return }
+        model?.setExtra(extraRows[row].key, view.stringValue)
+        view.placeholderString = nil
+        extraRows = model?.extras ?? []
+        extrasTable.reloadData(forRowIndexes: [row], columnIndexes: [0])
+        showEdited()
+    }
 
     private func showAreaPlaceholders() {
         guard let model else { return }
@@ -718,7 +815,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         guard let model else { return }
         clearSaveError()
         for (field, views) in labels {
-            for view in views { showLabel(view, field, edited: model.isEdited(field)) }
+            for view in views { showLabel(view, field.title, edited: model.isEdited(field)) }
         }
         let note = model.collapseNote
         collapseLabel.stringValue = note ?? ""
@@ -762,6 +859,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     // MARK: Editing
 
     public func controlTextDidChange(_ notification: Notification) {
+        if let view = notification.object as? NSTextField, view.isDescendant(of: extrasTable) {
+            return extraChanged(view, row: extrasTable.row(for: view))
+        }
         guard let view = notification.object as? NSTextField,
             let field = fields.first(where: { $0.value.contains { $0 === view } })?.key
         else { return }
@@ -837,6 +937,39 @@ extension TagEditorWindow: NSTabViewDelegate {
             return
         }
         Self.lastTab = tab
+    }
+}
+
+extension TagEditorWindow: NSTableViewDataSource, NSTableViewDelegate {
+    public func numberOfRows(in tableView: NSTableView) -> Int { extraRows.count }
+
+    /// A key, with a dot when edited, or its value, which can be typed in while any file can
+    /// be saved. A mixed value shows "Mixed" until typed in.
+    public func tableView(_ tableView: NSTableView, viewFor column: NSTableColumn?, row: Int)
+        -> NSView?
+    {
+        guard let column, row < extraRows.count else { return nil }
+        let extra = extraRows[row]
+        let view = NSTextField()
+        view.isBordered = false
+        view.drawsBackground = false
+        view.lineBreakMode = .byTruncatingTail
+        view.cell?.usesSingleLineMode = true
+        if column.identifier == Self.extraKeyColumn {
+            view.isEditable = false
+            view.isSelectable = true
+            showLabel(view, extra.key, edited: extra.isEdited)
+        } else {
+            view.isEditable = model?.canSave == true
+            view.stringValue = extra.value ?? ""
+            view.placeholderString = extra.value == nil ? mixedPlaceholder : nil
+            view.delegate = self
+        }
+        return view
+    }
+
+    public func tableViewSelectionDidChange(_ notification: Notification) {
+        showExtrasEditable()
     }
 }
 

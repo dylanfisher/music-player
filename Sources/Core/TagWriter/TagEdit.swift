@@ -127,6 +127,19 @@ public struct TagValueError: Error, Equatable, CustomStringConvertible {
     /// The custom key's name, as the edit gave it; nil for a field and the art.
     var customKey: String? = nil
 
+    /// A custom key's value the editor refuses before the writer sees it, as an ID3 frame for
+    /// a file of another format.
+    package init(customKey: String, text: String, detail: String) {
+        self.init(field: nil, text: text, detail: detail, customKey: customKey)
+    }
+
+    init(field: TagEditField?, text: String, detail: String, customKey: String? = nil) {
+        self.field = field
+        self.text = text
+        self.detail = detail
+        self.customKey = customKey
+    }
+
     public var description: String {
         "\(customKey ?? field?.rawValue ?? "art") \"\(text)\" \(detail)"
     }

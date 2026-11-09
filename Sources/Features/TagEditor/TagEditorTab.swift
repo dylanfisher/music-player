@@ -3,7 +3,8 @@ import TagWriter
 /// A tab of the info window and the fields it lays out, grouped as YATE groups them: the main
 /// tags first, each sort field above the field it sorts, then credits, details, rights and
 /// label, webpages (URLs), lyrics, the art and the file. Extras lists the keys no field maps,
-/// and Discogs, shown only for files with a release id, the release.
+/// to edit, add and remove, and Discogs, shown only for files with a release id, the release
+/// as the local catalog holds it, read only.
 enum TagEditorTab: String, CaseIterable {
     case info, sorting, credits, details, extras, rights, webpages, lyrics, artwork, file
     case discogs

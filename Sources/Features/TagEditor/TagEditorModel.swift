@@ -40,8 +40,8 @@ struct FileFacts: Equatable, Sendable {
 }
 
 /// The tag editor's state for one track or many: each field's value where the tracks agree or
-/// "mixed" where they don't, what the user typed, and the art. Typed text stays as typed until
-/// `edit()` checks it.
+/// "mixed" where they don't, what the user typed, the Extras tab's keys, and the art. Typed text
+/// stays as typed until `edit()` checks it.
 public struct TagEditorModel: Equatable, Sendable {
     public enum Art: Equatable, Sendable {
         case unchanged
@@ -53,14 +53,19 @@ public struct TagEditorModel: Equatable, Sendable {
     /// What the user typed, by field, including fields typed back to their old value.
     private(set) var typed: [TagEditField: String] = [:]
     public private(set) var art = Art.unchanged
+    /// What the user typed in Extras, by key, uppercased as the reader gives them, including
+    /// keys added and values typed back to what they were.
+    private(set) var typedExtras: [String: String] = [:]
+    /// Keys the user deleted in Extras that some track holds.
+    private(set) var deletedExtras: Set<String> = []
 
     init(tracks: [EditableTrack]) {
         precondition(!tracks.isEmpty, "the editor opens on at least one track")
         self.tracks = tracks
     }
 
-    /// The same files as read again after a write: what the user typed and the art they chose
-    /// stay, and every other field shows what the files hold now.
+    /// The same files as read again after a write: what the user typed, in Extras too, and the
+    /// art they chose stay, and every other field shows what the files hold now.
     mutating func reread(_ tracks: [EditableTrack]) {
         precondition(
             tracks.map(\.path) == self.tracks.map(\.path), "a reread holds the same files")
@@ -157,34 +162,89 @@ public struct TagEditorModel: Equatable, Sendable {
 
     public mutating func removeArt() { art = .removed }
 
-    /// The edit to write: every field typed differently from what it showed, and the art. Throws
-    /// for a value some writable track can't take, before anything is written.
+    /// The edit to write: every field and Extras key typed differently from what it showed, the
+    /// Extras keys deleted, and the art. Throws for a value some writable track can't take,
+    /// before anything is written.
     func edit() throws(TagValueError) -> TagEdit {
         var values: [TagEditField: String] = [:]
         for (field, text) in typed where shared(field) != text { values[field] = text }
+        var custom: [String: String] = [:]
+        for (key, text) in typedExtras where sharedExtra(key) != text { custom[key] = text }
+        for key in deletedExtras where writable.contains(where: { $0.tags.custom[key] != nil }) {
+            custom[key] = ""
+        }
+        // The writer refuses a whole file for such a key, even one it would only remove.
+        for (key, text) in custom.sorted(by: { $0.key < $1.key }) {
+            if let problem = id3OnlyProblem(key) {
+                throw TagValueError(customKey: key, text: text, detail: problem)
+            }
+        }
         let artChange: ArtChange? =
             switch art {
             case .unchanged: nil
             case .replaced(let image, let mimeType): .replace(image, mimeType: mimeType)
             case .removed: .remove
             }
-        let edit = TagEdit(values: values, art: artChange)
+        let edit = TagEdit(values: values, custom: custom, art: artChange)
         for track in writable { _ = try edit.applied(to: track.tags) }
         return edit
     }
 
     /// What the Extras tab lists: every key the reader found that no field maps (ADR 0129), by
-    /// key. A key's value shows when every track has it and they agree; otherwise it's mixed,
-    /// a key some tracks lack included. Keys another tab shows, as the Discogs ones, are listed
-    /// too: this is what the files hold, not what's left unshown.
+    /// key, with the keys added and less those deleted. A key's value is what was typed, else
+    /// it shows when every track has it and they agree; otherwise it's mixed, a key some tracks
+    /// lack included. Keys another tab shows, as the Discogs ones, are listed too: this is what
+    /// the files hold, not what's left unshown.
     var extras: [ExtraRow] {
-        let keys = Set(tracks.flatMap(\.tags.custom.keys)).sorted()
+        let keys = Set(tracks.flatMap(\.tags.custom.keys)).union(typedExtras.keys)
+            .subtracting(deletedExtras).sorted()
         return keys.map { key in
-            let values = tracks.map { $0.tags.custom[key] }
-            let first = values[0]
-            return ExtraRow(
-                key: key, value: values.allSatisfy { $0 == first } ? first : nil)
+            ExtraRow(
+                key: key, value: typedExtras[key] ?? sharedExtra(key),
+                isEdited: typedExtras[key].map { $0 != sharedExtra(key) } ?? false)
         }
+    }
+
+    /// Key `key`'s value in every track, or nil when they differ or some lack it. Empty when
+    /// none has it.
+    private func sharedExtra(_ key: String) -> String? {
+        let first = tracks[0].tags.custom[key]
+        return tracks.dropFirst().allSatisfy { $0.tags.custom[key] == first } ? first ?? "" : nil
+    }
+
+    /// Sets `key`, a key `extras` lists, to `text` in every track. Empty text removes the key
+    /// when saved.
+    mutating func setExtra(_ key: String, _ text: String) { typedExtras[key] = text }
+
+    /// Takes `key` out of every track when saved, or drops it if it was only added.
+    mutating func deleteExtra(_ key: String) {
+        typedExtras[key] = nil
+        if tracks.contains(where: { $0.tags.custom[key] != nil }) { deletedExtras.insert(key) }
+    }
+
+    /// Adds key `name` to Extras, uppercased as the reader gives every key, with no value until
+    /// one is typed; a key deleted comes back with the value it showed. Returns why it can't be
+    /// added, adding nothing: a name no format can hold or a field's (it would read back as
+    /// that field), an ID3 frame for a file of another format, or a key already listed.
+    mutating func addExtra(_ name: String) -> String? {
+        if let problem = customKeyProblem(name) { return "\"\(name)\" \(problem)" }
+        let key = name.uppercased()
+        if let problem = id3OnlyProblem(key) { return "\"\(key)\" \(problem)" }
+        guard !extras.contains(where: { $0.key == key }) else {
+            return "\"\(key)\" is already in Extras"
+        }
+        if deletedExtras.remove(key) == nil { typedExtras[key] = "" }
+        return nil
+    }
+
+    /// Why `key` can't be written to every writable track: it's a frame only ID3 holds, and
+    /// some track is another format. Nil when it can, or when no track's format is known.
+    private func id3OnlyProblem(_ key: String) -> String? {
+        guard ID3CustomKey.isID3Only(key),
+            let other = writable.lazy.compactMap({ $0.file.flatMap { TagFormat($0.audio.codec) } })
+                .first(where: { $0 != .id3 })
+        else { return nil }
+        return "is an ID3 frame, which \(other.rawValue) doesn't hold"
     }
 
     /// The Discogs release ids the tracks carry, each once, in the tracks' order; a value that
@@ -208,6 +268,8 @@ public struct TagEditorModel: Equatable, Sendable {
 struct ExtraRow: Equatable {
     var key: String
     var value: String?
+    /// Whether saving would change it: it was typed differently from what it showed.
+    var isEdited = false
 }
 
 /// Reads each file's tags and art for the editor, through `read`, `filesReadAtOnce` at a time,
