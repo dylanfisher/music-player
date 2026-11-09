@@ -11,7 +11,7 @@
   [0128](0128-discogs-survey.md): agents may read the real library, read only, for phase 51's
   survey, tuning and budgets. [0164](0164-keep-files-organized.md): the undo journal's
   records follow a file Keep Files Organized renamed.
-- **See also:** [0025](0025-threat-model.md) records the writer's threats and how the temp file is made and checked.
+- **See also:** [0025](0025-threat-model.md) records the writer's threats and how the temp file is made and checked. [0172](0172-every-picture-and-bulk-covers.md): an edit can set every picture a file holds.
 
 ## Context
 

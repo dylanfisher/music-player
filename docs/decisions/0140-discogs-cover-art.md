@@ -5,7 +5,7 @@
 - **Amends:** [0025](0025-threat-model.md) (row 64)
 - **See also:** [0132](0132-discogs-field-mapping.md) (the mapping), [0133](0133-one-confirmation-for-a-match-set.md)
   (one confirmation), [0138](0138-the-discogs-api-client.md) (the client), [0136](0136-asking-before-a-rescan-and-undoing-a-tagger-write.md)
-  (undo)
+  (undo), [0172](0172-every-picture-and-bulk-covers.md) (Get Artwork, the covers alone)
 
 ## Context
 
