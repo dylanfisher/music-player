@@ -190,9 +190,10 @@ package final class Downloads {
                     self.refresh()
                 }
             }
-            model.start()
+            // Set before the start, whose first poll is the one either would ask for.
             if controller?.window?.isVisible == true { model.setWindowOpen(true) }
             model.setStatusShown(statusBarShown)
+            model.start()
             refresh()
         }
         refresh()

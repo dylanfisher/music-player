@@ -16,7 +16,8 @@ private struct NoFolder: Error {}
 /// there only if `places` says so.
 @MainActor
 func started(
-    _ service: DownloadsService, places: @escaping @Sendable () async throws -> ImportPlaces
+    _ service: DownloadsService, statusBarShown: Bool = false,
+    places: @escaping @Sendable () async throws -> ImportPlaces
 ) async throws -> (Downloads, Downloads.Session) {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
         "review-\(UUID().uuidString)", isDirectory: true)
@@ -24,6 +25,7 @@ func started(
     let database = folder.appendingPathComponent("library.sqlite", isDirectory: false)
     _ = try LibraryIndex(at: database)
     let downloads = Downloads()
+    downloads.setStatusBarShown(statusBarShown)
     downloads.start(
         Downloads.Setup(
             machine: FakeService.machine, service: service, databaseURL: database,

@@ -77,6 +77,19 @@ private func downloading(_ id: Int, bytes: Int, created: Int) -> DownloadJob {
 }
 
 @MainActor
+@Test func startingWithTheStatusBarInViewPollsOnce() async throws {
+    let service = FakeService([downloading(1, bytes: 10, created: 1)])
+    let (downloads, session) = try await started(service.service, statusBarShown: true) {
+        throw CancellationError()
+    }
+    #expect(session.model.isStatusShown)
+    await eventually("the first poll") { !service.listed.isEmpty }
+    for _ in 0..<2_000 { await Task.yield() }
+    #expect(service.listed.count == 1)
+    downloads.stop()
+}
+
+@MainActor
 @Test func theItemFollowsThePollsAndItsClickOpensTheWindow() async throws {
     let service = FakeService([downloading(1, bytes: 10, created: 1)])
     let (downloads, session) = try await started(service.service) {
