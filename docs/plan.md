@@ -663,6 +663,34 @@ Asked by the owner on 2026-11-09; the owner chose one merged pane.
       the top. The pane's scroll origin returns to the top when `fit()` shrinks the window, and
       a test opens and closes it and checks the document's top is at the clip's top.
 
+Implementation plan, phase 63 (ADR 0168):
+
+What exists, found by search (map.md recipes): the panes are `SettingsWindowController.Pane`,
+each naming the `GeneralModel.Section`s it shows, and General shows the rest. The Watched
+Folders pane is `FoldersPane`, the folders table over a `GeneralPane` of its sections. The
+Library section's extra rows (Show Library Health, Database, Last Snapshot, the Snapshots
+disclosure) are added by any `GeneralPane` that shows `.library`; Snapshot Folder is a
+`library.` row of that section. `PaneScroller.fit()` sizes the window to the pane.
+
+- 63.1 Gap (fix): reproduced in a test before any change. `fit()` runs from the pane's
+  frame-change notice, which the window's layout pass posts; resizing the window inside that
+  pass leaves the scroll view at its old height plus the change again, so after a close it's
+  shorter than the window and the strip above it is empty. `fit()` runs after the pass
+  instead. The test opens and closes Snapshots and checks the pane's top is at the window's
+  content top.
+- 63.2 Rename (refactor): `FoldersPane` becomes `LibraryPane`, the file with it.
+- 63.3 The pane (feat): `Pane.folders` becomes `.library`, titled Library, symbol
+  `books.vertical`, in the same toolbar place, with the sections Folder Changes, Network
+  Folders, Library Folder and Library, in that order (`Section` cases reordered to match).
+  The palette's watched folders and Watched Folders… open it. `--snapshot-of folders` becomes
+  `library` (`SnapshotTarget`, `AppDelegate`, README, main.swift's comment).
+- 63.4 Docs: ADR 0168, the amended-by lines of 0042 and 0017, README's two pane names.
+
+Tests: the gap test above; the Library pane holds the watched folders table, every section
+above with the health, database and snapshot rows and Snapshot Folder, and General none of
+them; the palette opens Library for a folder, network or `library.` setting; the command line
+test's list of targets.
+
 ### 64. Downloads: approve, upgrades, Open in Tagger, window
 
 Asked by the owner on 2026-11-09.
