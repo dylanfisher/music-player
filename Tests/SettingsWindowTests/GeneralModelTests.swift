@@ -699,7 +699,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions())
+        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        set: { _, _ in })
     func keys(_ view: NSView) -> Set<String> {
         view.subviews.reduce(into: Set(view.identifier.map { [$0.rawValue] } ?? [])) {
             $0.formUnion(keys($1))
@@ -757,7 +758,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions())
+        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        set: { _, _ in })
     controller.show(.general)
     defer { controller.window.close() }
     // A short screen below where the window opened: it moves down onto it, top and bottom.
@@ -793,7 +795,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions())
+        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        set: { _, _ in })
     controller.show(.shortcuts)
     defer { controller.window.close() }
     #expect(controller.window.frame.minX == saved.minX)
@@ -813,7 +816,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions(openConfigFile: { opened += 1 }))
+        configPath: "/tmp/config.json", actions: actions(openConfigFile: { opened += 1 }),
+        value: { _ in nil }, set: { _, _ in })
     controller.show(setting: schema.rescanNetworkFoldersAtLaunch.key)
     #expect(controller.window.title == schema.watchedFolders.title)
     let folders = try #require(controller.window.contentViewController?.view)

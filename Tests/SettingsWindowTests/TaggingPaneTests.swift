@@ -153,14 +153,14 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
 }
 
 @MainActor @Test func theMappingsSettingOpensTheTaggingPane() throws {
+    let value: (String) -> Any? = { key in
+        key == TaggingModel.setting.key
+            ? try! JSONSerialization.jsonObject(
+                with: Data(TaggingModel.setting.text(DiscogsPreset.oneToOne.mapping).utf8))
+            : nil
+    }
     let general = GeneralModel(
-        settings: AppSettings().settings, searcherInstalled: true,
-        value: { key in
-            key == TaggingModel.setting.key
-                ? try! JSONSerialization.jsonObject(
-                    with: Data(TaggingModel.setting.text(DiscogsPreset.oneToOne.mapping).utf8))
-                : nil
-        },
+        settings: AppSettings().settings, searcherInstalled: true, value: value,
         set: { _, _ in }, isBlocked: { false })
     let bindings = try KeyBindings(
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
@@ -179,7 +179,8 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
                     indexPath: "/tmp/library.sqlite", indexBytes: 0, snapshots: [],
                     lastProblem: nil)
             },
-            revealIndex: {}, backUpNow: {}, restoreSnapshot: { _ in }))
+            revealIndex: {}, backUpNow: {}, restoreSnapshot: { _ in }),
+        value: value, set: { _, _ in })
     defer { controller.window.close() }
     #expect(controller.tagging == nil, "made as it's first shown")
     controller.show(setting: TaggingModel.setting.key)

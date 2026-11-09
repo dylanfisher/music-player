@@ -229,13 +229,15 @@ extension AppDelegate {
     func settingsWindowController() -> SettingsWindowController? {
         if let settingsWindow { return settingsWindow }
         guard let settings, let dispatcher else { return nil }
+        let value: (String) -> Any? = { [weak settings] in settings?.json(forKey: $0) }
+        let set: (String, Any) throws -> Void = { [weak settings] key, json in
+            try settings?.set(key: key, json: json)
+        }
         let general = GeneralModel(
             settings: settings.schema.settings,
             searcherInstalled: NSWorkspace.shared.urlForApplication(
                 withBundleIdentifier: FileViewer.searcher.bundleID) != nil,
-            value: { [weak settings] in settings?.json(forKey: $0) },
-            set: { [weak settings] key, json in try settings?.set(key: key, json: json) },
-            isBlocked: { [weak settings] in settings?.blocked ?? false })
+            value: value, set: set, isBlocked: { [weak settings] in settings?.blocked ?? false })
         let shortcuts = ShortcutsModel(bindings: dispatcher.bindings, appName: appName) {
             [weak self, weak settings, weak dispatcher] changes in
             do {
@@ -299,7 +301,7 @@ extension AppDelegate {
                 restoreSnapshot: { [weak self] snapshot in
                     guard let window = self?.settingsWindow?.window else { return }
                     self?.confirmRestoring(snapshot, over: window)
-                }))
+                }), value: value, set: set)
         settingsWindow = controller
         return controller
     }

@@ -63,12 +63,20 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     /// Each pane in its scroll view, made as it's first shown.
     private var scrollers: [Pane: PaneScroller] = [:]
 
+    /// Reads and writes a setting as JSON holds it, for the Tagging pane's model.
+    private let settingValue: (String) -> Any?
+    private let setSetting: (String, Any) throws -> Void
+
+    /// `value` reads a setting as JSON holds it and `set` writes one, as `general`'s do.
     public init(
         general: GeneralModel, shortcuts: ShortcutsModel, configPath: String,
-        actions: SettingsActions
+        actions: SettingsActions, value: @escaping (String) -> Any?,
+        set: @escaping (String, Any) throws -> Void
     ) {
         model = general
         self.actions = actions
+        settingValue = value
+        setSetting = set
         let others = Pane.allCases.flatMap(\.sections)
         self.general = GeneralPane(
             model: general, configPath: configPath, actions: actions,
@@ -156,7 +164,8 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private func taggingPane() -> TaggingPane {
         if let tagging { return tagging }
         let pane = TaggingPane(
-            model: TaggingModel(value: model.value, set: model.set, isBlocked: model.isBlocked))
+            model: TaggingModel(
+                value: settingValue, set: setSetting, isBlocked: model.isBlocked))
         tagging = pane
         return pane
     }
