@@ -48,6 +48,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "WindowPlacement",
+            path: "Sources/Primitives/WindowPlacement",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SQLite",
             path: "Sources/Primitives/SQLite",
             swiftSettings: strictSwift,
@@ -184,7 +189,7 @@ let package = Package(
             name: "LibraryBrowser",
             dependencies: [
                 "Analysis", "Artwork", "BarView", "Commands", "DisplayText", "KeyChord", "Library",
-                "Log", "Metadata", "Playback", "Settings",
+                "Log", "Metadata", "Playback", "Settings", "WindowPlacement",
             ],
             path: "Sources/Features/LibraryBrowser",
             swiftSettings: strictSwift
@@ -214,7 +219,7 @@ let package = Package(
             name: "DiscogsTagger",
             dependencies: [
                 "Discogs", "DisplayText", "Library", "Log", "Metadata", "Recommender", "Settings",
-                "TagWriter",
+                "TagWriter", "WindowPlacement",
             ],
             path: "Sources/Features/DiscogsTagger",
             swiftSettings: strictSwift
@@ -223,20 +228,22 @@ let package = Package(
             name: "Downloads",
             dependencies: [
                 "Analysis", "Discogs", "DisplayText", "Library", "Log", "Metadata", "Recommender",
-                "Settings", "TagWriter",
+                "Settings", "TagWriter", "WindowPlacement",
             ],
             path: "Sources/Features/Downloads",
             swiftSettings: strictSwift
         ),
         .target(
             name: "Spectrum",
-            dependencies: ["Analysis", "DisplayText", "Library"],
+            dependencies: ["Analysis", "DisplayText", "Library", "WindowPlacement"],
             path: "Sources/Features/Spectrum",
             swiftSettings: strictSwift
         ),
         .target(
             name: "SettingsWindow",
-            dependencies: ["Commands", "DisplayText", "KeyChord", "Log", "Settings"],
+            dependencies: [
+                "Commands", "DisplayText", "KeyChord", "Log", "Settings", "WindowPlacement",
+            ],
             path: "Sources/Features/SettingsWindow",
             swiftSettings: strictSwift
         ),
@@ -244,7 +251,7 @@ let package = Package(
             name: "NowPlaying",
             dependencies: [
                 "Artwork", "BarView", "Commands", "DisplayText", "Library", "Log", "Metadata",
-                "Playback", "Settings",
+                "Playback", "Settings", "WindowPlacement",
             ],
             path: "Sources/Features/NowPlaying",
             swiftSettings: strictSwift
@@ -263,7 +270,7 @@ let package = Package(
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Recommender",
                 "Scripting", "SQLite", "Settings", "SettingsWindow", "Snapshot", "Spectrum",
-                "TagEditor", "TagWriter", "UPnP", "UPnPOutput",
+                "TagEditor", "TagWriter", "UPnP", "UPnPOutput", "WindowPlacement",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -415,6 +422,11 @@ let package = Package(
         .testTarget(
             name: "FuzzyMatchTests",
             dependencies: ["FuzzyMatch"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "WindowPlacementTests",
+            dependencies: ["WindowPlacement"],
             swiftSettings: strictSwift
         ),
         .testTarget(
