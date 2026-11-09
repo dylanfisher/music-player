@@ -66,7 +66,9 @@ extension DiscogsPreset {
     /// Each field's custom keys in every preset, and in the spellings early builds wrote: the
     /// other spellings of its tags that a field replacing them removes from a file (ADR 0152).
     public static let spellings: [DiscogsField: [DiscogsTarget]] = {
-        var spellings = [DiscogsField.albumArtistURL: [numbered(DiscogsKey.albumArtistURLUnderscored)]]
+        var spellings = [
+            DiscogsField.albumArtistURL: [numbered(DiscogsKey.albumArtistURLUnderscored)]
+        ]
         for preset in all {
             for (field, rule) in preset.mapping.rules {
                 for target in rule.targets where target.isKey {
