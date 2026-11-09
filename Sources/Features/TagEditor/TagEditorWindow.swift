@@ -651,7 +651,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             "Every file gets the key once you type its value and save. A field's name can't be"
             + " used: it would read back as that field."
         let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 22))
-        name.placeholderString = "Name"
+        name.placeholderString = "Key name"
         alert.accessoryView = name
         alert.addButton(withTitle: "Add")
         alert.addButton(withTitle: "Cancel")

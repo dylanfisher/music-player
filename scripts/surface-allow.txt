@@ -11,6 +11,7 @@ SettingsWindowController.toolbarSelectableItemIdentifiers | NSToolbarDelegate
 TagEditorWindow.controlTextDidChange | NSControlTextEditingDelegate
 TagEditorWindow.textDidChange | NSTextDelegate
 TagEditorWindow.tabView | NSTabViewDelegate
+TagEditorWindow.tableViewSelectionDidChange | NSTableViewDelegate
 TagEditorWindow.windowDidBecomeKey | NSWindowDelegate
 # The standard library calls this: CustomReflectable's requirement, which keeps the token out of
 # dump and mirrors (ADR 0137).
