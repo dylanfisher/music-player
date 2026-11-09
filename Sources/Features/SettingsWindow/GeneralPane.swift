@@ -618,6 +618,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             guard let field = fields[row.key], field.currentEditor() == nil
             else { return }
             field.stringValue = model.text(row.key)
+            // The refused text is gone, so its reason is too.
+            addressProblems[row.key]?.isHidden = true
         case .output:
             (control as? NSPopUpButton).map(showOutputs)
         case .folders:
@@ -846,7 +848,6 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         do {
             try model.setText(key, field.stringValue)
             problem.isHidden = true
-            errorLabel.isHidden = true
         } catch {
             logger.error("\(error)")
             problem.stringValue = GeneralModel.refusal(error)

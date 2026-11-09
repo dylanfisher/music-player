@@ -1109,6 +1109,10 @@ private func visibleLabels(in view: NSView) -> [String] {
             == "\"http://192.168.1.156\" isn't an IPv4 or IPv6 address; host names aren't taken")
     #expect(field.stringValue == "http://192.168.1.156")
 
+    // A reload, as after the config file changes, shows the saved value, and not the reason.
+    pane.reload()
+    #expect(field.stringValue.isEmpty && problem.isHidden)
+
     field.stringValue = "192.168.1.156"
     click(save)
     #expect(values[key] as? String == "192.168.1.156")
