@@ -225,8 +225,35 @@ private func ignoresCase(_ folder: String) -> Bool { pathconf(folder, _PC_CASE_S
     try FileManager.default.createSymbolicLink(
         atPath: linked, withDestinationPath: folders.library)
     let result = moveToLayout(
-        layoutMoves([path], libraryFolder: linked), libraryFolder: linked)
+        layoutMoves([path], libraryFolder: linked), libraryFolder: linked, checkingAgain: false)
     #expect(result.inPlace == 1)
     #expect(result.problems.isEmpty)
     #expect(exists(path))
+}
+
+@Test func aPathSelectedTwiceCountsOnce() throws {
+    let folders = try OrganizeFolders()
+    let old = try folders.file("library/song.flac", title: "Song")
+    let plan = layoutMoves([old, old], libraryFolder: folders.library)
+    #expect(plan.moved.map(\.from) == [old])
+    #expect(plan.problems.isEmpty)
+}
+
+@Test func aConfirmedPlanSkipsAFileWhoseTagsChangedSince() throws {
+    let folders = try OrganizeFolders()
+    let old = try folders.file("library/song.flac", title: "Song")
+    let gone = try folders.file("library/gone.flac", title: "Gone", track: 2)
+    let plan = layoutMoves([old, gone], libraryFolder: folders.library)
+    try folders.file("library/song.flac", title: "Retitled")
+    try FileManager.default.removeItem(atPath: gone)
+    let result = moveToLayout(
+        plan, libraryFolder: folders.library, checkingAgain: true, calls: MoveCalls())
+    #expect(result.moved.isEmpty)
+    #expect(
+        result.problems == [
+            "\(old): not moved, its tags changed after Organize Selected Files asked",
+            "\(gone): not moved, it isn't there any more",
+        ])
+    #expect(exists(old))
+    #expect(!exists(folders.library + "/Artist/Album/01 Retitled.flac"))
 }

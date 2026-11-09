@@ -74,8 +74,11 @@ public final class TagEditing {
         var confirm:
             @MainActor (Confirmation, NSWindow, @escaping @MainActor (Bool) -> Void) -> Void
         var alert: @MainActor (String, [String], NSWindow) -> Void
-        /// Renames files in the library folder, the second argument, to its layout.
-        var organize: @Sendable ([String], String) -> FilesOrganized
+        /// Where files go in the library folder, the second argument, by its layout.
+        var layout: @Sendable ([String], String) -> FilesOrganized
+        /// Renames a plan's files in the library folder, the second argument; with the third,
+        /// each is checked first to still go where the plan says.
+        var move: @Sendable (FilesOrganized, String, Bool) -> FilesOrganized
         /// Points the journal's records of each renamed file at its new path, giving what
         /// couldn't be.
         var follow: @Sendable ([TrackMove]) -> [TagWriteError]
@@ -135,7 +138,8 @@ public final class TagEditing {
             newestEdit: { () throws(TagWriteError) in try writer.newestEdit() },
             present: { $0.show(after: $1) }, confirm: ask,
             alert: showProblems,
-            organize: { moveToLayout(layoutMoves($0, libraryFolder: $1), libraryFolder: $1) },
+            layout: { layoutMoves($0, libraryFolder: $1) },
+            move: { moveToLayout($0, libraryFolder: $1, checkingAgain: $2) },
             follow: { writer.follow($0.map { ($0.from, $0.to) }) })
         // A write in place a crash cut short is finished before anything reads the file
         // again; the writer logs what it found (ADR 0107).
@@ -404,12 +408,11 @@ public final class TagEditing {
         enqueue("write the tags", over: window) { write(files, .discogsTagger, $0) }
     }
 
-    /// Organize Selected Files: renames `paths` that are in the library folder `folder` to
-    /// its layout, after the writes queued before it, as Keep Files Organized does after a
-    /// write. The caller has asked the user (ADR 0164).
-    public func organize(_ paths: [String], in folder: String, over window: NSWindow) {
-        guard !paths.isEmpty else { return }
-        enqueue("organize the files", over: window, organizing: (paths, folder)) { _ in
+    /// Organize Selected Files: renames the files of `plan`, which the user confirmed, in the
+    /// library folder `folder`, after the writes queued before it. A file that no longer goes
+    /// where the plan said is skipped and listed (ADR 0164).
+    public func organize(_ plan: FilesOrganized, in folder: String, over window: NSWindow) {
+        enqueue("organize the files", over: window, organizing: (plan, folder)) { _ in
             TagWriteReport()
         }
     }
@@ -419,7 +422,7 @@ public final class TagEditing {
     /// follows them before any later write or undo can look for them (ADR 0164).
     private func enqueue(
         _ action: String, over window: NSWindow,
-        organizing: (paths: [String], folder: String)? = nil,
+        organizing: (plan: FilesOrganized, folder: String)? = nil,
         _ work:
             @escaping @Sendable (@escaping @Sendable (TagWriteProgress) -> Void) ->
             TagWriteReport
@@ -429,7 +432,8 @@ public final class TagEditing {
         alertWindows[number] = (action, window)
         pendingWrites += 1
         let keepingIn = organizing == nil ? organizingFolder() : nil
-        let organize = effects.organize
+        let layout = effects.layout
+        let move = effects.move
         let follow = effects.follow
         writes.async {
             var report = work { progress in
@@ -441,13 +445,17 @@ public final class TagEditing {
                 }
             }
             var organized: FilesOrganized?
-            if let target = organizing ?? keepingIn.map({ (report.changed, $0) }),
-                !target.paths.isEmpty
-            {
-                var result = organize(target.paths, target.folder)
+            let target =
+                organizing.map { ($0.plan, $0.folder, true) }
+                ?? keepingIn.flatMap { folder in
+                    report.changed.isEmpty ? nil : (layout(report.changed, folder), folder, false)
+                }
+            if let target {
+                let (plan, folder, confirmed) = target
+                var result = move(plan, folder, confirmed)
                 // The setting is limited to the library folder: an edit of a file elsewhere
                 // isn't a problem.
-                if organizing == nil { result.outside = [] }
+                if !confirmed { result.outside = [] }
                 result.problems += follow(result.moved).map {
                     "\($0.path): Undo Tag Edit can't find it at its new path: \($0.detail)"
                 }

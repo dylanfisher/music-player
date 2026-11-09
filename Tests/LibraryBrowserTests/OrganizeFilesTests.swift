@@ -46,7 +46,7 @@ private func organizingBrowser() throws -> (
 @MainActor
 private final class Asked {
     var plans: [FilesOrganized] = []
-    var organized: [[String]] = []
+    var organized: [FilesOrganized] = []
 }
 
 @MainActor @Test func organizeSelectedFilesAsksWithTheCountThatWillMoveAndSkipsTheRest()
@@ -59,8 +59,8 @@ private final class Asked {
             asked.plans.append(plan)
             reply(answer)
         }
-        await browser.organizeFiles([inside, outside], in: library, over: window) { paths, _ in
-            asked.organized.append(paths)
+        await browser.organizeFiles([inside, outside], in: library, over: window) { plan, _ in
+            asked.organized.append(plan)
         }
     }
     let plan = try #require(asked.plans.first)
@@ -69,8 +69,8 @@ private final class Asked {
     let question = organizeQuestion(plan)
     #expect(question.message == "Organize 1 File?")
     #expect(question.detail.contains("1 not in the library folder"))
-    // Cancel organizes nothing; Organize hands every selected path on, to be checked again.
-    #expect(asked.organized == [[inside, outside]])
+    // Cancel organizes nothing; Organize hands on the plan it asked about.
+    #expect(asked.organized == [plan])
     // Asking renames nothing.
     #expect(FileManager.default.fileExists(atPath: inside))
 }

@@ -113,9 +113,15 @@ private func makeEditing(
                 answer(confirm)
             },
             alert: { message, _, _ in seen.alert(message) },
-            organize: { paths, folder in
-                seen.ran("organize \(paths.joined(separator: " ")) in \(folder)")
+            layout: { paths, folder in
+                seen.ran("layout \(paths.joined(separator: " ")) in \(folder)")
                 return organize(paths, folder)
+            },
+            move: { plan, folder, checkingAgain in
+                seen.ran(
+                    "move \(plan.moved.map(\.from).joined(separator: " ")) in \(folder)"
+                        + (checkingAgain ? ", checking again" : ""))
+                return plan
             },
             follow: { moves in
                 seen.ran("follow \(moves.map { "\($0.from)>\($0.to)" }.joined(separator: " "))")
@@ -763,11 +769,11 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
             ("/elsewhere/c.flac", TagEdit()),
         ], over: window)
     editing.undo(over: window, from: .discogsTagger)
-    try await eventually { seen.work.count == 4 && !editing.isWriting }
+    try await eventually { seen.work.count == 5 && !editing.isWriting }
     #expect(
         seen.work == [
             "write /lib/a.flac /lib/b.flac /elsewhere/c.flac",
-            "organize /lib/a.flac /lib/b.flac /elsewhere/c.flac in /lib",
+            "layout /lib/a.flac /lib/b.flac /elsewhere/c.flac in /lib", "move /lib/a.flac in /lib",
             "follow /lib/a.flac>/lib/A/a.flac", "undo",
         ])
     #expect(seen.written.first == ["/lib/A/a.flac", "/lib/b.flac", "/elsewhere/c.flac"])
@@ -786,8 +792,9 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
     #expect(seen.written == [["/lib/a.flac"]])
 }
 
-/// Organize Selected Files runs after the writes queued before it, whatever the setting, and
-/// the rescan is told the moved files' new paths.
+/// Organize Selected Files runs the plan the user confirmed, checking each file again, after
+/// the writes queued before it, whatever the setting, and the rescan is told the moved files'
+/// new paths.
 @MainActor
 @Test func organizeSelectedFilesRunsAfterTheQueuedWrites() async throws {
     let seen = Seen()
@@ -801,13 +808,14 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
             return report
         }, organize: organizeA)
     editing.write([("/lib/b.flac", TagEdit(values: [.title: "B"]))], over: window)
-    editing.organize(["/lib/a.flac", "/elsewhere/c.flac"], in: "/lib", over: window)
+    let confirmed = organizeA(["/lib/a.flac", "/elsewhere/c.flac"], "/lib")
+    editing.organize(confirmed, in: "/lib", over: window)
     #expect(seen.work.count <= 1)
     gate.open()
     try await eventually { !editing.isWriting && seen.written.count == 2 }
     #expect(
         seen.work == [
-            "write /lib/b.flac", "organize /lib/a.flac /elsewhere/c.flac in /lib",
+            "write /lib/b.flac", "move /lib/a.flac in /lib, checking again",
             "follow /lib/a.flac>/lib/A/a.flac",
         ])
     #expect(seen.written.last == ["/lib/A/a.flac"])

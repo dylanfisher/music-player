@@ -5,11 +5,11 @@ import Metadata
 
 extension LibraryBrowser {
     /// Organize Selected Files…: works out where the selected tracks in the library folder
-    /// `folder` go, asks over `window` with the number that will move, and hands the paths to
-    /// `organize`, which renames them after the tag writes queued (ADR 0164).
+    /// `folder` go, asks over `window` with the number that will move, and hands the plan it asked
+    /// about to `organize`, which renames its files after the tag writes queued (ADR 0164).
     public func organizeSelection(
         in folder: String?, over window: NSWindow,
-        organize: @escaping ([String], String) -> Void
+        organize: @escaping (FilesOrganized, String) -> Void
     ) {
         Task {
             let paths: [String]
@@ -24,7 +24,7 @@ extension LibraryBrowser {
 
     func organizeFiles(
         _ paths: [String], in folder: String?, over window: NSWindow,
-        organize: @escaping ([String], String) -> Void
+        organize: @escaping (FilesOrganized, String) -> Void
     ) async {
         guard let folder else {
             return report("couldn't organize the files: no library folder is set")
@@ -38,7 +38,7 @@ extension LibraryBrowser {
         let agreed = await withCheckedContinuation { continuation in
             confirmOrganizing(plan, window) { continuation.resume(returning: $0) }
         }
-        if agreed { organize(paths, folder) }
+        if agreed { organize(plan, folder) }
     }
 
     /// Says what Keep Files Organized or Organize Selected Files moved, and lists the files it

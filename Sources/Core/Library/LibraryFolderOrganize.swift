@@ -72,24 +72,33 @@ public func layoutMoves(_ paths: [String], libraryFolder: String) -> FilesOrgani
 
 /// Renames the files of `plan`, which `layoutMoves` made, never over a file and never to
 /// another volume, and removes the folders that leaves empty, never the library folder itself
-/// (ADR 0164). A file whose path is taken by then is left where it is and listed. Blocks on the
-/// volume, so call it off the main thread, and from one queue at a time: the tag writes'.
-public func moveToLayout(_ plan: FilesOrganized, libraryFolder: String) -> FilesOrganized {
-    moveToLayout(plan, libraryFolder: libraryFolder, calls: MoveCalls())
-}
-
-func moveToLayout(_ plan: FilesOrganized, libraryFolder: String, calls: MoveCalls)
+/// (ADR 0164). A file whose path is taken by then is left where it is and listed. With
+/// `checkingAgain`, for a plan the user confirmed a while ago, a file is first read again and
+/// skipped and listed unless it's still where the plan found it and still goes where the plan
+/// says. Blocks on the volume, so call it off the main thread, and from one queue at a time:
+/// the tag writes'.
+public func moveToLayout(_ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool)
     -> FilesOrganized
 {
+    moveToLayout(
+        plan, libraryFolder: libraryFolder, checkingAgain: checkingAgain, calls: MoveCalls())
+}
+
+func moveToLayout(
+    _ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool = false, calls: MoveCalls
+) -> FilesOrganized {
     var result = plan
     result.moved = []
     guard let library = resolved(libraryFolder) else {
         result.problems += plan.moved.map { _ in MoveRefusal.notFound(libraryFolder).description }
         return result
     }
+    let spelling = Spelling(libraryFolder)
     var left: Set<String> = []
     for move in plan.moved {
-        if let problem = rename(move.from, to: move.to, library, calls) {
+        if checkingAgain, let changed = changedSince(move, libraryFolder, spelling) {
+            result.problems.append(changed)
+        } else if let problem = rename(move.from, to: move.to, library, calls) {
             result.problems.append(problem)
         } else {
             result.moved.append(move)
@@ -130,6 +139,30 @@ private struct Spelling {
         }
         return path + "/" + (parts.last.map(String.init) ?? "")
     }
+}
+
+/// Why `move`'s file no longer goes where its plan said, nil when it still does.
+private func changedSince(_ move: TrackMove, _ libraryFolder: String, _ spelling: Spelling)
+    -> String?
+{
+    guard pathExists(move.from) else {
+        return "\(move.from): not moved, it isn't there any more"
+    }
+    let now: String
+    do throws(LayoutProblem) {
+        now = try layoutDestination(of: move.from, in: libraryFolder)
+    } catch {
+        switch error {
+        case .unreadable(let detail):
+            return notMoved(move.from, MoveRefusal.unreadable(move.from, detail))
+        case .unlisted(let detail):
+            return MoveRefusal.failed(move.from, libraryFolder, detail).description
+        }
+    }
+    guard spelling.key(now) == spelling.key(move.to) else {
+        return "\(move.from): not moved, its tags changed after Organize Selected Files asked"
+    }
+    return nil
 }
 
 /// Where a file goes.

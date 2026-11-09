@@ -33,8 +33,8 @@ extension AppDelegate {
             guard let self, let window = self.window?.window else { return }
             self.browser?.organizeSelection(
                 in: self.settings?[\.libraryFolder], over: window
-            ) { [weak self] paths, folder in
-                self?.tagEditing.organize(paths, in: folder, over: window)
+            ) { [weak self] plan, folder in
+                self?.tagEditing.organize(plan, in: folder, over: window)
             }
         }
         dispatcher.handle(
