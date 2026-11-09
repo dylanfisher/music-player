@@ -53,7 +53,7 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
             entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
             duration: 4410, items: covers))
     let metadata = try parse(file, pictures: true).metadata
-    let types: [UInt32?] = metadata.pictures.map(\.type)
+    let types: [PictureType?] = metadata.pictures.map(\.type)
     #expect(types == [nil, nil, nil])
     let names: [String?] = metadata.pictures.map(\.typeName)
     #expect(names == [nil, nil, nil])

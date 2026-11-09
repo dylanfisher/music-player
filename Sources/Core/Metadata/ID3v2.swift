@@ -629,7 +629,7 @@ private func picture(
     return EmbeddedPicture(
         art: EmbeddedArt(
             offset: offset, byteCount: end - offset, mimeType: mime, unsynchronised: stored),
-        type: type)
+        type: PictureType(rawValue: type))
 }
 
 /// The MIME type, picture type and where the image starts, or nil when `bytes` ends first.

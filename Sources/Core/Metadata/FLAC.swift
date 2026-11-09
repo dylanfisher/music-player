@@ -99,5 +99,5 @@ private func flacPicture(_ reader: ByteReader, _ body: Range<Int>) throws(ParseF
     return EmbeddedPicture(
         art: EmbeddedArt(
             offset: imageOffset, byteCount: length, mimeType: mime, unsynchronised: false),
-        type: type)
+        type: PictureType(rawValue: type))
 }
