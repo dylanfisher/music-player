@@ -4,6 +4,7 @@ import Commands
 import Discogs
 import DisplayText
 import Metadata
+import Settings
 import TagWriter
 import UniformTypeIdentifiers
 
@@ -64,7 +65,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     var askExtraKey: (@escaping (String) -> Void) -> Void = { _ in }
     /// The Discogs tab's release, or why it isn't shown.
     let discogsText = readOnlyText()
-    /// The release the Discogs tab shows, once the files are read; nil when they have none.
+    /// The Discogs tab's release id, which edits `DiscogsKey.releaseID` in every file.
+    let releaseIDField = NSTextField()
+    private let openOnDiscogsButton = NSButton()
+    /// The release the Discogs tab shows: the one typed, else the files'; nil for none.
     private(set) var discogsReleaseID: Int?
     /// Reads release `id` from the local catalog: nil when it doesn't have it, and
     /// `CatalogError.missing` with no catalog.
@@ -167,7 +171,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             current.reread(model.tracks)
             self.model = current
             showValues()
-            showDiscogs(current.discogsReleaseIDs)
+            showDiscogs(current.shownReleaseIDs)
             return
         }
         self.model = model
@@ -175,7 +179,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         showNote(model.readOnlyNote ?? "", color: .secondaryLabelColor)
         showEditable()
         showValues()
-        showDiscogs(model.discogsReleaseIDs)
+        showDiscogs(model.shownReleaseIDs)
         focusFirstField()
     }
 
@@ -184,21 +188,19 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private var discogsShownIDs: [Int]?
     /// Counts the catalog reads, so one finishing after a later one started is dropped.
     private var discogsRead = 0
-    /// The Discogs tab while it's taken away, to put back.
-    private var discogsItem: NSTabViewItem?
 
-    /// Reads the first of `ids` into the Discogs tab, and puts the tab back when a save gave
-    /// the files their first release id; with none, the tab goes.
+    /// Reads the first of `ids` into the Discogs tab; with none, the tab says how to give the
+    /// files one. The tab is always there, so the tab bar doesn't change once the window shows.
     private func showDiscogs(_ ids: [Int]) {
         guard ids != discogsShownIDs else { return }
         discogsShownIDs = ids
         discogsRead += 1
+        discogsReleaseID = ids.first
+        openOnDiscogsButton.isEnabled = discogsReleaseID != nil
         guard let first = ids.first else {
-            discogsReleaseID = nil
-            return removeDiscogsTab()
+            discogsText.string = noReleaseText
+            return
         }
-        if tabItem(.discogs) == nil, let discogsItem { tabs.addTabViewItem(discogsItem) }
-        discogsReleaseID = first
         discogsText.string = "Reading the Discogs catalog…"
         let release = self.release
         let mine = discogsRead
@@ -214,24 +216,11 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         }
     }
 
-    /// Takes the Discogs tab away for files with no release id, keeping it as the tab the next
-    /// window opens on if it was.
-    private func removeDiscogsTab() {
-        guard let item = tabItem(.discogs) else { return }
-        discogsItem = item
-        let last = Self.lastTab
-        if shownTab == .discogs {
-            tabs.selectTabViewItem(withIdentifier: TagEditorTab.info.rawValue)
-        }
-        tabs.removeTabViewItem(item)
-        Self.lastTab = last
-    }
-
     private func tabItem(_ tab: TagEditorTab) -> NSTabViewItem? {
         tabs.tabViewItems.first { $0.identifier as? String == tab.rawValue }
     }
 
-    /// The tabs the window has, in order: every one, less Discogs for files with no release.
+    /// The tabs the window has, in order.
     var shownTabs: [TagEditorTab] {
         tabs.tabViewItems.compactMap { ($0.identifier as? String).flatMap(TagEditorTab.init) }
     }
@@ -586,16 +575,26 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         return stack
     }
 
-    /// The release's text over Open on Discogs.
+    /// The release id over the release's text, and Open on Discogs.
     private func discogsView() -> NSView {
+        releaseIDField.delegate = self
+        releaseIDField.cell?.usesSingleLineMode = true
+        releaseIDField.alignment = .right
+        releaseIDField.widthAnchor.constraint(equalToConstant: Self.shortWidth * 1.5).isActive =
+            true
+        let label = NSTextField(labelWithString: DiscogsField.releaseID.title)
+        let id = NSStackView(views: [label, releaseIDField])
         let scroll = readOnlyTextView(discogsText)
-        let open = NSButton(
-            title: openOnDiscogsTitle, target: self, action: #selector(openOnDiscogs))
-        let stack = NSStackView(views: [scroll, open])
+        openOnDiscogsButton.title = openOnDiscogsTitle
+        openOnDiscogsButton.bezelStyle = .rounded
+        openOnDiscogsButton.target = self
+        openOnDiscogsButton.action = #selector(openOnDiscogs)
+        let stack = NSStackView(views: [id, scroll, openOnDiscogsButton])
         stack.orientation = .vertical
         stack.alignment = .trailing
         stack.spacing = 10
         scroll.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        id.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
         return stack
     }
 
@@ -753,6 +752,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         for view in fields.values.joined() { view.isEditable = editable }
         for view in areas.values { view.isEditable = editable }
         compilationBox.isEnabled = editable
+        releaseIDField.isEditable = editable
         saveButton.isEnabled = editable
         showExtrasEditable()
         commandsChanged()
@@ -773,6 +773,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             view.string = model.text(field)
         }
         showAreaPlaceholders()
+        if releaseIDField.stringValue != model.releaseIDText {
+            releaseIDField.stringValue = model.releaseIDText
+        }
+        releaseIDField.placeholderString = model.isReleaseIDMixed ? mixedPlaceholder : nil
         if !model.isTyped(.compilation) {
             compilationBox.state =
                 model.isMixed(.compilation)
@@ -802,6 +806,17 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         extraRows = model?.extras ?? []
         extrasTable.reloadData(forRowIndexes: [row], columnIndexes: [0])
         showEdited()
+    }
+
+    /// A release id typed on the Discogs tab: it goes to every file as Extras' key does, and
+    /// the tab reads that release.
+    private func releaseIDChanged() {
+        guard model != nil else { return }
+        model?.setExtra(DiscogsKey.releaseID, releaseIDField.stringValue)
+        releaseIDField.placeholderString = nil
+        showExtras()
+        showEdited()
+        if let model { showDiscogs(model.shownReleaseIDs) }
     }
 
     private func showAreaPlaceholders() {
@@ -861,6 +876,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     public func controlTextDidChange(_ notification: Notification) {
         if let view = notification.object as? NSTextField, view.isDescendant(of: extrasTable) {
             return extraChanged(view, row: extrasTable.row(for: view))
+        }
+        if notification.object as? NSTextField === releaseIDField {
+            return releaseIDChanged()
         }
         guard let view = notification.object as? NSTextField,
             let field = fields.first(where: { $0.value.contains { $0 === view } })?.key

@@ -173,6 +173,11 @@ public struct TagEditorModel: Equatable, Sendable {
         for key in deletedExtras where writable.contains(where: { $0.tags.custom[key] != nil }) {
             custom[key] = ""
         }
+        if let typed = custom[DiscogsKey.releaseID], !typed.isEmpty, !isReleaseID(typed) {
+            throw TagValueError(
+                customKey: DiscogsKey.releaseID, text: typed,
+                detail: "isn't a Discogs release id, a whole number above 0")
+        }
         // The writer refuses a whole file for such a key, even one it would only remove.
         for (key, text) in custom.sorted(by: { $0.key < $1.key }) {
             if let problem = id3OnlyProblem(key) {
@@ -247,8 +252,26 @@ public struct TagEditorModel: Equatable, Sendable {
         return "is an ID3 frame, which \(other.rawValue) doesn't hold"
     }
 
+    /// What the Discogs tab's Release ID field shows: the id typed, else the one every track
+    /// holds; empty when mixed or none has one.
+    var releaseIDText: String {
+        typedExtras[DiscogsKey.releaseID] ?? sharedExtra(DiscogsKey.releaseID) ?? ""
+    }
+
+    /// Whether the tracks hold different release ids, or some none, and none was typed.
+    var isReleaseIDMixed: Bool {
+        typedExtras[DiscogsKey.releaseID] == nil && sharedExtra(DiscogsKey.releaseID) == nil
+    }
+
+    /// The release the Discogs tab shows: the id typed, while it's one, else the first the
+    /// tracks hold, each once.
+    var shownReleaseIDs: [Int] {
+        guard let typed = typedExtras[DiscogsKey.releaseID] else { return discogsReleaseIDs }
+        return isReleaseID(typed) ? [Int(typed)!] : []
+    }
+
     /// The Discogs release ids the tracks carry, each once, in the tracks' order; a value that
-    /// isn't a number is left out. The Discogs tab shows the first.
+    /// isn't a number is left out.
     var discogsReleaseIDs: [Int] {
         var seen = Set<Int>()
         return tracks.compactMap { $0.tags.custom[DiscogsKey.releaseID].flatMap { Int($0) } }
@@ -262,6 +285,11 @@ public struct TagEditorModel: Equatable, Sendable {
         }
         return tags.compilation ? "1" : ""
     }
+}
+
+/// Whether `text` is a Discogs release id: a whole number above 0, in ASCII digits.
+private func isReleaseID(_ text: String) -> Bool {
+    text.allSatisfy { $0.isASCII && $0.isNumber } && (Int(text) ?? 0) > 0
 }
 
 /// A row of the Extras tab: a key and its value, nil where the tracks differ.

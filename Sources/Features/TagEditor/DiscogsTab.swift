@@ -15,3 +15,8 @@ func discogsTabText(_ read: Result<ReleaseDetail?, any Error>, releases: Int) ->
     case .failure(let error): return "The Discogs catalog couldn't be read: \(error)"
     }
 }
+
+/// What the Discogs tab says with no release id, typed or in the files.
+let noReleaseText =
+    "No Discogs release id. Type the number from the release's page, discogs.com/release/<id>,"
+    + " to tag the files with it."
