@@ -277,7 +277,8 @@ public struct TagWriter: Sendable {
             throw TagWriteError(path: path, kind: .invalidValue, detail: error.description)
         }
         let groups = TagGroup.changed(by: edit, from: current.metadata.tags, to: target)
-        let art = edit.art == .remove && current.metadata.art == nil ? nil : edit.art
+        var art = edit.art == .pictures([]) ? .remove : edit.art
+        if art == .remove, current.metadata.art == nil { art = nil }
         guard !groups.isEmpty || art != nil else { return .done(.unchanged) }
 
         let segments: [Segment]
@@ -292,9 +293,17 @@ public struct TagWriter: Sendable {
             ? try InPlacePlan(
                 segments, size: before.size, source: source, payload: file.payload, path: path)
             : nil
-        let expected = Expected(
+        var expected = Expected(
             tags: target, audio: current.metadata.audio,
             art: try expectedArt(art, current, source, path))
+        if case .pictures(let pictures) = art {
+            expected.pictures =
+                if case .mp4 = file {
+                    mp4CoverOrder(pictures).map { ($0.image, nil) }
+                } else {
+                    pictures.map { ($0.image, $0.type) }
+                }
+        }
 
         if let hook = faults.beforeWritingTemp {
             do {
@@ -570,6 +579,9 @@ public struct TagWriter: Sendable {
         var tags: TrackTags
         var audio: TrackAudio
         var art: Data?
+        /// Every picture, in the file's order, with its type, nil in MP4; nil when the edit
+        /// doesn't set them, and only the art the reader shows is checked.
+        var pictures: [(image: Data, type: PictureType?)]?
     }
 
     /// The art the file must hold after `change`: the new image, none, or what it holds now.
@@ -578,6 +590,8 @@ public struct TagWriter: Sendable {
     ) throws(TagWriteError) -> Data? {
         switch change {
         case .replace(let image, _): image
+        case .pictures(let pictures):
+            (pictures.first { $0.type == .frontCover } ?? pictures.first)?.image
         case .remove: nil
         case nil: try currentArt(current, source, path)
         }
@@ -654,7 +668,7 @@ public struct TagWriter: Sendable {
         let edited: TagFile
         let reread: ParsedFile
         do throws(ParseFailure) {
-            reread = try parse(ByteReader(source))
+            reread = try parse(ByteReader(source, keepsPictures: expected.pictures != nil))
             edited = try TagFile(ByteReader(source))
         } catch {
             throw failed("the new file doesn't read: \(error.error(path: path).detail)")
@@ -679,6 +693,23 @@ public struct TagWriter: Sendable {
             throw failed(
                 "the art reads back as \(newArt?.count ?? 0) bytes, not \(expected.art?.count ?? 0)"
             )
+        }
+        if let pictures = expected.pictures {
+            let read = reread.metadata.pictures
+            guard read.count == pictures.count else {
+                throw failed("\(read.count) pictures read back, not \(pictures.count)")
+            }
+            for (index, (picture, wanted)) in zip(read, pictures).enumerated() {
+                let image: Data
+                do throws(ParseFailure) {
+                    image = try readArt(picture.art, from: source)
+                } catch {
+                    throw failed("picture \(index + 1) doesn't read: \(error.detail)")
+                }
+                guard image == wanted.image, picture.type == wanted.type else {
+                    throw failed("picture \(index + 1) doesn't read back as the one written")
+                }
+            }
         }
         return reread
     }

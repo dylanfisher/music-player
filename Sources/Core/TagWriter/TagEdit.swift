@@ -43,9 +43,26 @@ public enum TagEditField: String, CaseIterable, Sendable {
 
 /// New art for a file, or none.
 public enum ArtChange: Equatable, Sendable {
-    /// A JPEG or PNG image, stored as the front cover.
+    /// A JPEG or PNG image, stored as the front cover in place of the picture the reader shows;
+    /// the file's other pictures stay.
     case replace(Data, mimeType: String)
+    /// Every picture the file is to hold, in order, in place of all it holds; none removes
+    /// them. MP4 keeps no types, so it gets the front covers first (ADR 0172).
+    case pictures([ArtPicture])
     case remove
+}
+
+/// One picture an edit writes: a JPEG or PNG image and what it shows.
+public struct ArtPicture: Equatable, Sendable {
+    public var image: Data
+    public var mimeType: String
+    public var type: PictureType
+
+    public init(image: Data, mimeType: String, type: PictureType) {
+        self.image = image
+        self.mimeType = mimeType
+        self.type = type
+    }
 }
 
 /// What one edit changes. Fields it doesn't name are left as they are in each file.
@@ -107,7 +124,13 @@ public struct TagEdit: Equatable, Sendable {
             }
             result.custom[name.uppercased()] = text.nilIfEmpty
         }
-        if case .replace(_, let mimeType) = art, !artMIMETypes.contains(mimeType) {
+        let mimeTypes: [String] =
+            switch art {
+            case .replace(_, let mimeType): [mimeType]
+            case .pictures(let pictures): pictures.map(\.mimeType)
+            case .remove, nil: []
+            }
+        if let mimeType = mimeTypes.first(where: { !artMIMETypes.contains($0) }) {
             throw TagValueError(
                 field: nil, text: mimeType, detail: "art must be a JPEG or PNG image")
         }

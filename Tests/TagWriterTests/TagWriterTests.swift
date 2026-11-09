@@ -56,7 +56,8 @@ func everyEditReadsBackAndUndoes(_ sample: Sample) throws {
         #expect(try tags(url) == expected, "\(name)")
         switch edit.art {
         case .replace(let image, _): #expect(try art(url) == image, "\(name)")
-        case .remove: #expect(try art(url) == nil, "\(name)")
+        case .remove, .pictures([]): #expect(try art(url) == nil, "\(name)")
+        case .pictures: Issue.record("the pictures' round trip is in PicturesWriteTests")
         case nil: #expect(try art(url) == originalArt, "\(name)")
         }
         #expect(

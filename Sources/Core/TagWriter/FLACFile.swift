@@ -113,11 +113,8 @@ struct FLACFile {
         case .remove:
             blocks.removeAll { $0.type == picture }
         case .replace(let image, let mimeType):
-            var body = bigEndianBytes(Int(frontCoverPictureType), 4)
-            body += bigEndianBytes(mimeType.utf8.count, 4) + Array(mimeType.utf8)
-            // No description; width, height, depth and colors unknown, which FLAC allows as 0.
-            body += zeros(4) + zeros(16) + bigEndianBytes(image.count, 4) + Array(image)
-            let new = Block(type: picture, body: body)
+            let new = pictureBlock(
+                ArtPicture(image: image, mimeType: mimeType, type: .frontCover))
             if let index = blocks.firstIndex(where: { block in
                 block.type == picture
                     && artOffset.map { block.original?.contains($0) == true } == true
@@ -126,7 +123,20 @@ struct FLACFile {
             } else {
                 blocks.append(new)
             }
+        case .pictures(let pictures):
+            let first = blocks.firstIndex { $0.type == picture } ?? blocks.count
+            blocks.removeAll { $0.type == picture }
+            blocks.insert(contentsOf: pictures.map(pictureBlock), at: first)
         }
+    }
+
+    private func pictureBlock(_ picture: ArtPicture) -> Block {
+        var body = bigEndianBytes(Int(picture.type.rawValue), 4)
+        body += bigEndianBytes(picture.mimeType.utf8.count, 4) + Array(picture.mimeType.utf8)
+        // No description; width, height, depth and colors unknown, which FLAC allows as 0.
+        body += zeros(4) + zeros(16) + bigEndianBytes(picture.image.count, 4)
+        body += Array(picture.image)
+        return Block(type: BlockType.picture.rawValue, body: body)
     }
 
     /// The vendor and every comment the edit doesn't replace, byte for byte; the replaced

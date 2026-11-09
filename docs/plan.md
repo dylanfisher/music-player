@@ -678,7 +678,7 @@ Asked by the owner on 2026-11-09. Bulk art is the front cover only, by the owner
       with no art or smaller art, or replace with the Replace choice, and write through
       `TagWriter` with progress in the status bar. Needs the token.
 
-Implementation plan, phase 66 (ADR 0171):
+Implementation plan, phase 66 (ADR 0172):
 
 What exists, found by search (map.md recipes): the reader lists every picture in
 `TrackMetadata.pictures` (`EmbeddedPicture`, its type internal) when asked; `TrackMetadata.art`
@@ -711,7 +711,7 @@ write. The viewer's `ArtViewer.frame(of:in:)` fits with no cap. Get Info's Artwo
   confirming with the count and Fill Missing, Replace or Cancel, then `write`.
 - 66.9 Library: "Get Discogs Artwork" (`track.getDiscogsArtwork`) in the track menu, the same
   flow for the selection, through the tagger's public entry, which needs the token.
-- 66.10 ADR 0171, see-also lines in 0020 and 0140, and AGENTS.md's clause if it needs one.
+- 66.10 ADR 0172, see-also lines in 0020 and 0140, and AGENTS.md's clause if it needs one.
 
 ### 10. Web remote
 

@@ -218,13 +218,20 @@ struct MP4File {
         return key
     }
 
-    /// Replaces the first `data` atom of `covr`, which is the one the reader shows, or removes
-    /// `covr` whole.
+    /// Replaces the first `data` atom of `covr`, which is the one the reader shows, puts a
+    /// `data` atom a picture in its place, or removes `covr` whole.
     private func applyArt(_ art: ArtChange, to ilst: inout MP4Box) {
         let index = ilst.children!.firstIndex { $0.type == mp4CoverItemType }
         switch art {
-        case .remove:
+        case .remove, .pictures([]):
             ilst.children!.removeAll { $0.type == mp4CoverItemType }
+        case .pictures(let pictures):
+            let body = mp4CoverOrder(pictures).flatMap { picture in
+                dataAtom(picture.mimeType == pngMIMEType ? 14 : 13, Array(picture.image))
+            }
+            let item = MP4Box(type: mp4CoverItemType, body: body)
+            ilst.children!.removeAll { $0.type == mp4CoverItemType }
+            ilst.children!.insert(item, at: min(index ?? ilst.children!.count, ilst.children!.count))
         case .replace(let image, let mimeType):
             let data = dataAtom(mimeType == pngMIMEType ? 14 : 13, Array(image))
             guard let index else {
@@ -326,3 +333,9 @@ private func fullAtom(_ type: String, _ value: [UInt8]) -> [UInt8] {
 }
 
 func zeros(_ count: Int) -> [UInt8] { [UInt8](repeating: 0, count: max(0, count)) }
+
+/// `pictures` in the order MP4 holds them: the front covers first, then the rest as given, since
+/// `covr` keeps no types and players show its first.
+func mp4CoverOrder(_ pictures: [ArtPicture]) -> [ArtPicture] {
+    pictures.filter { $0.type == .frontCover } + pictures.filter { $0.type != .frontCover }
+}

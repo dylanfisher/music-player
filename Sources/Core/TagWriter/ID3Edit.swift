@@ -177,7 +177,37 @@ extension ID3Tag {
             } else {
                 frames.append(new)
             }
+        case .pictures(let pictures):
+            // The frames before the first picture stay before them.
+            let first = frames.firstIndex(where: isPicture) ?? frames.count
+            frames.removeAll(where: isPicture)
+            frames.insert(contentsOf: try pictureFrames(pictures), at: first)
         }
+    }
+
+    /// A picture frame each, with a description of its own, since ID3 allows one picture a
+    /// description: none for the first, as a single cover has, and the type's name for the
+    /// rest, numbered from 2 when it repeats.
+    private func pictureFrames(_ pictures: [ArtPicture]) throws(ParseFailure) -> [ID3Frame] {
+        var used: Set<String> = []
+        var frames: [ID3Frame] = []
+        for (index, picture) in pictures.enumerated() {
+            let name = picture.type.name
+            var description = index == 0 ? "" : name
+            var number = 1
+            while !used.insert(description).inserted {
+                number += 1
+                description = "\(name) \(number)"
+            }
+            let encoding = textEncoding(description)
+            var body: [UInt8] =
+                [encoding] + Array(picture.mimeType.utf8)
+                + [0, UInt8(clamping: picture.type.rawValue)] + encode(description, encoding)
+                + terminator(encoding)
+            body += picture.image
+            frames.append(try ID3Frame(id: pictureFrameID, body: body, version: version))
+        }
+        return frames
     }
 
     /// Latin-1 for ASCII, which every reader takes; otherwise UTF-8 in 2.4 and UTF-16 in 2.3,

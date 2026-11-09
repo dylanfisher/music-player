@@ -170,6 +170,8 @@ struct RoundTrip {
         let expectedArt: Data? =
             switch edit.art {
             case .replace(let image, _): image
+            case .pictures(let pictures):
+                (pictures.first { $0.type == .frontCover } ?? pictures.first)?.image
             case .remove: nil
             case nil: try originalParsed.metadata.art.map { try readArt($0, at: original) }
             }
