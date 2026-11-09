@@ -177,9 +177,127 @@ private func changed(
     let withBarcode = (1...3).map {
         albumFile(Int64($0), .flac, tags { $0.barcode = "999" })
     }
+    var keepBarcode = oneToOne
+    keepBarcode[.barcode].mode = .fillEmpty
     #expect(
-        changed(empty, files: withBarcode)[1]?.keys.contains("barcode") == false,
-        "a field Discogs lacks leaves the tag")
+        changed(empty, keepBarcode, files: withBarcode)[1]?.keys.contains("barcode") == false,
+        "a field Discogs lacks leaves a tag that fills only empty ones")
+}
+
+@Test func aFieldDiscogsLacksClearsTheTagsItReplaces() throws {
+    var bare = twoDiscs
+    bare.barcodes = []
+    bare.labels = []
+    let current = tags {
+        $0.barcode = "999"
+        $0.publisher = "Old Label"
+        $0.custom = ["DISCOGS_LABEL_URL": "old 1", "DISCOGS_LABEL_URL-2": "old 2"]
+    }
+    let files = (1...3).map { albumFile(Int64($0), .flac, current) }
+    let first = changed(bare, files: files)[1]!
+    #expect(first["barcode"] == .some(nil))
+    #expect(first["publisher"] == .some(nil))
+    #expect(first["DISCOGS_LABEL_URL"] == .some(nil))
+    #expect(first["DISCOGS_LABEL_URL-2"] == .some(nil))
+    #expect(first["catalogNumber"] == nil, "a tag the file doesn't have is no change")
+    let set = changeSet(for: files, match: match(bare), mapping: oneToOne)
+    let edit = try set.edits()[0].edit
+    #expect(edit.values[.barcode] == "")
+    #expect(edit.custom["DISCOGS_LABEL_URL-2"] == "")
+
+    // A template that fills to no text clears its tag too.
+    var mapping = oneToOne
+    mapping[.genres].format.template = "{country}"
+    var noCountry = twoDiscs
+    noCountry.country = nil
+    let genred = (1...3).map { albumFile(Int64($0), .flac, tags { $0.genre = "Rock" }) }
+    #expect(changed(noCountry, mapping, files: genred)[1]?["genre"] == .some(nil))
+}
+
+@Test func aFieldDiscogsLacksLeavesTheTagsOfAKeptField() {
+    var undated = twoDiscs
+    undated.released = nil
+    let files = (1...3).map { albumFile(Int64($0), .flac, tags { $0.date = "2001" }) }
+    #expect(changed(undated, oneToOne.keepingExistingValues(), files: files)[1]?["date"] == nil)
+    #expect(changed(undated, oneToOne, files: files)[1]?["date"] == .some(nil))
+}
+
+@Test func anotherSpellingOfAFieldsKeyIsRemoved() throws {
+    // As YATE leaves a FLAC album, keys uppercased as they are read.
+    let yate = tags {
+        $0.custom = [
+            "TRACK NUMBER TEXT": "2", "DISCOGS RELEASE ORDINAL POSITION": "1",
+            "DISCOGS_ALBUM_RELEASECOUNTRY": "UK", "DISCOGS ALBUM RELEASE COUNTRY": "UK",
+            "DISCOGS_IMPORT_SETTINGS": "yate's",
+        ]
+    }
+    let files = (1...3).map { albumFile(Int64($0), .flac, yate) }
+    let first = changed(twoDiscs, files: files)[1]!
+    for key in [
+        "TRACK NUMBER TEXT", "DISCOGS RELEASE ORDINAL POSITION", "DISCOGS_ALBUM_RELEASECOUNTRY",
+        "DISCOGS ALBUM RELEASE COUNTRY",
+    ] {
+        #expect(first[key] == .some(nil), "\(key)")
+    }
+    #expect(first["TRACK_NUMBER_TEXT"] == "CD1-1")
+    #expect(first["COUNTRY"] == "Europe")
+    #expect(first["DISCOGS_IMPORT_SETTINGS"] == nil, "a key no field has is left")
+    let set = changeSet(for: files, match: match(twoDiscs), mapping: oneToOne)
+    #expect(set.files[0].changes.first { $0.tag.name == "TRACK NUMBER TEXT" }?.field == .position)
+    #expect(try set.edits()[0].edit.custom["DISCOGS ALBUM RELEASE COUNTRY"] == "")
+
+    // YATE's preset writes its own spellings of the country, so it keeps them.
+    let mp4 = (1...3).map { albumFile(Int64($0), .aac, yate) }
+    let byYATE = changed(twoDiscs, DiscogsPreset.yate.mapping, files: mp4)[1]!
+    #expect(byYATE["Discogs Album Release Country"] == "Europe")
+    #expect(byYATE["DISCOGS_ALBUM_RELEASECOUNTRY"] == .some(nil), "FLAC's spelling, in MP4")
+    #expect(byYATE["DISCOGS ALBUM RELEASE COUNTRY"] == nil)
+}
+
+@Test func anotherSpellingsNumberedKeysAreRemoved() {
+    let current = tags {
+        $0.custom = [
+            "DISCOGS_ALBUM_ARTIST_URL": "https://www.discogs.com/artist/1",
+            "DISCOGS_ALBUM_ARTIST_URL-2": "https://www.discogs.com/artist/2",
+            "DISCOGS CATALOG NUMBER-2": "Other: OTH 2",
+        ]
+    }
+    let files = (1...3).map { albumFile(Int64($0), .flac, current) }
+    let first = changed(twoDiscs, files: files)[1]!
+    #expect(first["DISCOGS_ALBUM_ARTIST_URL"] == .some(nil))
+    #expect(first["DISCOGS_ALBUM_ARTIST_URL-2"] == .some(nil))
+    #expect(first["DISCOGS CATALOG NUMBER-2"] == .some(nil))
+    #expect(first["DISCOGS_ALBUMARTIST_URL"] == "https://www.discogs.com/artist/1")
+    #expect(first["DISCOGS_CATALOG_NUMBER-2"] == "Other: OTH 2")
+    var keep = oneToOne
+    keep[.labelCatalogNumbers].mode = .fillEmpty
+    #expect(
+        changed(twoDiscs, keep, files: files)[1]?.keys.contains("DISCOGS CATALOG NUMBER-2")
+            == false, "a field that fills only empty tags removes nothing")
+
+    // ID3's WXXX frames are YATE's spelling of the URLs.
+    let mp3 = albumFile(
+        1, .mp3,
+        tags { $0.custom = ["WXXX:DISCOGS_ALBUMARTIST_URL-2": "https://www.discogs.com/artist/X"] })
+    #expect(changed(twoDiscs, files: [mp3])[1]?["WXXX:DISCOGS_ALBUMARTIST_URL-2"] == .some(nil))
+}
+
+@Test func aKeyTheMappingWritesIsNeverRemoved() {
+    var mapping = oneToOne
+    mapping[.position].targets = [.key("Track Number Text")]
+    mapping[.producer].targets = [.key(DiscogsKey.releaseCountryVorbis)]
+    let current = tags {
+        $0.custom = [
+            "TRACK NUMBER TEXT": "2", "TRACK_NUMBER_TEXT": "2",
+            "DISCOGS_ALBUM_RELEASECOUNTRY": "UK",
+        ]
+    }
+    let files = (1...3).map { albumFile(Int64($0), .flac, current) }
+    let first = changed(twoDiscs, mapping, files: files)[1]!
+    #expect(first["Track Number Text"] == "CD1-1")
+    #expect(first["TRACK NUMBER TEXT"] == nil, "the key it writes isn't also removed")
+    #expect(first["TRACK_NUMBER_TEXT"] == .some(nil))
+    #expect(first["DISCOGS_ALBUM_RELEASECOUNTRY"] == "Pat", "another field's target is kept")
 }
 
 @Test func aNumberedKeyPastTheReleasesValuesIsRemoved() throws {
@@ -210,6 +328,16 @@ private func changed(
     #expect(bonus.contains(.releaseID))
     #expect(bonus.allSatisfy { $0.level == .release })
     #expect(set.files[3].changes.contains { $0.field == .album })
+
+    // A bonus track's tags of the track's fields are left, other spellings too.
+    let bonusTags = tags {
+        $0.title = "Bonus"
+        $0.custom = ["TRACK_NUMBER_TEXT": "5", "TRACK NUMBER TEXT": "5"]
+    }
+    let withBonus = Array(files.prefix(3)) + [albumFile(4, .flac, bonusTags)]
+    let tagged = changeSet(for: withBonus, match: match(twoDiscs, files: 3), mapping: oneToOne)
+    #expect(!tagged.files[3].changes.isEmpty)
+    #expect(tagged.files[3].changes.allSatisfy { $0.field.level == .release })
 }
 
 @Test func aDSDFileCantBeWrittenAndNoReleaseChangesNothing() throws {

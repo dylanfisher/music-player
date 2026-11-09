@@ -138,7 +138,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         }
         keepBox.toolTip =
             "Titles, artists, numbers, credits and the date fill only empty tags,"
-            + " whatever the mapping says."
+            + " whatever the mapping says. Off, they match Discogs as every field the mapping"
+            + " replaces does: a field Discogs has no value for is cleared."
         skipVideoBox.toolTip = "Releases that are only Blu-ray, DVD or video are never candidates."
         sortArtistBox.toolTip = "Files with no sort artist get the album artist as one."
         mappingButton.toolTip =

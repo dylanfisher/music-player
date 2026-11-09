@@ -62,6 +62,24 @@ public enum DiscogsPreset {
         name: "YATE", mapping: DiscogsMapping(yateRules).checkedOnce())
 }
 
+extension DiscogsPreset {
+    /// Each field's custom keys in every preset, and in the spellings early builds wrote: the
+    /// other spellings of its tags that a field replacing them removes from a file (ADR 0151).
+    public static let spellings: [DiscogsField: [DiscogsTarget]] = {
+        var spellings = [DiscogsField.albumArtistURL: [numbered(DiscogsKey.albumArtistURLUnderscored)]]
+        for preset in all {
+            for (field, rule) in preset.mapping.rules {
+                for target in rule.targets where target.isKey {
+                    if !spellings[field, default: []].contains(target) {
+                        spellings[field, default: []].append(target)
+                    }
+                }
+            }
+        }
+        return spellings
+    }()
+}
+
 /// "A & B", as YATE joins several labels (ADR 0128).
 private let labelFormat = DiscogsFieldFormat(join: " & ")
 private let listFormat = DiscogsFieldFormat(join: ", ")

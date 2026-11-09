@@ -24,7 +24,8 @@ public struct TagChange: Equatable, Sendable, Identifiable {
     public var field: DiscogsField
     /// Nil for a tag the file doesn't have.
     public var current: String?
-    /// Nil to remove the tag: a numbered key past the release's values.
+    /// Nil to remove the tag: a numbered key past the release's values, a tag of a field
+    /// Discogs has no value for, or another spelling of the field's key (ADR 0151).
     public var new: String?
 
     public var tag: MappedTag { id.tag }
@@ -111,8 +112,9 @@ public struct AlbumChangeSet: Equatable, Sendable {
 
 /// What the mapping would write to `files` for `match` (ADR 0132). A file the match maps to a
 /// track gets every field; one it maps to none, such as a bonus track the release lacks, gets
-/// the release's fields only. A field Discogs has no value for leaves its tags as they are, and
-/// a field set to fill empty tags leaves a tag that has a value. `fillingSortArtist` gives a
+/// the release's fields only. A field set to fill empty tags leaves a tag that has a value. One
+/// that replaces them clears its tags when Discogs has no value for it, and removes the other
+/// spellings of its key a file holds (ADR 0151). `fillingSortArtist` gives a
 /// file with no sort artist the album artist the changes write, else its own (ADR 0132).
 public func changeSet(
     for files: [AlbumFile], match: AlbumMatch, mapping: DiscogsMapping,
@@ -152,26 +154,78 @@ private func changes(
     mapping: DiscogsMapping
 ) -> [TagChange] {
     let tags = file.metadata.tags
+    let mappingKeys = DiscogsField.allCases.flatMap { field in
+        mapping[field].mode == .off ? [] : mapping[field].targets.filter(\.isKey)
+    }
     var result: [TagChange] = []
     for field in DiscogsField.allCases {
         let rule = mapping[field]
-        guard rule.mode != .off, let value = fields.value(field, at: place) else { continue }
+        // A track's field for a file the match maps to no track is left as it is.
+        guard rule.mode != .off, field.level == .release || place != nil else { continue }
+        let value = fields.value(field, at: place)
+        guard value != nil || rule.mode == .replace else { continue }
+        var pairs: [(MappedTag, String?)] = []
         for target in rule.targets {
-            for (tag, new) in written(
-                field, value, rule.format, target, format: format, fields: fields, place: place,
-                tags: tags)
-            {
-                let current = text(tag, in: tags)
-                if rule.mode == .fillEmpty, current != nil { continue }
-                guard new != current else { continue }
-                result.append(
-                    TagChange(
-                        id: TagChange.ID(fileID: file.id, tag: tag), field: field,
-                        current: current, new: new))
+            if let value {
+                pairs += written(
+                    field, value, rule.format, target, format: format, fields: fields,
+                    place: place, tags: tags)
+            } else {
+                pairs += held(target, format, in: tags).map { ($0, nil) }
             }
+        }
+        if rule.mode == .replace, rule.targets.contains(where: \.isKey) {
+            pairs += otherSpellings(of: field, in: tags, keeping: mappingKeys, format).map {
+                ($0, nil)
+            }
+        }
+        for (tag, new) in pairs {
+            let current = text(tag, in: tags)
+            if rule.mode == .fillEmpty, current != nil { continue }
+            guard new != current else { continue }
+            result.append(
+                TagChange(
+                    id: TagChange.ID(fileID: file.id, tag: tag), field: field,
+                    current: current, new: new))
         }
     }
     return result
+}
+
+/// The tags of `target` in `format` that `tags` holds: its field or key, and its numbered keys.
+private func held(_ target: DiscogsTarget, _ format: TagFormat, in tags: TrackTags)
+    -> [MappedTag]
+{
+    guard target.isKey else {
+        let tag = target.tag(in: format)
+        return text(tag, in: tags) == nil ? [] : [tag]
+    }
+    return tags.custom.keys.sorted().filter { spells($0, target, format) }.map(MappedTag.custom)
+}
+
+/// The keys `tags` holds that another preset, or an early build, spells `field`'s tags with,
+/// in any format, and that none of `mappingKeys` in `format` spells (ADR 0151).
+private func otherSpellings(
+    of field: DiscogsField, in tags: TrackTags, keeping mappingKeys: [DiscogsTarget],
+    _ format: TagFormat
+) -> [MappedTag] {
+    let spellings = DiscogsPreset.spellings[field] ?? []
+    return tags.custom.keys.sorted().filter { key in
+        spellings.contains { target in TagFormat.allCases.contains { spells(key, target, $0) } }
+            && !mappingKeys.contains { spells(key, $0, format) }
+    }.map(MappedTag.custom)
+}
+
+/// Whether `key`, uppercased, is `target`'s key in `format` or one of its numbered keys.
+private func spells(_ key: String, _ target: DiscogsTarget, _ format: TagFormat) -> Bool {
+    guard case .custom(let name) = target.tag(in: format) else { return false }
+    if key == name.uppercased() { return true }
+    guard case .custom(let second)? = target.tag(in: format, value: 1) else { return false }
+    let prefix = second.uppercased().dropLast()
+    guard key.hasPrefix(prefix), let number = Int(key.dropFirst(prefix.count)) else {
+        return false
+    }
+    return number > 1
 }
 
 /// `ARTISTSORT` as the owner's YATE fills it after an import: the album artist the changes
@@ -181,7 +235,9 @@ private func sortArtist(_ file: AlbumFile, _ changes: [TagChange]) -> TagChange?
     guard text(tag, in: file.metadata.tags) == nil, !changes.contains(where: { $0.tag == tag })
     else { return nil }
     let written = changes.first { $0.tag == .field(.albumArtist) }
-    guard let albumArtist = written?.new ?? file.metadata.tags.albumArtist else { return nil }
+    guard let albumArtist = written.map(\.new) ?? file.metadata.tags.albumArtist else {
+        return nil
+    }
     return TagChange(
         id: TagChange.ID(fileID: file.id, tag: tag), field: .albumArtist, current: nil,
         new: albumArtist)

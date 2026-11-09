@@ -28,6 +28,9 @@ public enum DiscogsKey {
     public static let masterURL = "DISCOGS_MASTER_URL"
     public static let artistURL = "DISCOGS_ARTIST_URL"
     public static let albumArtistURL = "DISCOGS_ALBUMARTIST_URL"
+    /// The album artist URL key as early builds of this app spelled it, which a file they
+    /// tagged may still hold and a replace removes (ADR 0151).
+    public static let albumArtistURLUnderscored = "DISCOGS_ALBUM_ARTIST_URL"
     public static let labelURL = "DISCOGS_LABEL_URL"
     public static let producer = "PRODUCER"
     /// The credits no other key takes.

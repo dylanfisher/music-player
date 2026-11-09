@@ -33,6 +33,11 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
         return .custom(numbered[format] + Self.numberSeparator + String(index + 1))
     }
 
+    /// Whether this is a custom key rather than a field.
+    public var isKey: Bool {
+        if case .key = self { true } else { false }
+    }
+
     /// Whether each value of a list gets a key of its own.
     public var isNumbered: Bool {
         if case .key(_, numbered: .some) = self { true } else { false }
