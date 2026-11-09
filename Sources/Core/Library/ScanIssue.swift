@@ -11,6 +11,9 @@ public struct ScanIssue: Equatable, Sendable, CustomStringConvertible {
         case rootEmpty
         /// The folder went away or moved to another volume during the scan.
         case rootVanished
+        /// The walk was given a file more than once, so its listings can't be trusted to say
+        /// what's gone (ADR 0151).
+        case listedTwice
         /// A directory or entry that couldn't be listed or stat'ed.
         case unreadable
         /// Not followed, so a link can't loop or reach outside the folder.

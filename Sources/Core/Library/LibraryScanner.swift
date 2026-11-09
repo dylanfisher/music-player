@@ -169,6 +169,18 @@ public struct LibraryScanner: Sendable {
                         + " the index keeps them"))
             return summary
         }
+        // A volume that lists a file twice can leave others out with no error, as the NAS did
+        // on 8 Nov (ADR 0151), so what the walk didn't see isn't known to be gone.
+        if let first = outcome.firstListedTwice {
+            summary.issues.append(
+                ScanIssue(
+                    kind: .listedTwice, path: root,
+                    detail: "listed \(outcome.listedTwice) files more than once, the first"
+                        + " \(first); the index keeps the files it didn't see"))
+            logger.error(
+                "\(root) listed \(outcome.listedTwice) files more than once; nothing removed")
+            return summary
+        }
 
         // The walk finished, so remove what's gone, except under anything it couldn't see, and
         // nothing when the owner keeps missing tracks.

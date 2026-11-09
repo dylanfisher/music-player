@@ -101,6 +101,42 @@ import Testing
     #expect(try library.index().trackCount() == library.readableCount)
 }
 
+/// Lists `root` with every entry twice, as the NAS listed the library on 8 Nov, so the walk
+/// is given each file more than once.
+private struct ListsRootTwice: ScanFileAccess {
+    var root: String
+
+    func volumeIsLocal(_ path: String) throws -> Bool? { true }
+
+    func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
+        let entries = try SystemFileAccess().contentsOfDirectory(directory, keys: keys)
+        return directory == root ? entries + entries : entries
+    }
+
+    func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
+        try SystemFileAccess().readMetadata(at: path)
+    }
+}
+
+/// A listing that repeats files can leave others out with no error, so a scan given a file
+/// twice removes nothing, not even a file that really went, and counts each file once
+/// (ADR 0151).
+@Test func aFileListedTwiceRemovesNothing() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let gone = library.manifest.files.first { $0.malformation == nil }!
+    try FileManager.default.removeItem(atPath: library.path(gone))
+    let scanner = LibraryScanner(
+        databaseURL: library.databaseURL, access: ListsRootTwice(root: library.root))
+
+    let summary = try scanner.scan(library.folder)
+    #expect(summary.issues.map(\.kind) == [.listedTwice])
+    #expect(summary.removed == 0)
+    #expect(summary.unchanged == library.manifest.files.count - 1 - summary.failed)
+    #expect(try library.index().trackCount() == library.readableCount)
+    #expect(try library.index().track(path: library.path(gone)) != nil)
+}
+
 @Test func unreadableDirectoryKeepsItsFiles() throws {
     let library = try TestLibrary()
     _ = try library.scan()

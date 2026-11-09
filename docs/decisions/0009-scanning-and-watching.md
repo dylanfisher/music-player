@@ -7,6 +7,8 @@
   rescanned at launch. [0124](0124-drop-files-and-the-library-folder.md): files dropped on the
   window are rescanned, or their folders watched. [0149](0149-polls-from-the-last-whole-scan.md):
   a network folder is polled an interval after its last whole scan started, across launches.
+  [0151](0151-a-listing-that-repeats-files-removes-nothing.md): a scan whose listings give it a
+  file twice removes nothing.
 
 ## Context
 
@@ -30,7 +32,8 @@ stored 500 to a transaction.
 walk that finished, when the folder is still the same directory on the same device (`st_dev`)
 as at the start, and never at or under an entry that couldn't be listed or stat'ed. A missing
 folder, one that lists nothing while the index holds its files (an empty mount point), and one
-that vanished or changed device during the scan are reported and keep the index as it was. A
+that vanished or changed device during the scan are reported and keep the index as it was, as
+is a walk given any file twice (ADR 0151). A
 reader whose file is unreadable checks the folder; if it's gone, reading stops.
 
 **An unreadable file keeps its earlier track.** A read failing with `unreadable` (I/O, not a

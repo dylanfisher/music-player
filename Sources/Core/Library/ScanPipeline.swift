@@ -41,6 +41,9 @@ final class ScanPipeline: @unchecked Sendable {
         var unreadablePaths: [String] = []
         /// Entries in `root`'s listing, when it was listed.
         var rootEntries: Int?
+        /// Files the walk was given again after it had seen them, and the first of them.
+        var listedTwice = 0
+        var firstListedTwice: String?
         var unchanged = 0
         var read = 0
         var failed = 0
@@ -215,7 +218,11 @@ final class ScanPipeline: @unchecked Sendable {
                 {
                     continue
                 }
-                outcome.seen.insert(file.path)
+                guard outcome.seen.insert(file.path).inserted else {
+                    if outcome.listedTwice == 0 { outcome.firstListedTwice = file.path }
+                    outcome.listedTwice += 1
+                    continue
+                }
                 if isChanged(file) {
                     queued.append(file)
                     toRead += 1
