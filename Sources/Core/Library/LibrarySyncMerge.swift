@@ -296,9 +296,12 @@ extension LibraryIndex {
         if let counts = try statement(
             "SELECT play_count, skip_count, last_played_seconds FROM plays WHERE path_id = ?"
         ).map(gone, row: { (try $0.int(0), try $0.int(1), $0.optionalDouble(2)) }).first {
+            // The hand-set offset moves whole (`absorbPlayCount`), so only the plays counted
+            // are kept from going below 0, and `play_count` less the offset stays them.
+            let offset = try statement(playCountOffsetSQL).map(gone) { try $0.int(0) }.first ?? 0
             try addCounts(
-                kept, plays: max(0, counts.0 - overlap.0), skips: max(0, counts.1 - overlap.1),
-                lastPlayed: counts.2)
+                kept, plays: max(0, counts.0 - offset - overlap.0) + offset,
+                skips: max(0, counts.1 - overlap.1), lastPlayed: counts.2)
             try statement("DELETE FROM plays WHERE path_id = ?").run(gone)
         }
         try statement("UPDATE history SET path_id = ? WHERE path_id = ?").run(kept, gone)

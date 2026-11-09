@@ -428,6 +428,33 @@ private func syncAll(_ machines: [Machine]) throws {
 }
 
 /// A move carries a hand-set count with the plays, onto a path played since.
+/// A path set below its counted plays merges by a move with its whole offset, so the plays
+/// counted stay its plays and the other path's added.
+@Test func aMoveOfAPathSetBelowItsPlaysKeepsThePlaysCounted() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let old = try a.scanned("x.flac", title: "Song")
+    for at in 0..<2 { try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000 + Double(at)) }
+    try a.index.remove([old])
+    try a.scanned("renamed.flac", title: "Song")
+    #expect(try a.index.matchMoves().count == 1)
+    // B played the new path 3 times and has a set of 1 over 6 plays, the rest yet to come.
+    let new = try b.scanned("renamed.flac", title: "Song")
+    for at in 0..<3 { try b.index.recordPlay(b.path("renamed.flac"), at: 1_700_000_100 + Double(at)) }
+    try b.index.inTransaction { try b.index.setPlayCountOffset(-5, of: new) }
+    try a.sync()
+    try b.sync()
+    let id = try #require(try b.track("renamed.flac")).id
+    let (count, offset) = try b.index.database.prepare(
+        """
+        SELECT p.play_count, o.plays FROM plays p
+        JOIN \(playCountOffsetsTable) o ON o.path_id = p.path_id WHERE p.path_id = ?
+        """
+    ).map(id) { (try $0.int(0), try $0.int(1)) }[0]
+    #expect(offset == -5)
+    #expect(count - offset == 5, "A's 2 plays and B's 3")
+}
+
 @Test func aMoveCarriesAHandSetCount() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair
