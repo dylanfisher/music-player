@@ -1,99 +1,91 @@
 
 
-### 59. Downloads
+### 60. Keep Files Organized
 
-Some items change the service (`~/projects/music-recommender`, edited on mbp2021, where it
-runs; restart it after) and its `docs/api.md` with it.
+Asked by the owner on 2026-11-09, with the boundary change: "record the new move in an ADR and
+in the AGENTS.md boundary".
 
-- [x] **Copy into staging:** a downloaded job shows "Copying to staging, 5 of 14 files" from
-      the `progress` the service already sends with `downloaded`, and "Copying to staging…"
-      before the copy starts.
-- [x] **Speed and ETA** for downloading and copying jobs, from successive `progress` bytes.
-      Computed only while the window or the status item shows it.
-- [x] **Search state over time:** a long search says more than "Searching": the attempt, when
-      the next search runs, and whatever else the service can report (a service change if
-      needed).
-- [x] **Open with a selection:** opening Downloads with library rows selected opens the From
-      Library sheet for them.
-- [x] **Reveal in Finder** for a staged or approved job.
-- [x] **Open in slskd:** a command that opens slskd's web page, at an address the service
-      reports (a service change).
-- [x] **Status bar item:** while a download is in progress, an item at the bottom right of the
-      status bar; a click opens Downloads, a right-click picks its style (count, label,
-      progress bar).
-- [x] **Approve sheet:** redone calmer, with the same views the app uses elsewhere for the
-      same data (DRY).
+- [x] **Setting:** Keep Files Organized, limited to the library folder. After each tag write
+      the user confirms, the edited files are renamed to their `libraryFolderPath` layout with
+      `renamex_np(RENAME_EXCL)`, as Approve does, and stats and playlists carry over through
+      the move list (`importMoves`/`TrackMove`). A taken target name skips the file and lists
+      it in Problems.
+- [x] **Organize Selected Files:** the same for selected tracks already in the library folder.
+- [x] **ADR and AGENTS.md boundary** for the new move.
 
-Implementation plan, phase 59 (ADR 0163). The service's half shipped first (its ADR 0014):
-`downloads/config` sends `slskd_url`, a job sends `search` while `searching`, and a
-`not_found` job's `reason` stays through its next search.
+Implementation plan, phase 60 (ADR 0164):
 
-What exists, found by search (map.md recipes):
+What exists, found by search (map.md recipes): the layout is `libraryFolderPath` in
+`Core/Library/LibraryFolderLayout.swift`; Approve's renames are `LibraryFolderMove`, over
+`MoveCalls`; the move list is `LibraryIndex.importMoves(_:)`, reached through
+`LibraryWatcher.importMoves(lines:)`. Tag writes and undos run one at a time on `TagEditing`'s
+write queue and report through `written`; the undo journal (`TagUndoJournal`) keys each file's
+record by its path, with the edited file's size, mtime and inode. Problems rows come from
+`LibraryStatus`'s reports, filled by `LibraryBrowser.finish`.
 
-- `Recommender.DownloadJob` decodes the job strictly, every key required; it has no `search`.
-  The client has no `config` route. `DownloadsService` holds the calls as closures.
-- `DownloadsModel` polls every 2 s while the window is open and a job moves, else every
-  60 s from launch to quit (the coordinator tags and imports off those polls). Nothing in the
-  status bar hears it.
-- `DownloadRow.state` words a state; `downloaded` is a bare "Downloaded", and `progress` is
-  read only while `downloading`.
-- The status bar is `LibraryBrowser`'s: its trailing stack ends with the problems button.
-- The tagger's tables (`taggerTable`), Library Problems and the Downloads window and Queue
-  sheet use one table look: alternating rows, full width, a bezeled scroll view. The Approve
-  sheet alone shows its data as monospaced text views.
-- File > Downloads… runs `showDownloads`, which calls `Downloads.show()`.
+- 60.1 Shared rename (refactor): `LibraryFolderMove`'s exclusive rename (`renameNeverOver`),
+  its case-preserving path (`listedPath`) and its library check (`isFolder`) become
+  file-level functions, which Approve and the organizer both call; `layoutDestination` reads
+  the tags and gives the destination for the copy, Approve and the organizer.
+- 60.2 The organizer (`Core/Library/LibraryFolderOrganize.swift`): `layoutMoves` plans,
+  `moveToLayout` renames a plan. A file outside the library folder (links followed) is
+  skipped; one already in place is left; one whose path is taken, or on another volume
+  (`EXDEV`), is skipped and listed, never copied. Folders a move leaves empty are removed with
+  `rmdir`, up to but never the library folder itself; a folder still holding other files
+  (cover art) stays, and is listed when no audio is left in it.
+- 60.3 The journal follows (`TagWriter.follow(_:)`, `TagUndoJournal`): every record of a
+  moved path takes the new path, and the one whose edited size and mtime match the file takes
+  its identity there, since an SMB rename may renumber the inode. Undo Tag Edit then finds it.
+- 60.4 Setting `library.keepFilesOrganized` (`AppSettings`), in the Library Folder box; the
+  box's folder row is on while either checkbox is (`switchKeys`).
+- 60.5 `TagEditing` hook: with a folder from `organizingFolder`, each write or undo the user
+  asked for is followed on the write queue by the organizer and the journal's follow, so no
+  later write or undo comes between; `written` gets the report at the new paths and what was
+  organized. Recovery at launch isn't organized.
+- 60.6 Organize Selected Files… (`track.organize`, in File > Moved and Removed Files):
+  `LibraryBrowser.organizeSelection` plans off the main thread, asks "Organize N Files?" with
+  the count that will move and the skipped, then hands the plan to `TagEditing.organize`.
+  `finishOrganizing` says what moved in the status bar and lists the rest in Problems.
+- 60.7 App wiring: the moves are recorded in the index before the renames
+  (`LayoutMoveLedger.swift`) and `carryLayoutMoves` gives them to `importMoves(lines:)`, so
+  stats, ratings and playlists follow, after each organize and each watcher start; the new
+  paths are rescanned.
+- 60.8 ADR 0164, the AGENTS.md clause, ADR 0124's and 0147's amended-by lines, and the
+  "Later" item's organize part reworded as done.
 
-Parts, each its own commit or two, with a test that fails without it:
+Tests: a taken name skipped, a move to another album folder, a file outside the library
+folder, `ENOTSUP` and `EXDEV` through `MoveCalls`, another client taking a name during the
+fallback, empty-folder cleanup and a folder with art kept, one spelling per folder on a volume
+that ignores case, stats and a playlist entry carried through `importMoves` and after a failed
+carry, undo after a move, and the hook's ordering in `TagEditorTests`. All in temporary
+folders.
 
-1. **Contract.** `DownloadJob.Search` (strict, as the rest), the fixture updated;
-   `DownloadsConfig` and `RecommenderClient.downloadsConfig()`, whose `slskdURL` puts the
-   service's own host in place of a loopback one, keeping scheme and port.
-2. **State words** in `DownloadRow.state`: the query, its number of the count, peers and
-   files while searching; the attempt and the last miss when searching again; when a
-   `not_found` job searches next, or that only Retry starts one; "Copying to staging…" and
-   "Copying to staging, 5 of 14 files" for `downloaded`, with its progress bar.
-3. **Speed and ETA:** `TransferRates`, pure, fed by the model with its own receive times
-   while the window is open only; a reading is kept when its bytes change, the speed is the
-   bytes over the time across the last 6, a stalled reading holds its last speed for 120 s
-   and then shows none, never 0 B/s. Tests with an injected clock.
-4. **Polling pace:** 2 s while the window is open and a job moves; 5 s while the status
-   bar shows and a job is on its way; 60 s otherwise, as before.
-5. **Status bar item:** `DownloadsStatusItem` in Downloads, put after the problems button
-   by a new `LibraryBrowser.setStatusAccessory`; shown while a job is queued, searching or
-   downloading; a click opens Downloads; a right-click picks its style, the setting
-   `appearance.downloadsStatusStyle` (count, text, progress bar), declared in `Settings`.
-6. **Open with a selection:** File > Downloads… with library rows selected opens From
-   Library Selection once the window can queue; a selection with no Discogs album opens
-   nothing.
-7. **Reveal in Finder** (staged through importing, and failed after staging) and **Open
-   in slskd** (the window's bar, from the config route, fetched when the window opens).
-8. **Approve sheet:** a table of the files (file, where it goes, the lossy-origin check)
-   and for an upgrade a table of the old files with a box for each with no new file, in the
-   tables' shared look (`NSTableView.inListScrollView`, the tagger's too), a single
-   line of warnings and blockers above the buttons.
+- [x] **Owner check, on a scratch folder on the share:** with two Macs, organize on one and
+      Approve or organize on the other into the same names: neither file is replaced, and the
+      second is listed as taken. Look in the log for "reserving the name" to see the share
+      took the fallback, and that no empty file is left after a refused rename.
 
-Result, phase 59: shipped all eight items (ADR 0163, 0145 amended), on the service's new
-`search` object and `slskd_url` (music-recommender 3478991 and 5e624ae, its ADR 0014, deployed
-on mbp2021). States read "Searching, query 1 of 2: 14 peers, 389 files", "Not found: …;
-searching again …", "Copying to staging…" and "Copying to staging, 5 of 14 files"; the window
-adds "· 2.4 MB/s, about 3 min left", averaged over six readings by this Mac's receive time,
-held through a stall for 120 s and never 0 B/s, and only while the window is open. Polling is
-2 s with the window open, 5 s with the status item showing, 60 s otherwise. The status item
-(count, text or progress bar, `appearance.downloadsStatusStyle`) opens the window; a
-right-click picks the style. File > Downloads… with a selection offers it in From Library
-Selection. Reveal in Finder takes only a single folder name under staging, as Approve and
-tagging now do. Open slskd strips credentials and query and puts the service's host for a
-loopback one. The Approve sheet and the tagger share one table helper in DisplayText. Gate:
-one correctness and one simplify review; 4 of 6 correctness findings real and fixed, 2 shown
-not real with tests; `theGlassHeadersAreFrosted` fails as in every agent session. Cost:
-implementer about 440k tokens, 392 tool calls, 72 min; reviewers 153k tokens, 24 calls, 2 min;
-the service half 160k tokens, 57 calls, 9 min. The service's deploy wiped its job history
-(three finished jobs).
+Result, phase 60: shipped all three items (ADR 0164; 0020, 0124 and 0147 amended; the AGENTS.md
+boundary). With Keep Files Organized on, a confirmed tag write or undo renames its files inside
+the library folder to their layout, and Organize Selected Files does it after a confirmation that
+names the count, running exactly the plan it confirmed. A taken name, a file outside the folder,
+or a move across volumes is skipped and listed; only folders a move empties are removed. Where a
+share refuses `RENAME_EXCL`, the name is reserved with `open(O_CREAT|O_EXCL)` before the rename,
+which holds across Macs; Approve shares that helper. Moves are written to a `layout_moves`
+ledger before the first rename and carried on the write queue, at each organize and at every
+watcher start. The undo journal follows a batch of renames in one pass. Gate: one file-safety
+and one simplify review, then a re-review of the fixes; 8 correctness findings, all real, fixed
+with tests, 4 simplifications, then 2 more from the re-review (the ledger carry raced an
+organize; a placeholder whose fstat failed stays, as recorded). No data-loss path found.
+`theGlassHeadersAreFrosted` fails as in every agent session. Cost: implementer about 440k tokens
+plus the last fixes, 449 tool calls, 92 min; reviewers 206k tokens, 25 calls, 4 min.
 
-Owner steps: a real download end to end, watching the State words, the speed through another
-job's search, and the copy; the status item, its click and its three styles over a relaunch,
-and polling back to 60 s with the status bar hidden; File > Downloads… with tracks selected;
-Reveal in Finder on a staged job; Open slskd opens mbp2021's address; Approve… on a new album
-and an upgrade; the toolbar at 960 points; anything left under `staging/job-2`.
+Owner steps, on a scratch copy first: set the library folder to a scratch copy with one album
+folder holding cover.jpg, turn on Keep Files Organized, change a track's album in Get Info, and
+check the move, its plays, rating and playlists, and the old folder gone or listed; Undo Tag
+Edit puts it back; a taken name overwrites nothing and is listed; Organize Selected Files… over
+tracks in and outside the folder, its count, and Cancel; then on a scratch folder on the share,
+the same, the log's `RENAME_EXCL` fallback line, and undo after a moved file; two Macs organizing
+into the same scratch folder at once; on a second Mac, the moves and stats through sync.
 
 

@@ -50,7 +50,7 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 1. Phases 51, 52 and 53, set by the owner on 2026-11-07, are done.
 2. Phase 54 runs on its own branch (set on 2026-11-08), and waits there for the owner's review.
 3. Phases 55 to 61, the owner's feedback of 2026-11-09, run next: 55 and 58 (done) first, then 56,
-   57 and 59, then 60 and 61; 55 to 58 and 61 are done. Each merges to `main` when its gate passes.
+   57 and 59, then 60 and 61. All seven are done. Each merges to `main` when its gate passes.
 4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
@@ -151,6 +151,8 @@ that phase's Result line, and delete its line here.
 - **61** ([phase](plan-archive.md#61-tagging-preferences-in-settings)): the owner steps under its
   Result line.
 - **59** ([phase](plan-archive.md#59-downloads)): the owner steps under its Result line.
+- **60** ([phase](plan-archive.md#60-keep-files-organized)): the owner steps under its Result
+  line, on a scratch copy first.
 
 ### Answers
 
@@ -641,71 +643,6 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
-
-### 60. Keep Files Organized
-
-Asked by the owner on 2026-11-09, with the boundary change: "record the new move in an ADR and
-in the AGENTS.md boundary".
-
-- [ ] **Setting:** Keep Files Organized, limited to the library folder. After each tag write
-      the user confirms, the edited files are renamed to their `libraryFolderPath` layout with
-      `renamex_np(RENAME_EXCL)`, as Approve does, and stats and playlists carry over through
-      the move list (`importMoves`/`TrackMove`). A taken target name skips the file and lists
-      it in Problems.
-- [ ] **Organize Selected Files:** the same for selected tracks already in the library folder.
-- [ ] **ADR and AGENTS.md boundary** for the new move.
-
-Implementation plan, phase 60 (ADR 0164):
-
-What exists, found by search (map.md recipes): the layout is `libraryFolderPath` in
-`Core/Library/LibraryFolderLayout.swift`; Approve's renames are `LibraryFolderMove`, over
-`MoveCalls`; the move list is `LibraryIndex.importMoves(_:)`, reached through
-`LibraryWatcher.importMoves(lines:)`. Tag writes and undos run one at a time on `TagEditing`'s
-write queue and report through `written`; the undo journal (`TagUndoJournal`) keys each file's
-record by its path, with the edited file's size, mtime and inode. Problems rows come from
-`LibraryStatus`'s reports, filled by `LibraryBrowser.finish`.
-
-- 60.1 Shared rename (refactor): `LibraryFolderMove`'s exclusive rename (`renameNeverOver`),
-  its case-preserving path (`listedPath`) and its library check (`isFolder`) become
-  file-level functions, which Approve and the organizer both call; `layoutDestination` reads
-  the tags and gives the destination for the copy, Approve and the organizer.
-- 60.2 The organizer (`Core/Library/LibraryFolderOrganize.swift`): `layoutMoves` plans,
-  `moveToLayout` renames a plan. A file outside the library folder (links followed) is
-  skipped; one already in place is left; one whose path is taken, or on another volume
-  (`EXDEV`), is skipped and listed, never copied. Folders a move leaves empty are removed with
-  `rmdir`, up to but never the library folder itself; a folder still holding other files
-  (cover art) stays, and is listed when no audio is left in it.
-- 60.3 The journal follows (`TagWriter.follow(_:)`, `TagUndoJournal`): every record of a
-  moved path takes the new path, and the one whose edited size and mtime match the file takes
-  its identity there, since an SMB rename may renumber the inode. Undo Tag Edit then finds it.
-- 60.4 Setting `library.keepFilesOrganized` (`AppSettings`), in the Library Folder box; the
-  box's folder row is on while either checkbox is (`switchKeys`).
-- 60.5 `TagEditing` hook: with a folder from `organizingFolder`, each write or undo the user
-  asked for is followed on the write queue by the organizer and the journal's follow, so no
-  later write or undo comes between; `written` gets the report at the new paths and what was
-  organized. Recovery at launch isn't organized.
-- 60.6 Organize Selected Files… (`track.organize`, in File > Moved and Removed Files):
-  `LibraryBrowser.organizeSelection` plans off the main thread, asks "Organize N Files?" with
-  the count that will move and the skipped, then hands the plan to `TagEditing.organize`.
-  `finishOrganizing` says what moved in the status bar and lists the rest in Problems.
-- 60.7 App wiring: the moves are recorded in the index before the renames
-  (`LayoutMoveLedger.swift`) and `carryLayoutMoves` gives them to `importMoves(lines:)`, so
-  stats, ratings and playlists follow, after each organize and each watcher start; the new
-  paths are rescanned.
-- 60.8 ADR 0164, the AGENTS.md clause, ADR 0124's and 0147's amended-by lines, and the
-  "Later" item's organize part reworded as done.
-
-Tests: a taken name skipped, a move to another album folder, a file outside the library
-folder, `ENOTSUP` and `EXDEV` through `MoveCalls`, another client taking a name during the
-fallback, empty-folder cleanup and a folder with art kept, one spelling per folder on a volume
-that ignores case, stats and a playlist entry carried through `importMoves` and after a failed
-carry, undo after a move, and the hook's ordering in `TagEditorTests`. All in temporary
-folders.
-
-- [ ] **Owner check, on a scratch folder on the share:** with two Macs, organize on one and
-      Approve or organize on the other into the same names: neither file is replaced, and the
-      second is listed as taken. Look in the log for "reserving the name" to see the share
-      took the fallback, and that no empty file is left after a refused rename.
 
 ### 10. Web remote
 
