@@ -36,6 +36,9 @@ final class DownloadsModel {
     private(set) var connection = Connection.waiting
     private(set) var isWindowOpen = false
     private var lastGood: Date?
+    /// The speeds of the jobs moving bytes, fed only while the window is open, the one place
+    /// that shows them.
+    private var rates = TransferRates()
     private var polling: Task<Void, Never>?
     /// The last poll started, which the next waits for.
     private var lastPoll: Task<Void, Never>?
@@ -87,10 +90,15 @@ final class DownloadsModel {
     }
 
     /// Opening the window polls at once and then at its pace; closing it cancels the request
-    /// running and goes back to the idle pace.
+    /// running, goes back to the idle pace and forgets the speeds.
     func setWindowOpen(_ open: Bool) {
         guard open != isWindowOpen else { return }
         isWindowOpen = open
+        if !open, !rates.isEmpty {
+            rates.removeAll()
+            buildRows()
+            changed()
+        }
         guard polling != nil else { return }
         restart(pollingFirst: open)
     }
@@ -141,17 +149,23 @@ final class DownloadsModel {
             let next = try await refreshed(before)
             guard !Task.isCancelled else { return }
             jobs = next
-            lastGood = now()
+            let received = now()
+            lastGood = received
             connection = .answering
+            if isWindowOpen { rates.take(next.rows.values, at: received) }
             took(Array(next.rows.values))
         } catch {
             // A poll the window's closing cancelled isn't the service failing.
             guard !Task.isCancelled else { return }
             connection = .down(error.description, lastGood: lastGood)
         }
-        // Most polls find nothing new; the rows and the window are left alone then.
-        guard jobs.rows != before.rows || connection != connectionBefore else { return }
+        // Most polls find nothing new; the rows and the window are left alone then. A speed
+        // shown can lapse with nothing new, so the rows are built again while one may show.
+        let changedJobs = jobs.rows != before.rows || connection != connectionBefore
+        guard changedJobs || !rates.isEmpty else { return }
+        let rowsBefore = rows
         buildRows()
+        guard changedJobs || rows != rowsBefore else { return }
         changed()
     }
 
@@ -229,8 +243,11 @@ final class DownloadsModel {
 
     private func buildRows() {
         let answering = connection == .answering
+        let at = now()
         rows = jobs.rows.values.compactMap {
-            DownloadRow($0, machine: machine, answering: answering)
+            DownloadRow(
+                $0, machine: machine, answering: answering,
+                rate: rates.isEmpty ? nil : rates.rate($0.id, at: at))
         }.sorted(by: DownloadRow.listed)
     }
 }

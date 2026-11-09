@@ -61,10 +61,11 @@ struct DownloadRow: Equatable, Sendable {
     var canApprove: Bool
 
     /// `job`'s row on the Mac named `machine`; nil for a terminal job, which isn't listed.
-    /// `answering` is false while the service doesn't answer, which dims every row; `formatted`
-    /// words the time of the next search.
+    /// `answering` is false while the service doesn't answer, which dims every row; `rate` is
+    /// the speed of the bytes it's moving, while the window shows one; `formatted` words the
+    /// time of the next search.
     init?(
-        _ job: DownloadJob, machine: String, answering: Bool = true,
+        _ job: DownloadJob, machine: String, answering: Bool = true, rate: TransferRate? = nil,
         formatted: (Date) -> String = DownloadRow.shortTime
     ) {
         guard let group = Self.group(job.state) else { return nil }
@@ -76,6 +77,7 @@ struct DownloadRow: Equatable, Sendable {
         candidate = Self.candidate(job)
         replaces = job.upgrade.map { "Replaces \($0.currentQuality)" }
         state = Self.state(job, formatted: formatted)
+        if Self.isTransferring(job.state), let rate { state += " · " + rate.text }
         stateDetail = Self.stateDetail(job)
         progress = Self.isTransferring(job.state) ? job.progress.map(Self.fraction) : nil
         tagging = Self.tagging(job.tagging, state: job.state)
