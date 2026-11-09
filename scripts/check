@@ -5,7 +5,9 @@
 # Every step runs even if an earlier one fails, so one invocation reports every
 # problem. Fixing four failures should cost one run, not four.
 #
-# Run a step only when it can fail on your diff (AGENTS.md). What each one reads:
+#   ./scripts/check [step...]
+# With no steps, runs them all. Named steps run alone, so a diff runs only the steps that can
+# fail on it (AGENTS.md). What each one reads:
 #   agents.md                     AGENTS.md
 #   map                           docs/map.md and the paths it names
 #   links                         every .md file
@@ -21,10 +23,15 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 failures=()
+chosen=("$@")
+ran=()
 
-# run <name> <command...> — print a header, run it, record the failure, continue.
+# run <name> <command...> — print a header, run it, record the failure, continue. With steps
+# named on the command line, any other step is skipped.
 run() {
   local name="$1"; shift
+  if [ ${#chosen[@]} -gt 0 ] && [[ " ${chosen[*]} " != *" $name "* ]]; then return; fi
+  ran+=("$name")
   printf '\n\033[1m▸ %s\033[0m\n' "$name"
   if ! "$@"; then failures+=("$name"); fi
 }
@@ -129,9 +136,17 @@ run signature-test ./scripts/check-signature-test
 run affected-test ./scripts/affected-test
 run test      ./scripts/test
 
+for name in ${chosen[@]+"${chosen[@]}"}; do
+  if [[ " ${ran[*]-} " != *" $name "* ]]; then failures+=("$name (no such step)"); fi
+done
+
 if [ ${#failures[@]} -gt 0 ]; then
   printf '\n\033[31m✗ failed: %s\033[0m\n' "${failures[*]}" >&2
   exit 1
 fi
 
-printf '\n\033[32m✓ all checks passed\033[0m\n'
+if [ ${#chosen[@]} -gt 0 ]; then
+  printf '\n\033[32m✓ passed: %s (not the full gate)\033[0m\n' "${ran[*]}"
+else
+  printf '\n\033[32m✓ all checks passed\033[0m\n'
+fi

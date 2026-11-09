@@ -21,7 +21,7 @@ Instructions for AI coding agents working in this repo. Humans: see [README.md](
 | Run the tests for what you changed | `./scripts/test --changed [ref]` |
 | **Full gate** (see Definition of done) | `./scripts/check` |
 
-Iterate with `./scripts/test --changed`; run `check` once, at the end. **Run a check only when it can fail on your diff:** name the step that reads what you changed (the list heads `scripts/check`), and if none does, skip it and say so.
+Iterate with `./scripts/test --changed`; run `check` once, at the end. **Run a check only when it can fail on your diff:** name the steps that read what you changed (the list heads `scripts/check`) and run only those, `./scripts/check <step>…`; if none does, skip it and say so. The full gate, no steps named, is for a change to the scripts or when asked.
 
 ## Principles
 
