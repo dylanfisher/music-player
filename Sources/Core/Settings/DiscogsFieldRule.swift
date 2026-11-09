@@ -45,3 +45,16 @@ public struct DiscogsFieldRule: Codable, Equatable, Sendable {
         if format != DiscogsFieldFormat() { try container.encode(format, forKey: .format) }
     }
 }
+
+extension DiscogsFieldRule.Mode {
+    /// The modes in the order the Field Mapping sheet and Settings ▸ Tagging list them.
+    public static let shown: [DiscogsFieldRule.Mode] = [.replace, .fillEmpty, .off]
+
+    public var title: String {
+        switch self {
+        case .replace: "Replace Tag"
+        case .fillEmpty: "Fill Empty Tag"
+        case .off: "Off"
+        }
+    }
+}

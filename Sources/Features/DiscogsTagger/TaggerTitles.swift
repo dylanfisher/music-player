@@ -197,18 +197,6 @@ func taggerTable(
     return scroll
 }
 
-extension DiscogsFieldRule.Mode {
-    static let shown: [DiscogsFieldRule.Mode] = [.replace, .fillEmpty, .off]
-
-    var title: String {
-        switch self {
-        case .replace: "Replace Tag"
-        case .fillEmpty: "Fill Empty Tag"
-        case .off: "Off"
-        }
-    }
-}
-
 extension TrackComparison {
     /// The mark at the end of a row of the tracklists, with the word that says what it means.
     var stateText: String {
