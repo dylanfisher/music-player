@@ -155,7 +155,16 @@ private func place(_ path: String, libraryFolder: String, resolvedLibrary librar
             return .problem(MoveRefusal.failed(path, libraryFolder, detail).description)
         }
     }
-    return nfc(destination) == nfc(path) ? .inPlace : .move(destination)
+    return isSameFile(destination, path) ? .inPlace : .move(destination)
+}
+
+/// Whether `one` and `other` name one file, whatever links or spellings lead to it.
+private func isSameFile(_ one: String, _ other: String) -> Bool {
+    if nfc(one) == nfc(other) { return true }
+    var first = stat()
+    var second = stat()
+    return stat(one, &first) == 0 && stat(other, &second) == 0 && first.st_dev == second.st_dev
+        && first.st_ino == second.st_ino
 }
 
 /// Renames `path` to `destination`, making its folders; nil when it moved, else why not. The

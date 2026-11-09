@@ -217,3 +217,16 @@ private func ignoresCase(_ folder: String) -> Bool { pathconf(folder, _PC_CASE_S
     #expect(exists(folders.library + "/Artist/kept.txt"))
     #expect(exists(old))
 }
+
+@Test func aFileReachedThroughALinkedSpellingOfTheFolderIsInPlace() throws {
+    let folders = try OrganizeFolders()
+    let path = try folders.file("library/Artist/Album/01 Song.flac", title: "Song")
+    let linked = folders.root + "/linked"
+    try FileManager.default.createSymbolicLink(
+        atPath: linked, withDestinationPath: folders.library)
+    let result = moveToLayout(
+        layoutMoves([path], libraryFolder: linked), libraryFolder: linked)
+    #expect(result.inPlace == 1)
+    #expect(result.problems.isEmpty)
+    #expect(exists(path))
+}
