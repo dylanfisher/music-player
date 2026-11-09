@@ -758,21 +758,26 @@ private func waitFor(_ condition: () -> Bool) async throws {
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
         configPath: "/tmp/config.json", actions: actions())
-    let short = NSRect(x: 0, y: 0, width: 1280, height: 420)
-    controller.visibleFrame = { _ in short }
     controller.show(.general)
     defer { controller.window.close() }
-    let scroll = try #require(controller.window.contentViewController?.view as? NSScrollView)
+    // A short screen below where the window opened: it moves down onto it, top and bottom.
+    let short = NSRect(x: 0, y: 0, width: 1280, height: 420)
+    let general = try #require(controller.window.contentViewController as? PaneScroller)
+    general.visibleFrame = { _ in short }
+    general.fit()
+    let scroll = try #require(general.view as? NSScrollView)
     let pane = try #require(scroll.documentView)
     #expect(controller.window.frame.height <= short.height)
     #expect(pane.fittingSize.height > scroll.frame.height)
     #expect(controller.window.frame.minY >= short.minY)
+    #expect(controller.window.frame.maxY <= short.maxY)
     // A pane that fits shows whole, unscrolled.
-    controller.visibleFrame = { _ in NSRect(x: 0, y: 0, width: 1280, height: 4000) }
     controller.show(.playback)
-    let playback = try #require(controller.window.contentViewController?.view as? NSScrollView)
-    let rows = try #require(playback.documentView)
-    #expect(abs(playback.frame.height - rows.fittingSize.height) <= 1)
+    let playback = try #require(controller.window.contentViewController as? PaneScroller)
+    playback.visibleFrame = { _ in NSRect(x: 0, y: 0, width: 1280, height: 4000) }
+    playback.fit()
+    let rows = try #require((playback.view as? NSScrollView)?.documentView)
+    #expect(abs(playback.view.frame.height - rows.fittingSize.height) <= 1)
 }
 
 /// Settings opens with its top left where it was left at the last launch, at the height of the
@@ -1032,7 +1037,9 @@ private func visibleLabels(in view: NSView) -> [String] {
         backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     defer { window.close() }
-    window.contentViewController = PaneScroller(pane) { _ in nil }
+    let scroller = PaneScroller(pane)
+    scroller.visibleFrame = { _ in nil }
+    window.contentViewController = scroller
     window.layoutIfNeeded()
     let triangle = try #require(pane.disclosures[key])
     let closed = pane.view.frame.height

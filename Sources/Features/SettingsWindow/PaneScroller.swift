@@ -6,13 +6,13 @@ import AppKit
 @MainActor
 final class PaneScroller: NSViewController {
     let pane: NSViewController
-    /// The visible frame of the screen the window is on; tests give a short one.
-    private let visibleFrame: (NSWindow) -> NSRect?
+    /// The visible frame of the screen a window is on, which caps the pane's height; tests
+    /// give a short one.
+    var visibleFrame: (NSWindow) -> NSRect? = { ($0.screen ?? NSScreen.main)?.visibleFrame }
     private var resized: (any NSObjectProtocol)?
 
-    init(_ pane: NSViewController, visibleFrame: @escaping (NSWindow) -> NSRect?) {
+    init(_ pane: NSViewController) {
         self.pane = pane
-        self.visibleFrame = visibleFrame
         super.init(nibName: nil, bundle: nil)
         addChild(pane)
     }
@@ -45,33 +45,30 @@ final class PaneScroller: NSViewController {
         view = scroll
     }
 
-    /// The tallest the pane may show on `window`'s screen, or nil when it isn't on one.
-    func heightLimit(in window: NSWindow) -> CGFloat? {
-        guard let screen = visibleFrame(window) else { return nil }
-        let chrome = window.frame.height - window.contentLayoutRect.height
-        return screen.height - chrome
-    }
-
     override func viewWillAppear() {
         super.viewWillAppear()
         fit()
     }
 
-    /// Sets the window to the pane's height, as far as its screen allows, keeping its top where
-    /// it is unless that would put its bottom off the screen: as a pane shows, and as its
-    /// height changes. The window would grow by itself as a row shows, but keep that height as
-    /// it hides, which left a gap.
+    /// Keeps the window at the pane's height, as far as its screen allows, and wholly on that
+    /// screen, its top where it is when it fits: as a pane shows, and each time its height
+    /// changes, whether a row shows or hides.
     func fit() {
         guard let window = view.window else { return }
-        let limit = heightLimit(in: window)
+        let screen = visibleFrame(window)
         pane.view.layoutSubtreeIfNeeded()
-        let height = min(pane.view.fittingSize.height, limit ?? .greatestFiniteMagnitude)
+        var height = pane.view.fittingSize.height
+        if let screen {
+            // Less the title bar and the toolbar.
+            height = min(
+                height, screen.height - window.frame.height + window.contentLayoutRect.height)
+        }
         let content = window.contentRect(forFrameRect: window.frame)
         var frame = window.frameRect(
             forContentRect: NSRect(
                 x: content.minX, y: content.maxY - height, width: content.width, height: height))
-        if let screen = visibleFrame(window), frame.minY < screen.minY {
-            frame.origin.y = screen.minY
+        if let screen {
+            frame.origin.y = min(max(frame.minY, screen.minY), screen.maxY - frame.height)
         }
         window.setFrame(frame, display: true)
     }
