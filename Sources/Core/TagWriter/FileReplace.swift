@@ -391,9 +391,9 @@ private func copy(
 
 /// Extended attributes macOS manages itself, which a volume may refuse to set on a new file
 /// although the file it was read from has them; a refusal of one leaves it off the new file
-/// (ADR 0136). Any other refusal fails the write, so a Finder tag or an attribute of the
-/// owner's is never dropped.
-let unsettableAttributes: Set<String> = ["com.apple.provenance"]
+/// (ADR 0136). The quarantine flag of a downloaded file means nothing on audio. Any other
+/// refusal fails the write, so a Finder tag or an attribute of the owner's is never dropped.
+let unsettableAttributes: Set<String> = ["com.apple.provenance", "com.apple.quarantine"]
 
 /// The errors a volume answers with when it won't set an attribute.
 private let refusals: Set<Int32> = [EACCES, EPERM, ENOTSUP]

@@ -311,3 +311,18 @@ private func inode(_ url: URL) throws -> Int? {
     #expect(attribute("com.example.note", of: url) == Array("kept".utf8))
     #expect(attribute(managed, of: url) == nil)
 }
+
+/// A downloaded file's quarantine flag is one of the attributes a refusal leaves off, as the
+/// NAS refused it on a write past the padding; without the skip the write fails.
+@Test func aRefusedQuarantineFlagIsLeftOff() throws {
+    let url = try Sample.mp3v24.copy()
+    let quarantine = "com.apple.quarantine"
+    let value = "0081;00000000;Safari;"
+    #expect(setxattr(url.path, quarantine, value, value.utf8.count, 0, 0) == 0)
+    var writer = scratchWriter()
+    writer.faults.refusingAttribute = { $0 == quarantine ? EACCES : nil }
+    let long = TagEdit(values: [.title: String(repeating: "Long ", count: 20_000)])
+    expectChanged(writer.write(long, to: [url.path]), [url])
+    // macOS may flag the new file of its own, as it does any a quarantined process creates.
+    #expect(attribute(quarantine, of: url) != Array(value.utf8))
+}

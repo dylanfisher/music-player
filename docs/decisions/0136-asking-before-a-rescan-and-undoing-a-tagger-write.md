@@ -59,7 +59,9 @@ sheets' sizes:
   attribute com.apple.provenance: Permission denied", or "can't copy its ACL". The temp path of
   a forward write uses the same function.
 - **The skip list:** `unsettableAttributes` in `FileReplace.swift`, the attributes macOS manages
-  itself, today only `com.apple.provenance`. A refusal (`EACCES`, `EPERM`, `ENOTSUP`) of one of
+  itself: `com.apple.provenance`, and `com.apple.quarantine`, which a browser puts on a
+  download and which the NAS refused on one ("can't copy the extended attribute
+  com.apple.quarantine: Permission denied"); on an audio file it guards nothing. A refusal (`EACCES`, `EPERM`, `ENOTSUP`) of one of
   them leaves it off the new file and is logged at notice level with the file and the name. Any
   other refusal still fails the write: a Finder tag or an attribute of the owner's is never
   dropped quietly. An ACL refusal isn't skipped. The list grows only from what the owner's
