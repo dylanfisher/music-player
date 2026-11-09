@@ -134,3 +134,16 @@ import Testing
     #expect(registry.command(.focusNextPane)?.chords == [])
     #expect(registry.command(.focusPreviousPane)?.chords == [])
 }
+
+@Test func theEditMenuHasCopyPasteAndDeleteAsStandardItems() throws {
+    let edit = try #require(AppMenus.sections(appName: "Test").first { $0.title == "Edit" })
+    let standard = edit.entries.compactMap { entry in
+        if case .standard(let item) = entry { item.action } else { nil }
+    }
+    #expect(Array(standard.drop { $0 != "copy:" }.prefix(3)) == ["copy:", "paste:", "delete:"])
+    let delete = edit.entries.compactMap { entry in
+        if case .standard(let item) = entry, item.action == "delete:" { item } else { nil }
+    }
+    // ⌫ stays Remove…'s.
+    #expect(delete.first?.chord == nil)
+}

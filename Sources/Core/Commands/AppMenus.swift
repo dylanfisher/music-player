@@ -138,6 +138,8 @@ public enum AppMenus {
                     .standard(StandardItem("Cut", "cut:", KeyChord("x", cmd))),
                     .standard(StandardItem("Copy", "copy:", KeyChord("c", cmd))),
                     .standard(StandardItem("Paste", "paste:", KeyChord("v", cmd))),
+                    // No chord: ⌫ is Remove… in the lists, and a field deletes by it itself.
+                    .standard(StandardItem("Delete", "delete:")),
                     .standard(
                         StandardItem(
                             AppCommands.title(of: .selectAll), "selectAll:", KeyChord("a", cmd),

@@ -164,3 +164,18 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     panel.move(.down, extending: false)
     #expect(table.selectedRowIndexes == [3])
 }
+
+@MainActor @Test func aCopiedRowHasItsFileAndItsNames() {
+    let model = QueueModel { path in
+        guard path == urls[1].path else { return nil }
+        return TrackRow(
+            id: 2, path: path, title: "Song", artist: "Band", album: "Record", albumID: nil,
+            albumArtist: nil, genre: nil, date: nil, trackNumber: nil, discNumber: nil,
+            codec: "flac", sampleRateHz: 44100, bitsPerSample: 16, durationSeconds: 61,
+            addedSeconds: 0, art: nil)
+    }
+    model.apply(state(order: [1, 0], current: 1))
+    #expect(model.copy(ofRow: 0) == CopiedTrack(path: urls[1].path, artist: "Band", title: "Song"))
+    // A file the library doesn't know, by its name.
+    #expect(model.copy(ofRow: 1) == CopiedTrack(path: urls[0].path, artist: nil, title: "0"))
+}

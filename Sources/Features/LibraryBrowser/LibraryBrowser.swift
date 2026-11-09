@@ -1551,6 +1551,46 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
+    /// Whether Edit ▸ Copy has tracks to copy: the track table or the timeline has the keys
+    /// and a selection.
+    public var canCopySelection: Bool {
+        (focusedList == .tracks || focusedList == .timeline) && hasSelectedTracks
+    }
+
+    /// The selected tracks for Edit ▸ Copy, in row order.
+    public func selectedCopies() async throws -> [CopiedTrack] {
+        let rows = try await reader.rows(ids: try selectedTrackIDs())
+        return rows.map(CopiedTrack.init)
+    }
+
+    /// Whether Edit ▸ Paste can add tracks here: the track table has the keys and shows a
+    /// manual playlist. Never the library (ADR 0160).
+    public var canPaste: Bool {
+        focusedList == .tracks && model.shownPlaylist?.isManual == true
+    }
+
+    /// Adds the tracks at `paths` to the manual playlist shown, after the last selected row
+    /// when the playlist is in its own order, else where adding puts them. Paths the library
+    /// doesn't have are reported, and the rest still added.
+    public func paste(_ paths: [String]) {
+        guard let playlist = model.shownPlaylist, playlist.isManual else { return }
+        let below = table.table.selectedRowIndexes.last.map { $0 + 1 }
+        edit("couldn't paste the tracks", entriesChange: true) {
+            let found = try await self.reader.trackIDs(atPaths: paths)
+            let ids = found.compactMap { $0 }
+            if !ids.isEmpty {
+                _ = try await self.model.add(ids, to: playlist.id)
+                if let below, self.model.canReorder {
+                    try await self.model.move(ids, toRow: below)
+                }
+            }
+            // After the refreshes, whose totals would take the status line's place.
+            if ids.count < paths.count {
+                self.report("\(paths.count - ids.count) of the tracks pasted aren't in the library")
+            }
+        }
+    }
+
     /// The paths of the selected tracks, in table order.
     public func selectedPaths() async throws -> [String] {
         let ids = try selectedTrackIDs()

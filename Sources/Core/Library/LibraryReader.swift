@@ -120,6 +120,16 @@ public actor LibraryReader {
         try index.paths(ids: ids)
     }
 
+    /// The rows of the tracks with `ids`, in that order, leaving out those that are gone.
+    public func rows(ids: [Int64]) throws -> [TrackRow] {
+        try index.rows(ids: ids)
+    }
+
+    /// The track ID of each path, or nil where the library has none.
+    public func trackIDs(atPaths paths: [String]) throws -> [Int64?] {
+        try index.trackIDs(atPaths: paths)
+    }
+
     public func fileIssues() throws -> [FileIssue] {
         try index.fileIssues()
     }

@@ -53,3 +53,16 @@ import Testing
             tracksFocused: browser.tracksHaveFocus,
             canRemoveFromPlaylist: browser.canRemoveFromPlaylist) == nil)
 }
+
+@Test func pastingAddsOnlyToTheQueueOrAPlaylist() {
+    #expect(pasteTarget(queueFocused: true, canPasteInPlaylist: false) == .queue)
+    #expect(pasteTarget(queueFocused: false, canPasteInPlaylist: true) == .playlist)
+    // The library, a smart playlist, the sidebar or a pane.
+    #expect(pasteTarget(queueFocused: false, canPasteInPlaylist: false) == nil)
+}
+
+@Test func aPasteFindsTheCopiedFilesOnlyWhileThePasteboardHoldsTheCopy() {
+    let clipboard = TrackClipboard(paths: ["/m/a.flac"], changeCount: 7)
+    #expect(clipboard.paths(atChangeCount: 7) == ["/m/a.flac"])
+    #expect(clipboard.paths(atChangeCount: 8) == nil)
+}

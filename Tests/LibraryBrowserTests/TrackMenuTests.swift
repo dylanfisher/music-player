@@ -235,3 +235,35 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     #expect(clip.bounds.minY == top)
     #expect(table.selectedRowIndexes == [3])
 }
+
+/// Copy reads the selected rows' names and files; Paste adds to a manual playlist only, after
+/// the selection, and never to the library (ADR 0160).
+@MainActor @Test func pasteAddsCopiedTracksToTheManualPlaylistAfterTheSelection() async throws {
+    let (browser, index) = try await browser(selecting: [4, 7])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    window.makeFirstResponder(browser.table.table)
+    #expect(browser.canCopySelection)
+    let copies = try await browser.selectedCopies()
+    let rows = try index.rows(ids: [browser.model.trackIDs[4], browser.model.trackIDs[7]])
+    #expect(copies == rows.map(CopiedTrack.init))
+    // Not in the library.
+    #expect(!browser.canPaste)
+
+    let mix = try index.createPlaylist(named: "Mix")
+    let kept = Array(browser.model.trackIDs[20..<23])
+    _ = try index.addToPlaylist(mix, trackIDs: kept)
+    try await browser.model.reloadPlaylists()
+    await browser.model.setSource(.playlist(mix))
+    window.makeFirstResponder(browser.table.table)
+    #expect(browser.canPaste)
+    browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
+    browser.paste(copies.map(\.path) + ["/not/in/the/library.flac"])
+    let pasted = [kept[0]] + rows.map(\.id) + kept[1...]
+    try await waitFor("the pasted tracks") { browser.model.trackIDs == pasted }
+    try await waitFor("the message") {
+        browser.statusText.contains("aren't in the library") == true
+    }
+}

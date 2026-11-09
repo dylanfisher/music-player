@@ -88,6 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mediaControls: MediaControls?
     private var dockMenu: DockMenu?
     private(set) var queue: QueuePanel?
+    /// What Edit ▸ Copy last copied, for Paste.
+    var trackClipboard: TrackClipboard?
     private(set) var watcher: LibraryWatcher?
     /// The library's snapshots (ADR 0142), made with the window.
     private(set) var snapshotScheduler: SnapshotScheduler?

@@ -80,6 +80,14 @@ public final class QueueModel {
         return item
     }
 
+    /// The track at `row` for Edit ▸ Copy: a file the library doesn't know is copied by its
+    /// name, with no artist.
+    public func copy(ofRow row: Int) -> CopiedTrack {
+        let url = state.queue[state.order[position(ofRow: row)]]
+        let item = item(at: row)
+        return CopiedTrack(path: url.path, artist: item.artist, title: item.title)
+    }
+
     /// "12 tracks". No total time: that would look up every track of a queue that can hold the
     /// whole library.
     public var summary: String { "\(count) track\(count == 1 ? "" : "s")" }
@@ -88,6 +96,7 @@ public final class QueueModel {
 /// One queue row as the panel shows it.
 public struct QueueItem: Equatable, Sendable {
     public var title: String
+    public var artist: String?
     /// "Artist — Album", or the folder for a file the library doesn't know.
     public var detail: String
     public var durationSeconds: Double?
@@ -95,11 +104,13 @@ public struct QueueItem: Equatable, Sendable {
     init(url: URL, row: TrackRow?) {
         guard let row else {
             title = url.deletingPathExtension().lastPathComponent
+            artist = nil
             detail = url.deletingLastPathComponent().path
             durationSeconds = nil
             return
         }
         title = row.title
+        artist = row.artist
         detail = [row.artist, row.album].compactMap { $0 }.joined(separator: " — ")
         durationSeconds = row.durationSeconds
     }
