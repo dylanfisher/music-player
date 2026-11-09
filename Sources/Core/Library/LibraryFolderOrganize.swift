@@ -16,12 +16,12 @@ public struct FilesOrganized: Equatable, Sendable {
     /// failed rename. One line each, for the Problems window.
     public var problems: [String] = []
     /// Folders a move left empty, removed.
-    public var removedFolders: [String] = []
+    var removedFolders: [String] = []
     /// Folders a move took the last audio file from that still hold other files, such as
     /// cover art, which are left where they are.
-    public var keptFolders: [String] = []
+    var keptFolders: [String] = []
 
-    public init() {}
+    init() {}
 
     /// For the status bar: "Organized 12 files · 2 not moved".
     public var summary: String {

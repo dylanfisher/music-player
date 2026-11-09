@@ -681,8 +681,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeTagEditing() -> TagEditing {
         let editing = TagEditing(
             writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)))
-        editing.written = { [weak self] report, _ in
-            self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
+        editing.written = { [weak self] report, organized in
+            guard let organized else {
+                self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
+                return
+            }
+            self?.carry(organized, then: report)
+        }
+        editing.organizingFolder = { [weak self] in
+            guard let settings = self?.settings, settings[\.keepFilesOrganized] else { return nil }
+            return settings[\.libraryFolder]
         }
         editing.run = { [weak self] in self?.dispatcher?.run($0) }
         editing.isEnabled = { [weak self] in self?.dispatcher?.isEnabled($0) == true }

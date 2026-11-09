@@ -117,7 +117,7 @@ public enum AppMenus {
                         "Moved and Removed Files",
                         [
                             .command(.resolveLostStats), .command(.restoreRemoved),
-                            .command(.importMoves),
+                            .command(.importMoves), .command(.organizeFiles),
                         ], showsChords: true),
                     .separator, .command(.revealInFinder), .command(.copyPath),
                     .command(.addToPlaylist), .command(.removeTracks),

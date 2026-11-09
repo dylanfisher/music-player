@@ -68,7 +68,7 @@ private final class Asked {
     #expect(plan.outside == [outside])
     let question = organizeQuestion(plan)
     #expect(question.message == "Organize 1 File?")
-    #expect(question.detail.contains("1 outside the library folder"))
+    #expect(question.detail.contains("1 not in the library folder"))
     // Cancel organizes nothing; Organize hands every selected path on, to be checked again.
     #expect(asked.organized == [[inside, outside]])
     // Asking renames nothing.

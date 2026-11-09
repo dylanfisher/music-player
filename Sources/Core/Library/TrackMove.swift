@@ -3,9 +3,4 @@
 public struct TrackMove: Equatable, Sendable {
     public var from: String
     public var to: String
-
-    public init(from: String, to: String) {
-        self.from = from
-        self.to = to
-    }
 }

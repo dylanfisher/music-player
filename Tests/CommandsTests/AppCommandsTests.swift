@@ -104,7 +104,9 @@ import Testing
     #expect(
         submenus == [
             "Import from Other Players": [.importSwinsian, .importITunes],
-            "Moved and Removed Files": [.resolveLostStats, .restoreRemoved, .importMoves],
+            "Moved and Removed Files": [
+                .resolveLostStats, .restoreRemoved, .importMoves, .organizeFiles,
+            ],
         ])
 
     let schema = AppSettings()

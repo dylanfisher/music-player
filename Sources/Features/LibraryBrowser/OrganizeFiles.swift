@@ -71,7 +71,7 @@ func organizeQuestion(_ plan: FilesOrganized) -> (message: String, detail: Strin
     var left: [String] = []
     if plan.inPlace > 0 { left.append("\(number(plan.inPlace)) already in place") }
     if !plan.outside.isEmpty {
-        left.append("\(number(plan.outside.count)) outside the library folder")
+        left.append("\(number(plan.outside.count)) not in the library folder")
     }
     if !plan.problems.isEmpty { left.append("\(number(plan.problems.count)) that can't move") }
     if !left.isEmpty {

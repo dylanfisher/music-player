@@ -88,6 +88,8 @@ extension CommandID {
     public static let copyPath = CommandID("track.copyPath")
     /// Removes the selection from the library, or moves its files to the Trash (ADR 0050).
     public static let removeTracks = CommandID("track.remove")
+    /// Renames the selection's files in the library folder to its layout (ADR 0164).
+    public static let organizeFiles = CommandID("track.organize")
     public static let editTags = CommandID("track.editTags")
     /// Shows the selection's spectrum; `music-player analyze` prints its measures (ADR 0115).
     public static let showSpectrum = CommandID("track.analyze")
@@ -276,6 +278,7 @@ public enum AppCommands {
                 [.init("r", cmd), .init("r", [cmd, shift])]),
             Command(.copyPath, "Copy Path", [.init("c", [opt, cmd])]),
             Command(.removeTracks, "Remove…", [.init(.delete)]),
+            Command(.organizeFiles, "Organize Selected Files…"),
             Command(.editTags, "Get Info", [.init("i", cmd)]),
             Command(.showSpectrum, "Show Spectrum", replies: true, paths: true),
             Command(.undoTagEdit, "Undo Tag Edit", [.init("z", [opt, cmd])]),
