@@ -63,6 +63,28 @@ private let snapshot = ReleaseSnapshot(
     #expect(!job.cleanupPending && job.createdAt == 1_794_060_000)
 }
 
+@Test func aSearchingJobCarriesItsQueryAndTheLastMiss() throws {
+    let text = try jobJSON(state: "searching")
+        .replacingOccurrences(of: #""reason": null"#, with: #""reason": "only MP3 found""#)
+        .replacingOccurrences(of: #""attempt": 1"#, with: #""attempt": 2"#)
+        .replacingOccurrences(
+            of: #""search": null"#,
+            with:
+                #""search": {"query": "made up artist made up album", "query_number": 1, "query_count": 2, "peers": 14, "files": 389, "started_at": 1794060030}"#
+        )
+    let job = try decodeReply(Array(jobReply(text).utf8), as: JobReply.self).job
+    #expect(job.state == .searching && job.reason == "only MP3 found" && job.attempt == 2)
+    #expect(
+        job.search
+            == .init(
+                query: "made up artist made up album", queryNumber: 1, queryCount: 2, peers: 14,
+                files: 389, startedAt: 1_794_060_030))
+    let partial = text.replacingOccurrences(of: #", "started_at": 1794060030"#, with: "")
+    #expect(throws: (any Error).self) {
+        try decodeReply(Array(jobReply(partial).utf8), as: JobReply.self)
+    }
+}
+
 @Test func anUnknownStateIsAnErrorOfItsOwnNeverASkippedJob() throws {
     let text = page([
         try jobJSON(id: 1, revision: 1), try jobJSON(id: 2, revision: 2, state: "paused"),
@@ -74,6 +96,7 @@ private let snapshot = ReleaseSnapshot(
     let job = try jobJSON()
     for broken in [
         job.replacingOccurrences(of: #""lease": null,"#, with: ""),
+        job.replacingOccurrences(of: #""search": null,"#, with: ""),
         job.replacingOccurrences(of: #""lease": null,"#, with: #""lease": null, "extra": 1,"#),
         job.replacingOccurrences(of: #""format": "flac""#, with: #""format": "aac""#),
         job.replacingOccurrences(of: #""source": "upgrade""#, with: #""source": "web""#),

@@ -38,7 +38,8 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
         }
     }
 
-    /// A `downloading` job's transfers so far.
+    /// With `downloading`, what slskd has received; with `downloaded`, what the copy into
+    /// staging has copied, nil until the copy starts.
     package struct Progress: Equatable, Sendable, Decodable {
         package var filesDone: Int
         package var filesTotal: Int
@@ -52,12 +53,62 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             case bytesTotal = "bytes_total"
         }
 
+        init(filesDone: Int, filesTotal: Int, bytesDone: Int, bytesTotal: Int) {
+            self.filesDone = filesDone
+            self.filesTotal = filesTotal
+            self.bytesDone = bytesDone
+            self.bytesTotal = bytesTotal
+        }
+
         package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             filesDone = try container.decode(Int.self, forKey: .filesDone)
             filesTotal = try container.decode(Int.self, forKey: .filesTotal)
             bytesDone = try container.decode(Int.self, forKey: .bytesDone)
             bytesTotal = try container.decode(Int.self, forKey: .bytesTotal)
+        }
+    }
+
+    /// A `searching` job's query running now, once its first has started.
+    package struct Search: Equatable, Sendable, Decodable {
+        /// The search text sent to Soulseek.
+        package var query: String
+        /// Which of the attempt's queries it is, from 1, of `queryCount`, 1 or 2.
+        package var queryNumber: Int
+        package var queryCount: Int
+        /// The peers that have answered this query so far, and the files in their answers.
+        package var peers: Int
+        package var files: Int
+        package var startedAt: Int
+
+        private enum CodingKeys: String, CodingKey, CaseIterable {
+            case query
+            case queryNumber = "query_number"
+            case queryCount = "query_count"
+            case peers, files
+            case startedAt = "started_at"
+        }
+
+        init(
+            query: String, queryNumber: Int, queryCount: Int, peers: Int, files: Int,
+            startedAt: Int
+        ) {
+            self.query = query
+            self.queryNumber = queryNumber
+            self.queryCount = queryCount
+            self.peers = peers
+            self.files = files
+            self.startedAt = startedAt
+        }
+
+        package init(from decoder: any Decoder) throws {
+            let container = try strictContainer(decoder, CodingKeys.self)
+            query = try container.decode(String.self, forKey: .query)
+            queryNumber = try container.decode(Int.self, forKey: .queryNumber)
+            queryCount = try container.decode(Int.self, forKey: .queryCount)
+            peers = try container.decode(Int.self, forKey: .peers)
+            files = try container.decode(Int.self, forKey: .files)
+            startedAt = try container.decode(Int.self, forKey: .startedAt)
         }
     }
 
@@ -213,12 +264,16 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     package var state: JobState
     /// Set with `failed` only.
     package var failedStage: FailedStage?
-    /// One line for the window: why it's `not_found`, failed or cancelled.
+    /// One line for the window: why it's `not_found`, failed or cancelled. A `not_found`
+    /// job's stays through its next search, until that attempt ends.
     package var reason: String?
     /// Search attempts so far, from 1.
-    var attempt: Int
-    var nextAttemptAt: Int?
+    package var attempt: Int
+    /// With `not_found`, when the next search runs; nil after the last automatic attempt.
+    package var nextAttemptAt: Int?
     package var progress: Progress?
+    /// Set with `searching` only, once its first query has started.
+    package var search: Search?
     package var candidate: Candidate?
     /// In release order; empty until a candidate is chosen.
     package var files: [File]
@@ -241,7 +296,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
         case failedStage = "failed_stage"
         case reason, attempt
         case nextAttemptAt = "next_attempt_at"
-        case progress, candidate, files
+        case progress, search, candidate, files
         case stagedPath = "staged_path"
         case tagging, lease, review, upgrade
         case cleanupPending = "cleanup_pending"
@@ -262,6 +317,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
         attempt = try container.decode(Int.self, forKey: .attempt)
         nextAttemptAt = try container.decode(Int?.self, forKey: .nextAttemptAt)
         progress = try container.decode(Progress?.self, forKey: .progress)
+        search = try container.decode(Search?.self, forKey: .search)
         candidate = try container.decode(Candidate?.self, forKey: .candidate)
         files = try container.decode([File].self, forKey: .files)
         stagedPath = try container.decode(String?.self, forKey: .stagedPath)

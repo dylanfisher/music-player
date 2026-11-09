@@ -10,6 +10,7 @@
   "attempt": 1,
   "next_attempt_at": null,
   "progress": null,
+  "search": null,
   "candidate": {"peer": "made-up-peer", "format": "flac", "bit_depth": 16, "sample_rate": 44100,
                 "bitrate": null, "variable_bitrate": null, "file_count": 4, "bytes": 147849216,
                 "tracklist": 0},

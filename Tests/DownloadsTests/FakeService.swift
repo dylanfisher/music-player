@@ -18,7 +18,7 @@ func job(
         {"id": 1, "revision": 1, "source": "manual", "format_policy": "flac",
          "release": {"release_id": 4242, "artist": "Made-Up Artist", "title": "Made-Up Album", "year": 1999},
          "state": "staged", "failed_stage": null, "reason": null, "attempt": 1, "next_attempt_at": null,
-         "progress": null,
+         "progress": null, "search": null,
          "candidate": {"peer": "made-up-peer", "format": "flac", "bit_depth": 16, "sample_rate": 44100,
                        "bitrate": null, "variable_bitrate": null, "file_count": 2, "bytes": 55574528,
                        "tracklist": 0},
