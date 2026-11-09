@@ -298,7 +298,7 @@ private let fallbackRenames = NSLock()
 /// Renames `source` to `destination` with `calls`, never over a file: 0, else the `errno`, with
 /// `EEXIST` for a file in the way. A share that refuses `RENAME_EXCL` (`ENOTSUP` or `EINVAL`)
 /// gets an `lstat` and a plain rename under a lock: the app is the library folder's only
-/// writer, so nothing of its own comes between them (ADR 0147, ADR 0160).
+/// writer, so nothing of its own comes between them (ADR 0147, ADR 0164).
 func renameNeverOver(_ source: String, to destination: String, _ calls: MoveCalls) -> Int32 {
     let code = calls.renameExclusive(source, destination)
     guard code == ENOTSUP || code == EINVAL else { return code }

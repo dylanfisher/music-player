@@ -213,7 +213,7 @@ public struct TagWriter: Sendable {
         return report
     }
 
-    /// Keep Files Organized renamed each file `from` to `to` (ADR 0160): its undo records
+    /// Keep Files Organized renamed each file `from` to `to` (ADR 0164): its undo records
     /// follow it, so Undo Tag Edit finds it at its new path. Returns, for each file, why its
     /// records couldn't follow; its edits then can't be undone.
     public func follow(_ moves: [(from: String, to: String)]) -> [TagWriteError] {
@@ -751,7 +751,7 @@ public struct TagWriteReport: Equatable, Sendable {
     /// again unless it changed since (ADR 0108). Undo and recovery leave it empty.
     public var parsed: [String: StampedParse] = [:]
 
-    init() {}
+    public init() {}
 }
 
 let crashDetail = "stopped before the rename, as a crash would"

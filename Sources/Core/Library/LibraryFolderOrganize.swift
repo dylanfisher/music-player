@@ -4,7 +4,7 @@ import Foundation
 import Metadata
 
 /// What Keep Files Organized, or Organize Selected Files, would do or did to some files in
-/// the library folder (ADR 0160).
+/// the library folder (ADR 0164).
 public struct FilesOrganized: Equatable, Sendable {
     /// Each file renamed, or to be, from its path to the one its tags give it.
     public var moved: [TrackMove] = []
@@ -65,10 +65,10 @@ public func planOrganizing(_ paths: [String], libraryFolder: String) -> FilesOrg
 }
 
 /// Renames each of `paths` that's in `libraryFolder` to the path its tags give it there
-/// (ADR 0160), never over a file and never to another volume, and removes the folders that
+/// (ADR 0164), never over a file and never to another volume, and removes the folders that
 /// leaves empty, never the library folder itself. A file whose path is taken is left where it
 /// is and listed. Blocks on the volume, so call it off the main thread, and from one queue at a
-/// time: the tag writes' (ADR 0160).
+/// time: the tag writes' (ADR 0164).
 public func organizeFiles(_ paths: [String], libraryFolder: String) -> FilesOrganized {
     organizeFiles(paths, libraryFolder: libraryFolder, calls: MoveCalls())
 }

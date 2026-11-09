@@ -681,7 +681,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeTagEditing() -> TagEditing {
         let editing = TagEditing(
             writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)))
-        editing.written = { [weak self] report in
+        editing.written = { [weak self] report, _ in
             self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
         }
         editing.run = { [weak self] in self?.dispatcher?.run($0) }

@@ -389,7 +389,7 @@ public struct TagUndoJournal: Sendable {
     }
 
     /// Points every record of the file `from`, in every edit kept, at `to`, where Keep Files
-    /// Organized renamed it (ADR 0160), so undo finds it there and an older edit still follows
+    /// Organized renamed it (ADR 0164), so undo finds it there and an older edit still follows
     /// a newer one. A record whose edited size and mtime are `moved`'s takes its identity too,
     /// since a rename changes neither but a share may give the file a new inode. A record that
     /// doesn't read is left alone; `latest` reports and deletes it when undo reaches its edit.

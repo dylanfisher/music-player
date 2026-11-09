@@ -1,6 +1,7 @@
 import AppKit
 import Commands
 import Discogs
+import Library
 import Log
 import Metadata
 import TagWriter
@@ -17,8 +18,12 @@ private let logger = moduleLogger()
 public final class TagEditing {
     /// The info windows open, in the order they opened.
     public private(set) var editors: [TagEditorWindow] = []
-    /// Called on the main thread with what a write or undo changed, for the rescan.
-    public var written: (TagWriteReport) -> Void = { _ in }
+    /// Called on the main thread with what a write or undo changed, for the rescan, and what
+    /// Keep Files Organized moved after it, whose files the report has at their new paths.
+    public var written: (TagWriteReport, FilesOrganized?) -> Void = { _, _ in }
+    /// The library folder while Keep Files Organized is on, else nil, read as each write or
+    /// undo the user asked for is queued (ADR 0164).
+    public var organizingFolder: () -> String? = { nil }
     /// Called on the main thread as a save goes, for the status bar: "Saving tags: 3 of 20" and
     /// how far along, from 0 to 1; nil once no write is left (ADR 0108).
     public var saving: (_ progress: (text: String, fraction: Double)?) -> Void = { _ in }
@@ -69,6 +74,11 @@ public final class TagEditing {
         var confirm:
             @MainActor (Confirmation, NSWindow, @escaping @MainActor (Bool) -> Void) -> Void
         var alert: @MainActor (String, [String], NSWindow) -> Void
+        /// Renames files in the library folder, the second argument, to its layout.
+        var organize: @Sendable ([String], String) -> FilesOrganized
+        /// Points the journal's records of each renamed file at its new path, giving what
+        /// couldn't be.
+        var follow: @Sendable ([TrackMove]) -> [TagWriteError]
     }
 
     /// A question the user answers before the editor writes a batch of files.
@@ -124,14 +134,15 @@ public final class TagEditing {
             undo: { writer.undoLast(ifNewestIs: $0) },
             newestEdit: { () throws(TagWriteError) in try writer.newestEdit() },
             present: { $0.show(after: $1) }, confirm: ask,
-            alert: showProblems)
+            alert: showProblems, organize: { organizeFiles($0, libraryFolder: $1) },
+            follow: { writer.follow($0.map { ($0.from, $0.to) }) })
         // A write in place a crash cut short is finished before anything reads the file
         // again; the writer logs what it found (ADR 0107).
         writes.async { [weak self] in
             let report = writer.recoverInterrupted()
             guard !report.changed.isEmpty else { return }
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.written(report) }
+                MainActor.assumeIsolated { self?.written(report, nil) }
             }
         }
         readCanUndo()
@@ -392,9 +403,22 @@ public final class TagEditing {
         enqueue("write the tags", over: window) { write(files, .discogsTagger, $0) }
     }
 
-    /// Queues `work`, which is handed what to tell of its progress.
+    /// Organize Selected Files: renames `paths` that are in the library folder `folder` to
+    /// its layout, after the writes queued before it, as Keep Files Organized does after a
+    /// write. The caller has asked the user (ADR 0164).
+    public func organize(_ paths: [String], in folder: String, over window: NSWindow) {
+        guard !paths.isEmpty else { return }
+        enqueue("organize the files", over: window, organizing: (paths, folder)) { _ in
+            TagWriteReport()
+        }
+    }
+
+    /// Queues `work`, which is handed what to tell of its progress. With Keep Files Organized
+    /// on, or `organizing` given, the files are then renamed on the same queue, and the journal
+    /// follows them before any later write or undo can look for them (ADR 0164).
     private func enqueue(
         _ action: String, over window: NSWindow,
+        organizing: (paths: [String], folder: String)? = nil,
         _ work:
             @escaping @Sendable (@escaping @Sendable (TagWriteProgress) -> Void) ->
             TagWriteReport
@@ -403,8 +427,11 @@ public final class TagEditing {
         let number = lastWrite
         alertWindows[number] = (action, window)
         pendingWrites += 1
+        let keepingIn = organizing == nil ? organizingFolder() : nil
+        let organize = effects.organize
+        let follow = effects.follow
         writes.async {
-            let report = work { progress in
+            var report = work { progress in
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         self.saving(Self.savingStatus(progress))
@@ -412,8 +439,19 @@ public final class TagEditing {
                     }
                 }
             }
+            var organized: FilesOrganized?
+            if let target = organizing ?? keepingIn.map({ (report.changed, $0) }),
+                !target.paths.isEmpty
+            {
+                var result = organize(target.paths, target.folder)
+                result.problems += follow(result.moved).map {
+                    "\($0.path): Undo Tag Edit can't find it at its new path: \($0.detail)"
+                }
+                report = report.organized(result.moved, all: organizing != nil)
+                organized = result
+            }
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { self.finished(number, report) }
+                MainActor.assumeIsolated { self.finished(number, report, organized) }
             }
         }
     }
@@ -429,7 +467,7 @@ public final class TagEditing {
         )
     }
 
-    private func finished(_ number: Int, _ report: TagWriteReport) {
+    private func finished(_ number: Int, _ report: TagWriteReport, _ organized: FilesOrganized?) {
         pendingWrites -= 1
         if pendingWrites == 0 { saving(nil) }
         readCanUndo()
@@ -437,8 +475,8 @@ public final class TagEditing {
         completions.removeValue(forKey: number)?(
             Set(report.failures.map(\.path) + report.notWritten))
         guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }
-        if !report.changed.isEmpty {
-            written(report)
+        if !report.changed.isEmpty || organized != nil {
+            written(report, organized)
             let changed = Set(report.changed)
             for editor in editors where !changed.isDisjoint(with: editor.paths) {
                 read(into: editor, over: window)
@@ -494,4 +532,18 @@ private func ask(
     alert.addButton(withTitle: question.button)
     alert.addButton(withTitle: "Cancel")
     alert.beginSheetModal(for: window) { answer($0 == .alertFirstButtonReturn) }
+}
+
+extension TagWriteReport {
+    /// The report with each of `moves`' files at its new path, its parse with it. With `all`,
+    /// for Organize Selected Files, the moved files count as changed, for the rescan.
+    fileprivate func organized(_ moves: [TrackMove], all: Bool) -> TagWriteReport {
+        guard !moves.isEmpty else { return self }
+        let to = Dictionary(moves.map { ($0.from, $0.to) }, uniquingKeysWith: { one, _ in one })
+        var report = self
+        report.changed = all ? moves.map(\.to) : changed.map { to[$0] ?? $0 }
+        report.parsed = Dictionary(
+            parsed.map { (to[$0.key] ?? $0.key, $0.value) }, uniquingKeysWith: { one, _ in one })
+        return report
+    }
 }

@@ -4,6 +4,7 @@ import Testing
 
 @testable import Commands
 @testable import Fixtures
+@testable import Library
 @testable import Metadata
 @testable import TagEditor
 @testable import TagWriter
@@ -81,7 +82,10 @@ private func makeEditing(
     undo: @escaping @Sendable () -> TagWriteReport = { TagWriteReport() },
     newestEdit: @escaping @Sendable () throws(TagWriteError) -> JournaledEdit? = { nil },
     confirm: Bool = true,
-    progress: [TagWriteProgress] = []
+    progress: [TagWriteProgress] = [],
+    organize: @escaping @Sendable ([String], String) -> FilesOrganized = { _, _ in
+        FilesOrganized()
+    }
 ) -> TagEditing {
     let editing = TagEditing(
         effects: .init(
@@ -108,8 +112,16 @@ private func makeEditing(
                 seen.confirm(message.message)
                 answer(confirm)
             },
-            alert: { message, _, _ in seen.alert(message) }))
-    editing.written = { seen.wrote($0.changed) }
+            alert: { message, _, _ in seen.alert(message) },
+            organize: { paths, folder in
+                seen.ran("organize \(paths.joined(separator: " ")) in \(folder)")
+                return organize(paths, folder)
+            },
+            follow: { moves in
+                seen.ran("follow \(moves.map { "\($0.from)>\($0.to)" }.joined(separator: " "))")
+                return []
+            }))
+    editing.written = { report, _ in seen.wrote(report.changed) }
     return editing
 }
 
@@ -719,4 +731,78 @@ private final class FileTitles: @unchecked Sendable {
     #expect(seen.reads.count == reads + 1)
     touched.close()
     other.close()
+}
+
+/// Moves `/lib/a.flac` to `/lib/A/a.flac` and leaves the rest.
+private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths, _ in
+    var result = FilesOrganized()
+    result.moved = paths.filter { $0 == "/lib/a.flac" }.map {
+        TrackMove(from: $0, to: "/lib/A/a.flac")
+    }
+    return result
+}
+
+/// With Keep Files Organized on, a write is followed on the write queue by the renames and
+/// the journal's follow, before the undo queued after it, so the undo finds the file at its
+/// new path; the rescan is told the new path (ADR 0164).
+@MainActor
+@Test func keepFilesOrganizedRenamesAfterAWriteAndBeforeTheNextUndo() async throws {
+    let seen = Seen()
+    let editing = makeEditing(seen, organize: organizeA)
+    var organized: [FilesOrganized?] = []
+    editing.written = { report, result in
+        seen.wrote(report.changed)
+        organized.append(result)
+    }
+    editing.organizingFolder = { "/lib" }
+    editing.write(
+        [("/lib/a.flac", TagEdit(values: [.title: "A"])), ("/lib/b.flac", TagEdit())],
+        over: window)
+    editing.undo(over: window, from: .discogsTagger)
+    try await eventually { seen.work.count == 4 && !editing.isWriting }
+    #expect(
+        seen.work == [
+            "write /lib/a.flac /lib/b.flac", "organize /lib/a.flac /lib/b.flac in /lib",
+            "follow /lib/a.flac>/lib/A/a.flac", "undo",
+        ])
+    #expect(seen.written.first == ["/lib/A/a.flac", "/lib/b.flac"])
+    #expect(organized.first??.moved == [TrackMove(from: "/lib/a.flac", to: "/lib/A/a.flac")])
+}
+
+/// With the setting off, a write renames nothing.
+@MainActor
+@Test func aWriteWithKeepFilesOrganizedOffRenamesNothing() async throws {
+    let seen = Seen()
+    let editing = makeEditing(seen, organize: organizeA)
+    editing.write([("/lib/a.flac", TagEdit(values: [.title: "A"]))], over: window)
+    try await eventually { !editing.isWriting && !seen.written.isEmpty }
+    #expect(seen.work == ["write /lib/a.flac"])
+    #expect(seen.written == [["/lib/a.flac"]])
+}
+
+/// Organize Selected Files runs after the writes queued before it, whatever the setting, and
+/// the rescan is told the moved files' new paths.
+@MainActor
+@Test func organizeSelectedFilesRunsAfterTheQueuedWrites() async throws {
+    let seen = Seen()
+    let gate = Gate()
+    let editing = makeEditing(
+        seen,
+        write: { _, paths in
+            gate.wait()
+            var report = TagWriteReport()
+            report.changed = paths
+            return report
+        }, organize: organizeA)
+    editing.write([("/lib/b.flac", TagEdit(values: [.title: "B"]))], over: window)
+    editing.organize(["/lib/a.flac", "/elsewhere/c.flac"], in: "/lib", over: window)
+    #expect(seen.work.count <= 1)
+    gate.open()
+    try await eventually { !editing.isWriting && seen.written.count == 2 }
+    #expect(
+        seen.work == [
+            "write /lib/b.flac", "organize /lib/a.flac /elsewhere/c.flac in /lib",
+            "follow /lib/a.flac>/lib/A/a.flac",
+        ])
+    #expect(seen.written.last == ["/lib/A/a.flac"])
 }

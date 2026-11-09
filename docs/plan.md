@@ -655,7 +655,7 @@ in the AGENTS.md boundary".
 - [ ] **Organize Selected Files:** the same for selected tracks already in the library folder.
 - [ ] **ADR and AGENTS.md boundary** for the new move.
 
-Implementation plan, phase 60 (ADR 0160):
+Implementation plan, phase 60 (ADR 0164):
 
 What exists, found by search (map.md recipes): the layout is `libraryFolderPath` in
 `Core/Library/LibraryFolderLayout.swift`; Approve's renames are `LibraryFolderMove` (private
@@ -691,7 +691,7 @@ inode. Problems rows come from `LibraryStatus`'s reports, filled by `LibraryBrow
   `finishOrganizing` says what moved in the status bar and lists the rest in Problems.
 - 60.7 App wiring: the organized moves go to `importMoves(lines:)`, so stats, ratings and
   playlists follow, and the new paths are rescanned.
-- 60.8 ADR 0160, the AGENTS.md clause, ADR 0124's and 0147's amended-by lines, and the
+- 60.8 ADR 0164, the AGENTS.md clause, ADR 0124's and 0147's amended-by lines, and the
   "Later" item's organize part removed.
 
 Tests: a taken name skipped, a move to another album folder, a file outside the library
