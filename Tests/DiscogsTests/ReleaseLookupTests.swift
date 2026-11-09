@@ -1,5 +1,6 @@
 import Foundation
 import Library
+import SQLite
 import Testing
 
 @testable import Discogs
@@ -82,6 +83,21 @@ private let stockholm = DiscogsAlbum(
     let alone = try await lookUpReleases(
         byID, for: stockholm, catalogAt: folder.catalog, api: nil)
     #expect(alone.releases.map(\.summary.id) == [400], "the artist typed beside it is ignored")
+}
+
+/// A catalog that can't be read stops the search with why, rather than passing for none.
+@Test func aCatalogThatCantBeReadStopsTheSearch() async throws {
+    let folder = try DumpFolder()
+    try folder.write("20261101", masters: apiDumpMasters, releases: apiDumpReleases)
+    try folder.importCatalog()
+    try Database(at: folder.catalog).execute("UPDATE catalog SET schema = 'other'")
+    let fake = FakeDiscogs()
+    await #expect(throws: CatalogError.builtByAnotherVersion(folder.catalog.path)) {
+        try await lookUpReleases(
+            ReleaseQuery(title: "Stockholm"), for: stockholm, catalogAt: folder.catalog,
+            api: fake.api())
+    }
+    #expect(fake.requests.isEmpty)
 }
 
 @Test func theAPIIsAskedWhenTheCatalogHasNoMatchOrIsntThere() async throws {

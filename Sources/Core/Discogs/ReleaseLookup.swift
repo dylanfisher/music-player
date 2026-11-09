@@ -67,9 +67,9 @@ public func lookUpReleases(
         let opened: Catalog
         do {
             opened = try Catalog(at: catalog)
-        } catch is CatalogError {
-            // No catalog, or one this build can't read, which the window says: the API is
-            // asked instead.
+        } catch CatalogError.missing {
+            // No catalog on this Mac: the API is asked instead. One that can't be read is
+            // thrown, for the sheet to say so.
             return ([], false)
         }
         return try catalogReleases(query, in: opened)
