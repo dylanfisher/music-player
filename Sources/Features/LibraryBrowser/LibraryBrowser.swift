@@ -115,6 +115,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// A drop's question before it watches new folders, which tests replace.
     var confirmAdding: @MainActor ([String], NSWindow, @escaping (Bool) -> Void) -> Void =
         askToAddFolders
+    /// Organize Selected Files' question, which tests replace.
+    var confirmOrganizing: @MainActor (FilesOrganized, NSWindow, @escaping (Bool) -> Void) -> Void =
+        askToOrganize
     /// Runs the command a key press in one of the browser's lists is bound to.
     public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
     /// Called once, when the table or the timeline first draws rows, or once loading finds none
@@ -865,7 +868,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    private func refreshNow() {
+    func refreshNow() {
         refreshPending = false
         lastRefresh = Date()
         Task {
@@ -1885,7 +1888,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Shows `summary` in the status bar, keeps `rows` as the problems list's `report`, in place
     /// of the last one, and opens the Problems window on them when there are any.
-    private func finish(
+    func finish(
         _ summary: String, _ rows: [Problem], as report: WritableKeyPath<LibraryStatus, [Problem]>
     ) {
         status[keyPath: report] = rows

@@ -30,6 +30,8 @@ struct LibraryStatus: Equatable, Sendable {
     var playlistFileReport: [Problem] = []
     /// What the last drop of files on the window couldn't add.
     var addedFilesReport: [Problem] = []
+    /// What the last organizing of files in the library folder didn't move (ADR 0164).
+    var organizedReport: [Problem] = []
     /// The lines of the last move list imported that moved nothing.
     var importedMovesReport: [Problem] = []
     /// What the health check shown found that the table can't list, and how many such items.
@@ -212,7 +214,7 @@ struct LibraryStatus: Equatable, Sendable {
         let after = syncProblems + folderLines.map(\.line)
         return
             (notices.map { Problem($0) } + playlistFileReport + addedFilesReport
-            + importedMovesReport + healthProblems
+            + organizedReport + importedMovesReport + healthProblems
             + after.map { Problem($0) }).filter { !dismissed.contains($0.line) }
     }
 
