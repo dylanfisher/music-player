@@ -88,4 +88,62 @@ tracks in and outside the folder, its count, and Cancel; then on a scratch folde
 the same, the log's `RENAME_EXCL` fallback line, and undo after a moved file; two Macs organizing
 into the same scratch folder at once; on a second Mac, the moves and stats through sync.
 
+### 62. Small fixes: palette, saving status, quit guard
 
+Asked by the owner on 2026-11-09.
+
+- [x] **Palette kinds:** short prefixes beside the full names: `a:` album, `ar:` artist,
+      `t:` track, `p:` playlist, `g:` genre. `song:` goes; the word is "track" everywhere,
+      placeholder included (ADR 0161 amended).
+- [x] **Saving status:** the status bar's "Saving tags: N of M" counts every queued and running
+      batch, as the tagger window does (`TagWriteProgress.combined`), so a second batch queued
+      mid-run raises M at once instead of after the first ends. One count, read by both.
+- [x] **Quit guard:** `applicationShouldTerminate` while tag writes are running or queued asks
+      "N tag writes haven't finished." with Wait and Quit (default), Quit Anyway and Cancel.
+      Wait and Quit terminates when the queue drains; the play state save still runs.
+- [x] **Status bar:** the downloads item moves from the right end to the left side, after the
+      scan and saving labels.
+
+Implementation plan, phase 62 (ADR 0161 amended, ADR 0167):
+
+What exists, found by search (map.md recipes): the kind words are `PaletteItem.Kind`'s case
+names, read by `PaletteQuery` through `queryNames`, with `songName` the one alias; the Go to
+Item placeholder is in `PaletteController.show`. `TagEditing.enqueue` reports each batch's own
+`TagWriteProgress` to `saving`, and `pendingWrites` counts what is queued; the tagger sums its
+writes with `TagWriteProgress.combined` (`TaggerModel.writeProgress`).
+`AppDelegate.applicationShouldTerminate` saves the play state with a 1 s bound. The downloads
+item goes in through `LibraryBrowser.setStatusAccessory`, into `statusTrailing`.
+
+- 62.1 Palette kinds: `PaletteItem.Kind.shortName` (`a`, `ar`, `t`, `p`, `g`; none for
+  command, setting and output) joins the name in `queryNames`; `songName` goes. The
+  placeholder names `album:`, `a:`, `track:` and `t:`. ADR 0161's typed-search bullet amended.
+- 62.2 Saving status: `enqueue` takes the batch's file count; the write batches queued and
+  running are kept by number with their last report, and `saving` gets `combined` over all of
+  them, at each report and when a batch is queued while one shows, so M rises at once. Undos
+  and organizes have no count and report nothing, as now.
+- 62.3 Quit guard: `TagEditing.holdQuit(_:)` returns false with nothing queued; otherwise it
+  asks through a new effect, "N tag writes haven't finished." (Wait and Quit, Quit Anyway,
+  Cancel), and calls back: Cancel at once with false, Quit Anyway with true, Wait and Quit with
+  true when `pendingWrites` reaches 0. The app returns `.terminateLater` while it holds, then
+  runs the play state save as now. ADR 0167.
+- 62.4 Status bar: `setStatusAccessory` inserts the view into `statusLeading` after the
+  analysis label, before the leading columns, whichever is laid out first; ADR 0163's bullet
+  amended.
+
+Tests: `PaletteTests` (each short prefix, `song:` now plain text), `TagEditingTests` (a second
+batch queued mid-run raises M at once; each quit answer, nothing asked with nothing queued),
+`StatusBarLayoutTests` (the item after the labels and before a leading column, set before or
+after the layout).
+
+Result, phase 62: shipped all four items (ADR 0167; 0161 and 0163 amended). The palette takes
+`a:`, `ar:`, `t:`, `p:` and `g:`, and `song:` is plain text. The status bar's saving count
+covers every batch queued since the queue was last empty, so it never goes backwards (the
+owner's call at the gate, which reverses the first cut's drop of a finished batch). Quitting
+with tag writes queued asks first; N counts batches, and a staged download's write
+(`StagedWriter`) isn't held. The gate found no other bug. `./scripts/check links format
+typecheck arch dupes surface test` passed; no bench, as nothing touched a budgeted path. Cost:
+implementer (Opus) 145k tokens, 95 tool calls, 21 min; gate (Sonnet) 61k tokens, 14 tool
+calls, 3 min.
+
+**Owner check:** queue a large tag write and quit: each of the three answers; queue a second
+batch mid-run and watch the status bar's total rise at once; `a:` and `t:` in Go to Item.

@@ -112,6 +112,8 @@ that phase's Result line, and delete its line here.
 
 ### Owner checks in the running app
 
+- **62** ([phase](plan-archive.md#62-small-fixes-palette-saving-status-quit-guard)): the quit
+  guard's three answers, the saving total with a second batch queued, `a:` and `t:`.
 - **35** ([phase](plan-archive.md#35-seek-progress-bar-and-buffering)): click and scrub the
   progress bar on the 2015 MacBook Pro, in the toolbar and the status bar, glass on and off.
 - **36** ([phase](plan-archive.md#36-window-chrome-and-glass)): dark mode, the real blur, 36.8's
@@ -646,53 +648,6 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
-
-### 62. Small fixes: palette, saving status, quit guard
-
-Asked by the owner on 2026-11-09.
-
-- [ ] **Palette kinds:** short prefixes beside the full names: `a:` album, `ar:` artist,
-      `t:` track, `p:` playlist, `g:` genre. `song:` goes; the word is "track" everywhere,
-      placeholder included (ADR 0161 amended).
-- [ ] **Saving status:** the status bar's "Saving tags: N of M" counts every queued and running
-      batch, as the tagger window does (`TagWriteProgress.combined`), so a second batch queued
-      mid-run raises M at once instead of after the first ends. One count, read by both.
-- [ ] **Quit guard:** `applicationShouldTerminate` while tag writes are running or queued asks
-      "N tag writes haven't finished." with Wait and Quit (default), Quit Anyway and Cancel.
-      Wait and Quit terminates when the queue drains; the play state save still runs.
-- [ ] **Status bar:** the downloads item moves from the right end to the left side, after the
-      scan and saving labels.
-
-Implementation plan, phase 62 (ADR 0161 amended, ADR 0167):
-
-What exists, found by search (map.md recipes): the kind words are `PaletteItem.Kind`'s case
-names, read by `PaletteQuery` through `queryNames`, with `songName` the one alias; the Go to
-Item placeholder is in `PaletteController.show`. `TagEditing.enqueue` reports each batch's own
-`TagWriteProgress` to `saving`, and `pendingWrites` counts what is queued; the tagger sums its
-writes with `TagWriteProgress.combined` (`TaggerModel.writeProgress`).
-`AppDelegate.applicationShouldTerminate` saves the play state with a 1 s bound. The downloads
-item goes in through `LibraryBrowser.setStatusAccessory`, into `statusTrailing`.
-
-- 62.1 Palette kinds: `PaletteItem.Kind.shortName` (`a`, `ar`, `t`, `p`, `g`; none for
-  command, setting and output) joins the name in `queryNames`; `songName` goes. The
-  placeholder names `album:`, `a:`, `track:` and `t:`. ADR 0161's typed-search bullet amended.
-- 62.2 Saving status: `enqueue` takes the batch's file count; the write batches queued and
-  running are kept by number with their last report, and `saving` gets `combined` over all of
-  them, at each report and when a batch is queued while one shows, so M rises at once. Undos
-  and organizes have no count and report nothing, as now.
-- 62.3 Quit guard: `TagEditing.holdQuit(_:)` returns false with nothing queued; otherwise it
-  asks through a new effect, "N tag writes haven't finished." (Wait and Quit, Quit Anyway,
-  Cancel), and calls back: Cancel at once with false, Quit Anyway with true, Wait and Quit with
-  true when `pendingWrites` reaches 0. The app returns `.terminateLater` while it holds, then
-  runs the play state save as now. ADR 0167.
-- 62.4 Status bar: `setStatusAccessory` inserts the view into `statusLeading` after the
-  analysis label, before the leading columns, whichever is laid out first; ADR 0163's bullet
-  amended.
-
-Tests: `PaletteTests` (each short prefix, `song:` now plain text), `TagEditingTests` (a second
-batch queued mid-run raises M at once; each quit answer, nothing asked with nothing queued),
-`StatusBarLayoutTests` (the item after the labels and before a leading column, set before or
-after the layout).
 
 ### 63. A Library pane in Settings
 
