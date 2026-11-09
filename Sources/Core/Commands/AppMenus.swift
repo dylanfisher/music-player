@@ -58,6 +58,10 @@ public enum AppMenus {
     /// The repeat modes' commands, in the order the submenu lists them and the toolbar's repeat
     /// button steps through them.
     public static let repeatCommands: [CommandID] = [.repeatOff, .repeatAll, .repeatOne]
+    /// Where the Shortcuts pane and the palette list the setting commands no menu has: those
+    /// the Settings window or the tagger shows, which would make the File menu too long
+    /// (ADR 0159).
+    public static let settingsSectionTitle = "Settings"
 
     /// The context menu of the track table and the timeline, grouped as Swinsian groups it.
     /// Its items act on the selection, which a right-click sets.
@@ -100,27 +104,22 @@ public enum AppMenus {
                     .command(.renamePlaylist), .command(.duplicatePlaylist),
                     .command(.deletePlaylist), .separator,
                     .command(.importPlaylist), .command(.exportPlaylist),
-                    .command(.importSwinsian), .command(.importITunes), .separator,
+                    .submenu(
+                        "Import from Other Players",
+                        [.command(.importSwinsian), .command(.importITunes)], showsChords: true),
+                    .separator,
                     .command(.addFolder), .command(.showWatchedFolders), .command(.checkHealth),
                     .command(.analyzeLibrary), .command(.pauseLibraryAnalysis),
                     .command(.pauseScan), .command(.resumeScan),
                     .command(.showStats), .command(.showYearInReview),
-                    .command(.showDiscogsTagger), .command(.showDownloads),
-                    .setting(settings.discogsKeepExistingValues.key),
-                    .setting(settings.discogsSkipVideo.key),
-                    .setting(settings.discogsFillSortArtist.key),
-                    .setting(settings.discogsArtwork.key), .command(.rescanNow),
-                    .command(.resolveLostStats), .command(.restoreRemoved),
-                    .command(.importMoves),
-                    .setting(settings.pausePollingDuringPlayback.key),
-                    .setting(settings.rescanNetworkFoldersAtLaunch.key),
-                    .setting(settings.removeMissingTracks.key),
-                    .setting(settings.rescanModifiedFiles.key),
-                    .setting(settings.copyAddedFiles.key),
-                    .setting(settings.groupByAlbumArtist.key),
-                    .setting(settings.separateReleases.key),
-                    .separator, .command(.revealInFinder), .setting(settings.fileViewer.key),
-                    .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),
+                    .command(.showDiscogsTagger), .command(.showDownloads), .command(.rescanNow),
+                    .submenu(
+                        "Moved and Removed Files",
+                        [
+                            .command(.resolveLostStats), .command(.restoreRemoved),
+                            .command(.importMoves),
+                        ], showsChords: true),
+                    .separator, .command(.revealInFinder), .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),
                     .command(.showInPlaylist), .command(.showAlbum), .command(.showArtist),
                     .separator, .command(.editTags), .command(.showSpectrum),
                     .command(.replaceArtwork), .command(.removeArtwork),
@@ -256,8 +255,32 @@ public enum AppMenus {
     }
 
     /// Each menu's commands in menu order, submenus included, with the commands a standard item
-    /// runs: the order the Shortcuts pane lists them in.
+    /// runs, then the setting commands no menu has, under `settingsSectionTitle`: the order the
+    /// Shortcuts pane lists them in.
     public static func commandsByMenu(appName: String, settings: AppSettings = AppSettings())
+        -> [(title: String, commands: [CommandID])]
+    {
+        let menus = menuCommands(appName: appName, settings: settings)
+        let unlisted = settingCommandsOffMenus(menus, settings)
+        return (menus + [(settingsSectionTitle, unlisted)]).filter { !$0.commands.isEmpty }
+    }
+
+    /// The setting commands no menu lists, in schema order (ADR 0159). The menu bar gives them
+    /// hidden items, so their shortcuts still work.
+    public static func settingCommandsOffMenus(
+        appName: String, settings: AppSettings = AppSettings()
+    ) -> [CommandID] {
+        settingCommandsOffMenus(menuCommands(appName: appName, settings: settings), settings)
+    }
+
+    private static func settingCommandsOffMenus(
+        _ menus: [(title: String, commands: [CommandID])], _ settings: AppSettings
+    ) -> [CommandID] {
+        let listed = Set(menus.flatMap(\.commands))
+        return SettingCommand.all(settings).map(\.command.id).filter { !listed.contains($0) }
+    }
+
+    private static func menuCommands(appName: String, settings: AppSettings)
         -> [(title: String, commands: [CommandID])]
     {
         let generated = SettingCommand.all(settings)
@@ -273,6 +296,5 @@ public enum AppMenus {
             }
         }
         return sections(appName: appName).map { ($0.title, ids($0.entries)) }
-            .filter { !$0.commands.isEmpty }
     }
 }

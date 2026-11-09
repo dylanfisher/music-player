@@ -39,6 +39,12 @@ final class MainMenu: NSObject, NSMenuItemValidation {
             case .app, .plain: break
             }
         }
+        // Hidden, so a shortcut given to a setting that no menu lists still runs it.
+        if let menu = bar.items.first?.submenu {
+            for id in AppMenus.settingCommandsOffMenus(appName: appName, settings: settings) {
+                addCommand(id, to: menu, chords: true, hidden: true)
+            }
+        }
         barItemCount = items.count
         add(AppMenus.trackMenu, to: trackMenu, chords: true, generated, descriptors)
         showChords()
@@ -95,19 +101,23 @@ final class MainMenu: NSObject, NSMenuItemValidation {
         }
     }
 
-    private func addCommand(_ id: CommandID, to menu: NSMenu, chords: Bool) {
+    /// Adds `id`'s item and its hidden alternate; `hidden` hides the item too, keeping its chord.
+    private func addCommand(_ id: CommandID, to menu: NSMenu, chords: Bool, hidden: Bool = false) {
         guard let command = dispatcher.bindings.defaults.command(id) else {
             preconditionFailure("the menus list \(id), which isn't a registered command")
         }
-        let shown = NSMenuItem(
-            title: command.title, action: #selector(runCommand(_:)), keyEquivalent: "")
+        let shown =
+            hidden
+            ? hiddenItem(action: #selector(runCommand(_:)), id: id)
+            : NSMenuItem(
+                title: command.title, action: #selector(runCommand(_:)), keyEquivalent: "")
         shown.target = self
         shown.representedObject = id
-        let hidden = hiddenItem(action: #selector(runCommand(_:)), id: id)
-        hidden.target = self
+        let alternate = hiddenItem(action: #selector(runCommand(_:)), id: id)
+        alternate.target = self
         menu.addItem(shown)
-        menu.addItem(hidden)
-        items.append((id, shown, hidden, chords))
+        menu.addItem(alternate)
+        items.append((id, shown, alternate, chords))
     }
 
     private func hiddenItem(action: Selector?, id: CommandID) -> NSMenuItem {

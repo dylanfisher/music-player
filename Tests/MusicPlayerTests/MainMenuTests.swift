@@ -23,11 +23,23 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     }
 }
 
+/// Every command has a menu item but the settings the Settings window shows instead
+/// (ADR 0159), whose hidden items still take their shortcuts.
 @MainActor @Test func everyCommandThatRunsFromMenusHasAMenuItem() throws {
-    let (menu, _) = try menu()
+    let toggle = SettingCommand.toggleID(AppSettings().separateReleases.key)
+    let (menu, _) = try menu([
+        toggle.rawValue: ShortcutOverride(primary: .chord(KeyChord("j", [.command, .control])))
+    ])
+    let offMenus = AppMenus.settingCommandsOffMenus(appName: "App")
     let missing = Set(AppCommands.all().filter(\.runsFromMenus).map(\.id))
-        .subtracting(menu.listedCommands)
+        .subtracting(menu.listedCommands).subtracting(offMenus)
     #expect(missing.isEmpty, "no menu item for \(missing.sorted())")
+    #expect(offMenus.contains(toggle))
+    let item = try #require(
+        items(menu.bar).map(\.0).first {
+            $0.representedObject as? CommandID == toggle && $0.keyEquivalent == "j"
+        })
+    #expect(item.isHidden && item.allowsKeyEquivalentWhenHidden)
 }
 
 @MainActor @Test func eachItemsKeyEquivalentIsItsCommandsFirstUsableChord() throws {

@@ -1,5 +1,6 @@
 import KeyChord
 import Receiver
+import Settings
 import Testing
 
 @testable import Commands
@@ -73,6 +74,46 @@ import Testing
     #expect(AppCommands.title(of: .pauseLibraryAnalysis) == "Pause Library Analysis")
     #expect(AppCommands.title(of: .pauseScan) == "Pause Scan")
     #expect(AppCommands.title(of: .resumeScan) == "Resume Scan")
+}
+
+/// The File menu lists no setting: those it had are in the Settings window or the tagger, and
+/// their commands are the Shortcuts pane's and the palette's Settings section (ADR 0159). Its
+/// rarely used commands are in two submenus.
+@Test func theFileMenuHasNoSettingsAndItsRareCommandsInSubmenus() throws {
+    let file = try #require(AppMenus.sections(appName: "Test").first { $0.title == "File" })
+    func settings(_ entries: [MenuEntry]) -> [String] {
+        entries.flatMap { entry -> [String] in
+            switch entry {
+            case .setting(let key): [key]
+            case .submenu(_, let entries, _): settings(entries)
+            default: []
+            }
+        }
+    }
+    #expect(settings(file.entries).isEmpty)
+    let submenus = Dictionary(
+        uniqueKeysWithValues: file.entries.compactMap { entry -> (String, [CommandID])? in
+            guard case .submenu(let title, let entries, _) = entry, title != "Rating" else {
+                return nil
+            }
+            return (
+                title,
+                entries.compactMap { if case .command(let id) = $0 { id } else { nil } }
+            )
+        })
+    #expect(
+        submenus == [
+            "Import from Other Players": [.importSwinsian, .importITunes],
+            "Moved and Removed Files": [.resolveLostStats, .restoreRemoved, .importMoves],
+        ])
+
+    let schema = AppSettings()
+    let sections = AppMenus.commandsByMenu(appName: "Test")
+    #expect(sections.last?.title == AppMenus.settingsSectionTitle)
+    let unlisted = Set(sections.last?.commands ?? [])
+    #expect(unlisted.contains(SettingCommand.toggleID(schema.separateReleases.key)))
+    #expect(unlisted.contains(SettingCommand.toggleID(schema.groupByAlbumArtist.key)))
+    #expect(!unlisted.contains(SettingCommand.toggleID(schema.hogMode.key)))
 }
 
 @Test func everyReceiverInputAndSoundModeIsACommand() {

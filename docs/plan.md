@@ -674,7 +674,7 @@ What exists, found by search (map.md recipes):
   shows in the pane's one `errorLabel`, at its foot. `IPAddressSetting.problem()` words the
   refusal.
 - Every Boolean and choice setting is a command, and `everyCommandIsInTheMenus` holds every
-  command to a menu, so the File menu lists 13 settings that the Settings window or the tagger
+  command to a menu, so the File menu lists 12 settings that the Settings window or the tagger
   already show. Separate Releases already has a checkbox in General > Library.
 - The track table's fallback order breaks a tie of album title on `t.album_id`, the order
   releases were added (ADR 0143); the Album pane already sorts a title's releases by year.
@@ -706,7 +706,7 @@ Parts, in order, each its own commit or two:
    field. Tests: the button saves; a host name is refused under the field.
 5. **55.5 File menu** (ADR 0159). Setting commands no longer have to be in a menu: those not
    in one are the Shortcuts pane's and the palette's section Settings. The File menu drops the
-   13 settings, and its rarely used commands go into two submenus, Import from Other Players
+   12 settings, and its rarely used commands go into two submenus, Import from Other Players
    (Swinsian, iTunes) and Moved and Removed Files (Resolve Lost Stats, Restore Removed Tracks,
    Import Moves). Tests: the File menu lists no setting; every command is in a menu or the
    Settings section.
