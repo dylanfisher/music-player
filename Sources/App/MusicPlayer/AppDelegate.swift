@@ -461,7 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .palette: { [weak self] in self?.palette?.window }
             case .playlist: { [weak self] in self?.ruleEditor?.window }
             case .tags: { [weak self] in self?.tagEditing.editors.last?.window }
-            case .settings, .playback, .appearance, .toolbar, .folders, .shortcuts:
+            case .settings, .playback, .appearance, .toolbar, .folders, .tagging, .shortcuts:
                 { [weak self] in self?.settingsWindow?.window }
             case .statusBar:
                 { [weak self] in
@@ -493,6 +493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .appearance: settingsWindowController()?.show(.appearance)
         case .toolbar: settingsWindowController()?.show(.toolbar)
         case .folders: settingsWindowController()?.show(.folders)
+        case .tagging: settingsWindowController()?.show(.tagging)
         case .shortcuts: settingsWindowController()?.show(.shortcuts)
         case .statusBar:
             settingsWindowController()?.showBarBuilder(AppSettings().statusBarLayout.key)

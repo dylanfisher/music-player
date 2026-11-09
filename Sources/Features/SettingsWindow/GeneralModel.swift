@@ -173,8 +173,9 @@ public final class GeneralModel {
     }
     /// The watched folders' row, which the Watched Folders pane shows.
     var foldersRow: Row? { rows.first { $0.control == .folders } }
-    private let value: (String) -> Any?
-    private let set: (String, Any) throws -> Void
+    /// How the panes read and write a setting, as JSON holds it.
+    let value: (String) -> Any?
+    let set: (String, Any) throws -> Void
     /// Whether the config file refuses every change until it's fixed (ADR 0082).
     let isBlocked: () -> Bool
 

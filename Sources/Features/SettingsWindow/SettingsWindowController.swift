@@ -4,11 +4,11 @@ import Settings
 import WindowPlacement
 
 /// The Settings window: one window with a toolbar of panes, General, Playback, Appearance,
-/// Toolbar, Watched Folders and Shortcuts. Made on first use and kept.
+/// Toolbar, Watched Folders, Tagging and Shortcuts. Made on first use and kept.
 @MainActor
 public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     public enum Pane: String, CaseIterable {
-        case general, playback, appearance, toolbar, folders, shortcuts
+        case general, playback, appearance, toolbar, folders, tagging, shortcuts
 
         var title: String {
             switch self {
@@ -17,6 +17,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .appearance: AppSettings().appearance.title
             case .toolbar: "Toolbar"
             case .folders: AppSettings().watchedFolders.title
+            case .tagging: "Tagging"
             case .shortcuts: "Shortcuts"
             }
         }
@@ -24,7 +25,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         /// The sections of settings the pane shows; General shows those no other pane does.
         var sections: [GeneralModel.Section] {
             switch self {
-            case .general, .shortcuts: []
+            case .general, .tagging, .shortcuts: []
             case .playback: [.output, .playCounts]
             case .appearance: [.theme, .trackTable]
             case .toolbar: [.titles, .toolbarStatus, .statusBar]
@@ -39,6 +40,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .appearance: "paintbrush"
             case .toolbar: "menubar.rectangle"
             case .folders: "folder"
+            case .tagging: "tag"
             case .shortcuts: "keyboard"
             }
         }
@@ -55,6 +57,8 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private let appearance: GeneralPane
     private let toolbarPane: GeneralPane
     private let folders: FoldersPane
+    /// Made as it's first shown, since its model reads the mapping then.
+    private(set) var tagging: TaggingPane?
     private let shortcuts: ShortcutsPane
     /// Each pane in its scroll view, made as it's first shown.
     private var scrollers: [Pane: PaneScroller] = [:]
@@ -103,6 +107,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     /// file for a setting the window doesn't show.
     public func show(setting key: String) {
         guard key != folders.key else { return show(.folders) }
+        guard key != TaggingModel.setting.key else { return show(.tagging) }
         guard model.rows.contains(where: { $0.key == key }) else {
             return actions.openConfigFile()
         }
@@ -131,6 +136,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         appearance.reload()
         toolbarPane.reload()
         if folders.isViewLoaded { folders.reload() }
+        if let tagging, tagging.isViewLoaded { tagging.reload() }
         shortcuts.model.update(bindings)
         if shortcuts.isViewLoaded { shortcuts.reload() }
     }
@@ -142,8 +148,17 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         case .appearance: appearance
         case .toolbar: toolbarPane
         case .folders: folders
+        case .tagging: taggingPane()
         case .shortcuts: shortcuts
         }
+    }
+
+    private func taggingPane() -> TaggingPane {
+        if let tagging { return tagging }
+        let pane = TaggingPane(
+            model: TaggingModel(value: model.value, set: model.set, isBlocked: model.isBlocked))
+        tagging = pane
+        return pane
     }
 
     private func select(_ pane: Pane) {

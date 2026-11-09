@@ -1,7 +1,7 @@
 import Foundation
 import Settings
 
-/// Settings ▸ Tagging's field mapping as the user edits it, with no AppKit (ADR 0160): the
+/// Settings ▸ Tagging's field mapping as the user edits it, with no AppKit (ADR 0165): the
 /// Discogs tagger's mapping in use, each field a key with its rule as the value, including the
 /// parts of a rule the Field Mapping sheet doesn't show, a tag spelled per format or numbered
 /// and how each value is written. The draft is checked as the config file's mapping is, and
@@ -115,8 +115,8 @@ final class TaggingModel {
         }
         let credits: [Part] = [.vorbisCredits, .mp4Credits, .id3Credits]
         if credits[0].isSet(in: format) {
-            parts.append(
-                "credits " + credits.map { $0.choices[$0.selected(in: format)] }.joined(separator: " / "))
+            let styles = credits.map { $0.choices[$0.selected(in: format)] }
+            parts.append("credits " + styles.joined(separator: " / "))
         }
         return parts.joined(separator: " · ")
     }
@@ -128,7 +128,7 @@ final class TaggingModel {
         let spelled =
             names == PerTagFormat(names.vorbis)
             ? names.vorbis : Spelling.allCases.map { $0.name(in: names) }.joined(separator: " / ")
-        return spelled + (target.isNumbered ? " (numbered)" : "")
+        return spelled + (target.isNumbered ? " (each value numbered)" : "")
     }
 
     func setMode(_ mode: DiscogsFieldRule.Mode, for field: DiscogsField) {
@@ -234,7 +234,7 @@ final class TaggingModel {
             case .names: "Names"
             case .suffixes: "Number Suffixes"
             case .repeats: "Repeated Labels"
-            case .date: "Date"
+            case .date: "Date Written"
             case .vorbisCredits: "Credits in vorbis"
             case .mp4Credits: "Credits in mp4"
             case .id3Credits: "Credits in id3"
