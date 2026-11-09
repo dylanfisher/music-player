@@ -539,11 +539,9 @@ final class TaggerModel {
     func choose(_ releaseID: Int, for albumID: Int64, from origin: MatchOrigin = .catalog) async {
         guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
         let album = albums[index]
-        let source: DiscogsSource =
-            origin == .api && runSource == .catalog ? (isCatalogReady ? .both : .api) : runSource
         do {
             let match = try await effects.match(
-                [album.matched], [albumID: releaseID], choices.skipVideo, source
+                [album.matched], [albumID: releaseID], choices.skipVideo, source(for: origin)
             ) { _ in }
             try await effects.review(
                 .chosen(releaseID: releaseID), album.album.tracks.map(\.fileID))
@@ -557,6 +555,12 @@ final class TaggerModel {
         } catch {
             failed("The release couldn't be chosen", ["\(error)"])
         }
+    }
+
+    /// The source that matches an album again with a release from `origin`: a release from the
+    /// API, as Look Up can find, needs the API even when the source is the catalog.
+    private func source(for origin: MatchOrigin) -> DiscogsSource {
+        origin == .api && runSource == .catalog ? (isCatalogReady ? .both : .api) : runSource
     }
 
     /// Whether a file of the selected album can be left out or put back: not in a staged job,
@@ -586,7 +590,7 @@ final class TaggerModel {
         let chosen = album.chosen.map { [albumID: $0] } ?? [:]
         do {
             let match = try await effects.match(
-                [album.matched], chosen, choices.skipVideo, runSource
+                [album.matched], chosen, choices.skipVideo, source(for: album.match.origin)
             ) { _ in }
             guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
             leftOutFiles[albumID] = album.leftOut.isEmpty ? nil : album.leftOut
