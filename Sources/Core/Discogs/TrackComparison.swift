@@ -26,8 +26,15 @@ public struct TrackComparison: Equatable, Sendable {
 
 extension AlbumMatch {
     /// The release's tracks in order, each beside the file mapped to it, then the files mapped
-    /// to none.
-    public func comparison(of album: DiscogsAlbum) -> [TrackComparison] {
+    /// to none, those in `leftOut`, which the user left out of the match, last.
+    public func comparison(of album: DiscogsAlbum, leftOut: Set<Int64> = []) -> [TrackComparison]
+    {
+        let all = rows(of: album)
+        return all.filter { !($0.fileID.map(leftOut.contains) ?? false) }
+            + all.filter { $0.fileID.map(leftOut.contains) ?? false }
+    }
+
+    private func rows(of album: DiscogsAlbum) -> [TrackComparison] {
         let files = Dictionary(uniqueKeysWithValues: album.tracks.map { ($0.fileID, $0) })
         let byTrack = Dictionary(mapping.map { ($0.value, $0.key) }, uniquingKeysWith: min)
         var rows = tracks.enumerated().map { index, track in

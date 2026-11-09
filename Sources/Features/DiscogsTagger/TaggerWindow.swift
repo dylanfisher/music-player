@@ -56,6 +56,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let releaseTable = NSTableView()
     static let filesHeading = "Your Files"
     static let releaseHeading = "Discogs Release"
+    /// The selected album's files left out, which its rows list last, greyed.
+    private(set) var leftOut: Set<Int64> = []
+    static let leftOutText = "Left out"
     /// Set while one tracklist follows the other's scroll or selection, so the other doesn't
     /// follow it back.
     private var following = false
@@ -282,7 +285,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// release's shows a scroller; the files' scrolls with it.
     private func tracklists() -> NSStackView {
         let files = taggerTable(
-            fileTable, [(.number, 24), (.fileTitle, 170), (.fileTime, 48)], source: self)
+            fileTable, [(.include, 24), (.number, 24), (.fileTitle, 170), (.fileTime, 48)],
+            source: self)
+        fileTable.tableColumns[0].headerToolTip =
+            "Untick a file to leave it out of the match, as a duplicate of another release's"
         let release = taggerTable(
             releaseTable,
             [(.position, 56), (.releaseTitle, 170), (.releaseTime, 48), (.state, 84)],
@@ -475,10 +481,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 ? "" : "Other Releases… lists what the catalog found, if anything."
         }
         reasonsLine.stringValue = album.flatMap { reasonsText($0.match, separator: " · ") } ?? ""
-        rows = album.map { $0.match.comparison(of: $0.album) } ?? []
+        leftOut = album?.leftOut ?? []
+        rows = album.map { $0.match.comparison(of: $0.album, leftOut: $0.leftOut) } ?? []
         fileTable.reloadData()
         releaseTable.reloadData()
-        let reviewing = album != nil && !model.isBusy
+        let reviewing = album != nil && !model.isBusy && model.rematchingID == nil
         let others = album?.match.candidates.count ?? 0
         otherReleasesButton.title = Self.otherReleasesTitle(others)
         otherReleasesButton.isEnabled = reviewing && others > 0
@@ -508,8 +515,25 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     {
         guard let id = tableColumn.flatMap({ TaggerColumn(rawValue: $0.identifier.rawValue) })
         else { return nil }
+        let isLeftOut = tableView !== albumTable && rows[row].fileID.map(leftOut.contains) == true
+        if id == .include {
+            guard rows[row].fileID != nil else { return nil }
+            let box = NSButton(checkboxWithTitle: "", target: self, action: #selector(included))
+            box.tag = row
+            box.state = isLeftOut ? .off : .on
+            box.isEnabled = model.canLeaveOut
+            box.toolTip = isLeftOut ? "Put this file back in the match" : "Leave this file out"
+            return box
+        }
         let cell = NSTextField(labelWithString: text(tableView, id, row))
         cell.lineBreakMode = .byTruncatingTail
+        if isLeftOut {
+            cell.textColor = .tertiaryLabelColor
+            if id == .state {
+                cell.toolTip = "Left out of the match: not matched, read or written"
+                return cell
+            }
+        }
         if tableView === albumTable {
             if shownAlbums[row].isRejected || shownAlbums[row].applied {
                 cell.textColor = .secondaryLabelColor
@@ -526,6 +550,19 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             cell.toolTip = rows[row].stateTip
         }
         return cell
+    }
+
+    /// A file's Include box was clicked: leaves the file out of the match, or puts it back.
+    @objc private func included(_ sender: NSButton) {
+        setIncluded(sender.state == .on, row: sender.tag)
+    }
+
+    /// Puts the file on `row` back in the match, or leaves it out; tests call it in place of
+    /// a click.
+    func setIncluded(_ included: Bool, row: Int) {
+        guard row < rows.count, let fileID = rows[row].fileID, let albumID = model.selectedID
+        else { return }
+        Task { await model.setLeftOut(!included, fileID, of: albumID) }
     }
 
     /// Why `match` isn't Exact, a reason a line or `separator` apart; nil when it says nothing.
@@ -557,7 +594,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         case .position: return comparison.position ?? ""
         case .releaseTitle: return comparison.releaseTitle ?? ""
         case .releaseTime: return comparison.releaseSeconds.map { clock(Double($0)) } ?? ""
-        default: return comparison.stateText
+        case .include: return ""
+        default:
+            return comparison.fileID.map(leftOut.contains) == true
+                ? Self.leftOutText : comparison.stateText
         }
     }
 
@@ -582,7 +622,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
         -> (any NSPasteboardWriting)?
     {
-        guard tableView === fileTable, model.canRemap, let fileID = rows[row].fileID else {
+        guard tableView === fileTable, model.canRemap, let fileID = rows[row].fileID,
+            !leftOut.contains(fileID)
+        else {
             return nil
         }
         let item = NSPasteboardItem()
@@ -613,7 +655,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Maps the dragged file to the track on `row`: a row of the release's gets its track, a
     /// file's own row past them maps it to none.
     func drop(_ fileID: Int64, onRow row: Int) -> Bool {
-        guard model.canRemap, row < rows.count else { return false }
+        guard model.canRemap, row < rows.count, !leftOut.contains(fileID),
+            !(rows[row].fileID.map(leftOut.contains) ?? false)
+        else { return false }
         model.assign(fileID, to: rows[row].track)
         return true
     }

@@ -118,6 +118,9 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     #expect(tagger.albums.map(\.id) == [-1])
     #expect(tagger.albums.first?.match.releaseID == stagedRelease)
     #expect(tagger.selectedID == -1)
+    #expect(!tagger.canLeaveOut, "a staged job's files move into the library together")
+    await tagger.setLeftOut(true, bonusAlbum.tracks[0].fileID, of: -1)
+    #expect(tagger.albums.first?.leftOut == [])
 
     // Another release would leave the tags of one the service didn't download.
     var failure: String?

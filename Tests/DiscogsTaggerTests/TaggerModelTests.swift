@@ -372,3 +372,54 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     await tagger.setRejected(true, 1)
     #expect(tagger.albums(in: .likely).first { $0.id == 1 }?.isRejected == true)
 }
+
+/// A file left out isn't matched, read or written; the album is matched again without it, and
+/// a new Analyze leaves it out too.
+@MainActor
+@Test func aFileLeftOutIsMatchedReadAndWrittenWithout() async throws {
+    let seen = Seen()
+    let doubled = album(7, "Stockholm", titles: ["Östermalm", "Östermalm", "Gamla Stan",
+        "Kungsholmen"])
+    let tagger = await model(
+        seen, albums: [doubled],
+        matches: { album, _ in
+            match(
+                album, release(70, "Stockholm", titles: stockholm),
+                tier: album.tracks.count == 3 ? .exact : .incomplete)
+        },
+        files: { ids in
+            doubled.tracks.indices.map { file(doubled, $0) }.filter { ids.contains($0.id) }
+        })
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.count(.incomplete) == 1)
+    tagger.selectedID = 7
+    #expect(tagger.canLeaveOut)
+
+    await tagger.setLeftOut(true, 701, of: 7)
+    let left = try #require(tagger.albums.first)
+    #expect(left.leftOut == [701])
+    #expect(left.matched.tracks.map(\.fileID) == [700, 702, 703])
+    #expect(left.match.tier == .exact)
+    #expect(tagger.tab == .exact, "the album's new tier is shown")
+    #expect(seen.matched.count == 2)
+
+    let plan = try #require(await tagger.plan([7]))
+    #expect(seen.reads.last == [700, 702, 703], "the file left out isn't read")
+    #expect(!plan.files.contains { $0.path.hasSuffix("/701.flac") }, "nor written")
+    let (set, _) = try #require(try await tagger.changeSet(for: 7))
+    #expect(set.files.map(\.fileID) == [700, 702, 703])
+
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.albums.first?.leftOut == [701], "kept through a new Analyze")
+    #expect(tagger.count(.exact) == 1)
+
+    await tagger.setLeftOut(false, 701, of: 7)
+    #expect(tagger.albums.first?.leftOut == [])
+    #expect(tagger.count(.incomplete) == 1)
+
+    for file in [700, 701, 702] { await tagger.setLeftOut(true, Int64(file), of: 7) }
+    await tagger.setLeftOut(true, 703, of: 7)
+    #expect(tagger.albums.first?.matched.tracks.map(\.fileID) == [703], "the last file stays")
+}

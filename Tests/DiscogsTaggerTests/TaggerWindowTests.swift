@@ -107,11 +107,13 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     let window = try #require(controller.window)
     defer { window.close() }
     let (files, tracks) = (controller.fileTable, controller.releaseTable)
-    #expect(files.tableColumns.map(\.identifier.rawValue) == ["number", "fileTitle", "fileTime"])
+    #expect(
+        files.tableColumns.map(\.identifier.rawValue)
+            == ["include", "number", "fileTitle", "fileTime"])
     #expect(
         tracks.tableColumns.map(\.identifier.rawValue)
             == ["position", "releaseTitle", "releaseTime", "state"])
-    #expect(files.tableColumns[1].title == tracks.tableColumns[1].title, "both Title")
+    #expect(files.tableColumns[2].title == tracks.tableColumns[1].title, "both Title")
     let labels = allViews(window.contentView!).compactMap { ($0 as? NSTextField)?.stringValue }
     #expect(labels.contains(TaggerWindow.filesHeading))
     #expect(labels.contains(TaggerWindow.releaseHeading))
@@ -131,6 +133,19 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     tracks.selectRowIndexes([2], byExtendingSelection: false)
     #expect(files.selectedRowIndexes == [2])
 
+    // Unticking a file leaves it out: listed last, greyed, on no track.
+    let box = try #require(
+        controller.tableView(files, viewFor: files.tableColumns[0], row: 0) as? NSButton)
+    #expect(box.state == .on && box.isEnabled)
+    controller.setIncluded(false, row: 0)
+    try await eventually { controller.leftOut == [200] && tagger.rematchingID == nil }
+    #expect(controller.rows.last?.fileID == 200)
+    #expect(controller.text(tracks, .state, controller.rows.count - 1) == "Left out")
+    let unticked = try #require(
+        controller.tableView(
+            files, viewFor: files.tableColumns[0], row: controller.rows.count - 1) as? NSButton)
+    #expect(unticked.state == .off)
+    #expect(!controller.drop(200, onRow: 0), "a file left out can't be dragged")
     try snapshot(window, "discogs-tagger-tracklists")
 
     let titles = (1...60).map { "Track \($0)" }

@@ -60,8 +60,16 @@ final class TaggerModel {
         var coverExcluded = false
         /// Handed to the writer in this session.
         var applied = false
+        /// The files the user left out, by id: they aren't matched, read or written.
+        var leftOut: Set<Int64> = []
 
         var id: Int64 { album.id }
+        /// The album as it's matched and written: its files but those left out.
+        var matched: DiscogsAlbum {
+            var kept = album
+            kept.tracks.removeAll { leftOut.contains($0.fileID) }
+            return kept
+        }
         var isRejected: Bool { review == .rejected }
     }
 
@@ -144,6 +152,11 @@ final class TaggerModel {
     /// Each tier's albums as places in `albums`, in list order, once sorted: the window lists
     /// them on every progress report, and sorting thousands each time stalls it.
     private var tierOrder: [MatchTier: [Int]] = [:]
+    /// The files left out of each album, by album id, kept for the session so a new Analyze
+    /// leaves them out too (ADR 0157).
+    private var leftOutFiles: [Int64: Set<Int64>] = [:]
+    /// The album being matched again after a file was left out or put back.
+    private(set) var rematchingID: Int64?
     var tab = MatchTier.exact
     var selectedID: Int64?
     var mapping: DiscogsMapping {
@@ -389,11 +402,22 @@ final class TaggerModel {
                 let chosen = reviews.compactMapValues { review -> Int? in
                     if case .chosen(let id) = review { id } else { nil }
                 }
+                let leftOut = albums.map { album in
+                    let files = leftOutFiles[album.id] ?? []
+                    // A rescan can leave an album none of whose files are kept; then none is
+                    // left out.
+                    return album.tracks.contains { !files.contains($0.fileID) } ? files : []
+                }
+                let matched = zip(albums, leftOut).map { album, files in
+                    var kept = album
+                    kept.tracks.removeAll { files.contains($0.fileID) }
+                    return kept
+                }
                 let matches: [AlbumMatch]
                 // Both keeps the catalog's matches when the API stops (ADR 0139).
                 var apiStopped: DiscogsAPIError?
                 do {
-                    matches = try await effects.match(albums, chosen, skipsVideo, source) {
+                    matches = try await effects.match(matched, chosen, skipsVideo, source) {
                         progress in
                         Task { @MainActor [self] in
                             guard self.run == current, case .analyzing = activity else { return }
@@ -407,10 +431,11 @@ final class TaggerModel {
                     matches = stopped.matches
                     apiStopped = stopped.error
                 }
-                self.albums = zip(albums, matches).map { album, match in
-                    Album(
+                self.albums = zip(albums.indices, matches).map { index, match in
+                    let album = albums[index]
+                    return Album(
                         album: album, match: match, review: reviews[album.id],
-                        chosen: chosen[album.id])
+                        chosen: chosen[album.id], leftOut: leftOut[index])
                 }
                 // A staged job's one album opens on its tier's tab, whichever it is.
                 if staged != nil, let only = self.albums.first { tab = only.match.tier }
@@ -470,12 +495,13 @@ final class TaggerModel {
     /// Makes `releaseID` the album's match, rescored against its files, and remembers it.
     func choose(_ releaseID: Int, for albumID: Int64) async {
         guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
-        let album = albums[index].album
+        let album = albums[index]
         do {
             let match = try await effects.match(
-                [album], [albumID: releaseID], choices.skipVideo, runSource
+                [album.matched], [albumID: releaseID], choices.skipVideo, runSource
             ) { _ in }
-            try await effects.review(.chosen(releaseID: releaseID), album.tracks.map(\.fileID))
+            try await effects.review(
+                .chosen(releaseID: releaseID), album.album.tracks.map(\.fileID))
             guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
             albums[index].match = match[0]
             albums[index].review = .chosen(releaseID: releaseID)
@@ -485,6 +511,46 @@ final class TaggerModel {
             changed()
         } catch {
             failed("The release couldn't be chosen", ["\(error)"])
+        }
+    }
+
+    /// Whether a file of the selected album can be left out or put back: not in a staged job,
+    /// whose files are all moved into the library together (ADR 0157), nor while work runs.
+    var canLeaveOut: Bool {
+        guard let album = selected else { return false }
+        return staged == nil && !isBusy && rematchingID == nil && !album.applied
+    }
+
+    /// Leaves the file `fileID` out of its album, or puts it back, then matches the album
+    /// again without the files left out, with the release the user chose if any. The last
+    /// file can't be left out.
+    func setLeftOut(_ out: Bool, _ fileID: Int64, of albumID: Int64) async {
+        guard let index = albums.firstIndex(where: { $0.id == albumID }), canLeaveOut,
+            albums[index].album.tracks.contains(where: { $0.fileID == fileID }),
+            albums[index].leftOut.contains(fileID) != out
+        else { return }
+        var album = albums[index]
+        if out { album.leftOut.insert(fileID) } else { album.leftOut.remove(fileID) }
+        guard !album.matched.tracks.isEmpty else { return }
+        rematchingID = albumID
+        changed()
+        defer {
+            rematchingID = nil
+            changed()
+        }
+        let chosen = album.chosen.map { [albumID: $0] } ?? [:]
+        do {
+            let match = try await effects.match(
+                [album.matched], chosen, choices.skipVideo, runSource
+            ) { _ in }
+            guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
+            leftOutFiles[albumID] = album.leftOut.isEmpty ? nil : album.leftOut
+            albums[index].leftOut = album.leftOut
+            albums[index].match = match[0]
+            albums[index].excluded = []
+            tab = match[0].tier
+        } catch {
+            failed("The album couldn't be matched again", ["\(error)"])
         }
     }
 
@@ -535,10 +601,10 @@ final class TaggerModel {
     /// shown.
     func changeSet(for albumID: Int64) async throws -> (AlbumChangeSet, problems: [String])? {
         guard let album = albums.first(where: { $0.id == albumID }) else { return nil }
-        let (files, read) = try await effects.read(album.album.tracks.map(\.fileID)) { _ in }
+        let (files, read) = try await effects.read(album.matched.tracks.map(\.fileID)) { _ in }
         var problems = read
         // A file moved or removed since the scan is in neither list; Apply refuses such an album.
-        let missing = album.album.tracks.count - files.count - read.count
+        let missing = album.matched.tracks.count - files.count - read.count
         if missing > 0 {
             problems.append("\(missing) file\(missing == 1 ? "" : "s") no longer in the library")
         }
@@ -610,7 +676,7 @@ final class TaggerModel {
         let delay = countDelayNanoseconds
         let read = effects.read
         let albumID = album.id
-        let ids = album.album.tracks.map(\.fileID)
+        let ids = album.matched.tracks.map(\.fileID)
         let task = Task {
             do {
                 try await Task.sleep(nanoseconds: delay)
@@ -652,7 +718,7 @@ final class TaggerModel {
         guard !isBusy else { return nil }
         let wanted = Set(albumIDs)
         let chosen = albums.filter { wanted.contains($0.id) }
-        let fileIDs = chosen.flatMap { $0.album.tracks.map(\.fileID) }
+        let fileIDs = chosen.flatMap { $0.matched.tracks.map(\.fileID) }
         run += 1
         let current = run
         activity = .reading(done: 0, total: fileIDs.count)
@@ -689,8 +755,8 @@ final class TaggerModel {
         let byID = Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
         var plan = ApplyPlan(albumIDs: [], files: [], fieldCount: 0, problems: readProblems)
         for album in chosen {
-            let albumFiles = album.album.tracks.compactMap { byID[$0.fileID] }
-            let unread = album.album.tracks.count - albumFiles.count
+            let albumFiles = album.matched.tracks.compactMap { byID[$0.fileID] }
+            let unread = album.matched.tracks.count - albumFiles.count
             guard unread == 0 else {
                 // Each file that couldn't be read is a problem of its own already.
                 plan.problems.append(
