@@ -2,8 +2,11 @@ import Discogs
 import DisplayText
 import Foundation
 import Library
+import Log
 import Settings
 import TagWriter
+
+private let logger = moduleLogger()
 
 /// The Discogs tagger's state and work, with no AppKit (ADRs 0131 to 0133): the catalog's
 /// state and its import, Analyze over a scope, the albums by tier, a release chosen or an album
@@ -133,16 +136,34 @@ final class TaggerModel {
     var sourceSaved: (DiscogsSource) -> Void = { _ in }
     var scope = Scope.library
     private(set) var albums: [Album] = [] {
-        didSet { tierOrder = [:] }
+        didSet {
+            tierOrder = [:]
+            forgetChangeCounts()
+        }
     }
     /// Each tier's albums as places in `albums`, in list order, once sorted: the window lists
     /// them on every progress report, and sorting thousands each time stalls it.
     private var tierOrder: [MatchTier: [Int]] = [:]
     var tab = MatchTier.exact
     var selectedID: Int64?
-    var mapping: DiscogsMapping
+    var mapping: DiscogsMapping {
+        didSet { forgetChangeCounts() }
+    }
     var savedMappings: [NamedDiscogsMapping]
-    private(set) var choices: TaggerChoices
+    private(set) var choices: TaggerChoices {
+        didSet { forgetChangeCounts() }
+    }
+    /// How many changes View Changes would show for each album, by id, once its files are
+    /// read: the tags Apply writes, the cover aside. Forgotten when an album, the mapping or
+    /// the choices change.
+    private(set) var changeCounts: [Int64: Int] = [:]
+    /// How long an album stays selected before its files are read for its count, so moving
+    /// through the list reads only the album stopped on.
+    var countDelayNanoseconds: UInt64 = 300_000_000
+    /// The count being read: its album, and the counts' generation it was started in.
+    private var counting: (task: Task<Void, Never>, albumID: Int64, generation: Int)?
+    /// Goes up each time the counts are forgotten, so a read started before is dropped.
+    private var countGeneration = 0
 
     /// Called after anything shown changes.
     var changed: () -> Void = {}
@@ -521,7 +542,9 @@ final class TaggerModel {
         if missing > 0 {
             problems.append("\(missing) file\(missing == 1 ? "" : "s") no longer in the library")
         }
-        let (set, problem) = await covered(changeSet(files, album), album)
+        let changes = changeSet(files, album)
+        if problems.isEmpty { changeCounts[albumID] = keptChanges(changes, album) }
+        let (set, problem) = await covered(changes, album)
         return (set, problems + (problem.map { [$0] } ?? []))
     }
 
@@ -562,6 +585,58 @@ final class TaggerModel {
         albums[index].excluded = excluded
         albums[index].coverExcluded = coverExcluded
         changed()
+    }
+
+    // MARK: - Counting the changes
+
+    private func forgetChangeCounts() {
+        countGeneration += 1
+        changeCounts = [:]
+        counting?.task.cancel()
+        counting = nil
+    }
+
+    /// Reads the selected album's files, after `countDelayNanoseconds`, for its count of
+    /// changes, unless it's known, being read, written already, rejected or without a release.
+    func countChanges() {
+        guard let album = selected, album.match.release != nil, !album.isRejected,
+            !album.applied, changeCounts[album.id] == nil
+        else { return }
+        if let counting, counting.albumID == album.id, counting.generation == countGeneration {
+            return
+        }
+        counting?.task.cancel()
+        let generation = countGeneration
+        let delay = countDelayNanoseconds
+        let read = effects.read
+        let albumID = album.id
+        let ids = album.album.tracks.map(\.fileID)
+        let task = Task {
+            do {
+                try await Task.sleep(nanoseconds: delay)
+                let (files, problems) = try await read(ids) { _ in }
+                guard generation == countGeneration, !Task.isCancelled else { return }
+                counting = nil
+                // A file that can't be read leaves the count unknown: View Changes says why.
+                guard problems.isEmpty, files.count == ids.count,
+                    let album = albums.first(where: { $0.id == albumID })
+                else { return }
+                changeCounts[albumID] = keptChanges(changeSet(files, album), album)
+                changed()
+            } catch is CancellationError {
+                // A newer selection or change took its place.
+            } catch {
+                // Only the button's count is lost; View Changes reads the files again and
+                // shows the error.
+                logger.notice("the changes of album \(albumID) weren't counted: \(error)")
+            }
+        }
+        counting = (task, albumID, generation)
+    }
+
+    /// The changes in `set` that View Changes leaves ticked.
+    private func keptChanges(_ set: AlbumChangeSet, _ album: Album) -> Int {
+        set.files.flatMap(\.changes).count { !album.excluded.contains($0.id) }
     }
 
     // MARK: - Apply

@@ -420,11 +420,22 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         rows = album.map { $0.match.comparison(of: $0.album) } ?? []
         trackTable.reloadData()
         let reviewing = album != nil && !model.isBusy
-        otherReleasesButton.isEnabled = reviewing
+        let others = album?.match.candidates.count ?? 0
+        otherReleasesButton.title = Self.otherReleasesTitle(others)
+        otherReleasesButton.isEnabled = reviewing && others > 0
+        let changes = album.flatMap { $0.applied ? nil : model.changeCounts[$0.id] }
+        changesButton.title = changes.map { "View \(count($0, "Change"))…" } ?? "View Changes…"
         changesButton.isEnabled = reviewing && summary != nil && album?.isRejected == false
+        model.countChanges()
         discogsButton.isEnabled = summary != nil
         rejectButton.isEnabled = reviewing
         rejectButton.title = album?.isRejected == true ? "Accept" : "Reject"
+    }
+
+    /// "9 Other Releases…", "1 Other Release…", or "No Other Releases" for none, when the
+    /// button is off.
+    static func otherReleasesTitle(_ others: Int) -> String {
+        others == 0 ? "No Other Releases" : "\(count(others, "Other Release"))…"
     }
 
     // MARK: - Tables

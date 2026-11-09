@@ -25,7 +25,9 @@ private func analyzed() async -> TaggerModel {
         Seen(), albums: albums,
         matches: { album, _ in
             album.id == 1
-                ? match(album, release(10, "Stockholm", titles: stockholm), tier: .exact)
+                ? match(
+                    album, release(10, "Stockholm", titles: stockholm), tier: .exact,
+                    candidates: [11])
                 : match(album, release(20, "Second", titles: stockholm), tier: .likely)
         })
     tagger.analyze()
@@ -754,6 +756,62 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     try await eventually { again.window?.attachedSheet?.windowController is ViewReleaseSheet }
     (again.window?.attachedSheet?.windowController as? ViewReleaseSheet)?.endSheet()
     again.endSheet()
+}
+
+/// The buttons count the other releases and, once the album's files are read, the changes.
+@MainActor
+@Test func theReviewButtonsCountTheOtherReleasesAndTheChanges() async throws {
+    let albums = [
+        album(1, "Stockholm", titles: stockholm), album(2, "Second", titles: ["Östermalm"]),
+    ]
+    let tagger = await model(
+        Seen(), albums: albums,
+        matches: { album, _ in
+            album.id == 1
+                ? match(
+                    album, release(10, "Stockholm", titles: stockholm), tier: .exact,
+                    candidates: Array(11...19))
+                : match(
+                    album, release(20, "Second", titles: ["Östermalm"]), tier: .exact,
+                    candidates: [21])
+        },
+        files: { ids in
+            albums.flatMap { album in album.tracks.indices.map { file(album, $0) } }
+                .filter { ids.contains($0.id) }
+        })
+    tagger.countDelayNanoseconds = 0
+    tagger.analyze()
+    await tagger.finished()
+    tagger.selectedID = 1
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    #expect(controller.otherReleasesButton.title == "9 Other Releases…")
+    // Minimal writes the release id, label, catalog number and year to each of the 3 files.
+    try await eventually { controller.changesButton.title == "View 12 Changes…" }
+
+    tagger.selectedID = 2
+    controller.refresh()
+    #expect(controller.otherReleasesButton.title == "1 Other Release…")
+    #expect(controller.changesButton.title == "View Changes…", "not read yet")
+    try await eventually { controller.changesButton.title == "View 4 Changes…" }
+
+    let (set, _) = try #require(try await tagger.changeSet(for: 2))
+    tagger.setExcluded([set.files[0].changes[0].id], for: 2)
+    #expect(tagger.changeCounts[2] == nil, "forgotten when the album changes")
+    try await eventually { controller.changesButton.title == "View 3 Changes…" }
+
+    #expect(TaggerWindow.otherReleasesTitle(0) == "No Other Releases")
+    let none = await model(
+        Seen(), albums: [album(3, "Nothing", titles: ["One"])],
+        matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    none.analyze()
+    await none.finished()
+    none.tab = .noCandidate
+    none.selectedID = 3
+    let empty = TaggerWindow(model: none)
+    defer { empty.window?.close() }
+    #expect(!empty.otherReleasesButton.isEnabled)
+    #expect(empty.otherReleasesButton.title == "No Other Releases")
 }
 
 /// The release area's Open on Discogs is on only for an album with a release, and opens that
