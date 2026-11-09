@@ -370,3 +370,25 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(palette.field.stringValue.isEmpty)
     palette.close()
 }
+
+@Test func aKindAndAColonListOnlyThatKind() {
+    let items = [
+        item("Dream Baby Dream", .track), item("Dream", .artist), item("Dreamland", .album),
+        item("Windowlicker", .track), item("Windowlicker", .album),
+    ]
+    let albums = rankPalette(items, query: "album: dream", frecency: [:], limit: 5)
+    #expect(albums.map(\.item.title) == ["Dreamland"])
+    #expect(albums[0].highlights == [NSRange(location: 0, length: 5)])
+    let songs = rankPalette(items, query: "Song:windowlicker", frecency: [:], limit: 5)
+    #expect(songs.map(\.item.kind) == [.track])
+    #expect(
+        rankPalette(items, query: "track: dream", frecency: [:], limit: 5).map(\.item.title)
+            == ["Dream Baby Dream"])
+    // With nothing after the colon, every item of the kind.
+    #expect(
+        rankPalette(items, query: "artist:", frecency: [:], limit: 5, emptyQueryKinds: [.track])
+            .map(\.item.title) == ["Dream"])
+    // A word that isn't a kind's is part of the query.
+    #expect(PaletteQuery("re: dream").kind == nil)
+    #expect(PaletteQuery("re: dream").text == "re: dream")
+}
