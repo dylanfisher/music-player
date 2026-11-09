@@ -213,7 +213,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         tabs.action = #selector(tabChosen)
 
         let albums = taggerTable(
-            albumTable, [(.album, 200), (.files, 36), (.confidence, 70), (.review, 64)],
+            albumTable, [(.album, 200), (.files, 36), (.confidence, 48), (.review, 64)],
             source: self)
         let tracks = tracklists()
 

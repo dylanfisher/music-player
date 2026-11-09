@@ -147,13 +147,12 @@ enum TaggerColumn: String {
         switch self {
         case .album: TrackColumn.album.title
         case .files: "Files"
-        case .confidence: "Confidence"
         case .review: "Review"
         case .number: TrackColumn.rowNumber.title
         case .fileTitle, .releaseTitle: TrackColumn.title.title
         case .fileTime, .releaseTime: TrackColumn.duration.title
         case .position: DiscogsField.position.title
-        case .state: "Match"
+        case .state, .confidence: "Match"
         case .include: ""
         case .fileName: TrackColumn.fileName.title
         case .field, .discogsField: "Discogs Field"

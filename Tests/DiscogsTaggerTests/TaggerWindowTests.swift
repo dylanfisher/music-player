@@ -1220,7 +1220,7 @@ private final class HeldSearch {
     defer { controller.window?.close() }
     #expect(
         controller.albumTable.tableColumns.map(\.title) == [
-            "Album", "Files", "Confidence", "Review",
+            "Album", "Files", "Match", "Review",
         ])
     #expect(controller.tabs.label(forSegment: 1) == "Likely (2)")
     #expect(controller.tabs.label(forSegment: 2) == "Safe (1)")

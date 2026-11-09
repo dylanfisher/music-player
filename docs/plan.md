@@ -719,7 +719,7 @@ Apply to All writes `applicable(tab)`. Choose goes through `rematch`, which runs
   previously chosen release rescored among them. `TaggerModel.Effects.choose` wraps it;
   `TaggerModel.choose` calls it in place of `effects.match`. A staged tagger keeps its own
   match (default effect unused there: its release is fixed).
-- 65.3 Confidence column, between Files and Review: "92%", blank with none.
+- 65.3 Confidence column headed "Match", between Files and Review: "92%", blank with none.
 - 65.4 Safe tab (`TaggerTab`, after Likely): the Likely albums whose every title is the same,
   in order, with the counts the same and every known length agreeing; by the matcher's rules
   their reasons are at most "other releases fit as well" and "found by title only". It is a view

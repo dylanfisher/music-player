@@ -45,6 +45,7 @@ the barcode, catalog number and title searches again, and Discogs's search is ne
   on a three-track release 45. The weights live in `MatchConfidence`, not `MatchThreshold`,
   which the golden file shared with music-recommender checks. Ranking, tiers and reasons don't
   change. A file dragged to another track keeps the confidence and the reasons the matcher gave.
+  The album list's column is headed "Match", short for the 280 pt list, and shows "92%".
 - **The Safe tab**, after Likely, lists the Likely albums whose reasons are only "other releases
   fit as well" and "found by title only", at least one of them: those whose release fits every
   title in order, the count and every known length. The tie is allowed because, without it, the
