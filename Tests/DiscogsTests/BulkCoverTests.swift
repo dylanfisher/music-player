@@ -62,11 +62,11 @@ private func serving() throws -> (FakeDiscogs, [UInt8]) {
     let cover = try Cover(checking: try serving().1)
     let plan = await coverPlan(
         [CoverAlbum(title: "A", releaseID: 1, paths: ["/bad", "/good"])], fill: .fillMissing,
-        cover: { _ in .success(cover) }
-    ) { path in
-        if path == "/bad" { throw Unreadable() }
-        return nil
-    }
+        cover: { _ in .success(cover) },
+        pixels: { path in
+            if path == "/bad" { throw Unreadable() }
+            return nil
+        })
     #expect(plan.edits.map(\.path) == ["/good"])
     #expect(plan.problems.count == 1)
 }

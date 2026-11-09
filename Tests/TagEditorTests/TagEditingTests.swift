@@ -715,7 +715,12 @@ private final class FakeJournal: @unchecked Sendable {
     let editing = makeEditing(
         seen,
         read: { paths, _ in
-            (paths.map { EditableTrack(path: $0, tags: TrackTags(), pictures: frontCovers(Data([1, 2, 3]))) }, [])
+            (
+                paths.map {
+                    EditableTrack(
+                        path: $0, tags: TrackTags(), pictures: frontCovers(Data([1, 2, 3])))
+                }, []
+            )
         })
     // The registry's rule for Undo Tag Edit, with the main window open or closed; the art
     // commands' rules are the editor's own.
@@ -760,7 +765,8 @@ private final class FakeJournal: @unchecked Sendable {
             (
                 paths.map {
                     EditableTrack(
-                        path: $0, tags: TrackTags(), pictures: frontCovers($0 == "/art.flac" ? Data([1]) : nil))
+                        path: $0, tags: TrackTags(),
+                        pictures: frontCovers($0 == "/art.flac" ? Data([1]) : nil))
                 }, []
             )
         })

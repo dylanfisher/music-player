@@ -59,7 +59,7 @@ nonisolated(nonsending) public func coverPlan(
         switch result {
         case .success(let fetched): image = fetched
         case .failure(let problem):
-            plan.problems.append("\(album.title): no cover: \(problem)")
+            plan.problems.append(problem.line(for: album.title))
             continue
         }
         var covered = false

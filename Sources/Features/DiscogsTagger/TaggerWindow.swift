@@ -463,7 +463,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         applyButton.title = "Apply to All in \(model.tab.title)…"
         applyButton.isEnabled = canApply && !model.isBusy && !model.applicable(model.tab).isEmpty
         let artwork = model.artworkGroups.count
-        artworkButton.title = "Get Artwork for \(DisplayText.count(artwork, "Album"))…"
+        artworkButton.title = "\(TaggerModel.artworkTitle(albums: artwork))…"
         // A staged job is written through its own journal, which covers aren't (ADR 0146).
         artworkButton.isHidden = model.isStaged
         artworkButton.isEnabled = !model.isBusy && artwork > 0
@@ -970,13 +970,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// would hide the alert.
     private func alert(_ message: String, _ details: [String], over: NSWindow? = nil) {
         guard let window = over ?? window else { return }
-        let shown = 8
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.informativeText =
-            details.prefix(shown).joined(separator: "\n")
-            + (details.count > shown ? "\n(\(details.count - shown) more not shown)" : "")
-        alert.beginSheetModal(for: window)
+        showProblems(message, details, over: window)
     }
 }
 

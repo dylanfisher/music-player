@@ -171,7 +171,7 @@ func pictureImages(at urls: [URL]) -> (
             }
             images.append(image)
         } catch {
-            problems.append("\(url.lastPathComponent) couldn't be read: \(error)")
+            problems.append("\(url.lastPathComponent): \(error)")
         }
     }
     return (images, problems)

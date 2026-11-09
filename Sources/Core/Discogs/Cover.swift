@@ -50,6 +50,9 @@ public enum CoverProblem: Error, Equatable, Sendable, CustomStringConvertible {
         case .fetch(let error): "\(error)"
         }
     }
+
+    /// "Persuader – Stockholm: no cover: …", as an album's problem line says it.
+    public func line(for album: String) -> String { "\(album): no cover: \(self)" }
 }
 
 extension Cover {

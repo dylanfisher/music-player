@@ -712,7 +712,7 @@ final class TaggerModel {
             return (set, nil)
         }
         guard hasToken() else {
-            return (set, "\(albumTitle(album.album)): no cover: \(CoverProblem.needsToken)")
+            return (set, CoverProblem.needsToken.line(for: albumTitle(album.album)))
         }
         let result: Result<Cover, CoverProblem>
         if let known = covers[releaseID] {
@@ -727,7 +727,7 @@ final class TaggerModel {
         }
         switch result {
         case .success(let cover): return (set.covering(cover, mode: choices.artwork), nil)
-        case .failure(let problem): return (set, "\(albumTitle(album.album)): no cover: \(problem)")
+        case .failure(let problem): return (set, problem.line(for: albumTitle(album.album)))
         }
     }
 

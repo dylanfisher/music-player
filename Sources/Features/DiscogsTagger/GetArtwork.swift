@@ -58,11 +58,15 @@ extension TaggerModel {
             progress: { progress($0, albums.count) })
     }
 
+    /// "Get Artwork for 12 Albums", the button's title and the question's.
+    static func artworkTitle(albums: Int) -> String {
+        "Get Artwork for \(DisplayText.count(albums, "Album"))"
+    }
+
     /// The question Get Artwork asks, with its count.
     static func artworkQuestion(albums: Int) -> (message: String, detail: String) {
-        let count = DisplayText.count(albums, "Album")
         return (
-            "Get Artwork for \(count)?",
+            "\(artworkTitle(albums: albums))?",
             "Each album's files get its release's primary image from Discogs as their front"
                 + " cover; their other pictures stay. The covers are fetched one release at a"
                 + " time, as Discogs allows. Fill Missing gives it to files with no art or"
@@ -174,9 +178,9 @@ func askForArtwork(
     }
 }
 
-/// Shows Get Artwork's problems over `window`, the first few of them.
+/// Shows `message` and the first few of `details` over `window`, as the tagger's alerts do.
 @MainActor
-func showArtworkProblems(_ message: String, _ details: [String], over window: NSWindow) {
+func showProblems(_ message: String, _ details: [String], over window: NSWindow) {
     let shown = 8
     let alert = NSAlert()
     alert.messageText = message

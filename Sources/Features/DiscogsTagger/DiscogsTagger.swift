@@ -60,7 +60,7 @@ public final class DiscogsTagger {
         }
     /// Shows what Get Artwork couldn't do over the window; tests collect it.
     var artworkAlert: (String, [String], NSWindow) -> Void = {
-        showArtworkProblems($0, $1, over: $2)
+        showProblems($0, $1, over: $2)
     }
 
     /// `reader` gives the albums and keeps the reviews; `catalog` is the catalog's file. `api`
