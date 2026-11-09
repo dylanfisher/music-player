@@ -51,7 +51,8 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     let format = model.draft[.label].format
     #expect(format.repeats == nil)
     // Repeats left out drop them, so choosing Once changes nothing.
-    #expect(TaggingModel.Part.repeats.choices[TaggingModel.Part.repeats.selected(in: format)] == "Once")
+    #expect(
+        TaggingModel.Part.repeats.choices[TaggingModel.Part.repeats.selected(in: format)] == "Once")
     model.choose(1, of: .repeats, for: .label)
     #expect(!model.isEdited)
     model.choose(0, of: .repeats, for: .label)
@@ -60,8 +61,9 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     #expect(
         model.draft[.involvedPeople].format.credits
             == PerTagFormat(vorbis: .nameRole, mp4: .roleNames, id3: .nameRole))
-    #expect(model.ruleText(.involvedPeople).hasSuffix(
-        "credits Name (Role) / Role;;;Name,Name / Name (Role)"))
+    #expect(
+        model.ruleText(.involvedPeople).hasSuffix(
+            "credits Name (Role) / Role;;;Name,Name / Name (Role)"))
 }
 
 @MainActor @Test func theProblemIsTheConfigFilesAndBlocksSave() throws {
@@ -97,7 +99,8 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     #expect(
         model.tags(.country)[position]
             == .key(
-                PerTagFormat(vorbis: "RELEASECOUNTRY", mp4: "Release Country", id3: "Release Country")))
+                PerTagFormat(
+                    vorbis: "RELEASECOUNTRY", mp4: "Release Country", id3: "Release Country")))
     #expect(
         TaggingModel.tagText(model.tags(.country)[position])
             == "RELEASECOUNTRY / Release Country / Release Country")
