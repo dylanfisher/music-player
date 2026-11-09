@@ -30,6 +30,21 @@ package struct ImportPlaces: Equatable, Sendable {
 /// owner ticks to lose; and the lossy-origin check of the staged files. Worked out before
 /// anything moves, and the sheet's Approve stays off while `blockers` lists anything.
 struct ApprovalPlan: Sendable {
+    /// A library album a job queued as a new album replaces (ADR 0169).
+    struct Replaced: Equatable, Sendable {
+        var artist: String?
+        var title: String
+        /// Found by its album artist and title, not its tracks' release id.
+        var byName: Bool
+        var files: Int
+    }
+
+    /// The moves for Keep Both: the job imported as a new album beside the one it replaces.
+    struct KeepBoth: Sendable {
+        var moves: [(name: String, destination: String)]
+        var problem: String?
+    }
+
     var job: DownloadJob
     /// The job is approved or importing already: Resume Here runs the steps left, and the
     /// staged files may be in the library by now.
@@ -48,54 +63,84 @@ struct ApprovalPlan: Sendable {
     /// The staged files analyzed, each with what it shows.
     var origins: [StagedOrigin]
     var originsProblem: String?
-    /// The job was queued as a new album, but its files' paths are taken by the tracks of one
-    /// library album of its release, so Approve replaces that album as an upgrade does.
-    var replacesAlbum = false
+    /// The job was queued as a new album, but one library album is its release's, by its
+    /// tracks' release id or by its artist and title, so Approve replaces that album as an
+    /// upgrade does, unless the owner keeps both.
+    var replaced: Replaced?
+    var keepBoth: KeepBoth?
+    /// Why a job queued as a new album replaces none, though the library has its release.
+    var notReplaced: String?
     /// The library folder the moves go into, which the sheet shows them relative to.
     var libraryFolder = ""
+    /// The lossy-origin check is still reading the staged files.
+    var checking = false
 
-    var isUpgrade: Bool { job.upgrade != nil || replacesAlbum }
+    var isUpgrade: Bool { job.upgrade != nil || replaced != nil }
 
     /// Whether the lossy-origin check asks the owner to acknowledge what it found.
     var originsBlock: Bool { originsProblem != nil || origins.contains(where: \.blocks) }
 
-    /// Why Approve can't go ahead yet, given the old files `ticked` to lose and whether the
-    /// origins' findings are acknowledged; empty when it can.
-    func blockers(ticked: Set<String>, acknowledgedOrigins: Bool) -> [String] {
+    /// Why Approve can't go ahead yet, given the old files `ticked` to lose, whether the
+    /// origins' findings are acknowledged, and Keep Both; empty when it can.
+    func blockers(ticked: Set<String>, acknowledgedOrigins: Bool, keepingBoth: Bool = false)
+        -> [String]
+    {
+        let keepingBoth = keepingBoth && keepBoth != nil
         var found: [String] = []
+        let movesProblem = keepingBoth ? keepBoth?.problem : movesProblem
         // A resume goes on whatever the moves found, but not from a folder it can't name.
         if !resuming || job.stagedFolder == nil, let movesProblem { found.append(movesProblem) }
-        if !resuming, let upgradeProblem { found.append(upgradeProblem) }
-        let unticked = unmatched.filter { !ticked.contains($0.sharePath) }
-        if !unticked.isEmpty {
-            found.append(
-                "Tick the \(unticked.count) old file\(unticked.count == 1 ? "" : "s") with no new"
-                    + " one, to lose \(unticked.count == 1 ? "it" : "them").")
+        if !keepingBoth {
+            if !resuming, let upgradeProblem { found.append(upgradeProblem) }
+            let unticked = unmatched.filter { !ticked.contains($0.sharePath) }
+            if !unticked.isEmpty {
+                found.append(
+                    "Tick the \(unticked.count) old file\(unticked.count == 1 ? "" : "s") with"
+                        + " no new one, to lose \(unticked.count == 1 ? "it" : "them").")
+            }
         }
-        if originsBlock && !acknowledgedOrigins {
+        if checking {
+            found.append(ApproveSheet.checkingNote)
+        } else if originsBlock && !acknowledgedOrigins {
             found.append("Acknowledge what the lossy-origin check found.")
         }
         return found
     }
 
-    /// The import the owner approved, with the old files `ticked`; nil until `blockers` is
-    /// empty, or for a job the service listed with no staged folder.
-    func approved(ticked: Set<String>, acknowledgedOrigins: Bool) -> ApprovedImport? {
-        guard blockers(ticked: ticked, acknowledgedOrigins: acknowledgedOrigins).isEmpty,
+    /// The import the owner approved, with the old files `ticked`, or as a new album when
+    /// `keepingBoth`; nil until `blockers` is empty, or for a job the service listed with no
+    /// staged folder.
+    func approved(ticked: Set<String>, acknowledgedOrigins: Bool, keepingBoth: Bool = false)
+        -> ApprovedImport?
+    {
+        guard
+            blockers(
+                ticked: ticked, acknowledgedOrigins: acknowledgedOrigins, keepingBoth: keepingBoth
+            ).isEmpty,
             let folder = job.stagedFolder
         else { return nil }
         return ApprovedImport(
             jobID: job.id, releaseID: job.release.releaseID, state: job.state, folder: folder,
             files: job.files,
-            upgrade: isUpgrade
+            upgrade: isUpgrade && !(keepingBoth && keepBoth != nil)
                 ? ApprovedImport.Upgrade(
                     old: old,
                     acknowledged: ticked.intersection(unmatched.map(\.sharePath)))
                 : nil)
     }
 
-    /// The plan for `job`, read from the staged files, the index at `databaseURL` and the
-    /// catalog at `catalog` (nil on a Mac without one). Reads off the main thread.
+    /// What the index says of the job: the album it replaces and where its files go.
+    private struct Found: Sendable {
+        var old: [String]?
+        var replaced: (album: DiscogsAlbum, byName: Bool)?
+        var notReplaced: String?
+        var moves: Result<[String], any Error>
+        var keepBoth: Result<[String], any Error>?
+    }
+
+    /// The plan for `job`, read from the index at `databaseURL` and the catalog at `catalog`
+    /// (nil on a Mac without one), without the lossy-origin check, which `checked(places:)`
+    /// runs after; `checking` says it's to come. Reads off the main thread.
     static func build(
         _ job: DownloadJob, places: ImportPlaces, databaseURL: URL, catalog: URL?
     ) async -> ApprovalPlan {
@@ -113,41 +158,41 @@ struct ApprovalPlan: Sendable {
         var oldPaths = job.upgrade?.oldPaths
         if !resuming {
             let found = await blockingFileWork {
-                Result { () throws -> (old: [String]?, destinations: [String]) in
-                    let index = try LibraryIndex(at: databaseURL)
-                    // The files are held to their sizes since the player's tag write.
-                    let files = try index.sizedAfterTagging(job.files, job: job.id, folder: folder)
-                        .map { ($0.name, $0.sizeBytes) }
-                    let old =
-                        try job.upgrade?.oldPaths
-                        ?? places.move.albumToReplace(
-                            folder: folder, files: files, release: job.release.releaseID,
-                            index: index)
-                    let destinations = try places.move.destinations(
-                        folder: folder, files: files,
-                        replacing: places.move.libraryPaths(old ?? []))
-                    return (old, destinations)
-                }
+                Result { () throws -> Found in try find(job, folder, places, databaseURL) }
             }
             switch found {
             case .success(let found):
-                plan.moves = zip(job.files.map(\.name), found.destinations).map { ($0, $1) }
-                plan.replacesAlbum = oldPaths == nil && found.old != nil
+                let names = job.files.map(\.name)
+                switch found.moves {
+                case .success(let destinations):
+                    plan.moves = zip(names, destinations).map { ($0, $1) }
+                case .failure(let error): plan.movesProblem = "\(error)"
+                }
+                if let replaced = found.replaced, let old = found.old {
+                    plan.replaced = Replaced(
+                        artist: replaced.album.artist, title: replaced.album.title,
+                        byName: replaced.byName, files: old.count)
+                    switch found.keepBoth {
+                    case .success(let destinations):
+                        plan.keepBoth = KeepBoth(
+                            moves: zip(names, destinations).map { ($0, $1) }, problem: nil)
+                    case .failure(let error):
+                        plan.keepBoth = KeepBoth(moves: [], problem: "\(error)")
+                    case nil: break
+                    }
+                }
+                plan.notReplaced = found.notReplaced
                 oldPaths = found.old
             case .failure(let error):
                 plan.movesProblem = "\(error)"
             }
-            let paths = job.files.map { places.stagingRoot + "/" + folder + "/" + $0.name }
-            do {
-                plan.origins = try await stagedOrigins(paths)
-            } catch {
-                plan.originsProblem = "\(error)"
-            }
+            plan.checking = true
         }
         if let oldPaths {
             do {
                 let old = try await positioned(
-                    oldPaths, release: job.release.releaseID, places: places,
+                    oldPaths, release: job.release.releaseID,
+                    heldToRelease: job.upgrade != nil, places: places,
                     databaseURL: databaseURL, catalog: catalog)
                 plan.old = old
                 let mapping = UpgradeMapping(
@@ -171,11 +216,73 @@ struct ApprovalPlan: Sendable {
         return plan
     }
 
+    /// The plan with the lossy-origin check of its staged files, under the staging folder of
+    /// `places`. Throws only when cancelled.
+    func checked(places: ImportPlaces) async throws -> ApprovalPlan {
+        var plan = self
+        plan.checking = false
+        guard let folder = job.stagedFolder else { return plan }
+        let paths = job.files.map { places.stagingRoot + "/" + folder + "/" + $0.name }
+        do {
+            plan.origins = try await stagedOrigins(paths)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            plan.originsProblem = "\(error)"
+        }
+        return plan
+    }
+
+    /// For a job queued as a new album, the library album of its release, when there's one,
+    /// and where the files go: replacing that album's, and for Keep Both beside them.
+    private static func find(
+        _ job: DownloadJob, _ folder: String, _ places: ImportPlaces, _ databaseURL: URL
+    ) throws -> Found {
+        let index = try LibraryIndex(at: databaseURL)
+        // The files are held to their sizes since the player's tag write.
+        let files = try index.sizedAfterTagging(job.files, job: job.id, folder: folder)
+            .map { ($0.name, $0.sizeBytes) }
+        var found = Found(old: job.upgrade?.oldPaths, moves: .success([]))
+        if job.upgrade == nil {
+            let release = job.release
+            switch libraryAlbum(
+                replacedBy: release.releaseID, artist: release.artist, title: release.title,
+                among: try index.discogsAlbums())
+            {
+            case .none: break
+            case .several(let count, let byName):
+                found.notReplaced =
+                    "\(count) albums in the library have this "
+                    + (byName ? "artist and title" : "release")
+                    + ", so it's imported as a new album beside them."
+            case .album(let album, let byName):
+                if let paths = try index.albumFiles(album.id, shareRoot: places.shareRoot) {
+                    found.old = paths
+                    found.replaced = (album, byName)
+                } else {
+                    found.notReplaced =
+                        "The library's \(album.title) isn't all on the share the staging folder"
+                        + " is on, so it's imported as a new album beside it."
+                }
+            }
+        }
+        found.moves = Result {
+            try places.move.destinations(
+                folder: folder, files: files,
+                replacing: places.move.libraryPaths(found.old ?? []))
+        }
+        if found.replaced != nil {
+            found.keepBoth = Result { try places.move.destinations(folder: folder, files: files) }
+        }
+        return found
+    }
+
     /// The upgrade's old files `sharePaths`, as the index has them, each placed on the release
-    /// by the matcher, as the new files are.
+    /// by the matcher, as the new files are. With `heldToRelease`, as for an upgrade the owner
+    /// queued, each must carry `release`; otherwise each is held to the one it carries now.
     private static func positioned(
-        _ sharePaths: [String], release: Int, places: ImportPlaces, databaseURL: URL,
-        catalog: URL?
+        _ sharePaths: [String], release: Int, heldToRelease: Bool, places: ImportPlaces,
+        databaseURL: URL, catalog: URL?
     ) async throws -> [UpgradeOldFile] {
         guard let catalog else {
             throw ReleaseSnapshot.Problem.notInCatalog(releaseID: release)
@@ -183,8 +290,11 @@ struct ApprovalPlan: Sendable {
         let read = await blockingFileWork {
             Result { () throws -> ([UpgradeOldFile], DiscogsAlbum, [String: Int64]) in
                 let index = try LibraryIndex(at: databaseURL)
-                let old = try index.upgradeOldFiles(
-                    sharePaths, release: release, shareRoot: places.shareRoot)
+                let old =
+                    heldToRelease
+                    ? try index.upgradeOldFiles(
+                        sharePaths, release: release, shareRoot: places.shareRoot)
+                    : try index.upgradeOldFiles(sharePaths, shareRoot: places.shareRoot)
                 var ids: [String: Int64] = [:]
                 var albumIDs: Set<Int64> = []
                 for file in old {

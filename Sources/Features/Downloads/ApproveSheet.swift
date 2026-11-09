@@ -2,27 +2,42 @@ import Analysis
 import AppKit
 import DisplayText
 import Library
+import Recommender
 import Settings
 
 /// Approve… (54.13, ADR 0147), laid out as the tagger's sheets are: a heading and a line under
 /// it, a table of the staged files with where each goes and what the lossy-origin check found,
 /// and for an upgrade a table of the old files it deletes, with a box for each that has no new
-/// file, to lose it. What still blocks Approve is one line beside the buttons. Approve ends the
-/// sheet with `result` set.
+/// file, to lose it. It shows at once, saying what it's preparing, and fills in as the plan
+/// and then the check come in (ADR 0169). What still blocks Approve is one line beside the
+/// buttons. Approve ends the sheet with `result` set.
 @MainActor
 final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     /// Said plainly, since the owner's library share has no Trash.
     static let deleteWarning =
         "These old files are deleted. On a share with no Trash, such as the NAS, they're deleted"
         + " permanently."
-    /// For a job queued as a new album whose release is in the library already.
-    static let replacesAlbumNote =
-        "This release is already in the library, at the paths these files take. Approve replaces"
-        + " that album, as an upgrade does, and keeps its tracks' plays, ratings, loves and"
-        + " playlist entries."
     static let resumeNote =
         "The import stopped partway. It goes on from where the library and the import's record"
         + " say it got to."
+    static let keepBothTitle = "Keep both: import this as a new album beside the library's"
+    nonisolated static let checkingNote = "Checking the first and last files for a lossy origin…"
+    static let claimingStep = "Claiming the album for this Mac…"
+    static let findingStep = "Finding the staging and library folders…"
+    static let planningStep = "Planning the moves…"
+
+    /// For a job queued as a new album that replaces one in the library: how many files, and
+    /// which album it found.
+    static func replacesNote(_ replaced: ApprovalPlan.Replaced) -> String {
+        let files = "\(replaced.files) file\(replaced.files == 1 ? "" : "s")"
+        let album =
+            replaced.byName
+            ? "the album with this artist and title, "
+                + "\"\([replaced.artist, replaced.title].compactMap { $0 }.joined(separator: " - "))\""
+            : "the album tagged with this release"
+        return "Replaces \(files) in the library: \(album). Approve replaces it as an upgrade"
+            + " does, and keeps its tracks' plays, ratings, loves and playlist entries."
+    }
 
     /// A staged file: its name, where it goes, and what the check found of it.
     struct FileRow: Equatable {
@@ -32,6 +47,8 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
         var check: String
         /// The check found something, or couldn't read the file.
         var warns: Bool
+        /// The check is reading it now.
+        var checking = false
     }
 
     /// An upgrade's old file: where it is, its track, and what Approve does to it.
@@ -48,52 +65,100 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
         case tick, name, destination, check, old, position, note
     }
 
-    let plan: ApprovalPlan
-    let files: [FileRow]
-    let old: [OldRow]
-    let filesTable = NSTableView()
-    let oldTable = NSTableView()
+    let job: DownloadJob
+    let album: String
+    let resuming: Bool
+    /// Nil while it's prepared.
+    private(set) var plan: ApprovalPlan?
+    private(set) var files: [FileRow] = []
+    private(set) var old: [OldRow] = []
+    private(set) var filesTable = NSTableView()
+    private(set) var oldTable = NSTableView()
     let approveButton: NSButton
     let blockersLabel = NSTextField(labelWithString: "")
+    /// Spins while the plan or the check is under way.
+    let spinner = NSProgressIndicator()
     let acknowledgeBox = NSButton(
         checkboxWithTitle: "I've read what the check found; approve anyway", target: nil,
         action: nil)
+    let keepBothBox = NSButton(checkboxWithTitle: keepBothTitle, target: nil, action: nil)
+    /// What's being prepared, until the plan comes in.
+    private var step = ""
     /// The old files ticked to lose, by their path on the share.
     private(set) var ticked: Set<String> = []
     /// The approved import; nil for Cancel.
     private(set) var result: ApprovedImport?
 
-    init(plan: ApprovalPlan, album: String) {
-        self.plan = plan
-        files = Self.fileRows(plan)
-        old = Self.oldRows(plan)
+    /// The sheet for `job`, preparing until `show(_:)` gives it the plan.
+    init(job: DownloadJob, album: String, resuming: Bool) {
+        self.job = job
+        self.album = album
+        self.resuming = resuming
         approveButton = NSButton(
-            title: plan.resuming ? DownloadAction.resumeHere.title : "Approve", target: nil,
+            title: resuming ? DownloadAction.resumeHere.title : "Approve", target: nil,
             action: nil)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 820, height: plan.isUpgrade ? 560 : 420),
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 420),
             styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.minSize = NSSize(width: 600, height: 320)
         super.init(window: window)
-        build(in: window, album: album)
-        refresh()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isDisplayedWhenStopped = false
+        acknowledgeBox.target = self
+        acknowledgeBox.action = #selector(changed)
+        keepBothBox.target = self
+        keepBothBox.action = #selector(keepBothChanged)
+        build()
+    }
+
+    /// The sheet with `plan` already worked out.
+    convenience init(plan: ApprovalPlan, album: String) {
+        self.init(job: plan.job, album: album, resuming: plan.resuming)
+        show(plan)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
+    /// Says what's being prepared, before the plan comes in.
+    func preparing(_ step: String) {
+        self.step = step
+        refresh()
+    }
+
+    /// Shows `plan`'s files, and for an upgrade its old files; while `plan.checking`, with a
+    /// spinner in each row the check reads.
+    func show(_ plan: ApprovalPlan) {
+        // A taller sheet the first time, for the old files' table.
+        if self.plan == nil, plan.isUpgrade, let window {
+            window.setContentSize(NSSize(width: window.frame.width, height: 560))
+        }
+        self.plan = plan
+        build()
+    }
+
+    private var keepingBoth: Bool { keepBothBox.state == .on }
+
     // MARK: - The rows
 
     /// Each staged file, in release order, with its destination and the check's finding. The
     /// check reads the first and last file only, so the rest say so.
-    static func fileRows(_ plan: ApprovalPlan) -> [FileRow] {
+    static func fileRows(_ plan: ApprovalPlan, keepingBoth: Bool = false) -> [FileRow] {
+        let moves = keepingBoth ? plan.keepBoth?.moves ?? [] : plan.moves
         let destinations = Dictionary(
-            plan.moves.map { ($0.name, $0.destination) }, uniquingKeysWith: { one, _ in one })
+            moves.map { ($0.name, $0.destination) }, uniquingKeysWith: { one, _ in one })
         let prefix = plan.libraryFolder.isEmpty ? nil : plan.libraryFolder + "/"
+        let checked = Set(stagedOriginChoice(plan.job.files.map(\.name)))
         return plan.job.files.map { file in
             var destination = destinations[file.name] ?? ""
             if let prefix, destination.hasPrefix(prefix) {
                 destination.removeFirst(prefix.count)
+            }
+            if plan.checking && checked.contains(file.name) {
+                return FileRow(
+                    name: file.name, destination: destination, check: "Checking…", warns: false,
+                    checking: true)
             }
             let (check, warns) = Self.check(file.name, plan)
             return FileRow(name: file.name, destination: destination, check: check, warns: warns)
@@ -132,21 +197,71 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
 
     // MARK: - The layout
 
-    private func build(in window: NSWindow, album: String) {
+    /// Lays the sheet out for what it has: the heading alone while it's prepared, then the
+    /// plan's tables. Built again when the plan or Keep Both changes, with tables of its own.
+    private func build() {
+        guard let window else { return }
         var views: [NSView] = []
         let heading = NSTextField(
-            labelWithString: (plan.resuming ? "Resume the import of " : "Approve ") + album)
+            labelWithString: (resuming ? "Resume the import of " : "Approve ") + album)
         heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         heading.lineBreakMode = .byTruncatingTail
         views.append(heading)
-        views.append(secondary(Self.subtitle(plan)))
+        views.append(secondary(Self.subtitle(job)))
+        var tables: [NSScrollView] = []
+        if let plan {
+            files = Self.fileRows(plan, keepingBoth: keepingBoth)
+            old = Self.oldRows(plan)
+            tables = planViews(plan, into: &views)
+        } else {
+            files = []
+            old = []
+            let filler = NSView()
+            filler.setContentHuggingPriority(.defaultLow, for: .vertical)
+            views.append(filler)
+        }
+
+        blockersLabel.textColor = .secondaryLabelColor
+        blockersLabel.lineBreakMode = .byTruncatingTail
+        blockersLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
+        cancel.keyEquivalent = "\u{1b}"
+        approveButton.target = self
+        approveButton.action = #selector(approve)
+        let buttons = NSStackView(views: [spinner, blockersLabel, NSView(), cancel, approveButton])
+        views.append(buttons)
+
+        let page = NSStackView(views: views)
+        page.orientation = .vertical
+        page.alignment = .leading
+        page.spacing = 10
+        page.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
+        for view in views where !(view is NSButton) {
+            view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -32).isActive = true
+        }
+        for scroll in tables { scroll.setContentHuggingPriority(.defaultLow, for: .vertical) }
+        if tables.count == 2 {
+            tables[0].heightAnchor.constraint(equalTo: tables[1].heightAnchor).isActive = true
+        }
+        window.contentView = page
+        refresh()
+    }
+
+    /// Appends the plan's notes, tables and boxes to `views`, and returns the tables.
+    private func planViews(_ plan: ApprovalPlan, into views: inout [NSView]) -> [NSScrollView] {
         if plan.resuming { views.append(note(Self.resumeNote)) }
-        if plan.replacesAlbum { views.append(note(Self.replacesAlbumNote)) }
-        if !plan.resuming, let problem = plan.movesProblem {
+        if let replaced = plan.replaced {
+            views.append(note(Self.replacesNote(replaced)))
+            views.append(keepBothBox)
+        }
+        if let notReplaced = plan.notReplaced { views.append(note(notReplaced)) }
+        let problem = keepingBoth ? plan.keepBoth?.problem : plan.movesProblem
+        if !plan.resuming, let problem {
             views.append(warning("The files can't be moved: \(problem)"))
         }
 
         // A resumed import's files may be in the library by now, so it lists them alone.
+        filesTable = NSTableView()
         filesTable.addColumn(
             NSUserInterfaceItemIdentifier(Column.name.rawValue), title: TrackColumn.fileName.title,
             width: 220,
@@ -164,7 +279,8 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
         views.append(filesScroll)
         var tables = [filesScroll]
 
-        if plan.isUpgrade {
+        oldTable = NSTableView()
+        if plan.isUpgrade && !keepingBoth {
             views.append(sectionHeading("Old files"))
             if let problem = plan.upgradeProblem {
                 views.append(warning(problem))
@@ -188,53 +304,38 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
             }
         }
 
-        if !plan.resuming && plan.originsBlock {
-            acknowledgeBox.target = self
-            acknowledgeBox.action = #selector(changed)
-            views.append(acknowledgeBox)
-        }
-
-        blockersLabel.textColor = .secondaryLabelColor
-        blockersLabel.lineBreakMode = .byTruncatingTail
-        blockersLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
-        cancel.keyEquivalent = "\u{1b}"
-        approveButton.target = self
-        approveButton.action = #selector(approve)
-        let buttons = NSStackView(views: [blockersLabel, NSView(), cancel, approveButton])
-        views.append(buttons)
-
-        let page = NSStackView(views: views)
-        page.orientation = .vertical
-        page.alignment = .leading
-        page.spacing = 10
-        page.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
-        for view in views where !(view is NSButton) {
-            view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -32).isActive = true
-        }
-        for scroll in tables { scroll.setContentHuggingPriority(.defaultLow, for: .vertical) }
-        if tables.count == 2 {
-            tables[0].heightAnchor.constraint(equalTo: tables[1].heightAnchor).isActive = true
-        }
-        window.contentView = page
+        if !plan.resuming && !plan.checking && plan.originsBlock { views.append(acknowledgeBox) }
+        return tables
     }
 
     /// "Discogs release 4242 · FLAC 16/44.1, 12 files · Replaces MP3 320".
-    static func subtitle(_ plan: ApprovalPlan) -> String {
-        ([DownloadRow.releaseName(plan.job.release.releaseID), DownloadRow.format(plan.job)]
-            + [DownloadRow.replaces(plan.job)].compactMap { $0 })
+    static func subtitle(_ job: DownloadJob) -> String {
+        ([DownloadRow.releaseName(job.release.releaseID), DownloadRow.format(job)]
+            + [DownloadRow.replaces(job)].compactMap { $0 })
             .joined(separator: " · ")
     }
 
     private var acknowledged: Bool { acknowledgeBox.state == .on }
 
+    /// What blocks Approve now: the step being prepared, until the plan comes in.
+    var blockers: [String] {
+        guard let plan else { return [step] }
+        return plan.blockers(
+            ticked: ticked, acknowledgedOrigins: acknowledged, keepingBoth: keepingBoth)
+    }
+
     private func refresh() {
-        let blockers = plan.blockers(ticked: ticked, acknowledgedOrigins: acknowledged)
+        let blockers = blockers.filter { !$0.isEmpty }
         blockersLabel.stringValue = blockers.joined(separator: " ")
         blockersLabel.toolTip = blockers.joined(separator: "\n")
         blockersLabel.isHidden = blockers.isEmpty
-        approveButton.isEnabled = blockers.isEmpty
-        approveButton.keyEquivalent = blockers.isEmpty ? "\r" : ""
+        approveButton.isEnabled = plan != nil && blockers.isEmpty
+        approveButton.keyEquivalent = approveButton.isEnabled ? "\r" : ""
+        if plan == nil || plan?.checking == true {
+            spinner.startAnimation(nil)
+        } else {
+            spinner.stopAnimation(nil)
+        }
     }
 
     /// Ticks or unticks the old file in `row`; one with a new file has no box.
@@ -249,12 +350,16 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
 
     @objc private func changed() { refresh() }
 
+    @objc private func keepBothChanged() { build() }
+
     @objc private func boxClicked(_ sender: NSButton) { toggleOld(sender.tag) }
 
     @objc private func cancel() { endSheet() }
 
     @objc private func approve() {
-        guard let approved = plan.approved(ticked: ticked, acknowledgedOrigins: acknowledged)
+        guard
+            let approved = plan?.approved(
+                ticked: ticked, acknowledgedOrigins: acknowledged, keepingBoth: keepingBoth)
         else { return }
         result = approved
         endSheet()
@@ -280,7 +385,14 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
             case .check:
                 let label = cell(file.check, truncating: .byTruncatingTail)
                 label.textColor = file.warns ? .systemOrange : .secondaryLabelColor
-                return label
+                guard file.checking else { return label }
+                let spinning = NSProgressIndicator()
+                spinning.style = .spinning
+                spinning.controlSize = .small
+                spinning.startAnimation(nil)
+                let cell = NSStackView(views: [spinning, label])
+                cell.spacing = 6
+                return cell
             default: return nil
             }
         }

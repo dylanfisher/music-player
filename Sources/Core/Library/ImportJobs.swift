@@ -12,6 +12,11 @@ struct ImportStep: Equatable, Sendable {
         case setAside
         /// An upgrade's old file's stats carried to its new one.
         case carried
+        /// An upgrade's old file whose track didn't carry the job's release id when the owner
+        /// approved, as in an album found by its artist and title (ADR 0169), with the id it
+        /// did carry as `destination`, nil for none. The Trash takes it only while it still
+        /// carries that id.
+        case held
         /// A staged file's size after the player's own tag write, which can grow the file when
         /// its padding runs out. Every check after the write holds the file to it, not to the
         /// size the service staged.
@@ -26,7 +31,7 @@ struct ImportStep: Equatable, Sendable {
     /// relative to the library's share.
     var path: String
     /// For `moved` and `carried`, the new file's path relative to the library's share; for
-    /// `setAside`, the hidden name's.
+    /// `setAside`, the hidden name's; for `held`, the release id the file must carry.
     var destination: String? = nil
     /// For `moved`, the size the file must have where it went; for `tagged`, the size it has
     /// since the tag write.

@@ -9,7 +9,7 @@ private let share = "smb://HAL9000/music"
 private func old(_ name: String, _ position: String?, stats: Bool = false) -> UpgradeOldFile {
     UpgradeOldFile(
         sharePath: "library/A/" + name, path: "/Volumes/music/library/A/" + name,
-        position: position, hasStats: stats)
+        position: position, hasStats: stats, release: "42")
 }
 
 @Test func oldFilesPairWithTheNewFileAtTheirPosition() {
@@ -97,18 +97,32 @@ private final class UpgradeLibrary {
         found == [
             UpgradeOldFile(
                 sharePath: "library/A/01.mp3", path: library.path("01.mp3"), position: nil,
-                hasStats: true),
+                hasStats: true, release: "42"),
             UpgradeOldFile(
                 sharePath: "library/A/02.mp3", path: library.path("02.mp3"), position: nil,
-                hasStats: false),
+                hasStats: false, release: "42"),
         ])
 }
 
 @Test func anOldFileOfAnotherReleaseOrNotInTheLibraryIsRefused() throws {
     let library = try UpgradeLibrary()
-    #expect(throws: UpgradeRefusal.otherRelease(library.path("03.mp3"), found: "7", expected: 42)) {
+    #expect(
+        throws: UpgradeRefusal.otherRelease(library.path("03.mp3"), found: "7", expected: "42")
+    ) {
         try library.index.upgradeOldFiles(
             ["library/A/01.mp3", "library/A/03.mp3"], release: 42, shareRoot: library.root)
+    }
+    // Held to the release it carried, it passes; held to none, it doesn't.
+    #expect(
+        try library.index.upgradeOldFiles(
+            ["library/A/03.mp3"], release: 42, held: ["library/A/03.mp3": "7"],
+            shareRoot: library.root
+        ).map(\.release) == ["7"])
+    #expect(throws: UpgradeRefusal.otherRelease(library.path("03.mp3"), found: "7", expected: nil))
+    {
+        try library.index.upgradeOldFiles(
+            ["library/A/03.mp3"], release: 42, held: ["library/A/03.mp3": nil],
+            shareRoot: library.root)
     }
     #expect(throws: UpgradeRefusal.notInLibrary(library.path("09.mp3"))) {
         try library.index.upgradeOldFiles(

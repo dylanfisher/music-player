@@ -7,8 +7,8 @@ import Testing
 @testable import Recommender
 @testable import Settings
 
-// Approve… takes the review claim before it looks at the job, so each way out before the sheet
-// decides gives the claim back.
+// Approve… shows its sheet, then takes the review claim before it looks at the job, so each way
+// out before the sheet decides gives the claim back.
 
 private struct NoFolder: Error {}
 
@@ -39,13 +39,48 @@ func started(
 
 private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
 
+/// Ends the alert the review put up over the window, once it's there.
+@MainActor
+private func dismissAlert(_ downloads: Downloads) async throws {
+    let window = try #require(downloads.window)
+    await eventually("the alert") { window.attachedSheet != nil }
+    if let sheet = window.attachedSheet { window.endSheet(sheet) }
+}
+
+/// Holds each claim the service gets until it's opened.
+private final class ClaimGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+
+    func open() { lock.withLock { opened = true } }
+    var isOpen: Bool { lock.withLock { opened } }
+
+    /// `service` with its claims held here.
+    func holding(_ service: DownloadsService) -> DownloadsService {
+        var held = service
+        let handoff = service.handoff
+        held.handoff = { [self] id, event throws(RecommenderError) in
+            if case .claim = event {
+                while !isOpen { try? await Task.sleep(nanoseconds: 1_000_000) }
+            }
+            return try await handoff(id, event)
+        }
+        return held
+    }
+}
+
 @MainActor
 @Test func aJobThatCantBeApprovedGivesTheClaimBack() async throws {
     let service = FakeService([job(1)])
     let (downloads, session) = try await started(service.service) { throw NoFolder() }
+    downloads.show()
     await downloads.review(try #require(service.job(1)), session, resuming: false)
-    #expect(service.eventTypes.suffix(2) == ["claim", "release"])
+    await eventually("the claim given back") {
+        service.eventTypes.suffix(2) == ["claim", "release"]
+    }
     #expect(service.job(1)?.review == nil)
+    try await dismissAlert(downloads)
+    downloads.window?.close()
     downloads.stop()
 }
 
@@ -53,14 +88,19 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
 @Test func aMissingStagingFolderGivesTheClaimBack() async throws {
     let service = FakeService([job(1) { $0.tagging = clean }])
     let (downloads, session) = try await started(service.service) { throw NoFolder() }
+    downloads.show()
     await downloads.review(try #require(service.job(1)), session, resuming: false)
-    #expect(service.eventTypes.suffix(2) == ["claim", "release"])
+    await eventually("the claim given back") {
+        service.eventTypes.suffix(2) == ["claim", "release"]
+    }
     #expect(service.job(1)?.review == nil)
+    try await dismissAlert(downloads)
+    downloads.window?.close()
     downloads.stop()
 }
 
 @MainActor
-@Test func aSheetThatCantShowGivesTheClaimBack() async throws {
+@Test func aReviewWithNowhereToShowItsSheetTakesNoClaim() async throws {
     let service = FakeService([job(1) { $0.tagging = clean }])
     let nowhere = FileManager.default.temporaryDirectory.path + "/\(UUID().uuidString)"
     let (downloads, session) = try await started(service.service) {
@@ -68,13 +108,64 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
     }
     // The window was never shown, so there is nothing to put the sheet on.
     await downloads.review(try #require(service.job(1)), session, resuming: false)
-    #expect(service.eventTypes.suffix(2) == ["claim", "release"])
+    #expect(!service.eventTypes.contains("claim"))
     #expect(service.job(1)?.review == nil)
     downloads.stop()
 }
 
+/// Approve shows its sheet before the service answers the claim, saying what it's doing, and
+/// the plan's rows once it has them (ADR 0169).
 @MainActor
-@Test func aReviewCancelledWhileItChecksShowsNoSheetAndGivesTheClaimBack() async throws {
+@Test func theSheetShowsAtOnceAndFillsInAsThePlanComes() async throws {
+    let fake = FakeService([job(1) { $0.tagging = clean }])
+    let gate = ClaimGate()
+    let nowhere = FileManager.default.temporaryDirectory.path + "/\(UUID().uuidString)"
+    let (downloads, session) = try await started(gate.holding(fake.service)) {
+        ImportPlaces(stagingRoot: nowhere, libraryFolder: nowhere, shareRoot: nowhere)
+    }
+    downloads.show()
+    let window = try #require(downloads.window)
+    let listed = try #require(fake.job(1))
+    let review = Task { await downloads.review(listed, session, resuming: false) }
+    await eventually("the sheet") { window.attachedSheet != nil }
+    let sheet = try #require(window.attachedSheet?.windowController as? ApproveSheet)
+    #expect(sheet.blockersLabel.stringValue == ApproveSheet.claimingStep)
+    #expect(!sheet.approveButton.isEnabled)
+    #expect(sheet.plan == nil)
+    gate.open()
+    await review.value
+    #expect(sheet.plan?.checking == false, "checked")
+    #expect(sheet.filesTable.numberOfRows == 2)
+    window.endSheet(try #require(window.attachedSheet))
+    await eventually("the claim given back") { fake.job(1)?.review == nil }
+    window.close()
+    downloads.stop()
+}
+
+/// Cancel while the claim is asked for stops the review, and the claim the service then
+/// grants goes back.
+@MainActor
+@Test func cancellingTheSheetWhileItPreparesGivesTheClaimBack() async throws {
+    let fake = FakeService([job(1) { $0.tagging = clean }])
+    let gate = ClaimGate()
+    let (downloads, session) = try await started(gate.holding(fake.service)) { throw NoFolder() }
+    downloads.show()
+    let window = try #require(downloads.window)
+    downloads.startReview(try #require(fake.job(1)), session, resuming: false)
+    await eventually("the sheet") { window.attachedSheet != nil }
+    window.endSheet(try #require(window.attachedSheet))
+    #expect(downloads.reviewing == nil)
+    gate.open()
+    await eventually("the claim given back") {
+        fake.eventTypes.suffix(2) == ["claim", "release"] && fake.job(1)?.review == nil
+    }
+    #expect(window.attachedSheet == nil, "no alert for a review the owner stopped")
+    window.close()
+    downloads.stop()
+}
+
+@MainActor
+@Test func aReviewCancelledWhileItChecksClosesItsSheetAndGivesTheClaimBack() async throws {
     let service = FakeService([job(1) { $0.tagging = clean }])
     let nowhere = FileManager.default.temporaryDirectory.path + "/\(UUID().uuidString)"
     let (downloads, session) = try await started(service.service) {
@@ -105,11 +196,15 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
         return answer
     }
     let (downloads, session) = try await started(service) { throw NoFolder() }
+    downloads.show()
     let listed = try #require(fake.job(1))
     let review = Task { await downloads.review(listed, session, resuming: false) }
     review.cancel()
     await review.value
     await eventually("the claim given back") { fake.job(1)?.review == nil }
+    #expect(fake.eventTypes.contains("claim"))
+    #expect(downloads.window?.attachedSheet == nil)
+    downloads.window?.close()
     downloads.stop()
 }
 

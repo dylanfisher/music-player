@@ -540,9 +540,22 @@ package final class Downloads {
         reviewing = nil
     }
 
-    /// Approve… and Resume Here: takes the review claim (Resume Here takes it over when it
-    /// runs), works out the plan, and runs the import once the sheet approves it. Every way out
-    /// before the import gives a claim Approve took back. Returns when the sheet is up.
+    /// Whether a review's claim needs giving back, and whether its sheet has ended, which the
+    /// sheet's end and the review's steps both read.
+    @MainActor
+    private final class ReviewState {
+        /// The claim is this Mac's, or the review is a Resume Here, which took none.
+        var claimed: Bool
+        var ended = false
+
+        init(claimed: Bool) { self.claimed = claimed }
+    }
+
+    /// Approve… and Resume Here: shows the sheet at once, saying what it's preparing; takes the
+    /// review claim (Resume Here takes it over when it runs); works out the plan, which fills
+    /// the sheet, then the lossy-origin check; and runs the import once the sheet approves it
+    /// (ADR 0169). Every way out before the import gives a claim Approve took back. Returns
+    /// once the check is done, or the review stops.
     func review(_ job: DownloadJob, _ session: Session, resuming: Bool) async {
         guard let coordinator = session.coordinator else { return }
         let setup = session.setup
@@ -556,45 +569,16 @@ package final class Downloads {
                 logger.info("job \(id)'s review claim not given up: \(error)")
             }
         }
-        if !resuming {
-            do throws(RecommenderError) {
-                job = try await coordinator.claimReview(job.id)
-            } catch {
-                if Task.isCancelled {
-                    // The service may have taken the claim before the request was cancelled;
-                    // it goes back from a task of its own, as this one's requests are cancelled.
-                    Task { await giveUp() }
-                    return
-                }
-                return alert("Another Mac may be reviewing this album", [error.description])
-            }
-            session.model.took(job)
-            guard DownloadRow(job, machine: setup.machine)?.canApprove == true else {
-                await giveUp()
-                return alert(
-                    "This album can't be approved now",
-                    ["It's \(job.state.rawValue), tagged \(job.tagging.status.rawValue)."])
-            }
-        }
-        let places: ImportPlaces
-        do {
-            places = try await setup.places()
-        } catch {
-            await giveUp()
-            return alert("The staging or library folder wasn't found", ["\(error)"])
-        }
-        let plan = await ApprovalPlan.build(
-            job, places: places, databaseURL: setup.databaseURL,
-            catalog: session.canTag ? setup.catalog : nil)
-        guard !Task.isCancelled else {
-            // The claim goes back from a task of its own: this one's requests are cancelled too.
-            Task { await giveUp() }
-            return
-        }
-        let approve = ApproveSheet(plan: plan, album: DownloadRow.album(job.release))
+        let state = ReviewState(claimed: resuming)
+        let approve = ApproveSheet(
+            job: job, album: DownloadRow.album(job.release), resuming: resuming)
+        approve.preparing(resuming ? ApproveSheet.findingStep : ApproveSheet.claimingStep)
         let shown = present(approve) {
             guard let approved = approve.result else {
-                Task { await giveUp() }
+                state.ended = true
+                self.cancelReview()
+                // A claim still being asked for is given back once it's answered.
+                if state.claimed { Task { await giveUp() } }
                 return
             }
             Task {
@@ -613,8 +597,62 @@ package final class Downloads {
                 await session.model.poll()
             }
         }
-        reviewing = nil
-        if !shown { await giveUp() }
+        // No sheet, no claim: the window isn't up, or a sheet is.
+        guard shown else { return }
+        // Ends the sheet, whose end gives the claim back, and says why.
+        let stop = { (message: String, details: [String]) in
+            approve.endSheet()
+            self.alert(message, details)
+        }
+        let stopped = { state.ended || Task.isCancelled }
+        if !resuming {
+            do throws(RecommenderError) {
+                job = try await coordinator.claimReview(job.id)
+            } catch {
+                if stopped() {
+                    approve.endSheet()
+                    // The service may have taken the claim before the request was cancelled;
+                    // it goes back from a task of its own, as this one's requests are cancelled.
+                    Task { await giveUp() }
+                    return
+                }
+                return stop("Another Mac may be reviewing this album", [error.description])
+            }
+            state.claimed = true
+            if stopped() {
+                guard state.ended else { return approve.endSheet() }
+                Task { await giveUp() }
+                return
+            }
+            session.model.took(job)
+            guard DownloadRow(job, machine: setup.machine)?.canApprove == true else {
+                return stop(
+                    "This album can't be approved now",
+                    ["It's \(job.state.rawValue), tagged \(job.tagging.status.rawValue)."])
+            }
+            approve.preparing(ApproveSheet.findingStep)
+        }
+        let places: ImportPlaces
+        do {
+            places = try await setup.places()
+        } catch {
+            return stop("The staging or library folder wasn't found", ["\(error)"])
+        }
+        guard !stopped() else { return approve.endSheet() }
+        approve.preparing(ApproveSheet.planningStep)
+        let plan = await ApprovalPlan.build(
+            job, places: places, databaseURL: setup.databaseURL,
+            catalog: session.canTag ? setup.catalog : nil)
+        guard !stopped() else { return approve.endSheet() }
+        approve.show(plan)
+        guard plan.checking else { return }
+        do {
+            let checked = try await plan.checked(places: places)
+            guard !stopped() else { return approve.endSheet() }
+            approve.show(checked)
+        } catch {
+            approve.endSheet()
+        }
     }
 
     private func retry(_ job: DownloadJob, _ row: DownloadRow, _ session: Session) {

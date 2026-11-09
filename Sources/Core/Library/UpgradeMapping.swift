@@ -10,6 +10,9 @@ package struct UpgradeOldFile: Equatable, Sendable {
     /// Plays, a rating, a love or a playlist entry, which a delete without a new file for it
     /// would lose.
     package var hasStats: Bool
+    /// The Discogs release id its track carried when it was found, nil for none, which it must
+    /// still carry when it's passed to the Trash (ADR 0169).
+    package var release: String?
 }
 
 /// How an upgrade's old files map to its new ones through the release's track positions: each
@@ -78,24 +81,24 @@ extension UpgradeMapping {
 package enum UpgradeRefusal: Error, Equatable, CustomStringConvertible {
     /// The job lists a file the index doesn't have.
     case notInLibrary(String)
-    /// The file no longer carries the job's release id, so it may not be the album's.
-    case otherRelease(String, found: String?, expected: Int)
+    /// The file no longer carries the release id it's held to, nil for none, so it may not
+    /// be the album's.
+    case otherRelease(String, found: String?, expected: String?)
 
     package var description: String {
         switch self {
         case .notInLibrary(let path): "\(path) isn't in the library"
         case .otherRelease(let path, let found, let expected):
             "\(path) is tagged with " + (found.map { "release \($0)" } ?? "no release")
-                + ", not \(expected)"
+                + ", not " + (expected.map { "release \($0)" } ?? "none")
         }
     }
 }
 
 extension LibraryIndex {
     /// The upgrade's old files `sharePaths`, relative to the share mounted at `shareRoot`, as
-    /// the index has them, with no position yet. Each must be a track that still carries
-    /// `release`: only the album's own files are ever passed to the Trash.
-    package func upgradeOldFiles(_ sharePaths: [String], release: Int, shareRoot: String) throws
+    /// the index has them, each with the release id its track carries and no position yet.
+    package func upgradeOldFiles(_ sharePaths: [String], shareRoot: String) throws
         -> [UpgradeOldFile]
     {
         let lookup = try statement(
@@ -109,39 +112,34 @@ extension LibraryIndex {
                 let found = try lookup.map(path, row: { (try $0.int64(0), $0.optionalText(1)) })
                     .first
             else { throw UpgradeRefusal.notInLibrary(path) }
-            guard found.1 == String(release) else {
-                throw UpgradeRefusal.otherRelease(path, found: found.1, expected: release)
-            }
             return UpgradeOldFile(
                 sharePath: sharePath, path: path, position: nil,
-                hasStats: try pathHasStats(found.0))
+                hasStats: try pathHasStats(found.0), release: found.1)
         }
+    }
+
+    /// As `upgradeOldFiles(_:shareRoot:)`, refusing any whose track no longer carries the
+    /// release id it's held to: `held`'s for its share path, else `release`. Only the album's
+    /// own files are ever passed to the Trash.
+    package func upgradeOldFiles(
+        _ sharePaths: [String], release: Int, held: [String: String?] = [:], shareRoot: String
+    ) throws -> [UpgradeOldFile] {
+        let found = try upgradeOldFiles(sharePaths, shareRoot: shareRoot)
+        for file in found {
+            let expected = held[file.sharePath] ?? String(release)
+            guard file.release == expected else {
+                throw UpgradeRefusal.otherRelease(
+                    file.path, found: file.release, expected: expected)
+            }
+        }
+        return found
     }
 }
 
 extension LibraryIndex {
-    /// The files of the library album that `paths` are tracks of, relative to the share
-    /// mounted at `shareRoot`, in disc and track order, when every one of `paths` is a track
-    /// of that one album and carries `release`, and all its files are on the share; nil
-    /// otherwise.
-    func album(holding paths: [String], release: Int, shareRoot: String) throws -> [String]? {
-        let lookup = try statement(
-            """
-            SELECT t.album_id, t.discogs_release_id FROM tracks t
-            JOIN files f ON f.id = t.file_id WHERE f.path = ?
-            """)
-        var albums: Set<Int> = []
-        for path in paths {
-            guard
-                let found = try lookup.map(
-                    path.precomposedStringWithCanonicalMapping,
-                    row: { ($0.optionalInt(0), $0.optionalText(1)) }
-                ).first,
-                let album = found.0, found.1 == String(release)
-            else { return nil }
-            albums.insert(album)
-        }
-        guard albums.count == 1, let album = albums.first else { return nil }
+    /// The files of the library album `album`, relative to the share mounted at `shareRoot`,
+    /// in disc and track order; nil when any isn't on the share.
+    package func albumFiles(_ album: Int64, shareRoot: String) throws -> [String]? {
         let files = try statement(
             """
             SELECT f.path FROM tracks t JOIN files f ON f.id = t.file_id WHERE t.album_id = ?
@@ -158,24 +156,5 @@ extension LibraryFolderMove {
     /// The files `sharePaths`, relative to the share, as the paths `destinations` compares.
     package func libraryPaths(_ sharePaths: [String]) -> Set<String> {
         Set(sharePaths.map { (stem(shareRoot) + "/" + $0).precomposedStringWithCanonicalMapping })
-    }
-
-    /// For a new album whose destinations are taken only by the tracks of one library album
-    /// of its release `release`: that album's files, relative to the share, which Approve
-    /// replaces as an upgrade does. Nil when no destination is taken; the move's refusal when
-    /// any is taken otherwise.
-    package func albumToReplace(
-        folder: String, files: [(name: String, sizeBytes: Int)], release: Int,
-        index: LibraryIndex
-    ) throws -> [String]? {
-        do {
-            _ = try destinations(folder: folder, files: files)
-            return nil
-        } catch MoveRefusal.collisions(let taken) {
-            guard
-                let album = try index.album(holding: taken, release: release, shareRoot: shareRoot)
-            else { throw MoveRefusal.collisions(taken) }
-            return album
-        }
     }
 }

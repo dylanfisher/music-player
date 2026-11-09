@@ -11,19 +11,22 @@ private let share = "smb://HAL9000/music"
 
 /// `MoveFolders`'s share, its `library` folder found on `share`, and for an upgrade an album of
 /// release 77 in the library: "01 First.mp3", played, rated, loved and in "Mix", and
-/// "02 Second.mp3", both on disk and in the index; or, with `names`, files of those names.
+/// "02 Second.mp3", both on disk and in the index; or, with `names`, files of those names, and
+/// with `release`, tagged with that release, nil for none.
 private final class ImportFolders {
     let folders: MoveFolders
     let names: [String]
+    let release: String?
     let playlist: Int64
     let played: Int64
     /// The directories each run asked to rescan.
     let rescanned = Rescans()
 
-    init(names: [String] = ImportFolders.oldNames) throws {
+    init(names: [String] = ImportFolders.oldNames, release: String? = "77") throws {
         let folders = try MoveFolders()
         self.folders = folders
         self.names = names
+        self.release = release
         let old = { (name: String) in folders.library + "/Artist/Album/" + name }
         let index = folders.index
         try index.relocate(share: share, path: "library", to: folders.library)
@@ -37,7 +40,7 @@ private final class ImportFolders {
             names.map { name in
                 Crafted(
                     path: old(name), title: name, album: "Album", codec: .mp3,
-                    custom: [DiscogsKey.releaseID: "77"]
+                    custom: release.map { [DiscogsKey.releaseID: $0] } ?? [:]
                 ).scanned
             })
         played = try #require(try index.track(path: old(names[0]))).id
@@ -64,7 +67,7 @@ private final class ImportFolders {
         let old = names.enumerated().map { offset, name in
             UpgradeOldFile(
                 sharePath: "library/Artist/Album/" + name, path: oldPath(name),
-                position: String(offset + 1), hasStats: offset == 0)
+                position: String(offset + 1), hasStats: offset == 0, release: release)
         }
         return ApprovedImport(
             jobID: 7, releaseID: 77, state: state, folder: "job-7", files: files,
@@ -173,6 +176,46 @@ private let newAlbumReports = ["approved", "importing", "imported"]
     #expect(try setup.reports() == newAlbumReports)
 }
 
+/// An album found by its artist and title carries another release id, or none: its files
+/// are held to the one each carried when the owner approved (ADR 0169).
+@Test(arguments: ["12", nil])
+func anUpgradeOfAnAlbumOfAnotherReleaseReplacesIt(_ release: String?) async throws {
+    let setup = try ImportFolders(release: release)
+    let outcome = await setup.run().run(try setup.job(upgrade: true))
+    #expect(outcome == .imported(setup.folders.destinations))
+    try setup.expectUpgraded()
+}
+
+/// One re-tagged with another release since the owner approved isn't the album's any more, so
+/// the Trash never gets it, on this run or the one after.
+@Test func anOldFileRetaggedSinceTheApprovalIsntDeleted() async throws {
+    let setup = try ImportFolders(release: "12")
+    let job = try setup.job(upgrade: true)
+    try setup.index.store(
+        setup.names.map { name in
+            Crafted(
+                path: setup.oldPath(name), title: name, album: "Album", codec: .mp3,
+                custom: [DiscogsKey.releaseID: "13"]
+            ).scanned
+        })
+    let outcome = await setup.run().run(job)
+    guard case .failed(.delete, let why) = outcome else {
+        Issue.record("not failed at the delete: \(outcome)")
+        return
+    }
+    #expect(why.contains("is tagged with release 13, not release 12"))
+    #expect(oldFilesThere(setup))
+    // A run after it reads the release each is held to from the ledger.
+    var resumed = job
+    resumed.upgrade = nil
+    resumed.state = .importing
+    guard case .failed(.delete, _) = await setup.run().run(resumed) else {
+        Issue.record("the resume deleted them")
+        return
+    }
+    #expect(oldFilesThere(setup))
+}
+
 @Test func anUntickedOldFileWithNoCounterpartBlocksTheUpgrade() async throws {
     let setup = try ImportFolders()
     var job = try setup.job(upgrade: true, positions: ["1", nil])
@@ -256,7 +299,7 @@ private let newAlbumReports = ["approved", "importing", "imported"]
         Issue.record("\(outcome)")
         return
     }
-    #expect(reason.contains("release 78, not 77"))
+    #expect(reason.contains("release 78, not release 77"))
     #expect(oldFilesThere(setup))
 }
 

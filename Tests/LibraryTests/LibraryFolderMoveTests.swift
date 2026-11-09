@@ -321,9 +321,9 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
 }
 
 /// The library album of release 77 at the album's destinations, with a third track the
-/// download doesn't have, on disk and in the index; `release` tags the first file.
+/// download doesn't have, on disk and in the index.
 private func libraryAlbum(
-    _ folders: MoveFolders, firstRelease release: String = "77", paths given: [String]? = nil
+    _ folders: MoveFolders, paths given: [String]? = nil
 ) throws {
     try FileManager.default.createDirectory(
         atPath: folders.library + "/Artist/Album", withIntermediateDirectories: true)
@@ -335,34 +335,22 @@ private func libraryAlbum(
         paths.enumerated().map { offset, path in
             Crafted(
                 path: path, title: "Old \(offset)", album: "Album", number: offset + 1,
-                custom: [DiscogsKey.releaseID: offset == 0 ? release : "77"]
+                custom: [DiscogsKey.releaseID: "77"]
             ).scanned
         })
 }
 
-@Test func aNewAlbumWhosePathsAnAlbumOfItsReleaseTakesReplacesThatAlbum() throws {
+@Test func anAlbumsFilesAreListedRelativeToTheShareInTrackOrder() throws {
     let folders = try MoveFolders()
-    #expect(
-        try folders.mover().albumToReplace(
-            folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
-            == nil)
     try libraryAlbum(folders)
+    let album = try #require(try folders.index.track(path: folders.destinations[0])?.albumID)
     #expect(
-        try folders.mover().albumToReplace(
-            folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
-            == [
-                "library/Artist/Album/01 First.flac", "library/Artist/Album/02 Second.flac",
-                "library/Artist/Album/03 Third.flac",
-            ])
-}
-
-@Test func pathsTakenByAnotherReleaseAreStillRefused() throws {
-    let folders = try MoveFolders()
-    try libraryAlbum(folders, firstRelease: "78")
-    #expect(throws: MoveRefusal.collisions(folders.destinations)) {
-        try folders.mover().albumToReplace(
-            folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
-    }
+        try folders.index.albumFiles(album, shareRoot: folders.mover().shareRoot) == [
+            "library/Artist/Album/01 First.flac", "library/Artist/Album/02 Second.flac",
+            "library/Artist/Album/03 Third.flac",
+        ])
+    // An album with a file off the share has none to replace.
+    #expect(try folders.index.albumFiles(album, shareRoot: "/Volumes/elsewhere") == nil)
 }
 
 /// Whether the temporary folder's volume ignores case, as a Mac's startup disk and the NAS do.
@@ -375,8 +363,9 @@ func anAlbumSpelledInAnotherCaseIsReplacedAtThePathsItHas() throws {
     try FileManager.default.createDirectory(
         atPath: folders.library + "/artist/Album", withIntermediateDirectories: true)
     try libraryAlbum(folders, paths: lower.map { folders.library + "/" + $0 })
-    let album = try folders.mover().albumToReplace(
-        folder: "job-7", files: try folders.files(), release: 77, index: folders.index)
+    let id = try #require(
+        try folders.index.track(path: folders.library + "/" + lower[0])?.albumID)
+    let album = try folders.index.albumFiles(id, shareRoot: folders.mover().shareRoot)
     #expect(album == lower.map { "library/" + $0 })
     #expect(
         try folders.mover().destinations(

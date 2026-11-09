@@ -210,6 +210,9 @@ package struct ImportRun {
         /// The old files set aside before their new ones take their paths: each one's path
         /// relative to the share, and where it's kept until the Trash takes it.
         var asides: [String: String]
+        /// The old files held to a release id other than the job's, by path relative to the
+        /// share: the one each carried when the owner approved, nil for none.
+        var held: [String: String?] = [:]
 
         /// Said after a failure that leaves set-aside files where they are.
         var keptAside: String {
@@ -240,7 +243,10 @@ package struct ImportRun {
                 asides: Dictionary(
                     ledgered.filter { $0.kind == .setAside }.compactMap { step in
                         step.destination.map { (step.path, move.shareRoot + "/" + $0) }
-                    }, uniquingKeysWith: { one, _ in one }))
+                    }, uniquingKeysWith: { one, _ in one }),
+                held: Dictionary(
+                    ledgered.filter { $0.kind == .held }.map { ($0.path, $0.destination) },
+                    uniquingKeysWith: { one, _ in one }))
         }
         guard let upgrade = job.upgrade else { return OldFiles(steps: [], asides: [:]) }
         let planned =
@@ -253,10 +259,15 @@ package struct ImportRun {
             zip(job.files.map(\.name), planned), uniquingKeysWith: { one, _ in one })
         let mapping = UpgradeMapping(old: upgrade.old, new: newPositions(job))
         let inPlace = try mapping.replacedInPlace(upgrade.old, destinations: newByName)
+        let held = Dictionary(
+            upgrade.old.filter { $0.release != String(job.releaseID) }.map {
+                ($0.sharePath, $0.release)
+            }, uniquingKeysWith: { one, _ in one })
         // Each is checked now, while the index has it at its path; the Trash takes it from
         // its hidden name later, which the index never has.
         _ = try index.upgradeOldFiles(
-            inPlace.map(\.sharePath), release: job.releaseID, shareRoot: move.shareRoot)
+            inPlace.map(\.sharePath), release: job.releaseID, held: held,
+            shareRoot: move.shareRoot)
         let inPlacePaths = Set(inPlace.map(\.sharePath))
         let pairs = Dictionary(
             mapping.pairs.map { ($0.old, $0.new) }, uniquingKeysWith: { one, _ in one })
@@ -290,14 +301,21 @@ package struct ImportRun {
                         jobID: job.jobID, releaseID: job.releaseID, kind: .setAside, path: path,
                         destination: try shareRelative(aside)))
             }
+            for (path, release) in held {
+                try index.recordImportStep(
+                    ImportStep(
+                        jobID: job.jobID, releaseID: job.releaseID, kind: .held, path: path,
+                        destination: release))
+            }
         }
-        return OldFiles(steps: steps, asides: asides)
+        return OldFiles(steps: steps, asides: asides, held: held)
     }
 
     /// Gives the old files still there to the Trash, a set-aside one from its hidden name. A
     /// file counts as gone when it's no longer at its path (ADR 0125), which on a share with
-    /// no Trash is a permanent delete. Each one not set aside must still be the release's track
-    /// in the index; a set-aside one was checked before it was. Nil when they're all gone.
+    /// no Trash is a permanent delete. Each one not set aside must still be a track in the index
+    /// carrying the release id it's held to; a set-aside one was checked before it was. Nil
+    /// when they're all gone.
     private func delete(_ old: OldFiles, _ job: ApprovedImport) async -> String? {
         let atPaths = old.steps.filter { old.asides[$0.path] == nil }.map(\.path)
             .filter { pathExists(move.shareRoot + "/" + $0) }
@@ -307,7 +325,7 @@ package struct ImportRun {
         guard !left.isEmpty else { return nil }
         do {
             _ = try index.upgradeOldFiles(
-                atPaths, release: job.releaseID, shareRoot: move.shareRoot)
+                atPaths, release: job.releaseID, held: old.held, shareRoot: move.shareRoot)
         } catch {
             return "\(error)"
         }
