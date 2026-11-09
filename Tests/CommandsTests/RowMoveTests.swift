@@ -68,31 +68,45 @@ private func at(_ row: Int) -> ListSelection {
 private func albums(_ row: Int) -> Int64? { row < 3 ? 1 : row < 5 ? nil : 2 }
 
 private func album(_ selection: ListSelection, _ move: RowMove, extending: Bool = false)
-    -> ListSelection
+    async -> ListSelection
 {
-    selection.moved(move, extending: extending, rowCount: 8, pageRows: 3, album: albums)
+    let target = await ListSelection.albumTarget(move, from: selection.cursor, rowCount: 8) {
+        albums($0)
+    }
+    return target.map { selection.moved(to: $0, extending: extending) } ?? selection
 }
 
-@Test func albumMovesGoToTheFirstTrackOfTheNextOrPreviousAlbum() {
-    #expect(album(at(1), .nextAlbum) == at(3))
-    #expect(album(at(3), .nextAlbum) == at(5))
+@Test func albumMovesGoToTheFirstTrackOfTheNextOrPreviousAlbum() async {
+    #expect(await album(at(1), .nextAlbum) == at(3))
+    #expect(await album(at(3), .nextAlbum) == at(5))
     // Past the last album there's no next one to go to.
-    #expect(album(at(6), .nextAlbum) == at(6))
+    #expect(await album(at(6), .nextAlbum) == at(6))
     // From inside an album, the album before it, not its own start.
-    #expect(album(at(6), .previousAlbum) == at(3))
-    #expect(album(at(4), .previousAlbum) == at(0))
+    #expect(await album(at(6), .previousAlbum) == at(3))
+    #expect(await album(at(4), .previousAlbum) == at(0))
     // The first album has none before it: its first row.
-    #expect(album(at(2), .previousAlbum) == at(0))
+    #expect(await album(at(2), .previousAlbum) == at(0))
     let none = ListSelection(rows: [], cursor: nil, anchor: nil)
-    #expect(album(none, .nextAlbum) == at(0))
-    #expect(album(none, .previousAlbum) == at(5))
+    #expect(await album(none, .nextAlbum) == at(0))
+    #expect(await album(none, .previousAlbum) == at(5))
 }
 
-@Test func albumMovesExtendWithShiftAndDoNothingWithoutAlbums() {
+@Test func albumMovesExtendWithShiftAndLeaveAListWithoutAlbumsAlone() async {
     #expect(
-        album(at(1), .nextAlbum, extending: true)
+        await album(at(1), .nextAlbum, extending: true)
             == ListSelection(rows: [1, 2, 3], cursor: 3, anchor: 1))
     #expect(at(4).moved(.nextAlbum, extending: false, rowCount: 8, pageRows: 3) == at(4))
+}
+
+/// A row whose album couldn't be read stops the move, rather than reading as no album.
+@Test func anAlbumThatCantBeReadStopsTheMove() async {
+    struct Unreadable: Error {}
+    await #expect(throws: Unreadable.self) {
+        _ = try await ListSelection.albumTarget(.nextAlbum, from: 0, rowCount: 8) { row in
+            if row == 2 { throw Unreadable() }
+            return albums(row)
+        }
+    }
 }
 
 @MainActor @Test func controlArrowsMoveByAlbum() throws {

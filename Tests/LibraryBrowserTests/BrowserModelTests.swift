@@ -734,3 +734,22 @@ private func loadedModel(
     #expect(model.groupings(addingAfter: 5) == nil)
     #expect(model.groupings(removing: 5) == Array(six.prefix(5)))
 }
+
+/// The album moves read the albums from the index, in chunks, and land where the rows' own
+/// album IDs say the albums start.
+@MainActor @Test func albumMovesFindTheAlbumStartsTheRowsHave() async throws {
+    let (model, index) = try await loadedModel()
+    let albums = try index.rows(ids: model.trackIDs).map(\.albumID)
+    #expect(albums.count == model.trackIDs.count)
+    let starts = albums.indices.filter { $0 == 0 || albums[$0] != albums[$0 - 1] }
+    #expect(starts.count > 2, "the library has albums to move between")
+    var row: Int? = nil
+    var visited: [Int] = []
+    while let next = try await model.albumTarget(.nextAlbum, from: row) {
+        visited.append(next)
+        row = next
+    }
+    #expect(visited == starts)
+    #expect(try await model.albumTarget(.previousAlbum, from: starts[2] + 1) == starts[1])
+    #expect(try await model.albumTarget(.previousAlbum, from: nil) == starts.last)
+}

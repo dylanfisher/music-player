@@ -1,3 +1,4 @@
+import Commands
 import Foundation
 import Library
 import Log
@@ -866,6 +867,30 @@ public final class BrowserModel {
         let ids = rows.filter { trackIDs.indices.contains($0) }.map { trackIDs[$0] }
         let paths = try await reader.paths(ids: ids)
         return ids.compactMap { paths[$0].map { URL(fileURLWithPath: $0, isDirectory: false) } }
+    }
+
+    /// How many rows' albums an album move reads at a time, in the direction it goes.
+    static let albumChunkRows = 500
+
+    /// The row an album move goes to from `cursor`, as `ListSelection.albumTarget` finds it, reading
+    /// the rows' album IDs from the index `albumChunkRows` at a time. A read that fails throws
+    /// rather than reading as no album.
+    func albumTarget(_ move: RowMove, from cursor: Int?) async throws -> Int? {
+        let ids = trackIDs
+        let forward = move == .nextAlbum
+        var albums: [Int64: Int64] = [:]
+        var read = IndexSet()
+        return try await ListSelection.albumTarget(move, from: cursor, rowCount: ids.count) { row in
+            if !read.contains(row) {
+                let rows =
+                    forward
+                    ? row..<min(ids.count, row + Self.albumChunkRows)
+                    : max(0, row - Self.albumChunkRows + 1)..<(row + 1)
+                albums.merge(try await reader.albumIDs(ids: Array(ids[rows]))) { first, _ in first }
+                read.insert(integersIn: rows)
+            }
+            return albums[ids[row]]
+        }
     }
 
     /// The rows now holding `ids`, for keeping a selection across a reload.

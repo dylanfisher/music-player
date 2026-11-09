@@ -288,3 +288,17 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     let pasted = [kept[0], new, kept[2], kept[1]]
     try await waitFor("the pasted tracks") { browser.model.trackIDs == pasted }
 }
+
+/// Control-Down in the track table selects the next album's first track, and with Shift
+/// extends to it.
+@MainActor @Test func theTrackTableMovesByAlbum() async throws {
+    let (browser, index) = try await browser(selecting: [0])
+    let albums = try index.rows(ids: browser.model.trackIDs).map(\.albumID)
+    let next = try #require(albums.indices.first { albums[$0] != albums[0] })
+    browser.table.move(.nextAlbum, extending: false)
+    await browser.table.albumMovesDone()
+    #expect(browser.table.table.selectedRowIndexes == [next])
+    browser.table.move(.previousAlbum, extending: true)
+    await browser.table.albumMovesDone()
+    #expect(browser.table.table.selectedRowIndexes == IndexSet(0...next))
+}

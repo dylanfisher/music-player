@@ -261,6 +261,18 @@ extension LibraryIndex {
         try statement(rowSelect + " WHERE f.path = ?").map(path, row: trackRow).first
     }
 
+    /// The album ID of each of `ids` that has one, as `TrackRow.albumID` reads it.
+    public func albumIDs(ids: [Int64]) throws -> [Int64: Int64] {
+        let found = try inChunks(
+            ids,
+            {
+                "SELECT file_id, album_id FROM tracks WHERE album_id IS NOT NULL AND file_id IN (\($0))"
+            },
+            { (Int64(try $0.int(0)), Int64(try $0.int(1))) })
+        // An ID asked for in two chunks comes back from both.
+        return Dictionary(found, uniquingKeysWith: { first, _ in first })
+    }
+
     /// The path of each of `ids` that is still in the index.
     public func paths(ids: [Int64]) throws -> [Int64: String] {
         let found = try inChunks(

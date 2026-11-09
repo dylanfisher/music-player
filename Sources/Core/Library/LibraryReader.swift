@@ -120,6 +120,10 @@ public actor LibraryReader {
         try index.paths(ids: ids)
     }
 
+    public func albumIDs(ids: [Int64]) throws -> [Int64: Int64] {
+        try index.albumIDs(ids: ids)
+    }
+
     /// The rows of the tracks with `ids`, in that order, leaving out those that are gone.
     public func rows(ids: [Int64]) throws -> [TrackRow] {
         try index.rows(ids: ids)

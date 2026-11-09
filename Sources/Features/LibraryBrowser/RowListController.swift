@@ -119,18 +119,52 @@ class RowListController: NSViewController {
 
     // MARK: Selection
 
-    /// Each row's album ID, for the album moves; nil for a list without albums.
-    var album: ((Int) -> Int64?)? { nil }
+    /// Finds the row an album move goes to, for a list that knows its rows' albums; nil for
+    /// one that doesn't, which an album move leaves as it is.
+    var albumTarget: ((RowMove, Int?) async throws -> Int?)? { nil }
+    /// Called when an album move couldn't read the albums.
+    var albumMoveFailed: (any Error) -> Void = { _ in }
+    /// The album move reading the index, which the next one waits for.
+    private var albumMove: Task<Void, Never>?
 
     func move(_ move: RowMove, extending: Bool) {
+        if move.isByAlbum {
+            moveByAlbum(move, extending: extending)
+            return
+        }
         let current = ListSelection(
             rows: table.selectedRowIndexes, cursor: cursor, anchor: anchor)
         select(
             current.moved(
-                move, extending: extending, rowCount: table.numberOfRows, pageRows: pageRows,
-                album: album))
+                move, extending: extending, rowCount: table.numberOfRows, pageRows: pageRows))
         if let cursor { table.scrollRowToVisible(cursor) }
     }
+
+    /// An album move reads the index off the main actor, so each waits for the one before, as
+    /// a held key's repeats come, and one whose list changed meanwhile selects nothing.
+    private func moveByAlbum(_ move: RowMove, extending: Bool) {
+        guard let albumTarget else { return }
+        let previous = albumMove
+        albumMove = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            let current = ListSelection(
+                rows: table.selectedRowIndexes, cursor: cursor, anchor: anchor)
+            let rowCount = table.numberOfRows
+            do {
+                guard let row = try await albumTarget(move, current.cursor),
+                    table.numberOfRows == rowCount
+                else { return }
+                select(current.moved(to: row, extending: extending))
+                table.scrollRowToVisible(row)
+            } catch {
+                albumMoveFailed(error)
+            }
+        }
+    }
+
+    /// Waits for the album moves started so far, for tests.
+    func albumMovesDone() async { await albumMove?.value }
 
     /// Selects `row` alone at the middle of the visible rows, as Go to Item asks.
     func selectCentered(_ row: Int) {

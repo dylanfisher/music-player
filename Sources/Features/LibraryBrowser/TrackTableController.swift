@@ -97,6 +97,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
                 columnWidth: layout.columns.first { $0.column == .art }?.width
                     ?? TrackColumn.art.defaultWidth), read: readArtBytes, thumbnails: thumbnails)
         super.init(play: actions.play, playNext: actions.playNext)
+        albumMoveFailed = { actions.failed("couldn't read the albums: \($0)") }
         configure(layout)
         follow(art)
         artHover.clicked = { [weak self] in self?.openHoveredArt() }
@@ -452,8 +453,11 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         return this.albumID != next.albumID
     }
 
-    /// The album the album lines and the art column group `row` by, read through the row cache.
-    override var album: ((Int) -> Int64?)? { { [unowned self] in trackRow($0)?.albumID } }
+    /// The album moves read the rows' albums from the index, not the row cache, so a long run
+    /// without an album costs a query, not a page fetch on the main actor for each 100 rows.
+    override var albumTarget: ((RowMove, Int?) async throws -> Int?)? {
+        { [model] move, cursor in try await model.albumTarget(move, from: cursor) }
+    }
 
     /// Whether `row` shows the track playing. Read from the row cache, which already holds the
     /// rows on screen.
