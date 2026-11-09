@@ -24,8 +24,12 @@ track, and that Paste and Delete work in playlists and the queue only. Each left
   draw it, and adjacent rows without an album are one. From inside an album, ⌃↑ goes to the
   album before it, not to its own first track, as the owner worded it. In the first album it
   goes to the first row; past the last, ⌃↓ stays. The track table has album IDs; the timeline,
-  the queue and the panes have none, and leave their selection alone. Move 10 Rows gives up
-  its ⌃⇧ alternate for them, since ⌥↓ and ⌥↑ already do the same.
+  the queue and the panes have none, and leave their selection alone. The track table reads
+  only the album IDs from the index, 500 rows at a time off the main actor, not the rows
+  through its page cache: a long run without an album would fetch a page per 100 rows in the
+  key handler. A read that fails is reported and moves nothing, rather than reading as no
+  album. Each move waits for the one before, so a held key moves an album per repeat. Move
+  10 Rows gives up its ⌃⇧ alternate for them, since ⌥↓ and ⌥↑ already do the same.
 - **Mission Control** takes ⌃↑ (Mission Control) and ⌃↓ (Application Windows) by default,
   system-wide, before the app sees them. The defaults stay what the owner asked for. To use
   them he turns those two off in System Settings ▸ Keyboard ▸ Keyboard Shortcuts ▸ Mission
@@ -42,7 +46,8 @@ track, and that Paste and Delete work in playlists and the queue only. Each left
   from elsewhere isn't matched against the library: the matches would be guesses.
 - **Paste** adds to the queue as Add to Playback Queue does, after the tracks already queued,
   or to the manual playlist shown, after the last selected row when it's in its own order. A
-  playlist holds a track once, so a track it has already moves there. Never to the library or
+  playlist holds a track once, so a track it has already moves there. The tracks keep the
+  order they were copied in, where a drag of rows keeps the playlist's. Never to the library or
   a smart playlist. Copied queue files the library doesn't know are left out of a playlist,
   and the status line says how many.
 - **Delete** is a new Edit item without a chord, which runs Remove from Queue or Playlist. ⌫
