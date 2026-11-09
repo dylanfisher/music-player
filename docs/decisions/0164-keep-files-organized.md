@@ -57,9 +57,13 @@ could let two of them find a name free and the second rename replace the first f
 lock can't hold across Macs; the server's create can. A rename that fails removes the empty
 file if it's still the one made (same inode, no bytes). A crash between the create and the
 rename leaves the empty file, which every later move counts as a taken name and lists, for the
-owner to delete; nothing deletes a file in the library folder it didn't just make. While the
-name is reserved a scan can find the empty file, which reads as a file with a problem until the
-rename lands and the next scan reads it again. Rules:
+owner to delete; nothing deletes a file in the library folder it didn't just make. The same
+is true when `fstat` on the new empty file fails, which on a share means the server stopped
+answering: without the file's inode there is no way to tell, later, that what is at the name is
+still that empty file and not one another Mac put there since, so it stays, the rename isn't
+tried, and the failure is logged and listed for that file. While the name is reserved, a scan,
+or the watcher reacting to the change, can briefly see the empty file, which reads as a file
+with a problem until the rename lands and the next scan reads it again. Rules:
 
 - Only a file inside the library folder, its links followed, is moved.
 - A file whose destination is the same file, by device and inode, is in place, whatever
