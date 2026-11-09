@@ -43,11 +43,20 @@ and the number left: already in place, outside the library folder, or with their
 Organize is the confirmation. Asking renames nothing.
 
 **How a file moves.** The same code as Approve: `renameNeverOver`, `renamex_np` with
-`RENAME_EXCL`, and where a share refuses the flag an `lstat` and a plain `rename`. The fallback
-now holds a lock in the app, since Approve and the organizer are two writers of the library
-folder and could otherwise both find a name free. Destination parts that exist are named as
-their folders list them (`listedPath`), so on a share that ignores case a change of case only is
-no move. Rules:
+`RENAME_EXCL`. Where a share refuses the flag, the destination name is reserved first with an
+empty file made by `open(O_CREAT | O_EXCL)`, which an SMB server carries out as a create that
+fails when the name exists, and the file is then renamed onto that empty file, which only this
+call made. The library folder is shared: other Macs, and on one Mac both Approve and the
+organizer, write it, so an `lstat` followed by a plain `rename`, which Approve used before,
+could let two of them find a name free and the second rename replace the first file. A process
+lock couldn't hold across Macs; the server's create can. A rename that fails removes the empty
+file if it's still the one made (same inode, no bytes). A crash between the create and the
+rename leaves the empty file, which every later move counts as a taken name and lists, for the
+owner to delete; nothing deletes a file in the library folder it didn't just make. While the
+name is reserved a scan can find the empty file, which reads as a file with a problem until the
+rename lands and the next scan reads it again. Destination parts that exist are named as their
+folders list them (`listedPath`), so on a share that ignores case a change of case only is no
+move. Rules:
 
 - Only a file inside the library folder, its links followed, is moved. A file outside it is
   never touched; Organize Selected Files lists it.

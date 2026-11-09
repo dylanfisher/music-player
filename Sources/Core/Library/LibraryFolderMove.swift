@@ -291,25 +291,43 @@ enum MoveRefusal: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// Held around the check and the rename where a share refuses `RENAME_EXCL`, so the app's two
-/// writers of the library folder, Approve and Keep Files Organized, can't both find a name free.
-private let fallbackRenames = NSLock()
-
 /// Renames `source` to `destination` with `calls`, never over a file: 0, else the `errno`, with
 /// `EEXIST` for a file in the way. A share that refuses `RENAME_EXCL` (`ENOTSUP` or `EINVAL`)
-/// gets an `lstat` and a plain rename under a lock: the app is the library folder's only
-/// writer, so nothing of its own comes between them (ADR 0147, ADR 0164).
+/// gets the name reserved first: an empty file made with `O_CREAT | O_EXCL`, which the server
+/// refuses when the name is taken, whichever Mac or app took it, then a plain rename onto that
+/// file, which this call made. Another Mac, or Approve and Keep Files Organized on one, can't
+/// both have the name (ADR 0147, ADR 0164). A rename that fails removes the empty file, if it's
+/// still the one made here.
 func renameNeverOver(_ source: String, to destination: String, _ calls: MoveCalls) -> Int32 {
-    let code = calls.renameExclusive(source, destination)
-    guard code == ENOTSUP || code == EINVAL else { return code }
+    let exclusive = calls.renameExclusive(source, destination)
+    guard exclusive == ENOTSUP || exclusive == EINVAL else { return exclusive }
     logger.notice(
-        "the volume refused RENAME_EXCL for \(destination); checking with lstat and renaming")
-    return fallbackRenames.withLock {
-        var info = stat()
-        if lstat(destination, &info) == 0 { return EEXIST }
-        let missing = errno
-        guard missing == ENOENT else { return missing }
-        return calls.rename(source, destination)
+        "the volume refused RENAME_EXCL for \(destination); reserving the name and renaming")
+    let reserved = open(destination, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
+    guard reserved >= 0 else { return errno }
+    var placeholder = stat()
+    let described = fstat(reserved, &placeholder) == 0 ? 0 : errno
+    // An SMB create can fail as late as the close.
+    let closed = close(reserved) == 0 ? 0 : errno
+    guard described == 0 else {
+        logger.error("couldn't read back the empty file that reserves \(destination), so it stays")
+        return described
+    }
+    let code = closed == 0 ? calls.rename(source, destination) : closed
+    if code != 0 { removePlaceholder(destination, placeholder) }
+    return code
+}
+
+/// Removes the empty file `renameNeverOver` made at `destination`, unless something else is
+/// there now.
+private func removePlaceholder(_ destination: String, _ placeholder: stat) {
+    var there = stat()
+    guard lstat(destination, &there) == 0, there.st_dev == placeholder.st_dev,
+        there.st_ino == placeholder.st_ino, there.st_size == 0
+    else { return }
+    if unlink(destination) != 0 {
+        logger.error(
+            "couldn't remove the empty file that reserved \(destination): \(errorText(errno))")
     }
 }
 

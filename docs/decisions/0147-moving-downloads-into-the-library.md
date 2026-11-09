@@ -7,7 +7,8 @@
   [0125](0125-trash-always-removes.md) (what passes files to the Trash, and what a share with
   no Trash does)
 - **Amended by:** [0164](0164-keep-files-organized.md): Keep Files Organized renames files
-  in the library folder through the same rename.
+  in the library folder through the same rename, and the fallback for a share that refuses
+  `RENAME_EXCL` reserves the name with an exclusive create.
 - **See also:** [0026](0026-sync-identity-is-the-relative-path.md) (the move list that
   carries stats),
   [0028](0028-network-folders-by-share.md) (paths by share),
@@ -46,9 +47,11 @@ answer, nothing moves.
 2. Staging and the library folder must be on one volume, or the approval is refused with that
    reason; a move between volumes would be a copy and a delete.
 3. Each file is renamed with `renamex_np(RENAME_EXCL)`, which never replaces a file. Where the
-   share refuses that flag (`ENOTSUP` or `EINVAL`), an `lstat` that finds nothing at the
-   destination comes before a plain `rename(2)`. The app is the library folder's only writer and
-   its import steps run one at a time, so nothing of its own can come between the two.
+   share refuses that flag (`ENOTSUP` or `EINVAL`), the destination name is reserved with an
+   empty file made by `open(O_CREAT | O_EXCL)`, then the file is renamed onto it, as ADR 0164
+   describes. (This was an `lstat` and a plain `rename(2)`, which assumed the app was the
+   library folder's only writer; other Macs share the folder, so the server's exclusive create
+   holds the name instead.)
 4. `LibraryFolderMove` takes sources only inside the staging folder and destinations only inside
    `library.folder`, both resolved with symbolic links followed; anything else is refused before
    any rename. Each file's step goes in a ledger, and every step can be worked out again from the
