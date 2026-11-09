@@ -440,7 +440,9 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try a.index.matchMoves().count == 1)
     // B played the new path 3 times and has a set of 1 over 6 plays, the rest yet to come.
     let new = try b.scanned("renamed.flac", title: "Song")
-    for at in 0..<3 { try b.index.recordPlay(b.path("renamed.flac"), at: 1_700_000_100 + Double(at)) }
+    for at in 0..<3 {
+        try b.index.recordPlay(b.path("renamed.flac"), at: 1_700_000_100 + Double(at))
+    }
     try b.index.inTransaction { try b.index.setPlayCountOffset(-5, of: new) }
     try a.sync()
     try b.sync()

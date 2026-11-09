@@ -363,7 +363,9 @@ extension LibraryIndex {
     /// it.
     private func absorbPlayCount(_ gone: Int64, into kept: Int64) throws {
         let offset = try statement(playCountOffsetSQL)
-        let offsets: [Int?] = try [gone, kept].map { id in try offset.map(id) { try $0.int(0) }.first }
+        let offsets: [Int?] = try [gone, kept].map { id in
+            try offset.map(id) { try $0.int(0) }.first
+        }
         if let goneOffset = offsets[0] {
             try statement(deletePlayCountOffsetSQL).run(gone)
             try statement(setPlayCountOffsetSQL).run(kept, (offsets[1] ?? 0) + goneOffset)
