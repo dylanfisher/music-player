@@ -898,8 +898,9 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(
         labels(in: library).filter { label in boxes.contains { $0.title == label } }
             == boxes.map(\.title))
-    // The database is read as the pane shows, though its rows are in a pane within it.
-    let deadline = Date().addingTimeInterval(5)
+    // The database is read as the pane shows, though its rows are in a pane within it. The
+    // other tests' windows can keep the main actor busy for seconds first.
+    let deadline = Date().addingTimeInterval(30)
     while !labels(in: library).contains("None yet"), Date() < deadline {
         try await Task.sleep(nanoseconds: 20_000_000)
     }
