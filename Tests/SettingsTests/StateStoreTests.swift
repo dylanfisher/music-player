@@ -282,6 +282,8 @@ private func problems(_ json: String) -> [SettingProblem] {
     let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
     let saved = (json?["window.frames"] as? [String: Any])?["Settings"] as? [String: Double]
     #expect(saved == ["x": 1600, "y": 300, "width": 640, "height": 500])
+    let rect = CGRect(x: 1600, y: 300, width: 640, height: 500)
+    #expect(WindowFrame(rect) == frames.frames["Settings"] && WindowFrame(rect).rect == rect)
     #expect(throws: SettingsError.self) {
         try settings.set(
             \.windowFrames,

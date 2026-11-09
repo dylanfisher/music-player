@@ -17,19 +17,6 @@ private let tableExtraPoints = 6.0 + 15.0
     #expect(needed <= room)
 }
 
-@Test func aFrameOnADisplayThatsGoneIsCentered() {
-    let screen = NSRect(x: 0, y: 0, width: 1440, height: 875)
-    let onScreen = WindowFrame(x: 100, y: 50, width: 1280, height: 760)
-    #expect(
-        restoredFrame(onScreen, screens: [screen])
-            == NSRect(x: 100, y: 50, width: 1280, height: 760))
-    // It was on a second display to the right.
-    #expect(
-        restoredFrame(WindowFrame(x: 1600, y: 0, width: 800, height: 600), screens: [screen]) == nil
-    )
-    #expect(restoredFrame(nil, screens: [screen]) == nil)
-}
-
 /// A split of empty views in a window of the default size, as the main window lays it out.
 @MainActor
 private func split(queueVisible: Bool) -> (MainSplit, NSWindow, content: NSView) {

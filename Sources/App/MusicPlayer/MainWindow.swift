@@ -5,6 +5,7 @@ import Log
 import NowPlaying
 import QueueView
 import Settings
+import WindowPlacement
 
 /// The app's name, as the window title and the app menu show it.
 let appName = appDisplayName
@@ -102,13 +103,13 @@ final class MainWindow: NSObject, NSWindowDelegate {
         glass?.set(settings.tableAppearance.glass)
         centerStatusBarUnderTitle()
 
-        if let frame = restoredFrame(
-            settings.frame, screens: NSScreen.screens.map(\.visibleFrame))
-        {
-            window.setFrame(frame, display: false)
-        } else {
-            window.center()
-        }
+        // On the screen it was left on, else centered on the screen with the key window.
+        window.setFrame(
+            placedFrame(
+                saved: settings.frame?.rect, size: window.frame.size, resizable: true,
+                screens: NSScreen.screens.map(\.visibleFrame),
+                anchorScreen: NSScreen.main?.visibleFrame ?? window.frame),
+            display: false)
         window.layoutIfNeeded()
         split.restore(sidebarVisible: settings.sidebarVisible, queueVisible: settings.queueVisible)
         browser.restoreSplit()
@@ -247,11 +248,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     private func saveFrame() {
         guard !restoring, !isFullScreen else { return }
-        let frame = window.frame
-        saver.set(
-            \.windowFrame,
-            WindowFrame(
-                x: frame.minX, y: frame.minY, width: frame.width, height: frame.height))
+        saver.set(\.windowFrame, WindowFrame(window.frame))
     }
 }
 
@@ -272,14 +269,6 @@ func focusArea(after current: Int?, of count: Int, forward: Bool) -> Int? {
     guard count > 0 else { return nil }
     guard let current else { return forward ? 0 : count - 1 }
     return (current + (forward ? 1 : count - 1)) % count
-}
-
-/// The saved frame, unless no screen in `screens` (their visible frames) shows any of it, as when
-/// the display it was on is gone. Nil means center the window.
-func restoredFrame(_ saved: WindowFrame?, screens: [NSRect]) -> NSRect? {
-    guard let saved else { return nil }
-    let frame = NSRect(x: saved.x, y: saved.y, width: saved.width, height: saved.height)
-    return screens.contains { $0.intersects(frame) } ? frame : nil
 }
 
 /// A visibility saved only when it differs from the one saved last, so each of several places

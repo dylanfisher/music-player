@@ -6,7 +6,7 @@ import CoreGraphics
 /// `anchorScreen`. A window that isn't `resizable` keeps `size`, under the saved top left,
 /// since its content sets its size. Either way it's moved onto its screen, shrunk to fit when
 /// `resizable`, and with its top, the title bar, on the screen when it's taller.
-func placedFrame(
+public func placedFrame(
     saved: CGRect?, size: CGSize, resizable: Bool, screens: [CGRect], anchorScreen: CGRect
 ) -> CGRect {
     let shown = saved.flatMap { saved in

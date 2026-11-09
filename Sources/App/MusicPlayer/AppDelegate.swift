@@ -251,17 +251,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// and its frame goes to the state file as it changes (ADR 0158).
     private func keepWindowFrames(_ state: StateStore<AppState>, _ saver: LayoutSaver) {
         let placed = PlacedWindows.shared
-        placed.frames = state[\.windowFrames].frames.mapValues {
-            CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
-        }
+        placed.frames = state[\.windowFrames].frames.mapValues(\.rect)
         placed.framesChanged = { frames in
-            saver.set(
-                \.windowFrames,
-                WindowFrames(
-                    frames.mapValues {
-                        WindowFrame(
-                            x: $0.minX, y: $0.minY, width: $0.width, height: $0.height)
-                    }))
+            saver.set(\.windowFrames, WindowFrames(frames.mapValues(WindowFrame.init)))
         }
         placed.anchor = { [weak self] in self?.window?.window }
     }

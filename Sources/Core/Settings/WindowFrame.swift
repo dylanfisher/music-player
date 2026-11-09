@@ -1,3 +1,5 @@
+import CoreGraphics
+
 /// Where a window sits on screen, in AppKit screen coordinates (origin bottom left).
 public struct WindowFrame: SettingValue {
     public var x: Double
@@ -11,6 +13,12 @@ public struct WindowFrame: SettingValue {
         self.width = width
         self.height = height
     }
+
+    public init(_ rect: CGRect) {
+        self.init(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+    }
+
+    public var rect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case x, y, width, height
