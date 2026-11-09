@@ -164,7 +164,8 @@ final class TaggerModel {
     /// The files left out of each album, by album id, kept for the session so a new Analyze
     /// leaves them out too (ADR 0157).
     private var leftOutFiles: [Int64: Set<Int64>] = [:]
-    /// The album being matched again after a file was left out or put back.
+    /// The album being matched again, for a release chosen or a file left out or put back;
+    /// one at a time.
     private(set) var rematchingID: Int64?
     var tab = MatchTier.exact
     var selectedID: Int64?
@@ -537,8 +538,16 @@ final class TaggerModel {
     /// release from the API, as Look Up Release can find, is matched with the API even when
     /// the source is the catalog.
     func choose(_ releaseID: Int, for albumID: Int64, from origin: MatchOrigin = .catalog) async {
-        guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
+        guard rematchingID == nil, !isBusy,
+            let index = albums.firstIndex(where: { $0.id == albumID })
+        else { return }
         let album = albums[index]
+        rematchingID = albumID
+        changed()
+        defer {
+            rematchingID = nil
+            changed()
+        }
         do {
             let match = try await effects.match(
                 [album.matched], [albumID: releaseID], choices.skipVideo, source(for: origin)
@@ -550,7 +559,7 @@ final class TaggerModel {
             albums[index].review = .chosen(releaseID: releaseID)
             albums[index].chosen = releaseID
             albums[index].excluded = []
-            tab = match[0].tier
+            if selectedID == albumID { tab = match[0].tier }
             changed()
         } catch {
             failed("The release couldn't be chosen", ["\(error)"])
@@ -597,7 +606,7 @@ final class TaggerModel {
             albums[index].leftOut = album.leftOut
             albums[index].match = match[0]
             albums[index].excluded = []
-            tab = match[0].tier
+            if selectedID == albumID { tab = match[0].tier }
         } catch {
             failed("The album couldn't be matched again", ["\(error)"])
         }
