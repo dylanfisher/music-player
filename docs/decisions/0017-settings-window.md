@@ -5,6 +5,8 @@
 - **Amends:** [0012](0012-searcher-conventions.md)
 - **Amended by:** [0042](0042-window-layout-and-settings-sections.md): the watched folders have
   a Settings pane of their own, and General is in sections.
+  [0168](0168-a-library-pane-in-settings.md): that pane is Library, with General's Library
+  section, and its snapshot is `--snapshot-of library`.
 
 ## Context
 
