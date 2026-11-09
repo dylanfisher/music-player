@@ -54,11 +54,12 @@ import Testing
             canRemoveFromPlaylist: browser.canRemoveFromPlaylist) == nil)
 }
 
-@Test func pastingAddsOnlyToTheQueueOrAPlaylist() {
-    #expect(pasteTarget(queueFocused: true, canPasteInPlaylist: false) == .queue)
-    #expect(pasteTarget(queueFocused: false, canPasteInPlaylist: true) == .playlist)
-    // The library, a smart playlist, the sidebar or a pane.
-    #expect(pasteTarget(queueFocused: false, canPasteInPlaylist: false) == nil)
+/// With Settings or Downloads key, Edit's Copy, Paste and Delete leave the main window alone.
+@Test func theEditItemsActOnTheMainWindowOnlyWhileItsKey() {
+    #expect(editList(mainWindowKey: true, queueHasKeys: true) == .queue)
+    #expect(editList(mainWindowKey: true, queueHasKeys: false) == .tracks)
+    #expect(editList(mainWindowKey: false, queueHasKeys: true) == nil)
+    #expect(editList(mainWindowKey: false, queueHasKeys: false) == nil)
 }
 
 @Test func aPasteFindsTheCopiedFilesOnlyWhileThePasteboardHoldsTheCopy() {

@@ -15,27 +15,27 @@ struct TrackClipboard: Equatable {
     }
 }
 
-enum PasteTarget: Equatable {
-    case queue, playlist
+/// The list Edit ▸ Copy, Paste and Delete act on: the queue when it has the keys, else the
+/// track lists. None while another window is key, where they'd act on a selection out of sight.
+enum EditList: Equatable {
+    case queue, tracks
 }
 
-/// Where Edit ▸ Paste adds tracks: the queue when it has the keys, the manual playlist shown
-/// when the track table has them, and nowhere else, the library least of all.
-func pasteTarget(queueFocused: Bool, canPasteInPlaylist: Bool) -> PasteTarget? {
-    if queueFocused { return .queue }
-    return canPasteInPlaylist ? .playlist : nil
+func editList(mainWindowKey: Bool, queueHasKeys: Bool) -> EditList? {
+    guard mainWindowKey else { return nil }
+    return queueHasKeys ? .queue : .tracks
 }
 
 /// Edit ▸ Copy, Paste and Delete for the track lists and the queue. They're standard items, so
 /// a text field's editor takes them first; these answer when a list has the keys.
 extension AppDelegate: NSMenuItemValidation {
     @objc func copy(_ sender: Any?) {
-        guard let browser, isMainWindowKey else { return }
-        if queueHasKeys, let queue {
+        guard let list = currentEditList else { return }
+        if list == .queue, let queue {
             writeCopies(queue.selectedCopies())
             return
         }
-        guard browser.canCopySelection else { return }
+        guard let browser, browser.canCopySelection else { return }
         Task {
             do {
                 writeCopies(try await browser.selectedCopies())
@@ -50,44 +50,42 @@ extension AppDelegate: NSMenuItemValidation {
             NSSound.beep()
             return
         }
-        switch currentPasteTarget {
+        switch currentEditList {
         case .queue: queue?.paste(paths)
-        case .playlist: browser?.paste(paths)
-        case nil: NSSound.beep()
+        case .tracks where browser?.canPaste == true: browser?.paste(paths)
+        case .tracks, nil: NSSound.beep()
         }
     }
 
     /// Takes the selection out of the queue or the playlist shown, as Remove from Queue or
     /// Playlist does; never from the library.
     @objc func delete(_ sender: Any?) {
-        if dispatcher?.run(.removeFromQueue) != true { NSSound.beep() }
+        if currentEditList == nil || dispatcher?.run(.removeFromQueue) != true { NSSound.beep() }
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(copy(_:)):
-            isMainWindowKey
-                && (queueHasKeys
-                    ? queue?.hasSelection == true : browser?.canCopySelection == true)
-        case #selector(paste(_:)): pastedPaths != nil && currentPasteTarget != nil
-        case #selector(delete(_:)): dispatcher?.isEnabled(.removeFromQueue) == true
+            switch currentEditList {
+            case .queue: queue?.hasSelection == true
+            case .tracks: browser?.canCopySelection == true
+            case nil: false
+            }
+        case #selector(paste(_:)):
+            pastedPaths != nil
+                && (currentEditList == .queue
+                    || (currentEditList == .tracks && browser?.canPaste == true))
+        case #selector(delete(_:)):
+            currentEditList != nil && dispatcher?.isEnabled(.removeFromQueue) == true
         default: true
         }
     }
 
-    private var isMainWindowKey: Bool {
-        window.map { NSApp.keyWindow === $0.window } ?? false
-    }
-
-    private var queueHasKeys: Bool {
-        guard let window, let queue else { return false }
-        return window.window.firstResponder === queue.list
-    }
-
-    private var currentPasteTarget: PasteTarget? {
-        guard isMainWindowKey else { return nil }
-        return pasteTarget(
-            queueFocused: queueHasKeys, canPasteInPlaylist: browser?.canPaste == true)
+    private var currentEditList: EditList? {
+        guard let window else { return nil }
+        return editList(
+            mainWindowKey: NSApp.keyWindow === window.window,
+            queueHasKeys: queue.map { window.window.firstResponder === $0.list } ?? false)
     }
 
     private var pastedPaths: [String]? {
