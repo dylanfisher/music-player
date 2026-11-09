@@ -263,7 +263,7 @@ private func rows() -> [DownloadRow] {
     let window = try #require(downloads.controller)
     await eventually("the config's answer") { session.slskdPage != nil }
     #expect(window.slskdButton.isEnabled)
-    window.slskdButton.performClick(nil)
+    click(window.slskdButton)
     #expect(opened.map(\.absoluteString) == ["http://192.0.2.7:5030"])
     downloads.window?.close()
     downloads.stop()
