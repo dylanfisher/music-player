@@ -112,6 +112,9 @@ that phase's Result line, and delete its line here.
 
 ### Owner checks in the running app
 
+- **64** ([phase](plan-archive.md#64-downloads-approve-upgrades-open-in-tagger-window)): a
+  manual download replacing an album on the NAS (scratch album), the window's frame and
+  columns on a second display, Open in Tagger on a discrepancy.
 - **63** ([phase](plan-archive.md#63-a-library-pane-in-settings)): Snapshots opened and closed
   leaves no gap; the Library pane's rows and the palette opening it.
 - **65** ([phase](plan-archive.md#65-tagger-confidence-and-the-safe-set)): the Match column,
@@ -652,70 +655,6 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
-
-### 64. Downloads: approve, upgrades, Open in Tagger, window
-
-Asked by the owner on 2026-11-09.
-
-- [ ] **Approve opens at once:** pressing Approve presents the sheet straight away, saying what
-      it's preparing (claiming, planning the moves). The track list shows as soon as the plan
-      has it; the lossy-origin check runs after, with a spinner in each checked row, and
-      Approve stays disabled until it finishes.
-- [ ] **Manual downloads as upgrades:** a job queued without `upgrade` (Library Selection, Paste
-      a Discogs Release) that matches an album in the index, by its Discogs release id, falling
-      back to the same album artist and album title, is planned as an upgrade of that album.
-      The sheet says "Replaces N files in the library" and has a Keep Both choice that imports
-      it as a new album. The replaced files go to the Trash as Add > Upgrades' do (ADR 0147).
-- [ ] **Open in Tagger:** opens the staged tagger with the job's album analyzed and its tab
-      selected, so a discrepancy can be fixed there. A job it can't open (no staged folder, no
-      format, release not in the catalog) says why instead of doing nothing.
-- [ ] **Window:** the Downloads window's column widths are saved and restored (`ColumnLayout`
-      or the table's own autosave, whichever the track table pattern fits), and a saved frame
-      on no current screen, or mostly off one, is placed back on the main window's screen.
-
-Implementation plan, phase 64 (ADR 0169):
-
-What exists, found by search (map.md recipes): Approve is `Downloads.review`, which claims the
-job, finds the places, builds `ApprovalPlan` (index, moves, the old album, then
-`stagedOrigins`, a decode of two files over the share) and only then presents `ApproveSheet`.
-A job queued by hand has `upgrade` nil, and the plan replaces an album only when its paths
-collide (`albumToReplace`, ADR 0156). Open in Tagger returns silently when
-`coordinator.stagedJob` is nil, and the staged tagger never analyzes, since `show` analyzes
-only a library selection. The Downloads window's `makeWindow` sets `controller`, so `show`'s
-`keepsFrame(as:)` behind `if self.controller == nil` never runs: the window opens at its
-content rect's origin, the primary screen's bottom left, and keeps no frame. Its columns have
-fixed widths.
-
-- 64.1 Window: `show` calls `keepsFrame(as:)` for the window it made. `placedFrame` treats a
-  saved frame the screens together show less than half of as on none, so it's centered on the
-  main window's screen. Column widths in `state.json` as `downloads.columns`, a new
-  `ColumnWidths` value (by column identifier, as the tagger's sheets keep theirs), applied
-  when the window is made and saved through the layout saver as a column resizes.
-- 64.2 Open in Tagger: `Downloads.taggerRefusal` says why a job can't open (no staged folder,
-  no format, no catalog on this Mac, the release not in it), checked before the tagger
-  opens, as an alert. `DiscogsTagger.show` analyzes a staged tagger when it first opens, so
-  it opens on the album's tier tab, and says why when the catalog can't be read.
-- 64.3 Approve at once: `review` presents `ApproveSheet` first, in a preparing state that
-  names the step (claiming, planning the moves); the plan without the lossy-origin check
-  fills its tables; the check then runs with a spinner in each checked row, and Approve is
-  off until it ends. Cancel while preparing stops the work and gives the claim back; a
-  failure closes the sheet and alerts as before.
-- 64.4 Manual downloads as upgrades: `ApprovalPlan.build` finds the library album to replace,
-  for a job with no `upgrade`, by its Discogs release id, else by its folded album artist and
-  title (`CatalogKey.matchKey`), when exactly one album matches with all files on the share.
-  It plans the upgrade and, for Keep Both, the moves as a new album. The sheet says
-  "Replaces N files in the library" and has a Keep Both box. Each old file is held to the
-  release id it carried when approved, recorded in the ledger (a `held` step) for those not
-  carrying the job's, so a resume checks it too; `albumToReplace` goes.
-- 64.5 ADR 0169, amending 0147 and 0156.
-
-Tests: the window placed and its frame kept on a second show, a mostly-off frame centered,
-column widths restored and saved; each refusal of Open in Tagger, and a staged tagger
-analyzing on show; the sheet up before the claim answers, the plan's tables before the check,
-Approve off until the check, Cancel while preparing giving the claim back; a manual job matched
-by release id and by name, two matches left new, Keep Both's plan, and an import whose old
-files carry another release or none trashing them, and refusing one re-tagged since. All in
-temporary folders, against the fake service.
 
 ### 66. Artwork
 
