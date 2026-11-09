@@ -20,11 +20,20 @@ public struct PerTagFormat<Value: Codable & Equatable & Sendable>: Codable, Equa
     /// Whether every format has the same value, which JSON writes as the value alone.
     public var isUniform: Bool { vorbis == mp4 && mp4 == id3 }
 
-    subscript(format: TagFormat) -> Value {
-        switch format {
-        case .vorbis: vorbis
-        case .mp4: mp4
-        case .id3: id3
+    public subscript(format: TagFormat) -> Value {
+        get {
+            switch format {
+            case .vorbis: vorbis
+            case .mp4: mp4
+            case .id3: id3
+            }
+        }
+        set {
+            switch format {
+            case .vorbis: vorbis = newValue
+            case .mp4: mp4 = newValue
+            case .id3: id3 = newValue
+            }
         }
     }
 

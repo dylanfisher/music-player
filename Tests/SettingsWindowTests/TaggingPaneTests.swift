@@ -55,7 +55,7 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
     select(.albumArtist, in: pane)
     #expect(pane.ruleHeading.stringValue == "Rule for “\(DiscogsField.albumArtist.title)”")
     #expect(text(pane.tagsTable, "vorbis", 0) == "albumArtist")
-    let suffixes = try #require(pane.partPopUps[.suffixes])
+    let suffixes = pane.popUp(.suffixes)
     #expect(suffixes.indexOfSelectedItem == 0)
     suffixes.selectItem(at: 1)
     _ = suffixes.target?.perform(suffixes.action, with: suffixes)
@@ -122,7 +122,7 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
     pane.reload()
     #expect(pane.model.draft == DiscogsPreset.yate.mapping)
     #expect(pane.field == .artist)
-    #expect(pane.partPopUps[.suffixes]?.indexOfSelectedItem == 1, "YATE drops the (2)")
+    #expect(pane.popUp(.suffixes).indexOfSelectedItem == 1, "YATE drops the (2)")
     #expect(pane.noteLabel.isHidden)
     pane.model.draft[.barcode].mode = .off
     store(DiscogsPreset.minimal.mapping)

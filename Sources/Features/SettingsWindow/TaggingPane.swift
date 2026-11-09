@@ -1,6 +1,7 @@
 import AppKit
 import Discogs
 import Log
+import Metadata
 import Settings
 
 private let logger = moduleLogger()
@@ -36,7 +37,9 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     let modePopUp = NSPopUpButton()
     let joinField = NSTextField()
     let templateField = NSTextField()
-    private(set) var partPopUps: [TaggingModel.Part: NSPopUpButton] = [:]
+    /// The format parts' pop-ups, in `TaggingModel.Part.all`'s order, each tagged with its
+    /// place there.
+    private(set) var partPopUps: [NSPopUpButton] = []
     let addTagButton = NSButton()
     let removeTagButton = NSButton()
     let ruleHeading = NSTextField(labelWithString: "")
@@ -47,6 +50,11 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     /// even once another field is selected.
     private var tagsField = TaggingModel.fields[0]
     let saveButton = NSButton(title: "Save", target: nil, action: nil)
+
+    /// The pop-up of the format part `part`.
+    func popUp(_ part: TaggingModel.Part) -> NSPopUpButton {
+        partPopUps[TaggingModel.Part.all.firstIndex(of: part)!]
+    }
 
     init(model: TaggingModel) {
         self.model = model
@@ -136,7 +144,7 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         modePopUp.action = #selector(modeChosen)
         let tags = scroll(
             tagsTable,
-            columns: TaggingModel.Spelling.allCases.map { ($0.title, 100) }
+            columns: TagFormat.allCases.map { ($0.rawValue, 100) }
                 + [(Self.numberedTitle, 100)],
             height: Self.tagsHeight)
         tagsTable.setAccessibilityLabel(DiscogsFieldRule.targetsTitle)
@@ -167,13 +175,14 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
             [label(DiscogsFieldRule.joinTitle), joinField],
             [label(DiscogsFieldRule.templateTitle), templateField],
         ]
-        for part in TaggingModel.Part.allCases {
+        for (index, part) in TaggingModel.Part.all.enumerated() {
             let popUp = NSPopUpButton()
+            popUp.tag = index
             popUp.addItems(withTitles: part.choices)
             popUp.toolTip = part.help
             popUp.target = self
             popUp.action = #selector(partChosen(_:))
-            partPopUps[part] = popUp
+            partPopUps.append(popUp)
             rows.append([label(part.title), popUp])
         }
         let grid = NSGridView(views: rows)
@@ -208,7 +217,9 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         for (text, control) in texts where control.currentEditor() == nil {
             control.stringValue = text ?? ""
         }
-        for (part, popUp) in partPopUps { popUp.selectItem(at: part.selected(in: rule.format)) }
+        for (part, popUp) in zip(TaggingModel.Part.all, partPopUps) {
+            popUp.selectItem(at: part.selected(in: rule.format))
+        }
         if tagsTable.editedRow < 0 {
             tagsField = field
             tagsTable.reloadData()
@@ -241,8 +252,7 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     }
 
     @objc private func partChosen(_ popUp: NSPopUpButton) {
-        guard let part = partPopUps.first(where: { $0.value === popUp })?.key else { return }
-        model.choose(popUp.indexOfSelectedItem, of: part, for: field)
+        model.choose(popUp.indexOfSelectedItem, of: TaggingModel.Part.all[popUp.tag], for: field)
         refresh()
     }
 
@@ -298,9 +308,9 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let cell = notification.object as? NSTextField,
             let id = cell.identifier?.rawValue,
-            let spelling = TaggingModel.Spelling(rawValue: id)
+            let format = TagFormat(rawValue: id)
         else { return }
-        model.setTag(cell.stringValue, spelling: spelling, at: cell.tag, for: tagsField)
+        model.setTag(cell.stringValue, in: format, at: cell.tag, for: tagsField)
         DispatchQueue.main.async { [weak self] in self?.refresh() }
     }
 
@@ -323,7 +333,7 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
             return label
         }
         let target = model.tags(tagsField)[row]
-        guard let spelling = TaggingModel.Spelling(rawValue: id) else {
+        guard let format = TagFormat(rawValue: id) else {
             let box = NSButton(
                 checkboxWithTitle: "", target: self, action: #selector(numberedClicked(_:)))
             box.state = target.isNumbered ? .on : .off
@@ -335,14 +345,14 @@ final class TaggingPane: NSViewController, NSTableViewDataSource, NSTableViewDel
             box.setAccessibilityLabel(Self.numberedTitle)
             return box
         }
-        let cell = NSTextField(string: spelling.name(in: target.names))
+        let cell = NSTextField(string: target.names[format])
         cell.isBordered = false
         cell.drawsBackground = false
-        cell.identifier = NSUserInterfaceItemIdentifier(spelling.rawValue)
+        cell.identifier = NSUserInterfaceItemIdentifier(format.rawValue)
         cell.tag = row
         cell.delegate = self
         cell.placeholderString = "Tag or key"
-        cell.setAccessibilityLabel("\(spelling.title) spelling")
+        cell.setAccessibilityLabel("\(format.rawValue) spelling")
         return cell
     }
 

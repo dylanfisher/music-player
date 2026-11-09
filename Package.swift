@@ -242,7 +242,7 @@ let package = Package(
         .target(
             name: "SettingsWindow",
             dependencies: [
-                "Commands", "Discogs", "DisplayText", "KeyChord", "Log", "Settings",
+                "Commands", "Discogs", "DisplayText", "KeyChord", "Log", "Metadata", "Settings",
                 "WindowPlacement",
             ],
             path: "Sources/Features/SettingsWindow",

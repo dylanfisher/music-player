@@ -57,7 +57,7 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     #expect(!model.isEdited)
     model.choose(0, of: .repeats, for: .label)
     #expect(model.draft[.label].format.repeats == .keep)
-    model.choose(1, of: .mp4Credits, for: .involvedPeople)
+    model.choose(1, of: .credits(.mp4), for: .involvedPeople)
     #expect(
         model.draft[.involvedPeople].format.credits
             == PerTagFormat(vorbis: .nameRole, mp4: .roleNames, id3: .nameRole))
@@ -91,11 +91,11 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     let (model, _) = model()
     let position = model.addTag(for: .country)
     #expect(model.problem?.contains("isn't a custom key's name") == true)
-    model.setTag("RELEASECOUNTRY", spelling: .vorbis, at: position, for: .country)
+    model.setTag("RELEASECOUNTRY", in: .vorbis, at: position, for: .country)
     #expect(model.tags(.country)[position] == .key("RELEASECOUNTRY"))
     #expect(model.problem == nil)
-    model.setTag("Release Country", spelling: .mp4, at: position, for: .country)
-    model.setTag("Release Country", spelling: .id3, at: position, for: .country)
+    model.setTag("Release Country", in: .mp4, at: position, for: .country)
+    model.setTag("Release Country", in: .id3, at: position, for: .country)
     #expect(
         model.tags(.country)[position]
             == .key(
@@ -105,15 +105,15 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
         model.tags(.country)[position].text
             == "RELEASECOUNTRY / Release Country / Release Country")
     // Spelled per format, a vorbis name changes vorbis alone.
-    model.setTag("COUNTRY_OF_RELEASE", spelling: .vorbis, at: position, for: .country)
+    model.setTag("COUNTRY_OF_RELEASE", in: .vorbis, at: position, for: .country)
     #expect(model.tags(.country)[position].names.mp4 == "Release Country")
     // A field's name is that field, as the config file reads it.
-    model.setTag("genre", spelling: .vorbis, at: 0, for: .styles)
+    model.setTag("genre", in: .vorbis, at: 0, for: .styles)
     #expect(model.tags(.styles) == [.field(.genre)])
     model.setNumbered(true, at: 0, for: .labelURL)
     #expect(model.tags(.labelURL)[0].isNumbered)
     let numbered = model.tags(.labelURL)[0].numberedNames
-    model.setTag("LABEL_LINK", spelling: .vorbis, at: 0, for: .labelURL)
+    model.setTag("LABEL_LINK", in: .vorbis, at: 0, for: .labelURL)
     #expect(model.tags(.labelURL)[0].numberedNames == PerTagFormat("LABEL_LINK"))
     #expect(numbered != PerTagFormat("LABEL_LINK"))
     model.setNumbered(false, at: 0, for: .labelURL)
@@ -126,7 +126,7 @@ private func mapping(_ json: Any?) throws -> DiscogsMapping {
     let (model, _) = model(DiscogsPreset.yate.mapping)
     let target = model.tags(.labelCatalogNumbers)[0]
     #expect(target.numberedNames != target.names)
-    model.setTag("CATNO", spelling: .vorbis, at: 0, for: .labelCatalogNumbers)
+    model.setTag("CATNO", in: .vorbis, at: 0, for: .labelCatalogNumbers)
     #expect(model.tags(.labelCatalogNumbers)[0].numberedNames == target.numberedNames)
 }
 
@@ -214,7 +214,7 @@ private func model(over settings: ConfigStore<AppSettings>) -> TaggingModel {
     #expect(settings.problems.isEmpty, "\(settings.problems)")
     let model = model(over: settings)
     model.choose(1, of: .suffixes, for: .albumArtist)
-    model.setTag("ALBUM_ARTIST_LINK", spelling: .vorbis, at: 0, for: .albumArtistURL)
+    model.setTag("ALBUM_ARTIST_LINK", in: .vorbis, at: 0, for: .albumArtistURL)
     try model.save()
     let text = try String(contentsOf: url, encoding: .utf8)
     #expect(text.hasPrefix(before), "\(text)")

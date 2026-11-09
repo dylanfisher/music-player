@@ -1,4 +1,5 @@
 import Foundation
+import Metadata
 import Settings
 
 /// Settings ▸ Tagging's field mapping as the user edits it, with no AppKit (ADR 0165): the
@@ -113,9 +114,8 @@ final class TaggingModel {
         for part in [Part.names, .suffixes, .repeats, .date] where part.isSet(in: format) {
             parts.append(part.choices[part.selected(in: format)])
         }
-        let credits: [Part] = [.vorbisCredits, .mp4Credits, .id3Credits]
-        if credits[0].isSet(in: format) {
-            let styles = credits.map { $0.choices[$0.selected(in: format)] }
+        if format.credits != nil {
+            let styles = TagFormat.allCases.map { format.creditsWritten[$0].title }
             parts.append("credits " + styles.joined(separator: " / "))
         }
         return parts.joined(separator: " · ")
@@ -130,30 +130,6 @@ final class TaggingModel {
 
     // MARK: The tags
 
-    /// How each format spells a tag: as the mapping's JSON names them.
-    enum Spelling: String, CaseIterable {
-        case vorbis, mp4, id3
-
-        /// As the tags table's column is titled: the key in the config file.
-        var title: String { rawValue }
-
-        func name(in names: PerTagFormat<String>) -> String {
-            switch self {
-            case .vorbis: names.vorbis
-            case .mp4: names.mp4
-            case .id3: names.id3
-            }
-        }
-
-        func set(_ name: String, in names: inout PerTagFormat<String>) {
-            switch self {
-            case .vorbis: names.vorbis = name
-            case .mp4: names.mp4 = name
-            case .id3: names.id3 = name
-            }
-        }
-    }
-
     func tags(_ field: DiscogsField) -> [DiscogsTarget] { draft[field].targets }
 
     /// Adds a tag with no name yet, which the check refuses until it has one; its position.
@@ -167,21 +143,19 @@ final class TaggingModel {
         draft[field].targets.remove(at: position)
     }
 
-    /// Sets how `spelling`'s format spells the tag at `position`. A name typed for vorbis goes
-    /// to every format while they all spell it the same, and numbered keys spelled as the tag
-    /// is follow it.
-    func setTag(
-        _ text: String, spelling: Spelling, at position: Int, for field: DiscogsField
-    ) {
+    /// Sets how `format` spells the tag at `position`. A name typed for vorbis goes to every
+    /// format while they all spell it the same, and numbered keys spelled as the tag is follow
+    /// it.
+    func setTag(_ text: String, in format: TagFormat, at position: Int, for field: DiscogsField) {
         guard draft[field].targets.indices.contains(position) else { return }
         let target = draft[field].targets[position]
         let old = target.names
         let name = text.trimmingCharacters(in: .whitespaces)
         var names = old
-        if spelling == .vorbis, old.isUniform {
+        if format == .vorbis, old.isUniform {
             names = PerTagFormat(name)
         } else {
-            spelling.set(name, in: &names)
+            names[format] = name
         }
         guard names != old else { return }
         let numbered = target.numberedNames == old ? names : target.numberedNames
@@ -203,8 +177,12 @@ final class TaggingModel {
 
     /// A part of a rule's format with a fixed set of choices, each a pop-up in the pane; the
     /// credits' style is one part per tag format, since YATE writes them differently in each.
-    enum Part: CaseIterable {
-        case names, suffixes, repeats, date, vorbisCredits, mp4Credits, id3Credits
+    enum Part: Equatable {
+        case names, suffixes, repeats, date
+        case credits(TagFormat)
+
+        /// The parts in the pane's order.
+        static let all = [names, suffixes, repeats, date] + TagFormat.allCases.map(credits)
 
         var title: String {
             switch self {
@@ -212,9 +190,7 @@ final class TaggingModel {
             case .suffixes: "Number Suffixes"
             case .repeats: "Repeated Labels"
             case .date: "Date Written"
-            case .vorbisCredits: "Credits in vorbis"
-            case .mp4Credits: "Credits in mp4"
-            case .id3Credits: "Credits in id3"
+            case .credits(let format): "Credits in \(format.rawValue)"
             }
         }
 
@@ -227,63 +203,29 @@ final class TaggingModel {
                     + " is kept"
             case .repeats: "Whether a label listed once per catalog number is written each time"
             case .date: "The date in full as Discogs has it, or its year"
-            case .vorbisCredits, .mp4Credits, .id3Credits: "How a credited person is written"
+            case .credits: "How a credited person is written"
             }
         }
 
         /// The choices' titles, in the cases' order.
         var choices: [String] {
             switch self {
-            case .names:
-                DiscogsFieldFormat.Names.allCases.map {
-                    switch $0 {
-                    case .canonical: "Discogs Name"
-                    case .variation: "Name as Credited"
-                    }
-                }
-            case .suffixes:
-                DiscogsFieldFormat.Suffixes.allCases.map {
-                    switch $0 {
-                    case .keep: "Keep “(2)”"
-                    case .drop: "Drop “(2)”"
-                    }
-                }
-            case .repeats:
-                DiscogsFieldFormat.Repeats.allCases.map {
-                    switch $0 {
-                    case .keep: "Each Time Listed"
-                    case .drop: "Once"
-                    }
-                }
-            case .date:
-                DiscogsFieldFormat.DateForm.allCases.map {
-                    switch $0 {
-                    case .full: "Full Date"
-                    case .year: "Year Only"
-                    }
-                }
-            case .vorbisCredits, .mp4Credits, .id3Credits:
-                DiscogsFieldFormat.CreditStyle.allCases.map {
-                    switch $0 {
-                    case .nameRole: "Name (Role)"
-                    case .roleNames: "Role;;;Name,Name"
-                    }
-                }
+            case .names: DiscogsFieldFormat.Names.titles
+            case .suffixes: DiscogsFieldFormat.Suffixes.titles
+            case .repeats: DiscogsFieldFormat.Repeats.titles
+            case .date: DiscogsFieldFormat.DateForm.titles
+            case .credits: DiscogsFieldFormat.CreditStyle.titles
             }
         }
 
         /// The choice in effect, a part left out counting as what it writes.
         func selected(in format: DiscogsFieldFormat) -> Int {
             switch self {
-            case .names: DiscogsFieldFormat.Names.allCases.firstIndex(of: format.namesWritten)!
-            case .suffixes:
-                DiscogsFieldFormat.Suffixes.allCases.firstIndex(of: format.suffixesWritten)!
-            case .repeats:
-                DiscogsFieldFormat.Repeats.allCases.firstIndex(of: format.repeatsWritten)!
-            case .date: DiscogsFieldFormat.DateForm.allCases.firstIndex(of: format.dateWritten)!
-            case .vorbisCredits, .mp4Credits, .id3Credits:
-                DiscogsFieldFormat.CreditStyle.allCases.firstIndex(
-                    of: credit(format.creditsWritten))!
+            case .names: format.namesWritten.position
+            case .suffixes: format.suffixesWritten.position
+            case .repeats: format.repeatsWritten.position
+            case .date: format.dateWritten.position
+            case .credits(let tagFormat): format.creditsWritten[tagFormat].position
             }
         }
 
@@ -294,37 +236,82 @@ final class TaggingModel {
             case .suffixes: format.suffixes != nil
             case .repeats: format.repeats != nil
             case .date: format.date != nil
-            case .vorbisCredits, .mp4Credits, .id3Credits: format.credits != nil
+            case .credits: format.credits != nil
             }
         }
 
         func set(_ index: Int, in format: inout DiscogsFieldFormat) {
             switch self {
-            case .names: format.names = DiscogsFieldFormat.Names.allCases[index]
-            case .suffixes: format.suffixes = DiscogsFieldFormat.Suffixes.allCases[index]
-            case .repeats: format.repeats = DiscogsFieldFormat.Repeats.allCases[index]
-            case .date: format.date = DiscogsFieldFormat.DateForm.allCases[index]
-            case .vorbisCredits, .mp4Credits, .id3Credits:
+            case .names: format.names = .at(index)
+            case .suffixes: format.suffixes = .at(index)
+            case .repeats: format.repeats = .at(index)
+            case .date: format.date = .at(index)
+            case .credits(let tagFormat):
                 var credits = format.creditsWritten
-                let style = DiscogsFieldFormat.CreditStyle.allCases[index]
-                switch self {
-                case .vorbisCredits: credits.vorbis = style
-                case .mp4Credits: credits.mp4 = style
-                default: credits.id3 = style
-                }
+                credits[tagFormat] = .at(index)
                 format.credits = credits
             }
         }
+    }
+}
 
-        /// This part's format's style among `credits`.
-        private func credit(_ credits: PerTagFormat<DiscogsFieldFormat.CreditStyle>)
-            -> DiscogsFieldFormat.CreditStyle
-        {
-            switch self {
-            case .mp4Credits: credits.mp4
-            case .id3Credits: credits.id3
-            default: credits.vorbis
-            }
+/// One of a format part's choices, as its pop-up lists it: the pop-up's index is its place
+/// among its cases.
+private protocol FormatChoice: CaseIterable, Equatable {
+    var title: String { get }
+}
+
+extension FormatChoice {
+    static var titles: [String] { allCases.map(\.title) }
+
+    /// Its place among its cases, which is its pop-up's index.
+    var position: Int { Array(Self.allCases).firstIndex(of: self)! }
+
+    /// The case at `position` among its cases.
+    static func at(_ position: Int) -> Self { Array(allCases)[position] }
+}
+
+extension DiscogsFieldFormat.Names: FormatChoice {
+    var title: String {
+        switch self {
+        case .canonical: "Discogs Name"
+        case .variation: "Name as Credited"
+        }
+    }
+}
+
+extension DiscogsFieldFormat.Suffixes: FormatChoice {
+    var title: String {
+        switch self {
+        case .keep: "Keep “(2)”"
+        case .drop: "Drop “(2)”"
+        }
+    }
+}
+
+extension DiscogsFieldFormat.Repeats: FormatChoice {
+    var title: String {
+        switch self {
+        case .keep: "Each Time Listed"
+        case .drop: "Once"
+        }
+    }
+}
+
+extension DiscogsFieldFormat.DateForm: FormatChoice {
+    var title: String {
+        switch self {
+        case .full: "Full Date"
+        case .year: "Year Only"
+        }
+    }
+}
+
+extension DiscogsFieldFormat.CreditStyle: FormatChoice {
+    var title: String {
+        switch self {
+        case .nameRole: "Name (Role)"
+        case .roleNames: "Role;;;Name,Name"
         }
     }
 }
