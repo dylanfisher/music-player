@@ -698,6 +698,43 @@ Asked by the owner on 2026-11-09.
       Releases and View Changes already send none beyond the cover the apply would fetch; a
       test with a counting stand-in transport holds both to that.
 
+Implementation plan, phase 65 (ADR 0170):
+
+What exists, found by search (map.md recipes): the matcher (`AlbumMatcher.match`) scores every
+candidate (`ReleaseScore`), picks and tiers one, and keeps of the chosen score only the reasons
+(`NotExactReason.reasons`) and the mapping. How a release was found is `CandidateKey`, dropped
+after the reasons. The window's tabs are `MatchTier.allCases`, with `model.tab` a tier, and
+Apply to All writes `applicable(tab)`. Choose goes through `rematch`, which runs
+`effects.match`, so in API or Both mode it repeats `ApiCandidates.found`'s searches.
+
+- 65.1 Confidence (`Core/Discogs/MatchConfidence.swift`): the percent from the shown score, the
+  album's title similarities, the tie and how the release was found, with its weights in that
+  file, not `MatchThreshold`, which the golden file pins. `AlbumMatch` gains `confidence`
+  (nil with no release scored) and keeps `foundBy`; `MatchCandidate` keeps its `foundBy` too,
+  so choosing it later can say how it was found. Ranking, tiers and reasons don't change.
+- 65.2 Choosing without searching (`Core/Discogs/AlbumMatcher.swift`): `chooseRelease` loads
+  the one release, from the catalog when the source has one and it holds it, else
+  `api.release(id:)` (cached), and scores it alone with the choice branch's tiering, which
+  becomes one function both paths call. The other candidates are the previous match's, with the
+  previously chosen release rescored among them. `TaggerModel.Effects.choose` wraps it;
+  `TaggerModel.choose` calls it in place of `effects.match`. A staged tagger keeps its own
+  match (default effect unused there: its release is fixed).
+- 65.3 Confidence column, between Files and Review, "92%", blank with none; sortable as the
+  table is not, so no sort.
+- 65.4 Safe tab (`TaggerTab`, after Likely): the Likely albums whose every title is the same,
+  in order, with the counts the same and every known length agreeing; by the matcher's rules
+  their reasons are at most "other releases fit as well" and "found by title only". It is a view
+  of Likely, which keeps them; Apply to All in Safe writes them as the other tabs do.
+- 65.5 ADR 0170: the formula, its weights, why a tab, the safe rule and the choose path;
+  0131 and 0136 get see-also lines.
+
+Tests: confidence of an exact, a title-only, a tied, a one-title-off and a bonus-track album
+(`AlbumMatcherTests`); choosing scores the release alone, keeps the candidates and sends no
+search, with `FakeDiscogs` counting (`ApiMatchingTests`), and Other Releases' summaries and View
+Changes' cover send none beyond the cover; the model's choose doesn't call `match`
+(`TaggerRematchTests`); the column and the Safe tab, its count and Apply to All
+(`TaggerWindowTests`).
+
 ### 66. Artwork
 
 Asked by the owner on 2026-11-09. Bulk art is the front cover only, by the owner's choice.
