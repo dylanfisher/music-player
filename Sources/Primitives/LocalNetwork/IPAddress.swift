@@ -90,7 +90,7 @@ public enum IPAddress: Hashable, Sendable, CustomStringConvertible {
     }
 
     /// As a URL's or a `Host` header's host: an IPv6 address in brackets, its zone as `%25`.
-    var urlHost: String {
+    public var urlHost: String {
         switch self {
         case .v4: description
         case .v6: "[" + description.replacingOccurrences(of: "%", with: "%25") + "]"
