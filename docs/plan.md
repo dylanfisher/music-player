@@ -49,7 +49,7 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 
 1. Phases 51, 52 and 53, set by the owner on 2026-11-07, are done.
 2. Phase 54 runs on its own branch (set on 2026-11-08), and waits there for the owner's review.
-3. Phases 55 to 61, the owner's feedback of 2026-11-09, run next: 55 (done) and 58 first, then 56,
+3. Phases 55 to 61, the owner's feedback of 2026-11-09, run next: 55 and 58 (done) first, then 56,
    57 and 59, then 60 and 61. Each merges to `main` when its gate passes.
 4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
@@ -144,6 +144,7 @@ that phase's Result line, and delete its line here.
   window rows of `./scripts/bench` hang in an agent session; run them on this Mac.
 - **55** ([phase](plan-archive.md#55-windows-and-settings)): the owner steps under its Result
   line, on the two-display Mac.
+- **58** ([phase](plan-archive.md#58-tagger)): the owner steps under its Result line.
 
 ### Answers
 
@@ -657,61 +658,6 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 - [ ] **Discogs tab always shown,** so a release id can be set where none is; the earlier
       choice to hide it without one is reversed.
 - [ ] **Play count** field, editable, for the count phase 56 lets the user set.
-
-### 58. Tagger
-
-- [ ] **Look Up Release:** search for a release by artist, title, catalog number or id, in
-      the local Discogs catalog first and the Discogs API when the catalog has no match or no
-      catalog is present (tests use the stand-in transport, AGENTS.md).
-- [ ] **Exclude tracks:** files can be left out of a match (duplicates of another release),
-      so the rest match the release's track count and can be tagged.
-- [ ] **Two tables:** our files and the release's tracks in two tables side by side that read
-      as one row each, so it's clear where each column comes from. The match mark gets a word
-      ("Exact", "Close", …) beside the symbol.
-- [ ] **Counts in buttons:** "9 other releases…" and "44 changes" where the number is known.
-- [ ] **Progress in the window:** the tagger shows its write progress as well as the status
-      bar, with whatever detail it has (album or file n of m), else a plain bar.
-- [ ] **Saved field mappings:** can be removed from the "Start from" menu, or by a button.
-
-Implementation plan, phase 58 (ADR 0157):
-
-What exists, found by search (map.md recipes): the tagger is `TaggerModel` (no AppKit, driven
-by `Effects`), `TaggerWindow` and its sheets in `Features/DiscogsTagger`; matching is
-`matchAlbums` and `AlbumMatcher` in `Core/Discogs`, with `Catalog`'s folded-key lookups
-(`releaseIDs(label:catalogNumber:)`, `titleMatches`) and `DiscogsAPI.search(_:)`, private, over
-`/database/search`. Other Releases… is `ReleasesSheet`; its rows are `ReleaseSummary`. The
-tagger writes through `TagEditing.write(_:over:completion:)`, whose progress reaches only the
-status bar's `saving`. Saved mappings are `MappingDraft.saved`.
-
-- 58.1 Saved mappings (`MappingDraft.remove(_:)`, `MappingSheet`): a Remove button beside
-  Start from, on for a saved mapping only; the removal is the draft's, so Cancel keeps it.
-- 58.2 Counts in buttons (`TaggerWindow`, `TaggerModel`): "9 Other Releases…" from the match's
-  candidates, and "View 44 Changes…" once the selected album's files are read: the model reads
-  them in the background after a short pause on a selection, and forgets the count whenever an
-  album, the mapping or the choices change. A plural helper of `DisplayText` gives the forms.
-- 58.3 Two tables (`TaggerWindow`, `TaggerTitles`): "Your Files" (number, title, length) and
-  "Discogs Release" (position, title, length, state), the same rows, scrolled and selected
-  together, the left one's scroller hidden. The state reads "✓ Same", "≠ Differs", "– No
-  file", "– No track". A drag goes from the files onto either table's row.
-- 58.4 Leaving files out (`TaggerModel.Album.leftOut`): an Include box in the files table.
-  A file left out isn't matched, read or written: the album is matched again without it, with
-  the release the user chose if any, and is listed last, greyed, as "Left out". Kept for the
-  session by album, through a new Analyze; not in the staged tagger (ADR 0157).
-- 58.5 Look Up Release (`Core/Discogs/ReleaseLookup.swift`, `ReleasesSheet` in a look-up
-  mode): fields for artist, title, catalog number and release ID or URL, filled from the
-  album's tags; Search asks the catalog first (the id, then label and catalog number or the
-  number alone, then artist and title by their folded keys, every field given then checked
-  against each release), and the API only when the catalog finds nothing or there's none
-  (`DiscogsAPI.search(artist:title:catalogNumber:)`, the release by id without a token). Each
-  release found is scored against the album's files for the Fit column. Use Release chooses it
-  as Other Releases does; a release from the API is matched with the API.
-- 58.6 Progress in the window (`TagEditing.write(_:over:progress:completion:)`, App wiring,
-  `TaggerModel.writing`): "Writing 120 tags to 20 files: 3 of 20 written" with the bar, shown
-  while nothing else runs; a staged write has no counts, so a plain spinning bar.
-- 58.7 Tests: each of the above in `DiscogsTaggerTests` and `DiscogsTests`, the look-up over a
-  fixture catalog and a stand-in transport, never the real API.
-
-Order: 58.1, 58.2, 58.3, 58.4, 58.5, 58.6, then the ADR.
 
 ### 59. Downloads
 
