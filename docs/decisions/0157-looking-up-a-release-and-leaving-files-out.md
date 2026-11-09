@@ -22,19 +22,22 @@ without its label, or a title without its artist.
 
 **The catalog first, the API when it finds nothing.** Search asks the catalog by release id, by
 catalog number on any label, else by artist and title through the matcher's folded keys,
-including its artist splits and title variants. Every field given must then hold for each
-release found (the artist and title within its own, folded; the catalog number as one of its
-labels'). Only when that finds nothing, or there's no usable catalog, is Discogs asked: a release
-id needs no token, a search does, and its first releases are fetched as the matcher fetches
-them. Nothing is sent before the user clicks Search. Whatever the source setting says, the
-catalog comes first, since a search is one person's question and the catalog answers it with no
-request.
+including its artist splits and title variants. A catalog number, when given, is what finds the
+ids; the artist and title typed beside it only filter them. Every field given must then hold
+for each release found (the artist and title within its own, folded; the catalog number as one
+of its labels'). A release id is looked up alone, whatever else is typed, and the sheet says so.
+Only when that finds nothing, or there's no catalog, is Discogs asked: a release id needs no
+token, a search does, and its first releases are fetched as the matcher fetches them. A catalog
+that can't be read, as one built by another version, stops the search with why, rather than
+passing for none. Nothing is sent before the user clicks Search. Whatever the source setting
+says, the catalog comes first, since a search is one person's question and the catalog answers
+it with no request.
 
 **No new indexes.** A catalog number alone, and a title alone, read every key, since the keys
 are indexed by label first and by artist first. An index for each would change the catalog's
 schema identity, which discards every catalog and asks for the dump to be imported again, for a
-search a person runs one at a time. The reads stop at 200 releases, and the sheet says when more
-were found. If the owner finds them slow on the 2015 MacBook Pro, the indexes are the fix, with
+search a person runs one at a time. A search reads at most 5,000 releases, filters them by the
+fields given, and lists the first 200 that hold; the sheet says when more were found. If the owner finds them slow on the 2015 MacBook Pro, the indexes are the fix, with
 the reimport that comes with them.
 
 **A release from the API is matched with the API.** Choosing a release Look Up found on Discogs
@@ -53,9 +56,13 @@ for it would outlive the problem.
 discrepancy forever. Its release is fixed too, so its tagger has neither Look Up nor the boxes.
 
 **Counts read in the background.** "View 44 Changes…" needs the album's files read. The model
-reads the selected album's files 0.3 s after the selection settles, and forgets every count when
-an album, the mapping or the choices change. The cover isn't counted, since that would ask
-Discogs for the image on a selection.
+reads the selected album's files 0.3 s after the selection settles, never while Analyze, a read
+or an import runs. An album's count is forgotten when its match changes (a release chosen, a
+file left out or put back, a row dragged), when its unticked changes change, and when a write of
+it fails partway; every count is forgotten when Analyze runs or the mapping or the choices
+change. A rejection forgets nothing, since it doesn't change what Apply would write. An album
+whose count can't be known, a file gone or unreadable, isn't read again until its count is
+forgotten. The cover isn't counted, since that would ask Discogs for the image on a selection.
 
 ## Consequences
 

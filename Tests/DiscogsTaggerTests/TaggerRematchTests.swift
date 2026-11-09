@@ -105,6 +105,33 @@ private let stockholm = ["Östermalm", "Gamla Stan", "Kungsholmen"]
     await tagger.finished()
 }
 
+/// A change to one album forgets only that album's count; the mapping forgets every one.
+@MainActor
+@Test func aChangeToOneAlbumForgetsOnlyItsCount() async throws {
+    let one = album(1, "Stockholm", titles: stockholm)
+    let two = album(2, "Second", titles: stockholm)
+    let tagger = await model(
+        Seen(), albums: [one, two],
+        matches: { album, _ in
+            match(album, release(Int(album.id) * 10, album.title, titles: stockholm), tier: .exact)
+        },
+        files: { ids in
+            [one, two].flatMap { album in album.tracks.indices.map { file(album, $0) } }
+                .filter { ids.contains($0.id) }
+        })
+    tagger.analyze()
+    await tagger.finished()
+    _ = try await tagger.changeSet(for: 1)
+    let (set, _) = try #require(try await tagger.changeSet(for: 2))
+    #expect(tagger.changeCounts.keys.sorted() == [1, 2])
+    tagger.setExcluded([set.files[0].changes[0].id], for: 2)
+    #expect(tagger.changeCounts.keys.sorted() == [1], "album 1's count stays")
+    await tagger.setRejected(true, 1)
+    #expect(tagger.changeCounts[1] != nil, "a rejection doesn't change what Apply would write")
+    tagger.mapping = DiscogsPreset.oneToOne.mapping
+    #expect(tagger.changeCounts.isEmpty)
+}
+
 /// One album is matched again at a time: a release chosen while a file's rematch runs is
 /// ignored, and a rematch that ends after the user moved to another album leaves the tab.
 @MainActor
