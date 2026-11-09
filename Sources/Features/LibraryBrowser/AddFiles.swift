@@ -96,7 +96,7 @@ func addedSummary(_ plan: AddPlan, copied: Int) -> String {
     var parts: [String] = []
     if !plan.filesToCopy.isEmpty {
         parts.append(
-            "Copied \(number(copied)) of \(count(plan.filesToCopy.count, "file")) into the"
+            "Copied \(number(copied)) of \(files(plan.filesToCopy.count)) into the"
                 + " library folder")
     }
     if !plan.foldersToWatch.isEmpty {

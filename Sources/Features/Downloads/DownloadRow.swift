@@ -187,7 +187,7 @@ struct DownloadRow: Equatable, Sendable {
             let answers =
                 search.peers == 0
                 ? "no answers yet"
-                : "\(count(search.peers, "peer")), \(count(search.files, "file"))"
+                : "\(count(search.peers, "peer")), \(DisplayText.files(search.files))"
             return (again ? "Searching again" : "Searching") + query + ": " + answers + lastTime
         case .notFound:
             let next =

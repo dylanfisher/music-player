@@ -25,7 +25,7 @@ public struct FilesOrganized: Equatable, Sendable {
 
     /// For the status bar: "Organized 12 files · 2 not moved".
     public var summary: String {
-        var parts = ["Organized \(count(moved.count, "file"))"]
+        var parts = ["Organized \(files(moved.count))"]
         if !problems.isEmpty { parts.append("\(problems.count) not moved") }
         if !outside.isEmpty { parts.append("\(outside.count) outside the library folder") }
         return parts.joined(separator: " · ")

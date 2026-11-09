@@ -92,7 +92,7 @@ extension HealthCheck {
         guard isMeasured, let analyzedCount else { return summary }
         return analyzedCount == 0
             ? "\(summary); none analyzed yet"
-            : "\(summary), of \(count(analyzedCount, "file")) analyzed"
+            : "\(summary), of \(files(analyzedCount)) analyzed"
     }
 
     /// What the check finds, for the row's tooltip.

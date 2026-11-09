@@ -199,7 +199,7 @@ struct LibraryStatus: Equatable, Sendable {
         guard hasProblems else { return nil }
         let folders = Set(folderLines.filter { !dismissed.contains($0.line) }.map(\.folder)).count
         var problems: [String] = []
-        if fileIssueCount > 0 { problems.append(count(fileIssueCount, "file")) }
+        if fileIssueCount > 0 { problems.append(files(fileIssueCount)) }
         if folders > 0 { problems.append(count(folders, "folder")) }
         if syncProblems.contains(where: { !dismissed.contains($0) }) {
             problems.append("the sync")

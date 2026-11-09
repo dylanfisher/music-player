@@ -86,6 +86,9 @@ public func number(_ value: Int) -> String {
 /// "1 track", "1,204 tracks": the one spelling of the noun every count of tracks uses.
 public func tracks(_ value: Int) -> String { count(value, "track") }
 
+/// "1 file", "1,204 files": the one spelling of the noun every count of files uses.
+public func files(_ value: Int) -> String { count(value, "file") }
+
 /// "1 album", "1,204 albums": `noun` after the count, plural but for one.
 public func count(_ value: Int, _ noun: String) -> String {
     "\(number(value)) \(noun)\(value == 1 ? "" : "s")"

@@ -144,7 +144,7 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         let files = Set(kept.map(\.id.fileID)).count
         summary.stringValue =
             "\(number(kept.count)) of \(count(changes.count, "change")) in "
-            + count(files, "file")
+            + DisplayText.files(files)
     }
 
     /// Ticks or unticks the change on `row` in each of its files: unticks them all when any
@@ -168,7 +168,7 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     /// or "3 files".
     func filesText(_ files: [String]) -> String {
         if files.count == 1 { return files[0] }
-        let text = count(files.count, "file")
+        let text = DisplayText.files(files.count)
         return files.count == writable ? "All \(text)" : text
     }
 
@@ -184,7 +184,7 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
             case .fileName: return filesText(Array(repeating: "", count: adds + replaces))
             case .field: return MappingSheet.artworkTitle
             case .current:
-                return replaces == 0 ? "" : "replaces the cover in \(count(replaces, "file"))"
+                return replaces == 0 ? "" : "replaces the cover in \(DisplayText.files(replaces))"
             case .written: return "\(cover.text) from Discogs"
             default: return ""
             }

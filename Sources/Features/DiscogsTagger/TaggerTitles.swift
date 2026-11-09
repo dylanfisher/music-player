@@ -19,7 +19,7 @@ enum TaggerText {
 
     /// "120 tags to 20 files": what a write writes.
     static func tagsToFiles(tags: Int, files: Int) -> String {
-        "\(DisplayText.count(tags, "tag")) to \(DisplayText.count(files, "file"))"
+        "\(DisplayText.count(tags, "tag")) to \(DisplayText.files(files))"
     }
 
     /// "12 releases in the catalog", "The catalog has no match; 8 releases from Discogs";
@@ -88,13 +88,13 @@ extension NotExactReason {
     var text: String {
         switch self {
         case .filesWithoutTrack(let files):
-            "\(count(files, "file")) \(files == 1 ? "has" : "have") no track on the release"
+            "\(DisplayText.files(files)) \(files == 1 ? "has" : "have") no track on the release"
         case .tracksWithoutFile(let count):
             "\(tracks(count)) of the release \(count == 1 ? "has" : "have") no file"
         case .countDiffers(let files, let tracks):
-            "\(count(files, "file")), the release has \(DisplayText.tracks(tracks))"
+            "\(DisplayText.files(files)), the release has \(DisplayText.tracks(tracks))"
         case .outOfOrder(let files):
-            "\(count(files, "file")) \(files == 1 ? "is" : "are") out of the release's order"
+            "\(DisplayText.files(files)) \(files == 1 ? "is" : "are") out of the release's order"
         case .titlesDiffer(let titles):
             "\(count(titles, "file title")) "
                 + (titles == 1 ? "differs from its track's" : "differ from their tracks'")
