@@ -23,6 +23,8 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     let nameField = NSTextField()
     let problemLabel = NSTextField(labelWithString: "")
     let okButton = NSButton(title: "OK", target: nil, action: nil)
+    /// Takes the saved mapping chosen in Start from out of the list; off for a preset.
+    let removeButton = NSButton(title: "Remove", target: nil, action: nil)
     /// Where Paste reads from; tests use a pasteboard of their own.
     var pasteboard = NSPasteboard.general
     /// The template help while it shows.
@@ -68,8 +70,12 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
         nameField.placeholderString = "Mapping Name"
         nameField.widthAnchor.constraint(equalToConstant: 160).isActive = true
         let save = NSButton(title: "Save As", target: self, action: #selector(saveAs))
+        removeButton.target = self
+        removeButton.action = #selector(removeSaved)
+        removeButton.toolTip = "Removes the saved mapping chosen in Start from; OK keeps it removed"
         let top = NSStackView(views: [
-            NSTextField(labelWithString: "Start from:"), presets, NSView(), nameField, save,
+            NSTextField(labelWithString: "Start from:"), presets, removeButton, NSView(),
+            nameField, save,
         ])
         let scroll = taggerTable(
             table,
@@ -118,6 +124,7 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
             presets.addItem(withTitle: "Edited")
             presets.selectItem(withTitle: "Edited")
         }
+        removeButton.isEnabled = draft.chosenName.map(draft.isSaved) ?? false
         table.reloadData()
         showProblem()
     }
@@ -210,6 +217,13 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     @objc private func presetChosen() {
         guard let name = presets.titleOfSelectedItem else { return }
         draft.use(name)
+        refresh()
+    }
+
+    /// Removes the saved mapping Start from shows, from the draft: Cancel puts it back.
+    @objc func removeSaved() {
+        guard let name = draft.chosenName, draft.isSaved(name) else { return NSSound.beep() }
+        draft.remove(name)
         refresh()
     }
 

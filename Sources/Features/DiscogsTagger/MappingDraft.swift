@@ -125,6 +125,18 @@ struct MappingDraft: Equatable {
         note = "Saved as “\(named.name)”"
         return nil
     }
+
+    /// Whether `name` is one of the user's saved mappings, which Remove can take out; a
+    /// preset can't be.
+    func isSaved(_ name: String) -> Bool { saved.contains { $0.name == name } }
+
+    /// Takes the saved mapping `name` out of the list, leaving the mapping shown as it is.
+    mutating func remove(_ name: String) {
+        guard isSaved(name) else { return }
+        saved.removeAll { $0.name == name }
+        if self.name == name { self.name = nil }
+        note = "Removed “\(name)”; OK keeps the change"
+    }
 }
 
 /// Whether every format spells the key the same.

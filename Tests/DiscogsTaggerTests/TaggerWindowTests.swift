@@ -239,6 +239,27 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(sheet.problemLabel.stringValue == "styles is a list, so it needs a join")
 }
 
+@MainActor
+@Test func removeTakesTheChosenSavedMappingOutOfStartFrom() throws {
+    var mine = DiscogsPreset.minimal.mapping
+    mine[.label].mode = .off
+    let sheet = MappingSheet(
+        draft: MappingDraft(
+            mapping: DiscogsPreset.oneToOne.mapping,
+            saved: [NamedDiscogsMapping(name: "Mine", mapping: mine)]),
+        artwork: .off, hasToken: true)
+    #expect(!sheet.removeButton.isEnabled, "a preset is shown")
+    sheet.presets.selectItem(withTitle: "Mine")
+    sheet.presets.sendAction(sheet.presets.action, to: sheet.presets.target)
+    #expect(sheet.removeButton.isEnabled)
+    sheet.removeSaved()
+    #expect(!sheet.presets.itemTitles.contains("Mine"))
+    #expect(sheet.draft.saved.isEmpty)
+    #expect(sheet.presets.titleOfSelectedItem == "Edited")
+    #expect(!sheet.removeButton.isEnabled)
+    #expect(sheet.problemLabel.stringValue == "Removed “Mine”; OK keeps the change")
+}
+
 /// The folders and flags each import was started with.
 private final class Imports: @unchecked Sendable {
     // `started` is guarded by `lock`.
