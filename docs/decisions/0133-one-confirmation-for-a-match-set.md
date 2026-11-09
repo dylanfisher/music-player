@@ -2,6 +2,7 @@
 
 - **Date:** 2026-11-07
 - **Status:** accepted
+- **Amended by:** [0152](0152-one-to-one-matches-discogs.md): Apply to All in Matched too.
 - **See also:** [0020](0020-tag-writing.md) (tag writing), [0050](0050-remove-from-library.md)
   (the other confirmed change to music files), [0108](0108-faster-tag-writes.md) (batches),
   [0131](0131-discogs-matching.md) (the tiers), [0132](0132-discogs-field-mapping.md) (the
@@ -21,7 +22,7 @@ nothing is written before the user confirms, and that a second session doesn't r
   files, and View Changes shows per file and tag what it holds now against what the mapping
   writes, with a checkbox each. The user can choose another release, remap a guessed album's
   files to tracks, untick a change, or reject the album.
-- **One confirmation.** Apply to All in Exact (or Likely) reads the tier's albums' files, leaves
+- **One confirmation.** Apply to All in Exact (or Likely, or Matched) reads the tier's albums' files, leaves
   out the rejected ones and the unticked changes, works out every edit, and asks once with the
   counts of tags, files and albums it changes and the albums it left out and why. That answer
   is the confirmation AGENTS.md asks for, for every file it counts. Apply in one album's View

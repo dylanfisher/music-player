@@ -25,7 +25,7 @@ public struct TagChange: Equatable, Sendable, Identifiable {
     /// Nil for a tag the file doesn't have.
     public var current: String?
     /// Nil to remove the tag: a numbered key past the release's values, a tag of a field
-    /// Discogs has no value for, or another spelling of the field's key (ADR 0151).
+    /// Discogs has no value for, or another spelling of the field's key (ADR 0152).
     public var new: String?
 
     public var tag: MappedTag { id.tag }
@@ -114,7 +114,7 @@ public struct AlbumChangeSet: Equatable, Sendable {
 /// track gets every field; one it maps to none, such as a bonus track the release lacks, gets
 /// the release's fields only. A field set to fill empty tags leaves a tag that has a value. One
 /// that replaces them clears its tags when Discogs has no value for it, and removes the other
-/// spellings of its key a file holds (ADR 0151). `fillingSortArtist` gives a
+/// spellings of its key a file holds (ADR 0152). `fillingSortArtist` gives a
 /// file with no sort artist the album artist the changes write, else its own (ADR 0132).
 public func changeSet(
     for files: [AlbumFile], match: AlbumMatch, mapping: DiscogsMapping,
@@ -204,7 +204,7 @@ private func held(_ target: DiscogsTarget, _ format: TagFormat, in tags: TrackTa
 }
 
 /// The keys `tags` holds that another preset, or an early build, spells `field`'s tags with,
-/// in any format, and that none of `mappingKeys` in `format` spells (ADR 0151).
+/// in any format, and that none of `mappingKeys` in `format` spells (ADR 0152).
 private func otherSpellings(
     of field: DiscogsField, in tags: TrackTags, keeping mappingKeys: [DiscogsTarget],
     _ format: TagFormat

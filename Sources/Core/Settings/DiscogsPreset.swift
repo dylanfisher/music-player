@@ -64,7 +64,7 @@ public enum DiscogsPreset {
 
 extension DiscogsPreset {
     /// Each field's custom keys in every preset, and in the spellings early builds wrote: the
-    /// other spellings of its tags that a field replacing them removes from a file (ADR 0151).
+    /// other spellings of its tags that a field replacing them removes from a file (ADR 0152).
     public static let spellings: [DiscogsField: [DiscogsTarget]] = {
         var spellings = [DiscogsField.albumArtistURL: [numbered(DiscogsKey.albumArtistURLUnderscored)]]
         for preset in all {

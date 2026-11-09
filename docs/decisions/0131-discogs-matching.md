@@ -72,7 +72,8 @@ In the order found, each release once:
 - **Incomplete:** another count, a weaker tracklist, or tracks with different release ids or
   only some with one.
 - **No candidate**, and **Matched**: every track has one release id; that release is scored
-  again for the refresh, and the others are listed.
+  again for the refresh, and the others are listed. Apply to All writes Matched albums as it
+  does Exact and Likely ones (ADR 0152).
 
 The tie-break among the releases that fit the tracklist (same count, every title in order).
 Each step gives each release a weight and keeps those of the highest weight, when any is above

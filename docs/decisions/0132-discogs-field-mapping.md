@@ -3,6 +3,9 @@
 - **Date:** 2026-11-07
 - **Status:** accepted; amended 2026-11-07 (51f): the shipped presets, styles to `MOOD` only,
   and the tagger window's three choices
+- **Amended by:** [0152](0152-one-to-one-matches-discogs.md): a field that replaces its tags
+  clears them when Discogs has no value for it and removes the other spellings of its key, and
+  the album artist URL key is YATE's `DISCOGS_ALBUMARTIST_URL`.
 - **See also:** [0003](0003-settings-schema.md) (the settings schema), [0128](0128-discogs-survey.md)
   (the owner's layout and YATE's keys), [0129](0129-custom-tag-fields.md) (custom keys, `WXXX`
   and `TIPL`), [0131](0131-discogs-matching.md) (the match a mapping is applied to)
@@ -48,7 +51,9 @@ Each field has a rule: a mode, targets and a format.
 - **Mode:** replace, fill empty only, or off. A field Discogs has no value for leaves its tags
   as they are in either mode: the mapping never clears a tag because a release lacks the data.
   The one removal is a numbered key past the release's values (`DISCOGS_LABEL_URL-3` when the
-  release has two labels), left by another release.
+  release has two labels), left by another release. (Superseded by
+  [0152](0152-one-to-one-matches-discogs.md): in replace, a field Discogs has no value for
+  clears its tags, and the other spellings of its key are removed.)
 - **Targets:** a field the tag editor knows (`TagEditField`), the same in every format, or a
   custom key spelled per tag format (Vorbis, MP4, ID3), and any number of them. A numbered key
   gives each value of a list its own key: the first to the key, the rest to a second spelling
@@ -169,7 +174,8 @@ Nothing in it reads or writes a file: the window reads the album's files and han
   file's spelling to the edit's (ADR 0129), so the owner's files would change spelling.
 - **Replace clearing a tag Discogs has no value for.** Rejected: a release without a barcode or
   a date would clear the user's; the numbered keys are the exception, since they're the
-  mapping's own.
+  mapping's own. Superseded by [0152](0152-one-to-one-matches-discogs.md): the owner decided
+  replace means the tags match Discogs.
 - **Deciding the disc from vinyl sides.** Rejected: a side isn't a disc, and a two-LP set's
   positions (A to D) don't say which sides share one.
 
