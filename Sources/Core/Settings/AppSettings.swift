@@ -41,6 +41,9 @@ public struct AppSettings: SettingsSchema {
         "library.copyAddedFiles", title: "Copy Added Files into the Library Folder",
         default: false,
         "Files dropped on the window are copied in, by artist and album.")
+    public let keepFilesOrganized = Setting(
+        "library.keepFilesOrganized", title: "Keep Files Organized", default: false,
+        "Tag edits rename files in the library folder by artist and album.")
     public let libraryFolder = Setting<String?>(
         "library.folder", title: "Library Folder", default: nil,
         "Where added files are copied; it's watched once they are.")

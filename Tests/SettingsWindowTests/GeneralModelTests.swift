@@ -304,7 +304,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         ])
     #expect(
         sections.first { $0.section == .libraryFolder }?.rows.map(\.key) == [
-            schema.copyAddedFiles.key, schema.libraryFolder.key,
+            schema.copyAddedFiles.key, schema.keepFilesOrganized.key, schema.libraryFolder.key,
         ])
     #expect(
         sections.first { $0.section == .folderChanges }?.rows.map(\.key) == [
@@ -684,6 +684,19 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(button("Clear", in: pane.view)?.isEnabled == true)
     try model.clear(schema.libraryFolder.key)
     #expect(stored[schema.libraryFolder.key] is NSNull)
+}
+
+@MainActor @Test func keepFilesOrganizedAloneTurnsTheLibraryFolderOn() throws {
+    let schema = AppSettings()
+    var stored: [String: Any] = [:]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in stored[key] = json }, isBlocked: { false })
+    #expect(!model.isEnabled(schema.libraryFolder.key))
+    #expect(model.isEnabled(schema.keepFilesOrganized.key))
+    try model.setOn(schema.keepFilesOrganized.key, true)
+    #expect(model.isEnabled(schema.libraryFolder.key))
+    #expect(model.isEnabled(schema.copyAddedFiles.key))
 }
 
 @Test func everySettingSaysWhatItDoesInOneShortSentence() {

@@ -120,7 +120,11 @@ public final class GeneralModel {
             case .receiver: ["receiver."]
             case .downloads: ["recommender.", "import."]
             case .folderChanges: [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key]
-            case .libraryFolder: [schema.copyAddedFiles.key, schema.libraryFolder.key]
+            case .libraryFolder:
+                [
+                    schema.copyAddedFiles.key, schema.keepFilesOrganized.key,
+                    schema.libraryFolder.key,
+                ]
             case .networkFolders:
                 [schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key]
             // `appearance` is every appearance key's prefix, so a new one shows here until it's
@@ -145,13 +149,14 @@ public final class GeneralModel {
             }
         }
 
-        /// The checkbox that turns the section's other settings on; they're disabled while it's
-        /// off, so the box reads as what depends on what.
-        var switchKey: String? {
-            switch self {
-            case .receiver: AppSettings().receiverEnabled.key
-            case .libraryFolder: AppSettings().copyAddedFiles.key
-            default: nil
+        /// The checkboxes that turn the section's other settings on; they're disabled while
+        /// every one is off, so the box reads as what depends on what.
+        var switchKeys: [String] {
+            let schema = AppSettings()
+            return switch self {
+            case .receiver: [schema.receiverEnabled.key]
+            case .libraryFolder: [schema.copyAddedFiles.key, schema.keepFilesOrganized.key]
+            default: []
             }
         }
 
@@ -230,7 +235,7 @@ public final class GeneralModel {
                 .folder(
                     emptyText: noValueText,
                     message: "Choose the folder that files added to the library are copied into."
-                        + " Files already in it aren't moved or renamed.")
+                        + " Only Keep Files Organized renames the files already in it.")
             case _ where setting.key == schema.snapshotFolder.key:
                 .folder(
                     emptyText: "Backups, beside the library",
@@ -276,10 +281,11 @@ public final class GeneralModel {
         return reasons.prefix(1).uppercased() + reasons.dropFirst()
     }
 
-    /// Whether a row can be changed now: not while its section's switch is off.
+    /// Whether a row can be changed now: not while its section's switches are all off.
     func isEnabled(_ key: String) -> Bool {
-        guard let switchKey = Section(key: key).switchKey, switchKey != key else { return true }
-        return isOn(switchKey)
+        let switches = Section(key: key).switchKeys
+        guard !switches.isEmpty, !switches.contains(key) else { return true }
+        return switches.contains(where: isOn)
     }
 
     public func isOn(_ key: String) -> Bool { value(key) as? Bool == true }
