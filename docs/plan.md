@@ -50,7 +50,7 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 1. Phases 51, 52 and 53, set by the owner on 2026-11-07, are done.
 2. Phase 54 runs on its own branch (set on 2026-11-08), and waits there for the owner's review.
 3. Phases 55 to 61, the owner's feedback of 2026-11-09, run next: 55 and 58 (done) first, then 56,
-   57 and 59, then 60 and 61. Each merges to `main` when its gate passes.
+   57 and 59, then 60 and 61; 55 to 58 and 61 are done. Each merges to `main` when its gate passes.
 4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
@@ -148,6 +148,8 @@ that phase's Result line, and delete its line here.
 - **56** ([phase](plan-archive.md#56-browsing-and-the-keyboard)): the owner steps under its Result line.
 - **57** ([phase](plan-archive.md#57-get-info)): the owner steps under its Result line; delete
   `"tagEditor.place"` from `state.json` first.
+- **61** ([phase](plan-archive.md#61-tagging-preferences-in-settings)): the owner steps under its
+  Result line.
 
 ### Answers
 
@@ -675,46 +677,6 @@ in the AGENTS.md boundary".
       it in Problems.
 - [ ] **Organize Selected Files:** the same for selected tracks already in the library folder.
 - [ ] **ADR and AGENTS.md boundary** for the new move.
-
-### 61. Tagging preferences in Settings
-
-- [ ] **Editor:** the tagging preferences now set only in `config.json` (suffixes to drop,
-      formats, the mappings) get an editor in Settings. Secrets stay out of it (AGENTS.md).
-
-Implementation plan, phase 61 (ADR 0165):
-
-What exists, found by search (map.md recipes): the tagger reads `discogs.mapping`,
-`discogs.savedMappings`, `discogs.keepExistingValues`, `discogs.skipVideo`,
-`discogs.fillSortArtist`, `discogs.artwork`, `discogs.dumpsFolder`, `discogs.catalogPath` and
-`discogs.token` (`AppSettings`). All but the mapping's parts are shown somewhere: the tagger's
-window and its Field Mapping sheet (`MappingSheet`, `MappingDraft`) show the four choices, each
-field's mode, tags, join and template, and save and remove named mappings; the Discogs window
-picks the dumps folder. What only `config.json` sets is each rule's `format` (`names`,
-`suffixes`, `repeats`, `date`, `credits` per tag format) and a tag spelled per format or
-numbered. The tie-break's preferred formats, edition and later-pressing words
-(`Core/Discogs/TieBreak.swift`) are constants, not settings. `ConfigStore.set(key:json:)`
-decodes and checks a value as the file's is, then patches only that key's text, written at mode
-0600; an edit in the file reaches `SettingsWindowController.reload` through `changed`.
-
-- 61.1 Core (`Settings`, `Discogs`): the modes' titles move from `TaggerTitles` to
-  `DiscogsFieldRule.Mode`; `DiscogsFieldFormat` names what a part left out writes, which
-  `MappedValue` and the date's render read; the format's choices are `CaseIterable`;
-  `DiscogsTarget(names:numbered:)` reads a target's spellings as the file reads its string, and
-  `MappingDraft` and the decoder use it.
-- 61.2 `TaggingModel` (`Features/SettingsWindow`, no AppKit): the mapping in use as a draft, each
-  field a key with its rule as the value; edits to the mode, the tags (add, remove, edit each
-  format's spelling, numbered), join, template and each format part; the problem from
-  `discogs.mapping`'s own `value(fromText:)`; Save through the model's `set`, Revert, and a
-  reload that takes the file's value unless the draft is edited.
-- 61.3 `TaggingPane` and `Pane.tagging`: a table of each field, by its title (`Discogs`'s
-  `DiscogsField.title`) with its key as the tooltip, and its rule, the selected rule's form
-  under it, the problem line, Revert and Save; `show(setting:)` opens it for the mapping;
-  `--snapshot-of tagging`.
-- 61.4 Tests: the model's edits and problems; the pane's table, form and Save; over a real
-  `ConfigStore`, both secrets byte for byte after a save at mode 0600, and an edit in the file
-  shown.
-
-Order: 61.1, 61.2, 61.3, 61.4 with each, then the ADR.
 
 ### 10. Web remote
 

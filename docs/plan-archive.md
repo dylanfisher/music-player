@@ -1,86 +1,65 @@
 
 
-### 57. Get Info
+### 61. Tagging preferences in Settings
 
-- [x] **No flashing:** the window opens at its final layout; its tabs don't resize after it
-      shows.
-- [x] **Resizable,** and it remembers its size and position (phase 55).
-- [x] **Discogs tab always shown,** so a release id can be set where none is; the earlier
-      choice to hide it without one is reversed.
-- [x] **Play count** field, editable, for the count phase 56 lets the user set.
+- [x] **Editor:** the tagging preferences now set only in `config.json` (suffixes to drop,
+      formats, the mappings) get an editor in Settings. Secrets stay out of it (AGENTS.md).
 
-Implementation plan, phase 57 (ADRs 0160, 0162):
+Implementation plan, phase 61 (ADR 0165):
 
-What exists, found by search (map.md recipes):
+What exists, found by search (map.md recipes): the tagger reads `discogs.mapping`,
+`discogs.savedMappings`, `discogs.keepExistingValues`, `discogs.skipVideo`,
+`discogs.fillSortArtist`, `discogs.artwork`, `discogs.dumpsFolder`, `discogs.catalogPath` and
+`discogs.token` (`AppSettings`). All but the mapping's parts are shown somewhere: the tagger's
+window and its Field Mapping sheet (`MappingSheet`, `MappingDraft`) show the four choices, each
+field's mode, tags, join and template, and save and remove named mappings; the Discogs window
+picks the dumps folder. What only `config.json` sets is each rule's `format` (`names`,
+`suffixes`, `repeats`, `date`, `credits` per tag format) and a tag spelled per format or
+numbered. The tie-break's preferred formats, edition and later-pressing words
+(`Core/Discogs/TieBreak.swift`) are constants, not settings. `ConfigStore.set(key:json:)`
+decodes and checks a value as the file's is, then patches only that key's text, written at mode
+0600; an edit in the file reaches `SettingsWindowController.reload` through `changed`.
 
-- `TagEditorWindow` makes its layout in `init` at a fixed width (660) and tab height (440),
-  then `load` fills it in. With no release id, `showDiscogs` takes the Discogs tab out
-  (`removeDiscogsTab`, from 53.11, a plan choice with no ADR). Eleven tabs don't fit in
-  660 points, so the tab bar squeezes them, and taking one out after the window shows lays
-  the rest out again: the owner's "tabs resize themselves". The window isn't resizable and
-  keeps only its top left corner, in `tagEditor.place` (`InfoWindowPlace`), its own
-  cascade past open windows, `start(place:parent:screens:)` and `moved`.
-- `window.keepsFrame(as:)` (ADR 0158); Spectrum keeps the first window's frame and cascades
-  the rest from the last one open.
-- The Discogs tab reads the first release id the files hold, through `release`, and shows the
-  catalog's text. The release id is the custom key `DiscogsKey.releaseID`, which Extras
-  edits through `TagEditorModel.setExtra`.
-- Play counts are app state: `plays.play_count`, which `recordPlay`, imports (`totals`) and
-  sync add to; nothing writes a play count to a file. Sync (ADR 0038) unions plays and keeps
-  each player's highest import total; ratings and the like are last-writer-wins through
-  `sync_items` (`SyncField`). The stats parts are rebuilt by their SQL text, so a new table
-  goes in a part of its own.
+- 61.1 Core (`Settings`, `Discogs`): the modes' titles move from `TaggerTitles` to
+  `DiscogsFieldRule.Mode`; `DiscogsFieldFormat` names what a part left out writes, which
+  `MappedValue` and the date's render read; the format's choices are `CaseIterable`;
+  `DiscogsTarget(names:numbered:)` reads a target's spellings as the file reads its string, and
+  `MappingDraft` and the decoder use it.
+- 61.2 `TaggingModel` (`Features/SettingsWindow`, no AppKit): the mapping in use as a draft, each
+  field a key with its rule as the value; edits to the mode, the tags (add, remove, edit each
+  format's spelling, numbered), join, template and each format part; the problem from
+  `discogs.mapping`'s own `value(fromText:)`; Save through the model's `set`, Revert, and a
+  reload that takes the file's value unless the draft is edited.
+- 61.3 `TaggingPane` and `Pane.tagging`: a table of each field, by its title (`Discogs`'s
+  `DiscogsField.title`) with its key as the tooltip, and its rule, the selected rule's form
+  under it, the problem line, Revert and Save; `show(setting:)` opens it for the mapping;
+  `--snapshot-of tagging`.
+- 61.4 Tests: the model's edits and problems; the pane's table, form and Save; over a real
+  `ConfigStore`, both secrets byte for byte after a save at mode 0600, and an edit in the file
+  shown.
 
-Parts, in order, each its own commit:
+Order: 61.1, 61.2, 61.3, 61.4 with each, then the ADR.
 
-1. **Discogs tab always shown** (ADR 0160). `removeDiscogsTab` goes; with no release id the
-   tab says so. A Release ID field at its top edits `DiscogsKey.releaseID` through the
-   model's Extras edit, so it saves through `TagEdit.custom` with the other fields, shows
-   "Mixed" for files that differ, and reads the typed release from the catalog. `edit()`
-   refuses an id that isn't a whole number above 0. Tests: the tab with no id, typing an id
-   reads it and saves it, a bad id is refused.
-2. **No flash** (ADR 0160). The cause is the tab taken out after the window shows, fixed by
-   part 1; also the tab view's minimum size, so the tab bar never squeezes, and a layout pass
-   before the window first shows. Test: the tab bar and window frame are the same before and
-   after `load`, for files with and without a release id.
-3. **Resizable, keeps its frame** (ADR 0160). `.resizable`, a minimum size from the content
-   at its fitting size; the tabs take the extra height and the fields the extra width. The
-   first window open keeps its frame as "Get Info Window"; one opened while another is open
-   cascades from the last, at its size. `tagEditor.place`, `InfoWindowPlace`, `moved`,
-   `start` and the cascade-past-taken-corners code go. Tests: the window resizes, its frame
-   is kept under the name, and a second window cascades.
-4. **Play count, stored and synced** (ADR 0162). `LibraryIndex.setPlayCount(_:paths:)`
-   stores each track's hand-set count as an offset over its counted plays (a part of its own,
-   `playCounts`), changing `plays.play_count` by the difference, and logs a `playCount`
-   event with the offset, last writer wins through `sync_items`. Merging applies the
-   offset over the plays that machine counts, so plays made elsewhere add on top and two
-   machines' sets don't add up. Moves carry the offset; rebuilding the imports or the part
-   takes it out first. Tests: set, set again, sync to a second index, plays after the set
-   add on, a lower set, a move, the line's round trip.
-5. **Play count field** in Get Info's File tab ("Plays"): "Mixed" where the tracks differ,
-   typing sets every track that has a row in the index, Save stores it through the app (not
-   the tag writer), also for read-only files. Tests: the model's shared value and edit, and
-   `TagEditing` handing a save's count on, with no write for a count alone.
+Result, phase 61: shipped (ADR 0165). Settings has a Tagging pane, after Watched Folders, for
+`discogs.mapping`, the mapping in use: each field by its title with its config.json key as the
+tooltip, and the selected rule's mode, tags (one column per format's spelling, numbered or
+not), join, template, and each format part (names, number suffixes, repeats, date, credits per
+format) that before only config.json could set. A draft is checked by the setting's own reader
+and saved through `ConfigStore.set(key:json:)`, which patches only the mapping at mode 0600; a
+test keeps both fake tokens byte for byte. A blocked file keeps the draft and says so. The
+tie-break's formats and edition words stay constants (ADR 0131), not settings. The Field
+Mapping sheet and the pane share the rule edits, `PerTagFormat.isUniform` and
+`DiscogsTarget.text`. Gate: one correctness and one simplify review, no correctness defects,
+5 findings fixed in 7 commits; `theGlassHeadersAreFrosted` fails as in every agent session, and
+`importColumnLayoutShowsAndSavesSwinsiansColumns` took 11 s under load and passed alone in
+0.4 s. Cost: implementer about 330k tokens, 162 tool calls, 43 min; reviewers 151k tokens, 27
+calls, 3 min.
 
-Result, phase 57: shipped all four items (ADRs 0160 and 0162; 0038 and 0158 amended). Get Info
-opens at its final layout: the tab bar now gets the 641 points its eleven tabs need and the
-Discogs tab is never removed, and the least height of 470 fits Info, the tallest tab. It is
-resizable and keeps its frame as "Get Info Window"; a second one cascades, through the same
-`keepsFrame(as:cascadedFrom:)` Spectrum now uses. The Discogs tab always shows, with a Release
-ID field. Plays is set by hand on the File tab, stored as an offset over the counted plays and
-synced as a latest-wins `playCount` event, so later plays on any Mac add on top. Gate: one
-correctness and one simplify review, 8 findings fixed in 10 commits, each correctness fix with
-a test seen failing first; `theGlassHeadersAreFrosted` fails as in every agent session, and
-`watcherEventsArriveInTheOrderSent` missed its 10 s deadline once under load and passed alone.
-No bench row covers Get Info. Cost: implementer about 330k tokens plus the fixes, 163 tool calls,
-38 min before the fixes; reviewers 182k tokens, 33 calls, 4 min.
-
-Owner steps: before the first launch, delete the `"tagEditor.place"` line from `state.json`, or
-the state file is discarded once; Get Info on files with and without a release id, nothing
-jumping and every tab label whole; resize, close, reopen and relaunch, and a second window
-cascading; a release id typed on an untagged album, saved, shown in Extras; one deleted in
-Extras then typed on the Discogs tab, saved, the new one written; Plays on one track and a mixed
-selection, the table updating, and with sync on the count and a later play reaching the other
-Mac.
+Owner steps: Settings > Tagging, titles with the key as tooltip; on "artist" set Number Suffixes
+to drop "(2)" and Save, then check config.json changed only in `discogs.mapping` and `stat -f
+%Lp config.json` prints 600; clear Genres' join, see why Save is off, Revert; edit the mapping
+in an editor with the pane open, then again over an edited draft and see the note; break
+config.json and see the pane keep its draft; save with the tagger open and see it pick up the
+change; the pane on mbp2015.
 
 
