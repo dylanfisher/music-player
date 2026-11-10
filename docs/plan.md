@@ -61,7 +61,9 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
    are done.
 7. Phase 73, the performance audit, set by the owner on 2026-11-10, runs next on its own
    branch and merges to `main` when its gate passes.
-8. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+8. Phases 74 to 76, the owner's feedback of 2026-11-10, run after 73: 74 and 75 in parallel,
+   each on its own branch and worktree, then 76.
+9. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -841,6 +843,66 @@ tokens and 1 to 3 hours, the gate and benches about 500k tokens and an hour.
 the owner's Mac, compared with the last recorded numbers; the old Mac's rows if the timeboxed run didn't finish;
 and one use of the app on the real library: launch, search, scroll with art, play, open the
 tagger.
+
+### 74. Tagger: scrolling, keeping your place, and the write's last steps
+
+Asked by the owner on 2026-11-10.
+
+- [ ] **The two columns scroll as one:** in the tagger's review, scrolling Your Files moves
+      Discogs Release with it in the same frame, with no lag either way, even though they are
+      separate tables (one scroll view holding both, for example). A test that a scroll of
+      either leaves both at the same offset.
+- [ ] **The album list keeps its place:** the album selected in the left column stays selected
+      after Other Releases… is opened and closed, and after one of its releases is chosen, even
+      when the choice moves the album to another tab. The list scrolls to keep it in view. No
+      action leaves the list with nothing selected while it has albums. A test for each path.
+- [ ] **The write's last steps show in its line:** after the last tag is written, the tagger's
+      write line (`TaggerModel.WriteProgress`, fed from
+      `TagEditing.write(_:over:progress:completion:)` and enqueue) no longer stays on "4,254 of
+      4,254 written" while Keep Files Organized runs. It shows "Organizing files: N of M moved",
+      then "Updating Undo Tag Edit for the moved files…", then "Updating the library…", from the
+      same `OrganizeProgress` the main window's status bar already gets. A test for each line.
+- [ ] **Several albums selected** was asked again; it landed in 0.22.0
+      ([ADR 0183](decisions/0183-several-albums-selected-in-the-tagger.md)): Shift or Command
+      extends the selection, Reject acts on all of it, and Apply reads "Apply to N Selected…".
+      Owner check: confirm it in the current build; any gap found becomes an item here.
+
+### 75. Closing the reset-layout banner
+
+Asked by the owner on 2026-11-10. When `state.json` has a key that doesn't match this build,
+the settings banner says "the saved window layout was reset: …", but it has no close button,
+and the stale key stays in the file until something else saves state.
+
+- [ ] **A close button for a state-discard line too** (`Sources/Features/SettingsWindow/
+      ConfigBanner.swift`, `render()`); today only config problems get one.
+- [ ] **Closing it rewrites `state.json` right away** (`StateStore`) from the values it loaded,
+      which drops the stale keys, then clears `discardReason`, so the banner hides and the
+      message doesn't come back on the next launch. If that write fails, the usual "couldn't
+      save the window layout" shows; the error is never hidden.
+- [ ] **The line names only the setting that was reset,** "the Discogs tagger's sheet sizes
+      were reset", not the whole window layout.
+- [ ] Tests: closing the banner hides it and leaves a `state.json` that reads back with no
+      discard reason; a failed write still shows the error.
+
+### 76. A layout editor for the status bar's totals
+
+Asked by the owner on 2026-11-10: the status bar's totals, "1,204 tracks, 5.1 GiB, 3 days 2
+hours (3 tracks selected, …)", get a template like the title line's (`TitleTemplate`,
+`{title} – {artist} – {album}`), edited the same way in Settings.
+
+- [ ] **Tokens** for the list's totals and the selection's: track count, size and duration of
+      each, and time remaining (the planner finds what that means today; the queue's or the
+      playing track's, and asks the owner if neither exists).
+- [ ] **A template per state the click cycles through** (`StatusTotals`: List and Selection,
+      List Only, Selection Only), plus the line shown while nothing is selected, each with a
+      default that reads as the bar does now, so nothing changes until the owner edits one.
+- [ ] **Anything else simple and useful** the planner finds while building it, kept small: for
+      example albums or artists in the list, the playlist's missing count, the timeline's plays,
+      which the summary already appends today. Each one listed in the phase's plan before it's
+      built.
+- [ ] Bad templates are reported as the title line's are (ADR 0085's banner and builder), and
+      Reset to Default restores the bar as it is now. Tests for each token, each state and a bad
+      template.
 
 ### 10. Web remote
 
