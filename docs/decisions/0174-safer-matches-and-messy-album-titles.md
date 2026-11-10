@@ -33,7 +33,8 @@ found no candidate.
   spelling only after the ones before it found nothing.
 - **The title's catalog number.** When the tags have no catalog number, the one the title names in
   a bracket at its start or end (letters and digits, not a year or a disc) is used: with the
-  label for the lookup, and in the tie-break. Without a label it isn't looked up, because the
+  label for the lookup, and in the tie-break, each spelling as written and without a trailing
+  format word ("APNEA027-WEB" and "APNEA027"). Without a label it isn't looked up, because the
   catalog indexes numbers by label first, so a number alone would read the whole table.
 - **The artist alone.** When no search finds any candidate, the matcher scores the artist's
   releases: the main release of each of the first 50 masters credited to the artist, and the
@@ -41,7 +42,8 @@ found no candidate.
   tracklist score of at least 0.3). It keeps a release only when it is Likely. A release found
   this way says "found by artist only", costs 15 points of confidence, and is at most Likely,
   never Exact or Safe. On the tuning set these matches were about 75% right, too weak to apply
-  without review. Compilations and Discogs's "Unknown Artist" credit are not searched. It doesn't
+  without review. Compilations and Discogs's "Unknown Artist" credit are not searched. In Both, an
+  album matched this way is still sent to the API, which may find it by title. It doesn't
   run for an album the title search found something for: on Incomplete albums it found 1 right,
   5 other pressings and 4 wrong albums, and it took a third of the time.
 - **Distinctive titles** (`TitleDistinctness`): a title counts as distinctive when, after its

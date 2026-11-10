@@ -156,6 +156,9 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(result.reasons == [.foundByArtistOnly])
     #expect(result.confidence == 85)
     #expect(result.safety == nil)
+    #expect(needsAPI(result, choosing: nil), "Both still asks the API for its title")
+    let byTitle = try match(album(stockholmTitles), releases: release(10, tracks: stockholm))
+    #expect(!needsAPI(byTitle, choosing: nil))
 
     let unlike = try match(
         album(["One", "Two", "Three"], title: "Untitled Rip 2004"),
@@ -184,6 +187,10 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
         releases: releases)
     #expect(tied.releaseID == 11)
     #expect(tied.tier == .exact)
+    let web = try match(
+        album(stockholmTitles, title: "Stockholm (SK 032-WEB)"), masters: master(100, main: 10),
+        releases: releases)
+    #expect(web.releaseID == 11, "the number without its format word")
 }
 
 /// Titles Fit: every title in order and the count, some lengths off but at least half the

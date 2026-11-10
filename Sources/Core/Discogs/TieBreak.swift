@@ -22,11 +22,10 @@ func tieBreak(
     _ scores: [ReleaseScore], releases: [Int: CatalogRelease], album: DiscogsAlbum
 ) -> (ReleaseScore, tied: Bool) {
     let barcode = album.barcode.map(CatalogKey.barcode).flatMap { $0.isEmpty ? nil : $0 }
-    // With no number in the tags, the one the title names in brackets (ADR 0174).
-    let taggedNumber = catalogNumbers(album).first
-    let number = taggedNumber.flatMap(CatalogKey.catalogNumber)
+    // With no number in the tags, each spelling the title names in brackets (ADR 0174).
+    let spelledNumbers = catalogNumbers(album).map { $0.trimmingCharacters(in: .whitespaces) }
+    let numbers = Set(spelledNumbers.compactMap(CatalogKey.catalogNumber))
     let spelledBarcode = barcode == nil ? nil : album.barcode?.trimmingCharacters(in: .whitespaces)
-    let spelledNumber = taggedNumber?.trimmingCharacters(in: .whitespaces)
     // Each step gives a release a weight; the releases of the highest weight above 0 stay.
     // A catalog number counts double on the first label, which `CATALOGNUMBER` is (ADR 0128).
     func numberWeight(_ release: CatalogRelease, _ same: (String) -> Bool) -> Int {
@@ -40,13 +39,16 @@ func tieBreak(
     let steps: [(CatalogRelease) -> Int] = [
         { release in
             (spelledBarcode.map { release.barcodes.contains($0) ? 1 : 0 } ?? 0)
-                + (spelledNumber.map { number in numberWeight(release) { $0 == number } } ?? 0)
+                + (spelledNumbers.isEmpty
+                    ? 0 : numberWeight(release) { spelledNumbers.contains($0) })
         },
         { release in
             (barcode.map { release.barcodes.map(CatalogKey.barcode).contains($0) ? 1 : 0 } ?? 0)
-                + (number.map { number in
-                    numberWeight(release) { CatalogKey.catalogNumber($0) == number }
-                } ?? 0)
+                + (numbers.isEmpty
+                    ? 0
+                    : numberWeight(release) {
+                        CatalogKey.catalogNumber($0).map(numbers.contains) ?? false
+                    })
         },
         { release in
             album.media.map { release.formats.map(mediaText).contains($0) ? 1 : 0 } ?? 0

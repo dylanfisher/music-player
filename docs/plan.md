@@ -53,7 +53,8 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
    57 and 59, then 60 and 61. All seven are done. Each merges to `main` when its gate passes.
 4. Phases 62 to 66, the owner's feedback of 2026-11-09 (second list): 62, 63, 64 and 65 in
    parallel, each on its own branch and worktree, then 66. All five are done.
-5. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+5. Phase 67, the owner's matcher feedback of 2026-11-09, is done.
+6. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner

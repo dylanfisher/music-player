@@ -441,3 +441,48 @@ tokens, 71 tool calls, 23 min.
 in an MP3, a FLAC and an M4A, then check them in another player; the art viewer on an album with
 several pictures, on Retina and the 2015 MacBook Pro; Get Artwork on a few tagged albums, Fill
 Missing then Replace.
+
+### 67. Safer matches and messy album titles
+
+Asked by the owner on 2026-11-09: more albums safe to apply from a whole-library run, a tab for
+"every title the same, some lengths off" that isn't fooled by "Untitled 1, 2, 3", and albums
+found whose title carries label information, such as `Ghost [WIGCD 32]`.
+
+- [x] **The tuning per tab:** `discogsTuning` reports each Apply to All tab as the tagged release
+      or a twin, another release of its master, or wrong, runs on the untagged albums too, and
+      writes `albums.tsv`, a line per album and run, to compare two tunings by.
+- [x] **Title spellings:** trailing and leading catalog-number brackets, format and disc words,
+      and the artist's name before a dash, each step a spelling looked up beside the title.
+- [x] **The title's catalog number:** for the label lookup and the tie-break, when the tags have
+      none.
+- [x] **The artist alone:** when nothing is found, the artist's releases, kept only when Likely,
+      never Exact, with "found by artist only".
+- [x] **Safe and Titles Fit** decided in the matcher (`AlbumMatch.safety`): distinctive titles,
+      a tie only with the same album, Titles Fit's lengths. Tooltips on every tab.
+- [x] **The confidence:** points off for titles that say little unless lengths agree, and for a
+      tie with another album.
+
+Plan:
+
+- 67.1 `MatchSafety` in `Core/Discogs`, read by `TaggerTab`; the tuning's per-tab rows,
+  untagged run and `albums.tsv`; a baseline.
+- 67.2 `CatalogKey.titleVariants(_:artist:)` and `catalogNumbers(inTitle:)`; `catalogNumbers`
+  in `candidateIDs`, `ApiCandidates` and `tieBreak`; tuned.
+- 67.3 The artist-only search (`Catalog.mainReleases(byArtist:limit:)`,
+  `artistOnlyReleases`), its reason, confidence and tier cap; tuned for recall against time.
+- 67.4 `TitleDistinctness`, the tie with another album, `MatchSafety.of`, the confidence;
+  the Titles Fit tab, tooltips, Apply to All; tuned.
+- 67.5 ADR 0174, a see-also line in 0170.
+
+Result, phase 67: shipped all six items (ADR 0174). On the 2026-11-07 survey, with tags: Exact
+or Likely right 1564 → 1573 of 1632, Exact with a wrong release 29 → 29, Safe 48 → 43 albums
+with no wrong album either way, Titles Fit 98 albums, none wrong. Titles only: right 1004 →
+1038, Safe 376 → 364 (two counted wrong, each the same tracklist under another release), Titles
+Fit 83, none wrong. Untagged: no candidate 2789 → 1761 of 4905, Safe 185 → 220, Titles Fit 64.
+The artist-only search found about 450 of those, about 75% right where the answer is known, so
+it stops at Likely. It first took 38 ms an album, nearly all random reads in the 37 GB catalog;
+searching only albums with no candidate and reading at most 50 masters brought it to 3.3 ms, 450
+found against 465 at 100. A tie only within one master took 26 good albums out of Safe; a tie
+across both masters and titles took 5. `DownloadsCoordinatorTests`' lease test failed once
+under the parallel run and passed three times alone, outside this phase's code. Implemented in
+the orchestrating session (Opus), without a separate implementer.

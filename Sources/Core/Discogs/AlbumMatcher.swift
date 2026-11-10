@@ -128,11 +128,12 @@ public struct APIStoppedMatching: Error, CustomStringConvertible {
 }
 
 /// Whether Both asks the API about an album the catalog pass matched as `match`: one with no
-/// candidate, one whose tracks carry a release id the catalog lacks, and one whose chosen
-/// release it lacks. The dump has no date for each release, so "newer than the dump" is
+/// candidate or only one found by artist alone (ADR 0174), one whose tracks carry a release id
+/// the catalog lacks, and one whose chosen release it lacks. The dump has no date for each release, so "newer than the dump" is
 /// "not in the catalog" (ADR 0139).
 func needsAPI(_ match: AlbumMatch, choosing choice: Int?) -> Bool {
-    match.tier == .noCandidate || (match.tier == .matched && match.release == nil)
+    match.tier == .noCandidate || match.foundBy == .artist
+        || (match.tier == .matched && match.release == nil)
         || (choice != nil && match.releaseID != choice)
 }
 
