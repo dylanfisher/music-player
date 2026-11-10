@@ -1,10 +1,10 @@
 import Discogs
 
-/// A tab of the tagger's window: a tier's albums, or Safe, the Likely albums `MatchSafety`
-/// finds need the least review before Apply to All (ADR 0170). Safe is a view of Likely, which
-/// lists them too.
+/// A tab of the tagger's window: a tier's albums, or Safe and Titles Fit, the Likely albums
+/// `MatchSafety` finds need the least review before Apply to All (ADRs 0170 and 0174). Both are
+/// views of Likely, which lists their albums too.
 enum TaggerTab: CaseIterable, Equatable {
-    case exact, likely, safe, incomplete, noCandidate, matched
+    case exact, likely, safe, titlesFit, incomplete, noCandidate, matched
 
     /// The tab of `tier`'s albums.
     init(_ tier: MatchTier) {
@@ -22,6 +22,7 @@ enum TaggerTab: CaseIterable, Equatable {
     func lists(_ match: AlbumMatch) -> Bool {
         switch self {
         case .safe: match.safety == .safe
+        case .titlesFit: match.safety == .titlesFit
         default: TaggerTab(match.tier) == self
         }
     }

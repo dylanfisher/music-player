@@ -6,7 +6,8 @@
   [0133](0133-one-confirmation-for-a-match-set.md) (Apply to All, a chosen release),
   [0136](0136-asking-before-a-rescan-and-undoing-a-tagger-write.md) (the reasons),
   [0139](0139-the-api-as-a-source-in-matching.md) (the API's cache),
-  [0148](0148-the-shared-matching-rules.md) (the rules the golden file pins)
+  [0148](0148-the-shared-matching-rules.md) (the rules the golden file pins),
+  [0174](0174-safer-matches-and-messy-album-titles.md) (Titles Fit, a safer Safe)
 
 ## Context
 

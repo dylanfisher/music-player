@@ -1,6 +1,8 @@
 /// How sure a match is of its release, from 0 to 100 percent (ADR 0170): the share of title
 /// fit, less points for lengths that differ or aren't known, another count, files out of
-/// order, a tie, a release found by title only, and tracks carrying different release ids.
+/// order, a tie (more for one with other albums), titles that say little with lengths that
+/// don't vouch for them, a release found by title or by artist only, and tracks carrying
+/// different release ids (ADR 0174).
 /// It reads the chosen release's score and changes nothing the matcher decides.
 enum MatchConfidence {
     /// Points off when every file's length differs from its track's; a share of them takes
@@ -12,6 +14,11 @@ enum MatchConfidence {
     /// Points off when every file is paired out of its place.
     static let outOfOrder = 10.0
     static let tied = 5.0
+    /// More points off when the releases tied are titled differently: other albums.
+    static let tiedAcrossTitles = 5.0
+    /// Points off when no title is distinctive (`TitleDistinctness`) and no length agrees; a
+    /// share of either takes that share, so lengths that agree vouch for titles that don't.
+    static let indistinctTitles = 15.0
     static let foundByTitleOnly = 5.0
     /// Points off for a release found among the artist's, the album's title not finding it.
     static let foundByArtistOnly = 15.0
@@ -21,8 +28,8 @@ enum MatchConfidence {
     /// album's titles. A title at least `MatchThreshold.sameTitle` like its track's counts in
     /// full, as the matcher counts it the same; one below counts its similarity.
     static func percent(
-        _ score: ReleaseScore, titles: TitleSimilarity, tied: Bool, foundBy: CandidateKey?,
-        mixedIDs: Bool
+        _ score: ReleaseScore, titles: TitleSimilarity, distinct: Double, tied: Bool,
+        tiedAcrossTitles: Bool, foundBy: CandidateKey?, mixedIDs: Bool
     ) -> Int {
         let longer = max(score.tracks.count, score.mapping.count)
         guard longer > 0 else { return 0 }
@@ -40,10 +47,13 @@ enum MatchConfidence {
             let differing = score.durationsCompared - score.durationsAgreeing
             points -= durationsDiffering * Double(differing) / mappedCount
             points -= durationsUnknown * Double(mapped - score.durationsCompared) / mappedCount
+            let unvouched = 1 - Double(score.durationsAgreeing) / mappedCount
+            points -= indistinctTitles * (1 - distinct) * unvouched
         }
         if !score.sameCount { points -= countDiffers }
         points -= outOfOrder * Double(score.outOfOrder) / Double(longer)
         if tied { points -= Self.tied }
+        if tiedAcrossTitles { points -= Self.tiedAcrossTitles }
         if foundBy == .title { points -= foundByTitleOnly }
         if foundBy == .artist { points -= foundByArtistOnly }
         if mixedIDs { points -= releaseIDsDiffer }

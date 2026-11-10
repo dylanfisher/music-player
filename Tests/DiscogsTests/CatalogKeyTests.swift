@@ -93,6 +93,15 @@ import Testing
     #expect(CatalogKey.catalogNumbers(inTitle: "Altogether Lost (The Remixes)") == [])
 }
 
+@Test func titlesThatSayLittleArentDistinctive() {
+    #expect(TitleDistinctness.share(["Östermalm", "Gamla Stan", "Kungsholmen"]) == 1)
+    #expect(TitleDistinctness.share(["Untitled 1", "Untitled 2", "Track 03", "A4"]) == 0)
+    // The same title but for a number tells no track apart, nor does a Roman numeral.
+    #expect(TitleDistinctness.share(["Ghost 1", "Ghost 2", "Part II", "Sun"]) == 0.25)
+    #expect(TitleDistinctness.share([nil, "", "Ok"]) == 0)
+    #expect(TitleDistinctness.share([]) == 0)
+}
+
 @Test func theMatchKeyFoldsMarksOutsideTheLatinTableAsTheLibraryTaggerAlwaysDid() {
     // The service keeps these marks; the player re-checks at auto-tag (ADR 0148), so the golden
     // cases leave them out and this is the player's side of that difference.

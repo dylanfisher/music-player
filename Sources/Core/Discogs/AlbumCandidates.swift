@@ -93,9 +93,12 @@ func artistOnlyReleases(_ artist: String?, in catalog: Catalog) throws -> [(
 
 /// Whether Discogs credits albums of no known artist to `name`, so its releases share nothing.
 private func isCatchAllArtist(_ name: String) -> Bool {
-    ["unknownartist", "unknownartists", "unknown", "noartist", "none"].contains(
-        CatalogKey.fold(name))
+    catchAllArtists.contains(CatalogKey.fold(name))
 }
+
+/// The folded credits Discogs gives albums of no known artist.
+private let catchAllArtists = Set(
+    "unknownartist unknownartists unknown noartist none".split(separator: " ").map(String.init))
 
 /// The most masters, and master-less releases, an artist-only search reads, and the most
 /// releases it scores. Tuned on the owner's library: 100 masters found 3% more albums than 50

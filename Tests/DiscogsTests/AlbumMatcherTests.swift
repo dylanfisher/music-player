@@ -186,6 +186,74 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(tied.tier == .exact)
 }
 
+/// Titles Fit: every title in order and the count, some lengths off but at least half the
+/// known ones agreeing, at least three files, the titles distinctive (ADR 0174).
+@Test func anAlbumWhoseTitlesFitButSomeLengthsDontIsTitlesFit() throws {
+    let releases = release(10, tracks: stockholm)
+    let oneOff = try match(album(stockholmTitles, seconds: [285, 370, 420]), releases: releases)
+    #expect(oneOff.tier == .likely)
+    #expect(oneOff.safety == .titlesFit)
+    let twoOff = try match(album(stockholmTitles, seconds: [285, 470, 420]), releases: releases)
+    #expect(twoOff.safety == nil, "fewer than half the lengths agree")
+    let single = try match(
+        album(["Östermalm", "Gamla Stan"], seconds: [285, 470]),
+        releases: release(10, tracks: Array(stockholm.prefix(2))))
+    #expect(single.safety == nil, "two files")
+    let untitled = ["Untitled 1", "Untitled 2", "Untitled 3"]
+    let numbered = try match(
+        album(untitled, seconds: [285, 370, 420]),
+        releases: release(
+            10,
+            tracks: [
+                track("1", "Untitled 1", "4:45"), track("2", "Untitled 2", "6:10"),
+                track("3", "Untitled 3", "5:00"),
+            ]))
+    #expect(numbered.tier == .likely)
+    #expect(numbered.safety == nil, "titles that differ only by a number")
+}
+
+/// Safe needs the tie, if any, to be with pressings of the same album, and titles that say
+/// little need every length known (ADR 0174).
+@Test func aSafeAlbumIsTiedOnlyWithItsOwnAlbumAndNeedsLengthsForUntitledTracks() throws {
+    let pressings =
+        release(10, master: 100, tracks: stockholm) + release(11, master: 100, tracks: stockholm)
+    let same = try match(
+        album(stockholmTitles), masters: master(100, main: 10), releases: pressings)
+    #expect(same.reasons == [.tiedAfterTieBreak, .foundByTitleOnly])
+    #expect(same.safety == .safe)
+
+    // A compilation of the same tracks, found by the same catalog number, is another album.
+    let compilation =
+        release(10, master: 100, tracks: stockholm)
+        + release(20, title: "The Best Of", master: 200, tracks: stockholm)
+    let across = try match(
+        album(stockholmTitles, label: "Svek", catalogNumber: "SK 032"),
+        masters: master(100, main: 10) + master(200, main: 20, title: "The Best Of"),
+        releases: compilation)
+    #expect(across.reasons == [.tiedAfterTieBreak])
+    #expect(across.safety == nil)
+    #expect(across.confidence == 90, "5 for the tie and 5 more for another album")
+
+    let untitled = ["Untitled 1", "Untitled 2", "Untitled 3"]
+    func untitledPressings(_ length: String) -> String {
+        let tracks = untitled.enumerated().map { track(String($0.offset + 1), $0.element, length) }
+        return release(10, master: 100, tracks: tracks) + release(11, master: 100, tracks: tracks)
+    }
+    let unknown = try match(
+        album(untitled, seconds: [300, 300, 300]), masters: master(100, main: 10),
+        releases: untitledPressings(""))
+    #expect(unknown.tier == .likely)
+    #expect(unknown.safety == nil, "no length vouches for the titles")
+    #expect(
+        unknown.confidence == 70,
+        "5 off for unknown lengths, 15 for the titles, 10 tied and by title")
+    let known = try match(
+        album(untitled, seconds: [300, 300, 300]), masters: master(100, main: 10),
+        releases: untitledPressings("5:00"))
+    #expect(known.safety == .safe)
+    #expect(known.confidence == 90)
+}
+
 @Test func anAlbumWithOneReleaseIDIsMatchedToThatReleaseThoughAnotherFits() throws {
     let result = try match(
         album(stockholmTitles, releaseIDs: ["11", "11", "11"]),

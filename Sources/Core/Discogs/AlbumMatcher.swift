@@ -263,6 +263,7 @@ final class AlbumMatcher {
         let tier: MatchTier
         let chosen: ReleaseScore?
         var tied = false
+        var acrossTitles = false
         if let choice, let score = scores.first(where: { $0.releaseID == choice }) {
             chosen = score
             tier = Self.chosenTier(score, album: album)
@@ -273,7 +274,7 @@ final class AlbumMatcher {
             (tier, chosen) = (.noCandidate, nil)
         } else {
             let best: ReleaseScore
-            (best, tied) = choose(scores, releases: releases, album: album)
+            (best, tied, acrossTitles) = choose(scores, releases: releases, album: album)
             chosen = best
             if !tagged.isEmpty {
                 tier = .incomplete
@@ -293,7 +294,8 @@ final class AlbumMatcher {
             }
         return Self.made(
             album, tier: tier, chosen: chosen, release: chosen.flatMap { releases[$0.releaseID] },
-            others: others, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
+            others: others, tied: tied, tiedAcrossTitles: acrossTitles,
+            foundBy: chosen.flatMap { foundBy[$0.releaseID] },
             titles: titles,
             origin: chosen.map { fetched[$0.releaseID] != nil } == true ? .api : .catalog)
     }
@@ -356,8 +358,8 @@ final class AlbumMatcher {
     /// with the release's tracks, and why it isn't Exact, and how sure it is.
     private static func made(
         _ album: DiscogsAlbum, tier: MatchTier, chosen: ReleaseScore?, release: CatalogRelease?,
-        others: [MatchCandidate], tied: Bool, foundBy: CandidateKey?, titles: TitleSimilarity,
-        origin: MatchOrigin
+        others: [MatchCandidate], tied: Bool, tiedAcrossTitles: Bool = false,
+        foundBy: CandidateKey?, titles: TitleSimilarity, origin: MatchOrigin
     ) -> AlbumMatch {
         let (tagged, isMatched) = taggedIDs(album)
         let mixedIDs = !tagged.isEmpty && !isMatched
@@ -375,23 +377,32 @@ final class AlbumMatcher {
         }
         let reasons = NotExactReason.reasons(
             tier, shown, tied: tied, foundBy: foundBy, mixedIDs: mixedIDs)
+        let distinct = TitleDistinctness.share(album.tracks.map(\.title))
         return AlbumMatch(
             albumID: album.id, tier: tier, release: release, tracks: chosen?.tracks ?? [],
             mapping: mapping, candidates: sorted.map(\.element), reasons: reasons,
             origin: origin,
             confidence: shown.map {
                 MatchConfidence.percent(
-                    $0, titles: titles, tied: tied, foundBy: foundBy, mixedIDs: mixedIDs)
+                    $0, titles: titles, distinct: distinct, tied: tied,
+                    tiedAcrossTitles: tiedAcrossTitles, foundBy: foundBy, mixedIDs: mixedIDs)
             },
-            safety: MatchSafety.of(tier, reasons: reasons), foundBy: foundBy)
+            safety: MatchSafety.of(
+                tier, reasons: reasons, score: shown, distinct: distinct,
+                tiedAcrossTitles: tiedAcrossTitles),
+            foundBy: foundBy)
     }
 
-    /// The best of `scores`, and whether others were as good after the tie-break. The best are
+    /// The best of `scores`, whether others were as good after the tie-break, and whether, if
+    /// so, the best are other albums: of more than one master (a release with none is its own)
+    /// and more than one title, as a compilation of the same tracks is. Discogs has some albums
+    /// under two masters of one title, and the releases of one master titled differently. The
+    /// best are
     /// every one that fits the tracklist when any does, else those ranked highest; among them
     /// the tie-break picks, and the first found of those it leaves.
     private func choose(
         _ scores: [ReleaseScore], releases: [Int: CatalogRelease], album: DiscogsAlbum
-    ) -> (ReleaseScore, tied: Bool) {
+    ) -> (ReleaseScore, tied: Bool, acrossTitles: Bool) {
         let best: [ReleaseScore]
         if scores.contains(where: \.fitsTracklist) {
             best = scores.filter(\.fitsTracklist)
@@ -401,6 +412,10 @@ final class AlbumMatcher {
                 score.order.1 == top.1 && top.2 - score.rank <= MatchThreshold.tie
             }
         }
-        return tieBreak(best, releases: releases, album: album)
+        let (chosen, tied) = tieBreak(best, releases: releases, album: album)
+        let masters = Set(best.map { releases[$0.releaseID]?.masterID ?? -$0.releaseID })
+        let titles = Set(
+            best.map { CatalogKey.fold(releases[$0.releaseID]?.title ?? "", title: true) })
+        return (chosen, tied, tied && masters.count > 1 && titles.count > 1)
     }
 }

@@ -58,9 +58,36 @@ extension TaggerTab {
         case .exact: MatchTier.exact.title
         case .likely: MatchTier.likely.title
         case .safe: "Safe"
+        case .titlesFit: "Titles Fit"
         case .incomplete: MatchTier.incomplete.title
         case .noCandidate: MatchTier.noCandidate.title
         case .matched: MatchTier.matched.title
+        }
+    }
+}
+
+extension TaggerTab {
+    /// What the tab lists, for its tooltip (ADR 0174).
+    var help: String {
+        switch self {
+        case .exact:
+            "One release fits every file's title in order, the count and every known length."
+        case .likely:
+            "A release of the album's count fits most titles, or fits as Exact would but ties"
+                + " with others or was found by the artist alone. Review before applying."
+        case .safe:
+            "Likely albums whose release fits every title in order, the count and every known"
+                + " length, tied only with pressings of the same album. Titles like \"Untitled 3\""
+                + " need every length known."
+        case .titlesFit:
+            "Likely albums whose every title fits in order with the count, but some lengths"
+                + " differ: at least 3 files, distinctive titles, and at least half the known"
+                + " lengths agreeing. Often another master or a different split."
+        case .incomplete:
+            "The best release has another count or fits only weakly, or the album's tracks"
+                + " carry different release ids."
+        case .noCandidate: "No release was found by id, barcode, catalog number, title or artist."
+        case .matched: "Every track already carries one release id."
         }
     }
 }

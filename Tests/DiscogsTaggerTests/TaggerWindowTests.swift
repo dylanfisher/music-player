@@ -1241,3 +1241,42 @@ private final class HeldSearch {
     controller.refresh()
     #expect(controller.text(controller.albumTable, .confidence, 0) == "", "no release, none")
 }
+
+/// Titles Fit, after Safe, lists the Likely albums the matcher found fit every title but not
+/// every length, applies to all, and each tab says in its tooltip what it lists (ADR 0174).
+@MainActor
+@Test func theTitlesFitTabListsItsAlbumsAndEveryTabSaysWhatItLists() async throws {
+    let albums = [
+        album(1, "Fits", titles: stockholm), album(2, "Off", artist: "Abba", titles: stockholm),
+    ]
+    let tagger = await model(
+        Seen(), albums: albums,
+        matches: { album, _ in
+            let release = release(Int(album.id) * 10, album.title, titles: stockholm)
+            return album.id == 1
+                ? match(
+                    album, release, tier: .likely,
+                    reasons: [.durationsDiffer(1, overSeconds: 8, orFraction: 0.05)],
+                    confidence: 90, safety: .titlesFit)
+                : match(album, release, tier: .likely, reasons: [.titlesDiffer(1)], confidence: 89)
+        })
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.albums(in: .titlesFit).map(\.id) == [1])
+    #expect(tagger.albums(in: .safe).isEmpty)
+    #expect(tagger.albums(in: .likely).map(\.id) == [2, 1], "Likely keeps it")
+
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    let index = TaggerTab.allCases.firstIndex(of: .titlesFit)!
+    #expect(index == TaggerTab.allCases.firstIndex(of: .safe)! + 1)
+    #expect(controller.tabs.label(forSegment: index) == "Titles Fit (1)")
+    for (segment, tab) in TaggerTab.allCases.enumerated() {
+        #expect(controller.tabs.toolTip(forSegment: segment) == tab.help)
+        #expect(!tab.help.isEmpty)
+    }
+    controller.tabs.selectedSegment = index
+    controller.tabs.sendAction(controller.tabs.action, to: controller.tabs.target)
+    #expect(controller.applyButton.title == "Apply to All in Titles Fit…")
+    #expect(tagger.applicable(.titlesFit).map(\.id) == [1])
+}

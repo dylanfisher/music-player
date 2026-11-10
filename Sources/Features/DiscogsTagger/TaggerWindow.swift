@@ -456,6 +456,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
         for (index, tab) in TaggerTab.allCases.enumerated() {
             tabs.setLabel("\(tab.title) (\(number(model.count(tab))))", forSegment: index)
+            tabs.setToolTip(tab.help, forSegment: index)
         }
         tabs.selectedSegment = TaggerTab.allCases.firstIndex(of: model.tab)!
         let canApply = TaggerModel.appliedTabs.contains(model.tab)

@@ -343,7 +343,7 @@ final class TaggerModel {
     }
 
     /// The tabs Apply to All writes: those a match set can be trusted in after a review.
-    static let appliedTabs: [TaggerTab] = [.exact, .likely, .safe, .matched]
+    static let appliedTabs: [TaggerTab] = [.exact, .likely, .safe, .titlesFit, .matched]
 
     // MARK: - The catalog
 

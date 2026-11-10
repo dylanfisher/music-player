@@ -205,7 +205,7 @@ func albumLine(
     let verdict: String =
         switch outcome {
         case nil: "-"
-        case let outcome? where outcome.kinship != .other: "right"
+        case let outcome? where outcome.kinship != .other: "same or twin"
         case let outcome? where outcome.sameMaster: "same master"
         default: "wrong"
         }
@@ -220,6 +220,7 @@ func albumLine(
 let applyTabs: [(String, @Sendable (AlbumMatch) -> Bool)] = [
     ("exact", { $0.tier == .exact }),
     ("safe", { $0.safety == .safe }),
+    ("titles fit", { $0.safety == .titlesFit }),
     ("likely, not safe", { $0.tier == .likely && $0.safety == nil }),
 ]
 
@@ -232,6 +233,7 @@ func untaggedLines(
         out.append("\(tier.rawValue): \(matches.count { $0.tier == tier })")
     }
     out.append("safe: \(matches.count { $0.safety == .safe })")
+    out.append("titles fit: \(matches.count { $0.safety == .titlesFit })")
     out.append(
         String(
             format: "%.1f s in all, %.1f ms an album", seconds,
@@ -324,13 +326,13 @@ func tuningLines(
     out.append(
         "known misses, the tags' date or MEDIA one the tagged release no longer has:"
             + " \(knownMisses.count)")
-    out.append("-- Apply to All: right (the tagged release or a twin), same master, wrong")
+    out.append("-- Apply to All: the tagged release or a twin, another of its master, wrong")
     for (name, lists) in applyTabs {
         let listed = zip(matches, outcomes).filter { lists($0.0) }.map(\.1)
         let right = listed.count { $0.kinship != .other }
         let sameMaster = listed.count { $0.kinship == .other && $0.sameMaster }
         out.append(
-            "\(name): \(listed.count), right \(right), same master \(sameMaster),"
+            "\(name): \(listed.count), same or twin \(right), same master \(sameMaster),"
                 + " wrong \(listed.count - right - sameMaster)")
     }
     out.append("-- Raw")
