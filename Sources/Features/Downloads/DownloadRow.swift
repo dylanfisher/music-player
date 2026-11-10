@@ -18,7 +18,7 @@ struct DownloadRow: Equatable, Sendable {
 
     /// The window's sections, in their order; newest first within each.
     enum Group: Int, Comparable, Sendable {
-        case needsReview, downloading, waiting, failed
+        case needsReview, downloading, waiting, failed, completed
 
         static func < (a: Group, b: Group) -> Bool { a.rawValue < b.rawValue }
     }
@@ -65,17 +65,23 @@ struct DownloadRow: Equatable, Sendable {
     var group: Group
     var canApprove: Bool
 
-    /// `job`'s row on the Mac named `machine`; nil for a terminal job, which isn't listed.
+    /// How long a completed job stays listed after it was imported.
+    static let completedListedFor: TimeInterval = 30 * 24 * 60 * 60
+
+    /// `job`'s row on the Mac named `machine`; nil for a job rejected or cancelled, or imported
+    /// more than `completedListedFor` before `now`, which isn't listed.
     /// `answering` is false while the service doesn't answer, which dims every row; `rate` is
     /// the speed of the bytes it's moving, while the window shows one; `formatted` words the
     /// time of the next search; `taggedAs` is the release the files were tagged as, when it
     /// isn't the job's; `leftForReview` is why Approve Safe Matches Automatically left it.
     init?(
         _ job: DownloadJob, machine: String, answering: Bool = true, rate: TransferRate? = nil,
-        taggedAs: Int? = nil, leftForReview: String? = nil,
+        taggedAs: Int? = nil, leftForReview: String? = nil, now: Date = Date(),
         formatted: (Date) -> String = DownloadRow.shortTime
     ) {
-        guard let group = Self.group(job.state) else { return nil }
+        guard let group = Self.group(job.state),
+            group != .completed || !Self.lapsed(job, at: now)
+        else { return nil }
         id = job.id
         source = job.source
         album = Self.album(job.release)
@@ -95,7 +101,8 @@ struct DownloadRow: Equatable, Sendable {
         style = Self.style(
             job.state, failedStage: job.failedStage, tagging: job.tagging.status,
             answering: answering)
-        claimedElsewhere = Self.claimedElsewhere(job.review, machine: machine)
+        claimedElsewhere =
+            group == .completed ? nil : Self.claimedElsewhere(job.review, machine: machine)
         self.group = group
         canApprove =
             answering
@@ -121,15 +128,22 @@ struct DownloadRow: Equatable, Sendable {
             warnsTagging: tagging == .discrepancy || tagging == .error)
     }
 
-    /// The section `state` is listed in; nil for a terminal state, which isn't listed.
+    /// The section `state` is listed in; nil for a job rejected or cancelled, which isn't.
     static func group(_ state: JobState) -> Group? {
         switch state {
         case .staged, .approved, .importing: .needsReview
         case .candidateFound, .downloading, .downloaded: .downloading
         case .queued, .searching, .notFound: .waiting
         case .failed: .failed
-        case .imported, .rejected, .cancelled: nil
+        case .imported: .completed
+        case .rejected, .cancelled: nil
         }
+    }
+
+    /// Whether `job` was imported more than `completedListedFor` before `now`: the import is
+    /// the last change the service makes to a job.
+    static func lapsed(_ job: DownloadJob, at now: Date) -> Bool {
+        now.timeIntervalSince1970 - TimeInterval(job.updatedAt) > completedListedFor
     }
 
     /// Approve is enabled for a staged job tagged clean whose review claim this Mac holds.
@@ -235,7 +249,7 @@ struct DownloadRow: Equatable, Sendable {
         case .staged: words = "Staged"
         case .approved: words = "Approved"
         case .importing: words = "Importing"
-        case .imported: words = "Imported"
+        case .imported: words = "Completed"
         case .rejected: words = "Rejected"
         case .failed:
             words = job.failedStage.map { "Failed at \($0.rawValue)" } ?? "Failed"

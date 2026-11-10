@@ -304,7 +304,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     /// Whether a rejected or cancelled job's files are still being deleted.
     var cleanupPending: Bool
     package var createdAt: Int
-    var updatedAt: Int
+    package var updatedAt: Int
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case id, revision, source

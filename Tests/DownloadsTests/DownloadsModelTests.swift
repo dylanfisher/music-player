@@ -57,15 +57,40 @@ func onlyTheTaggingCellWarns(tagging: DownloadJob.Tagging.Status, warns: Bool) {
     (.searching, .waiting),
     (.notFound, .waiting),
     (.failed, .failed),
+    (.imported, .completed),
 ])
-func eachLiveStateHasASection(state: JobState, group: DownloadRow.Group) {
+func eachListedStateHasASection(state: JobState, group: DownloadRow.Group) {
     #expect(DownloadRow.group(state) == group)
 }
 
-@Test(arguments: [JobState.imported, .rejected, .cancelled])
-func terminalJobsAreNotListed(state: JobState) {
+@Test(arguments: [JobState.rejected, .cancelled])
+func jobsRejectedOrCancelledAreNotListed(state: JobState) {
     #expect(DownloadRow.group(state) == nil)
     #expect(DownloadRow(job(1, state), machine: "Studio") == nil)
+}
+
+/// A job imported, by Approve or unasked, stays listed as completed for 30 days after its
+/// import, the service's last change to it, and then goes.
+@Test func aCompletedJobIsListedFor30DaysAfterItsImport() throws {
+    let imported = job(1, .imported) {
+        $0.updatedAt = 1_794_100_000
+        $0.review = DownloadJob.Hold(machine: "Kitchen", expiresAt: 1_794_186_400)
+    }
+    let importedAt = Date(timeIntervalSince1970: 1_794_100_000)
+    let row = try #require(
+        DownloadRow(imported, machine: "Studio", now: importedAt.addingTimeInterval(86_400)))
+    #expect(row.group == .completed)
+    #expect(row.state == "Completed")
+    #expect(row.claimedElsewhere == nil)
+    #expect(!row.canApprove)
+    let lastDay = importedAt.addingTimeInterval(30 * 86_400)
+    #expect(DownloadRow(imported, machine: "Studio", now: lastDay) != nil)
+    #expect(DownloadRow(imported, machine: "Studio", now: lastDay.addingTimeInterval(1)) == nil)
+    for action in DownloadAction.allCases {
+        #expect(
+            !DownloadAction.applies(
+                action, to: imported, machine: "Studio", answering: true, canTag: true))
+    }
 }
 
 @Test(arguments: [
@@ -250,15 +275,17 @@ func aReasonSaysTheUserForTheirNameAlone(reason: String, user: String, words: St
     #expect(try #require(DownloadRow(copying, machine: "Studio")).progress == 0.4)
 }
 
-@Test func rowsAreListedBySectionThenNewestFirst() {
+@Test func rowsAreListedBySectionThenNewestFirstWithTheCompletedLast() {
     let jobs = [
         job(1, .queued, created: 100), job(2, .staged, created: 100),
         job(3, .failed, created: 300), job(4, .staged, created: 200),
         job(5, .downloading, created: 50), job(6, .imported, created: 900),
+        job(7, .imported, created: 950), job(8, .rejected, created: 990),
     ]
-    let rows = jobs.compactMap { DownloadRow($0, machine: "Studio") }
+    let now = Date(timeIntervalSince1970: 1_794_100_000)
+    let rows = jobs.compactMap { DownloadRow($0, machine: "Studio", now: now) }
         .sorted(by: DownloadRow.listed)
-    #expect(rows.map(\.id) == [4, 2, 5, 1, 3])
+    #expect(rows.map(\.id) == [4, 2, 5, 1, 3, 7, 6])
 }
 
 @Test(arguments: [

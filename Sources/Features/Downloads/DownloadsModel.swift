@@ -314,7 +314,8 @@ final class DownloadsModel {
             DownloadRow(
                 $0, machine: machine, answering: answering,
                 rate: rates.isEmpty ? nil : rates.rate($0.id, at: at),
-                taggedAs: tagged[$0.id]?.differs(for: $0), leftForReview: leftForReview[$0.id])
+                taggedAs: tagged[$0.id]?.differs(for: $0), leftForReview: leftForReview[$0.id],
+                now: at)
         }.sorted(by: DownloadRow.listed)
     }
 }
