@@ -673,6 +673,22 @@ Asked by the owner on 2026-11-09.
       widths and order, like every other window (ADR 0158). This includes the tagger opened from
       Downloads (Open in Tagger).
 
+Plan:
+
+- 69.1 A test that shows the tagger, widens the album list's columns, and opens a second tagger
+  with what the first saved: it fails because nothing records the album list. The fix:
+  `TableLayout` in `Core/Settings` (widths, order, sort), which `TaggerSheetLayouts` holds for
+  each sheet and, with the album pane's width, for the album list; one `NSTableView` apply and
+  record in `DiscogsTagger` for both; the window records on a column's resize or move and the
+  divider's drag, and applies once its frame is placed, as Downloads does. `StateStoreTests`
+  for the new shape.
+- 69.2 The album list's sort: `TaggerModel.AlbumSort` by Album, Files, Match or Review, ties in
+  artist and title order; header clicks set it, the layout keeps it. Model and window tests.
+- 69.3 The sheets keep their column order through the same `TableLayout`; Open in Tagger's
+  tagger gets the layouts and saves them, and the two taggers share one copy. A window test of
+  the order.
+- 69.4 ADR 0176, cross-linked from 0136 and 0158.
+
 ### 70. Artwork, Settings and Get Info
 
 Asked by the owner on 2026-11-09.
