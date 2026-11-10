@@ -109,26 +109,28 @@ private let freeformFields: [String: TagField] = Dictionary(
 /// The freeform names, uppercased, the reader maps onto `field`, so a writer replaces exactly
 /// those.
 package func mp4FreeformNames(for field: TagField) -> Set<String> {
-    Set(freeformFields.compactMap { name, each in each == field ? name : nil })
+    freeformNamesByField[field] ?? []
 }
+
+private let freeformNamesByField = keysByField(freeformFields.map { ($0.key, $0.value) })
 
 /// `data` atom type codes for integers: "implicit" and big-endian signed.
 private let integerTypes: Set<UInt32> = [0, 21]
 
 /// The item types the reader maps onto `field`, so a writer replaces exactly those.
-package func mp4ItemTypes(for field: TagField) -> Set<String> {
-    Set(
-        itemKinds.compactMap { type, kind in
-            switch kind {
-            case .text(let each), .integer(let each): each == field ? type : nil
-            case .track: field == .track ? type : nil
-            case .disc: field == .disc ? type : nil
-            case .compilation: field == .compilation ? type : nil
-            case .genreIndex: field == .genre ? type : nil
-            case .freeform, .cover: nil
-            }
-        })
-}
+package func mp4ItemTypes(for field: TagField) -> Set<String> { itemTypesByField[field] ?? [] }
+
+private let itemTypesByField = keysByField(
+    itemKinds.compactMap { type, kind -> (String, TagField)? in
+        switch kind {
+        case .text(let each), .integer(let each): (type, each)
+        case .track: (type, .track)
+        case .disc: (type, .disc)
+        case .compilation: (type, .compilation)
+        case .genreIndex: (type, .genre)
+        case .freeform, .cover: nil
+        }
+    })
 
 /// The item the reader takes art from.
 package let mp4CoverItemType = itemKinds.first {

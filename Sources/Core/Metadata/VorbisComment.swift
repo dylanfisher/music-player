@@ -57,9 +57,9 @@ private let vorbisFields: [String: TagField] = Dictionary(
 package func vorbisWrittenKey(for field: TagField) -> String? { vorbisWrittenKeys[field] }
 
 /// The keys, uppercased, that the reader maps onto `field`, so a writer replaces exactly those.
-package func vorbisKeys(for field: TagField) -> Set<String> {
-    Set(vorbisFields.compactMap { key, each in each == field ? key : nil })
-}
+package func vorbisKeys(for field: TagField) -> Set<String> { vorbisKeysByField[field] ?? [] }
+
+private let vorbisKeysByField = keysByField(vorbisFields.map { ($0.key, $0.value) })
 
 /// Little-endian lengths, unlike the rest of FLAC: the vendor string, the comment count, then each
 /// comment as `KEY=value` in UTF-8. Keys no field maps are the custom ones.

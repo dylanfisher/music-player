@@ -147,8 +147,10 @@ private let userTextFields: [String: TagField] = Dictionary(
 /// The `TXXX` descriptions, uppercased, the reader maps onto `field`, so a writer replaces
 /// exactly those.
 package func id3UserTextDescriptions(for field: TagField) -> Set<String> {
-    Set(userTextFields.compactMap { description, each in each == field ? description : nil })
+    userTextDescriptionsByField[field] ?? []
 }
+
+private let userTextDescriptionsByField = keysByField(userTextFields.map { ($0.key, $0.value) })
 
 /// 2.3's original release year, which 2.4 replaced with `TDOR`.
 package let id3v23OriginalYearFrameID = "TORY"
@@ -170,19 +172,18 @@ package let id3v23DayFrameID = "TDAT"
 package let id3v23TimeFrameID = "TIME"
 
 /// The frame IDs the reader maps onto `field`, so a writer replaces exactly those.
-package func id3FrameIDs(for field: TagField) -> Set<String> {
-    Set(
-        frameKinds.compactMap { id, kind in
-            switch kind {
-            case .text(let each): each == field ? id : nil
-            case .genre: field == .genre ? id : nil
-            case .described(let each), .url(let each): each == field ? id : nil
-            case .day, .time: field == .date ? id : nil
-            case .iTunesGrouping: field == .grouping ? id : nil
-            case .picture, .userText, .userURL, .involvedPeople: nil
-            }
-        })
-}
+package func id3FrameIDs(for field: TagField) -> Set<String> { frameIDsByField[field] ?? [] }
+
+private let frameIDsByField = keysByField(
+    frameKinds.compactMap { id, kind -> (String, TagField)? in
+        switch kind {
+        case .text(let each), .described(let each), .url(let each): (id, each)
+        case .genre: (id, .genre)
+        case .day, .time: (id, .date)
+        case .iTunesGrouping: (id, .grouping)
+        case .picture, .userText, .userURL, .involvedPeople: nil
+        }
+    })
 
 /// "ID3v2.3" for version 3.
 package func id3VersionName(_ version: UInt8) -> String { "ID3v2.\(version)" }

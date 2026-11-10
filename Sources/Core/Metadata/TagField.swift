@@ -242,3 +242,9 @@ private func beatsPerMinute(
     let rounded = Int(value.rounded())
     return rounded == 0 ? nil : rounded
 }
+
+/// Each field's keys in a format's `key: field` table: a writer asks for them per frame it
+/// rewrites, so they're grouped once rather than found by a scan each time.
+func keysByField(_ fields: some Sequence<(String, TagField)>) -> [TagField: Set<String>] {
+    Dictionary(grouping: fields, by: \.1).mapValues { Set($0.map(\.0)) }
+}
