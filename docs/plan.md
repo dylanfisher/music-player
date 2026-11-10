@@ -844,6 +844,67 @@ the owner's Mac, compared with the last recorded numbers; the old Mac's rows if 
 and one use of the app on the real library: launch, search, scroll with art, play, open the
 tagger.
 
+Implementation plan, phase 73:
+
+Wave 0's baseline (`.build/perf-audit/baseline.txt`) missed one row, the metadata parse
+(5.07 s against 5 s); alone it measured 1.54 s, so the miss was load. Rows over 70% alone:
+settings 1.73 ms (87%), Stats' period change 247 ms (99%), Stats' open 292 ms (73%), the
+reader during Analyze Library 15.5 ms (78%), and the database sizes (index 79%, catalog 80%,
+history 72%). The seven auditors' findings are in `.build/perf-audit/{A,B,C,D,E,F,P}.md`;
+the real-time audit passed (A).
+
+- 73.1 Bench lane (`Sources/Tools/Bench`, the budget table): rows for the matcher over many
+  albums with masters of many releases and an artist-only share (E gap 1), the tagger window
+  with 1,741 albums, its refresh and Apply's progress (E, P), Downloads' Approve with its
+  lossy-origin check (F), Organize Selected Files local and on the slow simulated NAS (B2,
+  F1), type-to-select over every fixture title (C2), and a multi-MB body through
+  `HTTPSClient` (D1). Each row's before number is measured on the lane's own branch, before
+  the fix lanes land. Lane `bench`, Opus.
+- 73.2 `HTTPSClient` reads the body in chunks, not a byte at a time (D1: 17 s against 2 ms for
+  3 MB), keeping the size cap and the refusal of redirects. Lane `small`.
+- 73.3 `SampleMeasures` checks a block for clipping with vDSP before the per-sample loop (F3:
+  266 ms of the 1.03 s analysis row). Lane `small`.
+- 73.4 `ThumbnailStore` decodes a thumbnail when it's made, off the main thread (C1: the first
+  draw 0.31 against 0.17 ms at 256 px, 4.7 against 1.8 ms at 1024 px). Lane `small`.
+- 73.5 `ConfigStore` parses the config's `Data` without copying it to `[UInt8]` (P4: 24% of
+  the settings row, at 87% of its budget). Lane `small`.
+- 73.6 A schema part of its own, derived like `recorded`, holding an index on `history
+  (path_id, played_at)`, so Stats' first plays stop sorting 1M rows (B1, P1: 211 of 290 ms;
+  26 ms indexed). The stats part keeps its SQL, so no play is discarded; a test opens an index
+  of the old shape and finds its plays. A second index on `played_at` only if the history row
+  stays under its budget. Lane `library`, Opus.
+- 73.7 One listing of each folder per Organize, Approve or Copy Added Files run, not three per
+  file (`LibraryFolderMove.listedPath`; B2, F1: 0.96 ms a file locally, at least 135 ms a file
+  on the slow simulated NAS). A test that a folder changed during the run is listed again
+  where the move needs it. Lane `library`.
+- 73.8 The scanner's connection checkpoints the WAL less often (B4: 20% of the batch store's
+  samples). Lane `library`.
+- 73.9 Apply's write progress reaches the tagger about 200 times, not twice per file, and the
+  artwork count is kept between refreshes (E1: 42k main-queue blocks for 21k files, 0.69 ms
+  of artwork groups each). A test that the count follows a change. Lane `ui`, Opus.
+- 73.10 Type-to-select folds the titles once per list, not per keystroke (C2: 11.6 to 14.3
+  ms a keystroke over 43k titles). A test that a refreshed list is folded again. Lane `ui`.
+- 73.11 Approve's lossy-origin check decodes its two files at once (F4: 7.2 s serial against
+  about 3.6 s on the slow simulated NAS). Lane `ui`.
+
+For the owner (flags, see Triage): E2, the tag writer reading and planning a batch's files
+concurrently (estimated 4 to 8 times faster planning; the writer's boundary); T1, hashing the
+original while it's copied to the temp file (74 s to about 55 s on the slow NAS row; the
+same); D2, Downloads polling less often while its window is closed (1,440 wakeups a day;
+user-visible); L1, storing a file's path once when it's already normalized (11 MB of the
+47 MB index; stored shape, a rescan); L2 and E5, the catalog's key tables `WITHOUT ROWID` and
+an artist key with release ids (3.9 MB, and artist-only searches; both a re-import of the
+dump); A's `memset` of the held buffer when the renderer is made, so a first fade doesn't
+page-fault on the IO thread (real-time path).
+
+Deferred: A1, a deadline-driven control thread instead of the 10 ms tick (0.28% of a core
+while playing; a real-time design change, ADR 0029); E3 and E4, the matcher's kept and decoded
+tracklists (unmeasured until 73.1's matcher row); B3, more listers on a no-change NAS rescan
+(needs the owner's NAS, ADR 0151); F2, Approve finding its album without reading every track
+(M, about 60 ms); P2, All Time's period (no cheap fix, 99 ms in the sorter). Dropped: D3, the
+Output menu's search (network time), C3 and C4 (unmeasured, or already off the main actor),
+F5, Now Playing's unchanged labels (no number), P3 (1.3% of a sort).
+
 ### 74. Tagger: scrolling, keeping your place, and the write's last steps
 
 Asked by the owner on 2026-11-10.
