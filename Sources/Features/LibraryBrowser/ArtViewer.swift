@@ -67,6 +67,10 @@ final class ArtViewer {
 
     func show() {
         session += 1
+        orderFront()
+    }
+
+    private func orderFront() {
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(view)
     }
@@ -74,25 +78,36 @@ final class ArtViewer {
     /// Opens on `art` from the file at `path` at its final layout: it reads the file's
     /// pictures and decodes `art` at the screen's pixels together, off the main thread, then
     /// lays out the strip, a button a picture, and the art, and only then shows the window.
-    /// The thumbnails fill their buttons as they decode. `failed` gets what went wrong; a
-    /// failed decode still opens, on the art it was made with, and a failed read opens with no
-    /// strip. A close before both are done drops them, and the window never shows.
+    /// When the file changed since the row's art was read and `art` isn't among its pictures,
+    /// it decodes the first picture instead and opens on that. The thumbnails fill their
+    /// buttons as they decode. `failed` gets what went wrong; a failed decode still opens, on
+    /// the art it was made with, and a failed read opens with no strip. A close before it's
+    /// done drops it all, and the window never shows.
     func open(_ art: EmbeddedArt, path: String, failed: @escaping (String) -> Void) async {
+        session += 1
         let opening = session
         async let decoded = decode(art, path: path)
         async let listed = Self.pictures(at: path)
-        let (image, pictures) = await (decoded, listed)
+        var (image, pictures) = await (decoded, listed)
+        var shownArt = art
+        if case .success(let list) = pictures, !list.contains(where: { $0.art == art }),
+            let first = list.first
+        {
+            shownArt = first.art
+            image = await decode(first.art, path: path)
+        }
         guard opening == session, !isClosed else { return }
         switch image {
         case .success(let image): showDecoded(image)
         case .failure(let error): failed("couldn't open the art of \(path): \(error)")
         }
         switch pictures {
-        case .success(let pictures): show(pictures, current: art, path: path, failed)
+        case .success(let pictures): show(pictures, current: shownArt, path: path, failed)
         case .failure(let error): failed("couldn't read the pictures of \(path): \(error)")
         }
         window.contentView?.layoutSubtreeIfNeeded()
-        show()
+        // Not `show()`: the session is this opening's, which the thumbnails' decode keeps.
+        orderFront()
     }
 
     /// `art` from the file at `path`, decoded off the main thread at the screen's pixels.

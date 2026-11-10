@@ -231,3 +231,25 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     #expect(!viewer.window.isVisible)
     #expect(closed == 1)
 }
+
+/// A row whose art is no longer among the file's pictures opens on the first picture, decoded,
+/// so the art and the strip's "1 of 2" agree from the start (phase 70).
+@MainActor @Test func openingOnArtNoLongerInTheFileShowsTheFirstPicture() async throws {
+    let url = try flacWithPictures([4, 3])
+    let viewer = ArtViewer(
+        image: NSImage(size: NSSize(width: 99, height: 99)), screen: try #require(NSScreen.main),
+        owner: nil)
+    defer { viewer.close() }
+    let stale = EmbeddedArt(offset: 1, byteCount: 1, mimeType: "image/png", unsynchronised: false)
+    await viewer.open(stale, path: url.path) { Issue.record("\($0)") }
+    // Another test's posting that the app resigned active closes the viewer, which then
+    // never shows.
+    guard !viewer.isClosed else { return }
+    #expect(viewer.placeText == "1 of 2 · Back Cover")
+    #expect(viewer.image?.size == CGSize(width: 10, height: 10), "the first picture, decoded")
+    try await waitFor("the thumbnails") {
+        viewer.isClosed || viewer.thumbnails.allSatisfy { $0 != nil }
+    }
+    guard !viewer.isClosed else { return }
+    #expect(viewer.image?.size == CGSize(width: 10, height: 10), "and it stays")
+}
