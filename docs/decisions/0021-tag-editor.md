@@ -2,7 +2,8 @@
 
 - **Date:** 2026-10-31
 - **Status:** accepted
-- **Amended by:** [0100](0100-get-info-windows-and-smb-temp-files.md)
+- **Amended by:** [0100](0100-get-info-windows-and-smb-temp-files.md),
+  [0177](0177-art-viewer-settings-panes-get-info-steps.md): a batch save that gives every file one title asks, naming it.
 
 ## Context
 

@@ -13,6 +13,7 @@
   titled boxes, Sync and Network Folders sections, the longest prefix wins.
   [0168](0168-a-library-pane-in-settings.md): the Watched Folders pane becomes Settings ▸
   Library, which takes the Library section from General too, as Browsing and Database boxes.
+  [0177](0177-art-viewer-settings-panes-get-info-steps.md): Watched Folders is a pane of its own again, after Library.
 
 ## Context
 

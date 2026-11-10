@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0042](0042-window-layout-and-settings-sections.md) (the Watched Folders pane,
   General's Library section), [0017](0017-settings-window.md) (the panes' snapshots)
+- **Amended by:** [0177](0177-art-viewer-settings-panes-get-info-steps.md): Watched Folders is a pane of its own again, after
+  Library, with Folder Changes and Network Folders; the snapshots always show.
 
 ## Context
 

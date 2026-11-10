@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-09
 - **Status:** accepted
+- **Amended by:** [0177](0177-art-viewer-settings-panes-get-info-steps.md): a window on one track steps to the previous and next
+  track of its list in place, dropping what was typed, as a close does.
 - **Amends:** [0103](0103-option-arrow-seeks-get-info-place-health-toggle.md) (where an info
   window opens), [0158](0158-every-window-keeps-its-frame.md) (Get Info joins it),
   [0153](0153-editing-extras-and-when-undo-is-on.md) (the Discogs tab was read only)
