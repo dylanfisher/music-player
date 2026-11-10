@@ -27,7 +27,11 @@ func fileHashes(_ path: String, payload: [Range<Int>], faults: WriteFaults)
     var audio = CC_SHA256_CTX()
     CC_SHA256_Init(&full)
     CC_SHA256_Init(&audio)
-    var buffer = [UInt8](repeating: 0, count: hashReadBytes)
+    // Not zeroed: only the bytes a read fills are hashed, and a write hashes three times, so a
+    // small file would otherwise pay to zero all of it each time.
+    var buffer = [UInt8](unsafeUninitializedCapacity: hashReadBytes) { _, count in
+        count = hashReadBytes
+    }
     var offset = 0
     while true {
         let count = buffer.withUnsafeMutableBytes {
