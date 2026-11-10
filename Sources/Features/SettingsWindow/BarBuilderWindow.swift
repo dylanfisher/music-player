@@ -53,7 +53,7 @@ final class BarBuilderWindow: NSObject {
             (addAfter, "Add Column After", #selector(addColumnAfter)),
             (removeColumn, "Remove Column", #selector(removeSelectedColumn)),
             (removePart, "Remove Part", #selector(removeSelectedPart)),
-            (reset, "Reset to Default", #selector(resetToDefault)),
+            (reset, GeneralPane.resetTitle, #selector(resetToDefault)),
         ] {
             button.title = title
             button.bezelStyle = .rounded

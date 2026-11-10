@@ -17,8 +17,9 @@ public final class GeneralModel {
         /// A number field; `whole` takes integers only, `optional` means empty is null.
         case number(whole: Bool, optional: Bool)
         case text(optional: Bool)
-        /// A text field for a template, beside a help button that lists its tokens.
-        case template([SettingKind.Token])
+        /// A text field for a template, beside a help button that lists its tokens and Reset
+        /// to Default, which puts back `defaultText`.
+        case template([SettingKind.Token], defaultText: String)
         /// Watched folders, which the Watched Folders pane lists, adds and removes.
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
@@ -195,6 +196,8 @@ public final class GeneralModel {
     }
     /// The watched folders' row, which the Watched Folders pane shows.
     var foldersRow: Row? { rows.first { $0.control == .folders } }
+    /// The template settings by key, each of which checks its own tokens.
+    private let templates: [String: SettingDescriptor]
     private let value: (String) -> Any?
     private let set: (String, Any) throws -> Void
     /// Whether the config file refuses every change until it's fixed (ADR 0082).
@@ -211,6 +214,11 @@ public final class GeneralModel {
             $0.kind != .windowState && Self.isShown($0.key, searcherInstalled: searcherInstalled)
         }
         .map(Self.row)
+        templates = Dictionary(
+            uniqueKeysWithValues: settings.compactMap {
+                guard case .template = $0.kind else { return nil }
+                return ($0.key, $0)
+            })
         self.value = value
         self.set = set
         self.isBlocked = isBlocked
@@ -260,7 +268,8 @@ public final class GeneralModel {
             case .optional(.number): .number(whole: false, optional: true)
             case .string: .text(optional: false)
             case .optional(.string): .text(optional: true)
-            case .template(let tokens): .template(tokens)
+            case .template(let tokens):
+                .template(tokens, defaultText: templateText(setting.defaultValue))
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
             case .optional(.stagingFolder): .stagingFolder
@@ -431,10 +440,25 @@ public final class GeneralModel {
 
     func clear(_ key: String) throws { try set(key, NSNull()) }
 
-    /// Why `text` isn't a template, as `setText` would refuse it; nil when it parses.
-    static func templateProblem(_ text: String) -> String? {
-        TitleTemplate(text.trimmingCharacters(in: .whitespaces)).problem()
+    /// Why `text` isn't a template for the setting `key`, with its tokens, as `setText` would
+    /// refuse it; nil when it parses.
+    func templateProblem(_ key: String, _ text: String) -> String? {
+        guard let setting = templates[key] else {
+            preconditionFailure("\(key) isn't a template")
+        }
+        return setting.problem(text.trimmingCharacters(in: .whitespaces))
     }
+
+    /// The default a template row's Reset to Default puts back.
+    func templateDefault(_ key: String) -> String {
+        guard let row = rows.first(where: { $0.key == key }),
+            case .template(_, let defaultText) = row.control
+        else { preconditionFailure("\(key) isn't a template") }
+        return defaultText
+    }
+
+    /// Saves the template row `key`'s default, as typing it would.
+    func resetTemplate(_ key: String) throws { try setText(key, templateDefault(key)) }
 
     /// A template's tokens, one a line with what each stands for, for its help button's
     /// tooltip and popover.
@@ -497,6 +521,15 @@ private func barLayout(_ value: any SettingValue) -> BarLayout<String> {
             BarLayout<String>.self, from: JSONEncoder().encode(value))
     } catch {
         preconditionFailure("a bar layout's default doesn't read back: \(error)")
+    }
+}
+
+/// A template setting's value as its row's field shows it.
+private func templateText(_ value: any SettingValue) -> String {
+    do {
+        return try JSONDecoder().decode(String.self, from: JSONEncoder().encode(value))
+    } catch {
+        preconditionFailure("a template's default doesn't read back: \(error)")
     }
 }
 

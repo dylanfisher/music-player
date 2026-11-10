@@ -184,6 +184,13 @@ public struct SettingDescriptor: Sendable {
 
     /// Whether the setting holds a secret, alone or as an optional.
     var isSecret: Bool { kind == .secret || kind == .optional(.secret) }
+
+    /// Why `json` can't be the setting's value, as the config file says it without the key;
+    /// nil when it can.
+    public func problem(_ json: Any) -> String? {
+        guard case .failure(let reason) = decode(json) else { return nil }
+        return "\(reason)"
+    }
 }
 
 /// Lets `SettingsSchema` find settings among a schema's properties without knowing their types.

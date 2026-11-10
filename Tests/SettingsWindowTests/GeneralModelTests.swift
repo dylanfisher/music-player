@@ -344,7 +344,13 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let titleFormat = model.rows.first { $0.key == schema.headerTitleFormat.key }
     // It's a template like the window's title, with the same tokens.
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
-    #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
+    guard case .template(let titleTokens, _) = titleFormat?.control,
+        case .template(let windowTokens, _) = windowTitle?.control
+    else {
+        Issue.record("\(String(describing: titleFormat)) \(String(describing: windowTitle))")
+        return
+    }
+    #expect(titleTokens == windowTokens)
     let listed = sections.flatMap(\.rows).map(\.key)
     #expect(listed.count == AppSettings().settings.count - 15)
     #expect(!listed.contains(AppSettings().resume.key))
@@ -978,7 +984,7 @@ private func helpButton(in view: NSView) -> NSButton? {
         settings: schema.settings, searcherInstalled: true, value: { saved[$0] },
         set: { saved[$0] = $1 }, isBlocked: { false })
     let row = try #require(model.rows.first { $0.key == key })
-    guard case .template(let tokens) = row.control else {
+    guard case .template(let tokens, _) = row.control else {
         Issue.record("\(row.control)")
         return
     }
@@ -1075,6 +1081,51 @@ func aTemplateRowSavesAsItsTyped(key: String) throws {
     #expect(field.stringValue == "{title} — {artist}")
     #expect(!problemShown())
     #expect(saves == 1)
+}
+
+/// Each template row checks what's typed against its own setting's tokens: a total isn't a
+/// title's token, nor a title's field a total.
+@MainActor @Test func eachTemplateRowChecksItsOwnTokens() {
+    let schema = AppSettings()
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil },
+        set: { _, _ in }, isBlocked: { false })
+    #expect(model.templateProblem(schema.totalsFormat.key, "{tracks} · {albums}") == nil)
+    #expect(
+        model.templateProblem(schema.totalsFormat.key, "{title}")?.hasPrefix("no token {title}")
+            == true)
+    #expect(model.templateProblem(schema.windowTitle.key, "{title}") == nil)
+    #expect(
+        model.templateProblem(schema.windowTitle.key, "{tracks}")?.hasPrefix(
+            "no token {tracks}") == true)
+}
+
+/// Reset to Default puts back a template row's default, the bar's text as it was for the
+/// totals, and is off while the template is the default.
+@MainActor
+@Test(arguments: [
+    (
+        AppSettings().totalsListAndSelectionFormat.key,
+        AppSettings().totalsListAndSelectionFormat.defaultValue.template
+    ),
+    (AppSettings().windowTitle.key, AppSettings().windowTitle.defaultValue.template),
+])
+func aTemplateRowResetsToItsDefault(key: String, defaultText: String) throws {
+    let schema = AppSettings()
+    nonisolated(unsafe) var saved: [String: Any] = [key: "{tracks}"]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { saved[$0] },
+        set: { saved[$0] = $1 }, isBlocked: { false })
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.titles, .statusBar])
+    _ = pane.view
+    pane.reload()
+    let reset = try #require(pane.templateResets[key])
+    #expect(reset.isEnabled)
+    click(reset)
+    #expect(saved[key] as? String == defaultText)
+    #expect((view(key, in: pane.view) as? NSTextField)?.stringValue == defaultText)
+    #expect(!reset.isEnabled)
 }
 
 /// The text of every label under `view` that shows.

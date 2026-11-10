@@ -72,8 +72,10 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private(set) var snapshotList: SnapshotList?
     /// Counts the database's reads, so an older one that ends later shows nothing.
     private var databaseReads = 0
-    /// The template rows' lines under their fields, saying why the text typed isn't saved.
+    /// The template rows' lines under their fields, saying why the text typed isn't saved,
+    /// and their Reset to Default buttons, off while the template is the default.
     private var templateProblems: [String: NSTextField] = [:]
+    private(set) var templateResets: [String: NSButton] = [:]
     /// The address rows' Save buttons, and their lines under the fields saying why the address
     /// wasn't saved.
     private(set) var saveButtons: [String: NSButton] = [:]
@@ -396,6 +398,10 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         fallbackRows[key]?.isHidden = triangle.state == .off
     }
 
+    /// The title of the buttons that put back a setting's default, a template row's and the
+    /// bar builder's.
+    static let resetTitle = "Reset to Default"
+
     private func button(_ title: String, _ action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.bezelStyle = .rounded
@@ -463,15 +469,18 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             popUp.action = #selector(chose(_:))
             popUp.setAccessibilityLabel(row.title)
             return popUp
-        case .template(let tokens):
+        case .template(let tokens, _):
             let field = textField(row, optional: false)
             let help = NSButton(title: "", target: self, action: #selector(showTokens(_:)))
             help.bezelStyle = .helpButton
             help.toolTip = GeneralModel.help(tokens)
             help.setAccessibilityLabel("Tokens for \(row.title)")
+            let reset = button(Self.resetTitle, #selector(resetTemplate(_:)))
+            reset.setAccessibilityLabel("Reset \(row.title) to Default")
+            templateResets[row.key] = reset
             let problem = problemLine()
             templateProblems[row.key] = problem
-            let stack = NSStackView(views: [NSStackView(views: [field, help]), problem])
+            let stack = NSStackView(views: [NSStackView(views: [field, help]), problem, reset])
             stack.orientation = .vertical
             stack.alignment = .leading
             stack.spacing = 2
@@ -586,6 +595,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             let enabled = model.isEnabled(row.key)
             (fields[row.key] ?? control as? NSControl)?.isEnabled = enabled
             saveButtons[row.key]?.isEnabled = enabled
+            templateResets[row.key]?.isEnabled =
+                enabled && model.text(row.key) != model.templateDefault(row.key)
             labels[row.key]?.textColor = enabled ? .labelColor : .disabledControlTextColor
             summaries[row.key]?.textColor =
                 enabled ? .secondaryLabelColor : .disabledControlTextColor
@@ -808,7 +819,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         guard let field = notification.object as? NSTextField,
             let key = field.identifier?.rawValue, let problemLine = templateProblems[key]
         else { return }
-        let problem = GeneralModel.templateProblem(field.stringValue)
+        let problem = model.templateProblem(key, field.stringValue)
         problemLine.stringValue = problem ?? ""
         problemLine.isHidden = problem == nil
         guard problem == nil else { return }
@@ -825,6 +836,19 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         // the setting refused is put back here.
         if !attempt({ try model.setText(key, field.stringValue) }) {
             field.stringValue = model.text(key)
+        }
+    }
+
+    /// Puts back a template row's default, ending an edit of its field first, so the field
+    /// shows the default rather than what was being typed.
+    @objc private func resetTemplate(_ button: NSButton) {
+        guard let key = templateResets.first(where: { $0.value === button })?.key else { return }
+        if let field = fields[key], field.currentEditor() != nil {
+            field.window?.makeFirstResponder(nil)
+        }
+        if attempt({ try model.resetTemplate(key) }) {
+            templateProblems[key]?.isHidden = true
+            reload()
         }
     }
 
