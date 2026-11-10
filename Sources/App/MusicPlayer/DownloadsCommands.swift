@@ -70,7 +70,7 @@ extension AppDelegate {
                 catalog: paths.discogsCatalogFile(settings[\.discogsCatalogPath]),
                 mapping: settings[\.discogsMapping],
                 savedMappings: settings[\.discogsSavedMappings], choices: taggerChoices(settings),
-                resolved: { verdict in resolved(verdict, job.releaseID) })
+                resolved: resolved)
             stagedTagger = tagger
             tagger.show()
         }

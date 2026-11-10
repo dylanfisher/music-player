@@ -41,6 +41,11 @@ private final class StagedFiles: @unchecked Sendable {
 
     func match(_ release: Int) { lock.withLock { matched.append(release) } }
 
+    private var queries: [ReleaseQuery] = []
+    /// What each Look Up searched for.
+    var lookedUp: [ReleaseQuery] { lock.withLock { queries } }
+    func lookUp(_ query: ReleaseQuery) { lock.withLock { queries.append(query) } }
+
     /// Writes `edits` as the staged writer would, by path.
     func write(_ edits: [(path: String, edit: TagEdit)]) throws -> TagWriteReport {
         try lock.withLock {
@@ -79,16 +84,20 @@ private let staged = StagedJob(
 private func stagedTagger(
     _ files: StagedFiles, writing: Writing = .applies, choices: TaggerChoices = defaultChoices,
     catalog: TaggerModel.CatalogState = readyCatalog,
-    resolved: @escaping (AutoTagRun.Verdict) -> Void
+    resolved: @escaping (AutoTagRun.Verdict, Int) -> Void
 ) async -> TaggerModel {
-    let release = release(stagedRelease, "The Hunter", titles: ["Sleeper", "Fire"])
     let made = TaggerModel(
         stagedJob: staged,
         effects: TaggerModel.StagedEffects(
             read: { (files.album, files.files(), []) },
             match: { album, id in
                 files.match(id)
-                return match(album, release, tier: .likely)
+                let release = release(id, "The Hunter", titles: ["Sleeper", "Fire"])
+                return match(album, release, tier: id == stagedRelease ? .likely : .exact)
+            },
+            lookUp: { query, _ in
+                files.lookUp(query)
+                return ReleaseLookup(releases: [], origin: .catalog, isCut: false)
             },
             summaries: { _ in [] },
             release: { _ in nil },
@@ -110,7 +119,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 
 @MainActor @Test func aStagedJobOpensWithItsReleaseChosen() async throws {
     let files = StagedFiles(bonusAlbum)
-    let tagger = await stagedTagger(files) { _ in }
+    let tagger = await stagedTagger(files) { _, _ in }
     #expect(tagger.isStaged)
     tagger.analyze()
     await tagger.finished()
@@ -122,18 +131,66 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     await tagger.setLeftOut(true, bonusAlbum.tracks[0].fileID, of: -1)
     #expect(tagger.albums.first?.leftOut == [])
 
-    // Another release would leave the tags of one the service didn't download.
-    var failure: String?
-    tagger.failed = { message, _ in failure = message }
+}
+
+/// The files may be another edition than the release queued, as one with a bonus track: the
+/// owner chooses the release they are, and Apply reports it with the verdict (ADR 0178).
+@MainActor @Test func aStagedJobCanBeTaggedAsAnotherRelease() async throws {
+    let files = StagedFiles(bonusAlbum)
+    var resolved: [(AutoTagRun.Verdict, Int)] = []
+    let tagger = await stagedTagger(files) { resolved.append(($0, $1)) }
+    tagger.analyze()
+    await tagger.finished()
+    var failures: [String] = []
+    tagger.failed = { message, details in failures.append(([message] + details).joined()) }
     await tagger.choose(99, for: -1)
-    #expect(failure == "The release couldn't be chosen")
-    #expect(tagger.albums.first?.match.releaseID == stagedRelease)
+    #expect(failures.isEmpty)
+    #expect(files.releases == [stagedRelease, 99])
+    #expect(tagger.albums.first?.match.releaseID == 99)
+    #expect(tagger.albums.first?.review == .chosen(releaseID: 99))
+    #expect(tagger.tab == .exact)
+
+    // Analyze again keeps the release chosen.
+    tagger.analyze()
+    await tagger.finished()
+    #expect(files.releases.last == 99)
+
+    tagger.apply(try #require(await tagger.plan([-1])))
+    try await eventually { !resolved.isEmpty }
+    #expect(resolved.map(\.0) == [.clean])
+    #expect(resolved.map(\.1) == [99])
+
+    // Rejecting is Downloads' job, which deletes the staged folder.
+    await tagger.setRejected(true, -1)
+    #expect(failures.last?.contains("rejected in Downloads") == true)
+    #expect(tagger.albums.first?.isRejected == false)
+}
+
+@MainActor @Test func aStagedJobsApplyReportsTheQueuedReleaseWhenNoneWasChosen() async throws {
+    let files = StagedFiles(bonusAlbum)
+    var releases: [Int] = []
+    let tagger = await stagedTagger(files) { releases.append($1) }
+    tagger.analyze()
+    await tagger.finished()
+    tagger.apply(try #require(await tagger.plan([-1])))
+    try await eventually { !releases.isEmpty }
+    #expect(releases == [stagedRelease])
+}
+
+@MainActor @Test func aStagedJobCanLookUpAnotherRelease() async throws {
+    let files = StagedFiles(bonusAlbum)
+    let tagger = await stagedTagger(files) { _, _ in }
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.canLookUp)
+    _ = try await tagger.lookUp(ReleaseQuery(artist: "Persuader", title: "The Hunter"))
+    #expect(files.lookedUp == [ReleaseQuery(artist: "Persuader", title: "The Hunter")])
 }
 
 @MainActor @Test func applyWritesThroughTheStagedWriterAndReportsItClean() async throws {
     let files = StagedFiles(bonusAlbum)
     var verdicts: [AutoTagRun.Verdict] = []
-    let tagger = await stagedTagger(files) { verdicts.append($0) }
+    let tagger = await stagedTagger(files) { verdict, _ in verdicts.append(verdict) }
     var mainWrites = 0
     tagger.write = { _, _, _ in mainWrites += 1 }
     tagger.analyze()
@@ -154,7 +211,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 @MainActor @Test func anUntickedChangeIsTheOwnersChoiceAndStillClean() async throws {
     let files = StagedFiles(bonusAlbum)
     var verdicts: [AutoTagRun.Verdict] = []
-    let tagger = await stagedTagger(files) { verdicts.append($0) }
+    let tagger = await stagedTagger(files) { verdict, _ in verdicts.append(verdict) }
     tagger.analyze()
     await tagger.finished()
     let (changes, _) = try #require(try await tagger.changeSet(for: -1))
@@ -168,7 +225,9 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 @MainActor @Test func filesThatReadBackUnchangedAreStillADiscrepancy() async throws {
     let files = StagedFiles(bonusAlbum)
     var verdicts: [AutoTagRun.Verdict] = []
-    let tagger = await stagedTagger(files, writing: .ignores) { verdicts.append($0) }
+    let tagger = await stagedTagger(files, writing: .ignores) { verdict, _ in
+        verdicts.append(verdict)
+    }
     tagger.analyze()
     await tagger.finished()
     let plan = try #require(await tagger.plan([-1]))
@@ -183,7 +242,8 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 @MainActor @Test func aStagedWriteThatFailsReportsNothingAndCanBeAppliedAgain() async throws {
     let files = StagedFiles(bonusAlbum)
     var verdicts: [AutoTagRun.Verdict] = []
-    let tagger = await stagedTagger(files, writing: .fails) { verdicts.append($0) }
+    let tagger = await stagedTagger(files, writing: .fails) { verdict, _ in verdicts.append(verdict)
+    }
     tagger.analyze()
     await tagger.finished()
     tagger.apply(try #require(await tagger.plan([-1])))
@@ -196,7 +256,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     let files = StagedFiles(bonusAlbum)
     var choices = defaultChoices
     choices.artwork = .replace
-    let tagger = await stagedTagger(files, choices: choices) { _ in }
+    let tagger = await stagedTagger(files, choices: choices) { _, _ in }
     tagger.hasToken = { true }
     tagger.analyze()
     await tagger.finished()
@@ -206,7 +266,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 }
 
 @MainActor @Test func aStagedJobLooksItsReleaseUpInTheCatalogOnly() async throws {
-    let tagger = await stagedTagger(StagedFiles(bonusAlbum), catalog: .missing) { _ in }
+    let tagger = await stagedTagger(StagedFiles(bonusAlbum), catalog: .missing) { _, _ in }
     #expect(tagger.source == .catalog)
     #expect(tagger.runSource == .catalog)
     #expect(!tagger.canAnalyze)
@@ -217,7 +277,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 /// Open in Tagger shows the staged album analyzed, on its tier's tab, so a discrepancy can be
 /// fixed at once; a catalog that can't be used is said, not left as an empty window.
 @MainActor @Test func aStagedTaggerAnalyzesItsAlbumWhenItOpens() async throws {
-    let tagger = DiscogsTagger(model: await stagedTagger(StagedFiles(bonusAlbum)) { _ in })
+    let tagger = DiscogsTagger(model: await stagedTagger(StagedFiles(bonusAlbum)) { _, _ in })
     tagger.show()
     try await eventually { tagger.model.albums.count == 1 && !tagger.model.isBusy }
     #expect(tagger.model.tab == .likely)
@@ -225,7 +285,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     tagger.window?.close()
 
     let missing = DiscogsTagger(
-        model: await stagedTagger(StagedFiles(bonusAlbum), catalog: .missing) { _ in })
+        model: await stagedTagger(StagedFiles(bonusAlbum), catalog: .missing) { _, _ in })
     var failures: [[String]] = []
     missing.show()
     // After the window, which sets its own, and before the check the show starts answers.

@@ -17,6 +17,9 @@ extension TaggerModel {
             @Sendable () async -> (album: DiscogsAlbum, files: [AlbumFile], problems: [String])
         /// Matches the album with the release by id.
         var match: @Sendable (DiscogsAlbum, Int) async throws -> AlbumMatch
+        /// Look Up Release's search, in the local catalog only, where every staged match is
+        /// made (ADR 0178).
+        var lookUp: @Sendable (ReleaseQuery, DiscogsAlbum) async throws -> ReleaseLookup
         var summaries: @Sendable ([Int]) async throws -> [ReleaseSummary]
         var release: @Sendable (Int) async throws -> ReleaseDetail?
         var checkCatalog: @Sendable () async -> CatalogState
@@ -28,20 +31,22 @@ extension TaggerModel {
     struct Staged {
         var job: StagedJob
         var effects: StagedEffects
-        /// Hears the verdict once Apply has written and the files read back.
-        var resolved: (AutoTagRun.Verdict) -> Void
+        /// Hears the verdict once Apply has written and the files read back, with the release
+        /// the files were written as.
+        var resolved: (AutoTagRun.Verdict, _ releaseID: Int) -> Void
     }
 
-    /// The tagger for one staged job with a discrepancy, so the owner can resolve it: its
-    /// release is chosen and can't be changed, and Apply writes through `effects`, never the
-    /// library's writer. `resolved` hears clean once the files read back with nothing left to
-    /// change but what the owner unticked, and is for the coordinator to report.
+    /// The tagger for one staged job with a discrepancy, so the owner can resolve it: it opens
+    /// on the job's release, and Other Releases… and Look Up… can choose another in the local
+    /// catalog (ADR 0178). Apply writes through `effects`, never the library's writer.
+    /// `resolved` hears clean once the files read back with nothing left to change but what
+    /// the owner unticked, with the release written, and is for the coordinator to report.
     convenience init(
         stagedJob job: StagedJob, effects staged: StagedEffects, mapping: DiscogsMapping,
         savedMappings: [NamedDiscogsMapping], choices: TaggerChoices,
-        resolved: @escaping (AutoTagRun.Verdict) -> Void
+        resolved: @escaping (AutoTagRun.Verdict, _ releaseID: Int) -> Void
     ) {
-        let release = job.releaseID
+        let chosen = StagedChoice(job.releaseID)
         // A staged write is the fixed mapping's tags only, with no cover (ADR 0146).
         var choices = choices
         choices.artwork = .off
@@ -53,20 +58,22 @@ extension TaggerModel {
                     return [read.album]
                 },
                 reviews: {
-                    [StagedAlbum.albumID: .chosen(releaseID: release)]
+                    [StagedAlbum.albumID: .chosen(releaseID: chosen.release)]
                 },
+                // Kept for the session only: what lasts is the release Apply writes.
                 review: { review, _ in
-                    guard review == .chosen(releaseID: release) else {
-                        throw StagedReleaseFixed(release: release)
-                    }
+                    guard case .chosen(let release) = review else { throw StagedRejectRefused() }
+                    chosen.release = release
                 },
                 // One album: there's no progress to show.
                 match: { albums, _, _, _, _ in
                     var matches: [AlbumMatch] = []
-                    for album in albums { matches.append(try await staged.match(album, release)) }
+                    for album in albums {
+                        matches.append(try await staged.match(album, chosen.release))
+                    }
                     return matches
                 },
-                choose: { album, _, _, _ in try await staged.match(album, release) },
+                choose: { album, _, release, _ in try await staged.match(album, release) },
                 summaries: staged.summaries,
                 release: staged.release,
                 read: { ids, progress in
@@ -78,7 +85,8 @@ extension TaggerModel {
                 },
                 checkCatalog: staged.checkCatalog,
                 unfinishedImport: { nil },
-                importCatalog: { _, _, _ in throw StagedImportRefused() }),
+                importCatalog: { _, _, _ in throw StagedImportRefused() },
+                lookUp: staged.lookUp),
             mapping: mapping, savedMappings: savedMappings, choices: choices,
             staged: Staged(job: job, effects: staged, resolved: resolved))
     }
@@ -117,9 +125,13 @@ extension TaggerModel {
                 reopen(plan, unwritten: unwritten)
                 return
             }
+            // The release the plan's album was matched with, which its files now carry.
+            let written =
+                albums.first { plan.albumIDs.contains($0.id) }?.match.releaseID
+                ?? staged.job.releaseID
             let back = await read()
             guard back.problems.isEmpty else {
-                staged.resolved(.error(back.problems))
+                staged.resolved(.error(back.problems), written)
                 return
             }
             var left = 0
@@ -128,7 +140,7 @@ extension TaggerModel {
                     !album.excluded.contains($0.id)
                 }
             }
-            staged.resolved(StagedWriter.verdict(readingBack: left))
+            staged.resolved(StagedWriter.verdict(readingBack: left), written)
         }
     }
 }
@@ -142,12 +154,24 @@ struct StagedReadFailure: Error, CustomStringConvertible {
     var description: String { problems.joined(separator: "; ") }
 }
 
-/// A staged job is tagged from the release it was downloaded for, and no other.
-struct StagedReleaseFixed: Error, CustomStringConvertible {
-    var release: Int
-
+/// A staged job is rejected in Downloads, where the service deletes its staged folder.
+struct StagedRejectRefused: Error, CustomStringConvertible {
     var description: String {
-        "this album was downloaded for release \(release); reject it in Downloads to queue another"
+        "a download is rejected in Downloads, which deletes its staged folder"
+    }
+}
+
+/// The release a staged job's tagger matches, which Other Releases… and Look Up… change.
+private final class StagedChoice: @unchecked Sendable {
+    // `chosen` is guarded by `lock`.
+    private let lock = NSLock()
+    private var chosen: Int
+
+    init(_ release: Int) { chosen = release }
+
+    var release: Int {
+        get { lock.withLock { chosen } }
+        set { lock.withLock { chosen = newValue } }
     }
 }
 

@@ -143,7 +143,7 @@ final class TaggerModel {
         }
     }
 
-    /// A tagger without Look Up Release, as a staged job's is.
+    /// A tagger without Look Up Release, or with no album selected.
     struct LookUpUnavailable: Error, CustomStringConvertible {
         var description: String { "this tagger can't look releases up" }
     }
@@ -532,9 +532,9 @@ final class TaggerModel {
 
     // MARK: - Reviewing an album
 
-    /// Whether Look Up Release can search for the selected album: not in a staged job, whose
-    /// release is fixed, nor while work runs.
-    var canLookUp: Bool { selected != nil && staged == nil && !isBusy && rematchingID == nil }
+    /// Whether Look Up Release can search for the selected album: not while work runs. A
+    /// staged job's searches the local catalog only (ADR 0178).
+    var canLookUp: Bool { selected != nil && !isBusy && rematchingID == nil }
 
     /// What Look Up Release's fields start with: the album's artist and title as tagged.
     func lookUpQuery() -> ReleaseQuery {

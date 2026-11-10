@@ -132,13 +132,14 @@ public final class DiscogsTagger {
     }
 
     /// The tagger for one staged job with a discrepancy (ADR 0146), opened from Downloads: it
-    /// reads the job's files under `stagingRoot`, matches them with the job's release in the
-    /// catalog only, and writes through `StagedWriter`, whose journal is under
-    /// `dataDirectory`. `resolved` hears the verdict once Apply has written.
+    /// reads the job's files under `stagingRoot`, matches them with the job's release, or one
+    /// the owner chooses (ADR 0178), in the catalog only, and writes through `StagedWriter`,
+    /// whose journal is under `dataDirectory`. `resolved` hears the verdict once Apply has
+    /// written, with the release written.
     package convenience init(
         stagedJob job: StagedJob, stagingRoot: String, dataDirectory: URL, catalog: URL,
         mapping: DiscogsMapping, savedMappings: [NamedDiscogsMapping], choices: TaggerChoices,
-        resolved: @escaping (AutoTagRun.Verdict) -> Void
+        resolved: @escaping (AutoTagRun.Verdict, _ releaseID: Int) -> Void
     ) {
         let writer = StagedWriter(stagingRoot: stagingRoot, dataDirectory: dataDirectory)
         let sizes = StagedSizes(job, stagingRoot: stagingRoot)
@@ -158,6 +159,9 @@ public final class DiscogsTagger {
                     throw ReleaseSnapshot.Problem.notInCatalog(releaseID: release)
                 }
                 return match
+            },
+            lookUp: { query, album in
+                try await lookUpReleases(query, for: album, catalogAt: catalog, api: nil)
             },
             summaries: { try await releaseSummaries($0, catalogAt: catalog) },
             release: { try await releaseDetail($0, catalogAt: catalog) },
