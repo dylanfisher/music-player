@@ -223,7 +223,13 @@ final class TaggerModel {
     }
     /// Nil lists the albums by artist and then title.
     private(set) var albumSort: AlbumSort?
-    var selectedID: Int64?
+    /// The album the detail shows: the one clicked last. Setting it selects it alone.
+    var selectedID: Int64? {
+        didSet { selectedIDs = selectedID.map { [$0] } ?? [] }
+    }
+    /// The albums selected in the list, `selectedID` among them, which Reject and Apply act on
+    /// when there are several.
+    var selectedIDs: Set<Int64> = []
     var mapping: DiscogsMapping {
         didSet { forgetChangeCounts() }
     }
@@ -413,6 +419,9 @@ final class TaggerModel {
     func count(_ tab: TaggerTab) -> Int { albums.count { tab.lists($0.match) } }
 
     var selected: Album? { albums.first { $0.id == selectedID } }
+
+    /// The albums selected in the tab shown, in list order.
+    var selectedAlbums: [Album] { albums(in: tab).filter { selectedIDs.contains($0.id) } }
 
     /// Whether the selected album's rows can be dragged to another track: its match is a guess.
     var canRemap: Bool {
@@ -764,19 +773,33 @@ final class TaggerModel {
             })
     }
 
-    /// Rejects the album, so Apply to All leaves it out, or takes the rejection back; both are
-    /// remembered.
-    func setRejected(_ rejected: Bool, _ albumID: Int64) async {
-        guard let album = albums.first(where: { $0.id == albumID }) else { return }
-        let review: DiscogsReview? =
-            rejected ? .rejected : album.chosen.map { DiscogsReview.chosen(releaseID: $0) }
-        do {
-            try await effects.review(review, album.album.tracks.map(\.fileID))
-            guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
-            albums[index].review = review
-            changed()
-        } catch {
-            failed("The review couldn't be saved", ["\(error)"])
+    /// Rejects the albums, so Apply leaves them out, or takes the rejections back; both are
+    /// remembered. Taking one back remembers the release chosen for that album again.
+    func setRejected(_ rejected: Bool, _ albumIDs: [Int64]) async {
+        let wanted = Set(albumIDs)
+        // One save per review: a rejection's, or each chosen release's when taken back.
+        var groups: [(review: DiscogsReview?, albumIDs: Set<Int64>, files: [Int64])] = []
+        for album in albums where wanted.contains(album.id) {
+            let review: DiscogsReview? =
+                rejected ? .rejected : album.chosen.map { DiscogsReview.chosen(releaseID: $0) }
+            let files = album.album.tracks.map(\.fileID)
+            if let at = groups.firstIndex(where: { $0.review == review }) {
+                groups[at].albumIDs.insert(album.id)
+                groups[at].files += files
+            } else {
+                groups.append((review, [album.id], files))
+            }
+        }
+        defer { changed() }
+        for group in groups {
+            do {
+                try await effects.review(group.review, group.files)
+            } catch {
+                return failed("The review couldn't be saved", ["\(error)"])
+            }
+            for index in albums.indices where group.albumIDs.contains(albums[index].id) {
+                albums[index].review = group.review
+            }
         }
     }
 
@@ -949,9 +972,19 @@ final class TaggerModel {
 
     // MARK: - Apply
 
-    /// The albums Apply to All in `tab` writes: those not rejected and not written already.
+    /// The albums Apply in `tab` writes: those selected when several are, else all the tab's;
+    /// of them, those with a release, not rejected and not written already.
     func applicable(_ tab: TaggerTab) -> [Album] {
-        albums(in: tab).filter { !$0.isRejected && !$0.applied && $0.match.release != nil }
+        let listed = albums(in: tab)
+        let selected = listed.filter { selectedIDs.contains($0.id) }
+        return (selected.count > 1 ? selected : listed).filter {
+            !$0.isRejected && !$0.applied && $0.match.release != nil
+        }
+    }
+
+    /// Whether Apply in `tab` writes the albums selected in it rather than all of them.
+    func appliesToSelection(in tab: TaggerTab) -> Bool {
+        albums(in: tab).count { selectedIDs.contains($0.id) } > 1
     }
 
     /// Reads the files of `albumIDs` and works out what Apply writes to them, with progress;

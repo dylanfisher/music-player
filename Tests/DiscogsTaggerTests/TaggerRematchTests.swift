@@ -127,7 +127,7 @@ private let stockholm = ["Östermalm", "Gamla Stan", "Kungsholmen"]
     #expect(tagger.changeCounts.keys.sorted() == [1, 2])
     tagger.setExcluded([set.files[0].changes[0].id], for: 2)
     #expect(tagger.changeCounts.keys.sorted() == [1], "album 1's count stays")
-    await tagger.setRejected(true, 1)
+    await tagger.setRejected(true, [1])
     #expect(tagger.changeCounts[1] != nil, "a rejection doesn't change what Apply would write")
     tagger.mapping = DiscogsPreset.oneToOne.mapping
     #expect(tagger.changeCounts.isEmpty)

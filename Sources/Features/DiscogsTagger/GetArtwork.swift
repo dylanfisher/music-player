@@ -60,7 +60,7 @@ extension TaggerModel {
 
     /// "Get Artwork for 12 Albums", the button's title and the question's.
     static func artworkTitle(albums: Int) -> String {
-        "Get Artwork for \(DisplayText.count(albums, "Album"))"
+        "Get Artwork for \(TaggerText.albums(albums))"
     }
 
     /// The question Get Artwork asks, with its count.

@@ -202,7 +202,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     #expect(resolved.map(\.1) == [99])
 
     // Rejecting is Downloads' job, which deletes the staged folder.
-    await tagger.setRejected(true, -1)
+    await tagger.setRejected(true, [-1])
     #expect(failures.last?.contains("rejected in Downloads") == true)
     #expect(tagger.albums.first?.isRejected == false)
 }

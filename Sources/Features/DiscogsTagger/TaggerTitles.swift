@@ -17,6 +17,9 @@ enum TaggerText {
     static let lookUpEmpty = "Type an artist, a title, a catalog number or a release ID"
     static let searching = "Searching…"
 
+    /// "12 Albums", as Get Artwork and Reject count them on their buttons.
+    static func albums(_ count: Int) -> String { DisplayText.count(count, "Album") }
+
     /// "120 tags to 20 files": what a write writes.
     static func tagsToFiles(tags: Int, files: Int) -> String {
         "\(DisplayText.count(tags, "tag")) to \(DisplayText.files(files))"

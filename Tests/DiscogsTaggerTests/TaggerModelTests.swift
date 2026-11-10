@@ -117,12 +117,12 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(seen.reviews.last?.0 == .chosen(releaseID: 12))
     #expect(seen.reviews.last?.1 == one.tracks.map(\.fileID))
 
-    await tagger.setRejected(true, 1)
+    await tagger.setRejected(true, [1])
     #expect(tagger.selected?.isRejected == true)
-    await tagger.setRejected(false, 1)
+    await tagger.setRejected(false, [1])
     #expect(tagger.selected?.review == .chosen(releaseID: 12), "the choice comes back")
-    await tagger.setRejected(true, 2)
-    await tagger.setRejected(false, 2)
+    await tagger.setRejected(true, [2])
+    await tagger.setRejected(false, [2])
     #expect(
         seen.reviews.map(\.0) == [
             .chosen(releaseID: 12), .rejected, .chosen(releaseID: 12), .rejected, nil,
@@ -387,7 +387,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     await tagger.choose(12, for: 1)
     #expect(tagger.albums(in: .exact).isEmpty)
     #expect(tagger.albums(in: .likely).map(\.id) == [2, 1], "by artist, then title")
-    await tagger.setRejected(true, 1)
+    await tagger.setRejected(true, [1])
     #expect(tagger.albums(in: .likely).first { $0.id == 1 }?.isRejected == true)
 }
 

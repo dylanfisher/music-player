@@ -1280,3 +1280,55 @@ private final class HeldSearch {
     #expect(controller.applyButton.title == "Apply to All in Titles Fit…")
     #expect(tagger.applicable(.titlesFit).map(\.id) == [1])
 }
+
+/// Several albums selected in the list are rejected and accepted together, in one save, and
+/// Apply writes only them; the detail shows the one selected last.
+@MainActor
+@Test func severalSelectedAlbumsAreRejectedAndAppliedTogether() async throws {
+    let seen = Seen()
+    let albums = [
+        album(1, "A", titles: stockholm), album(2, "B", titles: stockholm),
+        album(3, "C", titles: stockholm),
+    ]
+    let tagger = await model(
+        seen, albums: albums,
+        matches: { album, _ in
+            match(album, release(Int(album.id) * 10, album.title, titles: stockholm), tier: .exact)
+        })
+    tagger.analyze()
+    await tagger.finished()
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    #expect(controller.albumTable.allowsMultipleSelection)
+    #expect(controller.shownAlbums.map(\.id) == [1, 2, 3])
+    #expect(controller.rejectButton.title == "Reject")
+    #expect(controller.applyButton.title == "Apply to All in Exact…")
+
+    controller.albumTable.selectRowIndexes([2], byExtendingSelection: false)
+    controller.albumTable.selectRowIndexes([0], byExtendingSelection: true)
+    #expect(tagger.selectedIDs == [1, 3])
+    #expect(tagger.selectedID == 1, "the row selected last")
+    #expect(controller.releaseTitle.stringValue == "Persuader – A")
+    #expect(controller.rejectButton.title == "Reject 2 Albums")
+    #expect(controller.applyButton.title == "Apply to 2 Selected…")
+    #expect(tagger.applicable(.exact).map(\.id) == [1, 3])
+
+    click(controller.rejectButton)
+    try await eventually { tagger.albums.filter(\.isRejected).map(\.id) == [1, 3] }
+    #expect(seen.reviews.count == 1, "one save")
+    #expect(seen.reviews.last?.0 == .rejected)
+    #expect(seen.reviews.last?.1 == albums[0].tracks.map(\.fileID) + albums[2].tracks.map(\.fileID))
+    #expect(controller.albumTable.selectedRowIndexes == [0, 2], "the selection stays")
+    #expect(controller.rejectButton.title == "Accept 2 Albums")
+    #expect(!controller.applyButton.isEnabled, "both rejected")
+
+    click(controller.rejectButton)
+    try await eventually { !tagger.albums.contains(where: \.isRejected) }
+    #expect(seen.reviews.last?.0 == nil)
+
+    controller.albumTable.selectRowIndexes([1], byExtendingSelection: false)
+    #expect(tagger.selectedIDs == [2])
+    #expect(controller.rejectButton.title == "Reject")
+    #expect(controller.applyButton.title == "Apply to All in Exact…")
+    #expect(tagger.applicable(.exact).map(\.id) == [1, 2, 3])
+}

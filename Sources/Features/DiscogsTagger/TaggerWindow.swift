@@ -64,6 +64,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Set while one tracklist follows the other's scroll or selection, so the other doesn't
     /// follow it back.
     private var following = false
+    /// Set while `refresh` selects the model's albums in the list, so the list's notifications
+    /// of it aren't taken for the user's.
+    private var selectingAlbums = false
     let releaseTitle = NSTextField(labelWithString: "")
     let releaseLine = NSTextField(labelWithString: "")
     /// Why a Likely or Incomplete album isn't Exact, under the release's lines.
@@ -228,6 +231,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         let albums = taggerTable(
             albumTable, [(.album, 200), (.files, 36), (.confidence, 48), (.review, 64)],
             source: self)
+        albumTable.allowsMultipleSelection = true
         for column in albumTable.tableColumns {
             column.sortDescriptorPrototype = NSSortDescriptor(
                 key: column.identifier.rawValue, ascending: true)
@@ -480,10 +484,6 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             tabs.setToolTip(tab.help, forSegment: index)
         }
         tabs.selectedSegment = TaggerTab.allCases.firstIndex(of: model.tab)!
-        let canApply = TaggerModel.appliedTabs.contains(model.tab)
-        applyButton.isHidden = !canApply
-        applyButton.title = "Apply to All in \(model.tab.title)…"
-        applyButton.isEnabled = canApply && !model.isBusy && !model.applicable(model.tab).isEmpty
         let artwork = model.artworkGroups.count
         artworkButton.title = "\(TaggerModel.artworkTitle(albums: artwork))…"
         // A staged job is written through its own journal, which covers aren't (ADR 0146).
@@ -492,12 +492,28 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
         shownAlbums = model.albums(in: model.tab)
         albumTable.reloadData()
-        if let row = shownAlbums.firstIndex(where: { $0.id == model.selectedID }) {
-            albumTable.selectRowIndexes([row], byExtendingSelection: false)
-        } else {
-            albumTable.deselectAll(nil)
+        selectingAlbums = true
+        // The detail's album is selected last, so it's the list's `selectedRow`.
+        let others = shownAlbums.indices.filter {
+            shownAlbums[$0].id != model.selectedID && model.selectedIDs.contains(shownAlbums[$0].id)
         }
+        albumTable.selectRowIndexes(IndexSet(others), byExtendingSelection: false)
+        if let row = shownAlbums.firstIndex(where: { $0.id == model.selectedID }) {
+            albumTable.selectRowIndexes([row], byExtendingSelection: true)
+        }
+        selectingAlbums = false
         showSelected()
+    }
+
+    /// Apply's button: all the tab's albums, or those selected when several are.
+    private func showApply() {
+        let canApply = TaggerModel.appliedTabs.contains(model.tab)
+        applyButton.isHidden = !canApply
+        applyButton.title =
+            model.appliesToSelection(in: model.tab)
+            ? "Apply to \(number(model.selectedAlbums.count)) Selected…"
+            : "Apply to All in \(model.tab.title)…"
+        applyButton.isEnabled = canApply && !model.isBusy && !model.applicable(model.tab).isEmpty
     }
 
     /// The writes running, beside the status bar's line: "Writing 120 tags to 20 files: 3 of
@@ -558,8 +574,17 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         changesButton.isEnabled = reviewing && summary != nil && album?.isRejected == false
         model.countChanges()
         discogsButton.isEnabled = summary != nil
-        rejectButton.isEnabled = reviewing
-        rejectButton.title = album?.isRejected == true ? "Accept" : "Reject"
+        let reviewed = model.selectedAlbums
+        rejectButton.isEnabled = reviewing && !reviewed.isEmpty
+        rejectButton.title = Self.rejectTitle(reviewed)
+        showApply()
+    }
+
+    /// "Reject", or "Accept" when every album selected is rejected; with the count when
+    /// several are, as "Reject 3 Albums".
+    static func rejectTitle(_ selected: [TaggerModel.Album]) -> String {
+        let verb = !selected.isEmpty && selected.allSatisfy(\.isRejected) ? "Accept" : "Reject"
+        return selected.count > 1 ? "\(verb) \(TaggerText.albums(selected.count))" : verb
     }
 
     /// "9 Other Releases…", "1 Other Release…", or "No Other Releases" for none, when the
@@ -729,10 +754,14 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             following = false
             return
         }
+        guard !selectingAlbums else { return }
         let row = albumTable.selectedRow
         let id = row >= 0 && row < shownAlbums.count ? shownAlbums[row].id : nil
-        guard id != model.selectedID else { return }
+        let rows = albumTable.selectedRowIndexes.filter { $0 < shownAlbums.count }
+        let ids = Set(rows.map { shownAlbums[$0].id })
+        guard id != model.selectedID || ids != model.selectedIDs else { return }
         model.selectedID = id
+        model.selectedIDs = ids
         showSelected()
     }
 
@@ -981,9 +1010,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         }
     }
 
+    /// Rejects the albums selected, or accepts them when they're all rejected.
     @objc private func toggleRejected() {
-        guard let album = model.selected else { return }
-        Task { await model.setRejected(!album.isRejected, album.id) }
+        let selected = model.selectedAlbums
+        guard !selected.isEmpty else { return }
+        let rejecting = !selected.allSatisfy(\.isRejected)
+        Task { await model.setRejected(rejecting, selected.map(\.id)) }
     }
 
     @objc private func getArtworkClicked() { getArtwork(model.artworkGroups) }
