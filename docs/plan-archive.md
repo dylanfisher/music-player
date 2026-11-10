@@ -903,3 +903,311 @@ and passed alone.
 Tagging…: the joined album in the list, the line naming both, a conflict for the repeated
 tracks, then a write and Undo Tag Edit; and a two-CD set split by disc, written with Separate
 Releases on, showing as one album after the rescan.
+
+### 73. Performance audit
+
+Asked by the owner on 2026-11-10: "a full performance audit and make any easy fixes or big
+improvements we can." The phase measures where the app spends CPU, main-thread time, memory,
+I/O and wakeups, fixes what is cheap and what moves a number the owner feels, adds bench rows
+for the paths built since phase 54 without one, and writes down the rest with a reason. Nothing
+the user sees changes apart from speed.
+
+- [x] **Baseline:** every bench row an agent session can run, on the phase branch before any
+      fix, saved and copied into the Result line.
+- [x] **Audit:** every module under `Sources/App`, `Features`, `Core` and `Primitives` read by
+      an auditor, and the main scenarios profiled in the release app; one triaged list of
+      findings.
+- [x] **Bench gaps closed:** a row and budget for each user-visible path at the owner's scale
+      that has none (at least the matcher over many albums, the tagger window with many
+      albums, Downloads' approve, Organize Selected Files).
+- [x] **Fixes landed:** every finding triaged as a fix, each with its before and after number;
+      no budget missed, no row more than 10% slower than the baseline without a written reason.
+- [x] **The rest recorded:** findings deferred or dropped, each with its reason, in the Result
+      line; the ones worth a later phase in [Later](#later).
+- [ ] **Owner checks:** the window rows on the owner's Mac, and the old Mac.
+
+Result, phase 73: 16 commits; one new ADR, 0185. Wave 0 ran every bench row an agent session
+can, without the `window:` rows, on the branch before any fix (`.build/perf-audit/baseline.txt`
+in the phase's worktree): every row in budget but the metadata parse, 5.07 s against 5 s under
+the auditors' load and 1.54 s alone. Seven Sonnet auditors read every module of their area,
+and one profiled the release app and the rows over 70%. The real-time audit passed: the IO proc
+is C, lock and allocation free, 157 ns a 1024-frame callback at 192 kHz. Twelve fixes shipped
+in three lanes, and seven rows and an ADR in a bench lane, as the implementation plan above
+lists. The numbers that moved, before and after, Apple Silicon, each row alone:
+
+| Row | Before | After | Budget |
+|---|---|---|---|
+| stats: open Stats on Past Month (73.6) | 321 ms | 84 ms | 400 ms |
+| analysis: a 5-minute 24/96 FLAC, local (73.3) | 1.03 s | 0.74 s | 2 s |
+| settings: load and validate (73.5) | 1.80 ms | 1.10 ms | 2 ms |
+| library: scan 43000 fixture files into a new index (73.8) | 1.35 s | 1.16 s | 5 s |
+| discogs: tagger, Apply to All's write progress, 18,288 files (new; 73.9) | 192 to 286 s | 0.75 s | 5 s |
+| discogs: tagger, a refresh of Exact with 1,741 albums (new; 73.9) | 4.3 ms | 3.1 ms | 10 ms |
+| downloads: Approve a 12-file album, local (new; 73.11, 73.3) | 2.2 s | 0.81 s | 5 s |
+| downloads: the same on the slow simulated NAS (new) | not measured | 3.4 s | 10 s |
+| library: Organize Selected Files, 2,000 files, local (new; 73.7) | 4.6 to 6.4 s | 1.21 s | 15 s |
+| library: Organize Selected Files, 213 files, slow simulated NAS (new; 73.7) | 7.3 s | 0.90 s | 15 s |
+| selection: type-to-select a key over every title (new; 73.10) | 8.4 ms | 3.4 ms | 20 ms |
+| https: a 3 MB body through `HTTPSClient` (new; 73.2) | 7.1 to 9.1 ms | 2.3 ms | 50 ms |
+| discogs: Analyze 1,741 albums, masters of 20 to 100 releases (new) | 4.6 to 4.9 s | 4.45 s | 10 s |
+| history: history table plus its indexes | 28.6 MB | 46.6 MB | 50 MB, was 40 |
+
+Slower by more than 10%: the sync merge of 1M plays, 6.45 to 7.8 s (39% of its budget), and a
+play recorded, 0.09 to 0.21 ms, because each play now goes into two indexes on `history`, the
+price of 73.6 (ADR 0185); the history size budget went from 40 to 50 MB for the same index.
+Four other rows read 13 to 30% slower in the full run (the 3000-file NAS scan, a scan's peak
+memory, the palette's last of 8 keystrokes, a seek during a refill); main's binary, run
+alternately with the branch's under the bench lock, measured the same, so they moved with
+the Mac, not the code. D1's 17 s for 3 MB was the auditor's harness reading on the main
+actor; through the client it was 7 to 9 ms, and the chunked read still took 60% off. C1's
+eager decode moved 0.04 to 0.2 ms a cover off the main thread, less than its estimate.
+
+For the owner (each changes something flagged, so not done): E2, the tag writer reading and
+planning a batch's files concurrently (its planning estimated 4 to 8 times faster); T1, the
+temp-file write hashing the original while copying it (74 s to about 55 s on the slow NAS
+row); D2, Downloads polling less often with its window closed (1,440 wakeups a day); L1, a
+path stored once when already normalized (11 MB of the 47 MB index, a rescan); L2 and E5, the
+catalog's key tables `WITHOUT ROWID` and an artist key with release ids (3.9 MB, and faster
+artist-only searches; both a re-import of the dump); and a `memset` of the renderer's held
+buffer when it's made, so a first fade can't page-fault on the IO thread. Deferred, in
+[Later](plan.md#later): A1, the 10 ms control-thread tick while playing (0.28% of a core); E3, the
+matcher keeping every candidate's whole score, which the new matcher row confirmed (290 to 330
+MB held after Analyze of 1,741 albums with masters of 20 to 100 releases); E4, decoding only a
+candidate's tracks. Deferred without a Later line: B3, more listers on a NAS rescan (needs the
+owner's NAS, ADR 0151); F2, Approve reading every track to find its album (about 60 ms); P2,
+All Time's period (99 ms in the sorter, no cheap fix). Dropped: D3 (network time), C3 and C4
+(unmeasured or already off the main actor), F5 (no number), P3 (1.3% of a sort), Get
+Artwork's and the status bar's per-file progress (outside 73.9). Not run: the `window:` rows
+and the old Mac, whose host didn't resolve (`ssh mbp2015`).
+
+The gate: the review found one defect, the chunked reader copying the whole body on each chunk
+(fixed in place); its second round found nothing above low, and that low one is fixed too.
+Simplify found `LibraryFolderListings` keeping two copies of each listing and a removal
+rebuilding a folder's map, both fixed, and the type-to-select row timing a copy of the old
+loop, fixed to call the real code; the architecture audit found nothing. Every commit passed
+`./scripts/check --changed` but for `theGlassHeadersAreFrosted` (the screen is locked) and
+one flaky `UPnPOutputTests` run under load, which passed alone. Full `./scripts/check` passed but
+for `theGlassHeadersAreFrosted`.
+
+Cost: auditors (Sonnet) A 156k tokens, 52 tool calls, 17 min; B 309k, 102, 30 min; C 170k, 58,
+12 min; D 137k, 54, 9 min; E 185k, 66, 11 min; F 242k, 75, 12 min; P 175k, 93, 25 min. Lanes:
+bench (Opus) 352k, 159, 51 min with two rounds of follow-ups; library (Opus) 206k, 126, 48 min
+with its gate fixes; ui (Opus) 144k, 78, 25 min; small (Sonnet) 106k, 46, 25 min with its gate
+fix. Gate (Sonnet): review 99k, 23, 3 min, and its second round 58k, 5, 1 min; simplify 71k,
+10, 1 min; architecture 64k, 12, 1 min. About 2.4M subagent tokens, and about 5 hours of wall
+time, most of it the audit and the lanes running side by side.
+
+Out of scope: the test suite's and `./scripts/check`'s speed (landed in 0.20.1); `Sources/Tools`
+apart from what a new bench row needs; any change of behavior, stored data the owner would lose,
+or new dependency without the owner's answer (see Triage); the real-time path's design, which is
+audited and changed only for a measured defect.
+
+#### How to run phase 73
+
+The orchestrator (Opus) runs five waves on the branch `phase/73-performance-audit`, in its own
+worktree. Agents are Sonnet unless the wave says Opus, per the owner's CLAUDE.md: Opus only
+for a fix lane that changes several files. Waves 1 and 4 fit the Workflow tool (parallel agents
+with a findings schema); triage stays with the orchestrator.
+
+**Before wave 0**, `git status` in main's checkout. It may hold the owner's uncommitted work (at
+planning time `TaggerModel.swift`, `TaggerWindowTests.swift` and an untracked ADR 0184). Never
+stash, reset, commit or edit it. A file with uncommitted changes there is off limits to fixes;
+its findings are deferred to the owner. ADR numbers start after the highest one on disk,
+tracked or not (0185 at planning time), and only the orchestrator assigns them.
+
+**Shared brief.** Every agent's prompt starts with this, then its own part:
+
+> Phase 73 of docs/plan.md, a performance audit. Read AGENTS.md, docs/map.md and the phase's
+> text first. Boundaries: no real library, no NAS, no Discogs API, no real service, no secrets;
+> measure with the fixture library, the simulated NAS and the null device only. The scale that
+> matters is 43k tracks, 1M plays, the owner's 1,741 tagged albums and a 36 GB Discogs catalog,
+> on Apple Silicon and on a 2015 MacBook Pro on macOS 12. A finding needs a number (bench row,
+> `xctrace`, `sample`, `EXPLAIN QUERY PLAN`, a timed loop) or a cost argument with n at that
+> scale; "could be faster" without either is dropped. Timed runs take the bench lock first:
+> `until mkdir "$(git rev-parse --git-common-dir)/perf-bench.lock" 2>/dev/null; do sleep 5; done`,
+> and `rmdir` it after, so two measurements never share the Mac. In an agent session the window
+> rows that quit the app hang in `terminate:` (see the [phase gate](#phase-gate)); leave them
+> out, and stop a launched app with `kill`.
+
+**Wave 0: baseline** (orchestrator, alone on the Mac). Create the branch and worktree, build
+release, and run `./scripts/bench` without the window rows, saving the output to
+`.build/perf-audit/baseline.txt`. Rerun alone any row that misses. Mark every row above 70% of
+its budget: those are wave 1's first profiling targets.
+
+**Wave 1: audit** (7 Sonnet agents in parallel, strictly read only: no edits, no commits; they
+write only under `.build/perf-audit/`). Six read code, by area; the seventh profiles. Each
+reports findings in this shape, one per item:
+
+| Field | What |
+|---|---|
+| `id` | area letter and number, `B7` |
+| `where` | `file:line`, every one involved |
+| `what` | what is slow or large, in one sentence |
+| `scenario` | what the owner does when it costs, at the scale above |
+| `evidence` | the number and how it was got, or the cost argument |
+| `fix` | a sketch, and what it risks (a stale cache, an ordering change) |
+| `size` | S: one file, under an hour; M: one module; L: several modules or a design change |
+| `proof` | the bench row that would show it, or "new row: …" |
+| `flags` | any of: real-time path, AGENTS.md boundary, stored data shape, user-visible change, new API needing `#available` on macOS 12 |
+
+Each also lists its area's **bench gaps**: user-visible paths at the owner's scale with no row.
+
+- **A, playback and output:** `Core/HALRender`, `HALOutput`, `Playback`, `UPnPOutput`,
+  `Primitives/RingBuffer`. CPU per second while playing 24/192 FLAC and through conversion,
+  decode burst sizes and the control thread's wakeups, allocation on the decode thread, vDSP
+  use, and the [real-time audit](#phase-gate) in full.
+- **B, index and scan:** `Core/Library`, `Primitives/SQLite`, `Core/Metadata`, `Core/Snapshot`.
+  Every SQL statement run at launch, per keystroke, per refresh and per play, with
+  `EXPLAIN QUERY PLAN` on the bench's fixture index for a scan or temp B-tree; statement reuse,
+  transactions per write, pragmas, WAL checkpoints; a scan's and rescan's system calls per file,
+  the watcher's coalescing, the sync merge, a snapshot's copy.
+- **C, library window:** `Features/LibraryBrowser`, `Primitives/DisplayText`, `Core/Artwork`,
+  `Core/BarView`, `Features/QueueView`, `Palette`, `PlaylistEditor`. Main-thread work per
+  keystroke, refresh and scroll frame; full reloads where a row reload would do; text layout and
+  drawing caches; the thumbnail cache's size, eviction and decode threads; resident memory.
+- **D, launch, idle and background:** `App/MusicPlayer`, `Core/Settings`, `Log`, `Commands`,
+  `Scripting`, `Receiver`, `UPnP`, `Recommender`, `Primitives/LocalNetwork`, `LocalSocket`,
+  `HTTPSClient`. What runs before the first rows; timers and their tolerance; polling; listeners
+  and SSDP while idle; log volume; behavior with the window hidden, on battery, under App Nap.
+- **E, Discogs and tagging:** `Core/Discogs`, `Features/DiscogsTagger`, `Core/TagWriter`,
+  `Features/TagEditor`. The matcher per album and over 1,741 albums, its queries against the
+  real catalog's size (index use, not row counts in the fixture); the tagger model's work per
+  change and its table reloads with thousands of albums; Combine; Apply of a large match set;
+  tag writes on the simulated NAS.
+- **F, Downloads, analysis and the other windows:** `Features/Downloads`, `Core/Analysis`,
+  `Features/NowPlaying`, `SettingsWindow`, `Spectrum`. Staging folder watching, Approve's renames
+  and copies, Organize's renames, Analyze Library's threads and peak memory, Now Playing's
+  updates per second, window open times.
+- **P, profiles:** the release app on the fixture library, with `xctrace` (Time Profiler,
+  Allocations, Leaks), `sample`, `footprint`, `vmmap --summary` and `top -l` for wakeups.
+  Scenarios: launch to idle; ten search keystrokes; a sort; scrolling with art; playing to the
+  null device; opening the Discogs tagger on the fixture catalog and analyzing; and each row wave
+  0 marked over 70%. Reports the ten heaviest symbols by self time per scenario, allocations per
+  scenario, any leak, and memory after each, as findings where a symbol is the app's own.
+
+**Wave 2: triage** (orchestrator). Merge and dedupe by `where`, then sort each finding into one
+bucket:
+
+- **Fix:** a size S finding with evidence, or any finding that improves a row or profiled
+  scenario by 25% or more, brings a row from over 80% of its budget to under 50%, or removes
+  CPU work that is small on Apple Silicon but measurable on the old Mac.
+- **Ask:** a fix with any flag but `#available`. Put them to the owner in one question, each
+  with its gain and what changes, and carry on with the rest; an answered one moves to Fix or
+  Defer.
+- **Row:** a bench gap. Its budget comes from its measured number with room, as phase 32f set
+  its rows; the old Mac figure is an estimate until its checkpoint.
+- **Defer:** worth doing but L and under the Fix line, or blocked by the owner's uncommitted
+  files. **Drop:** under 5%, unmeasurable, or more code than it saves.
+
+Then write "Implementation plan, phase 73" under this heading, as earlier phases did: numbered
+items 73.1 onward, each with its finding ids, files, the number it should move and its lane;
+and commit it (`docs:`).
+
+**Wave 3: fixes**, in lanes. A lane is one agent on one worktree branched from the phase
+branch, `phase/73-perf-<lane>`, and no two lanes running at once touch the same file. At most
+four lanes run at once: each worktree's `.build` takes several gigabytes, and builds load the
+Mac's measurements.
+
+- **The bench lane** goes first, alongside any fix lane whose rows already exist: the new rows
+  in `Sources/Tools/Bench` and their lines in [Performance budgets](#performance-budgets), so a
+  fix on those paths has a before number. Sonnet, or Opus if a row needs a new fixture
+  generator.
+- **Fix lanes**, one per module group from triage. Opus for a lane holding an L or M fix or
+  files in several modules; Sonnet for a lane of S fixes. Each fix is its own `perf` commit,
+  measured under the bench lock right before and right after, with both numbers and how they
+  were got in its body (see `647e65f1`). A fix that caches, batches or skips work gets a test
+  that fails if the cached or skipped result goes stale: that is where these fixes break.
+  Existing tests pass unchanged. A fix using an API newer than macOS 12 keeps an
+  `#available` fallback that is measured too. Iterate with `./scripts/check --changed main`.
+  A non-obvious choice goes in the lane's report as ADR text; the orchestrator numbers and
+  commits it.
+- Only the orchestrator edits `docs/plan.md`, apart from the bench lane's budget rows. It rebases
+  each finished lane onto the phase branch, fast-forwards, and removes the lane's worktree and
+  branch.
+
+**Wave 4: gate and landing.** The [phase gate](#phase-gate) on the phase branch: code review,
+simplify, the real-time audit if lane A changed anything, and the architecture audit, as
+Sonnet agents in parallel, strictly read only. Each confirmed finding goes back to the lane
+agent that wrote the code (`SendMessage`, so it keeps its context), or to a new Sonnet agent if
+that one is gone. Then, alone on the Mac, the bench as in wave 0, saved to
+`.build/perf-audit/after.txt`, and a table in the Result line of every row whose number moved
+more than 5%: baseline, after, budget. Then the full `./scripts/check` once, a patch bump in
+`Support/Info.plist` (perf only, as 0.21.1), Result and cost lines, the archive move and the
+[retrospective](#retrospective) if one is due. If the fast-forward of `main` fails because of
+the owner's uncommitted files, stop and ask.
+
+**Old Mac, timeboxed.** If `ssh mbp2015 true` succeeds, try to run the non-window bench rows
+there: an `x86_64` release build of `Bench`, `MusicPlayer` and `GenerateFixtures`, copied with
+`scp` to `~/perf-audit-73/` on that Mac, fixtures generated there, the output copied back, and
+the folder removed. Nothing outside that folder. Stop at the first step that fails twice, or
+after 30 minutes, and leave it as an owner check; either way, say which in the Result line. Its
+numbers replace an "estimate until its checkpoint" figure only with the owner's agreement.
+
+Rough cost, from earlier phases: the audit about 1M tokens and 30 minutes, the fix lanes 1 to 3M
+tokens and 1 to 3 hours, the gate and benches about 500k tokens and an hour.
+
+**Owner checks:** the window rows the agent session left out, with `./scripts/bench window` on
+the owner's Mac, compared with the last recorded numbers; the old Mac's rows if the timeboxed run didn't finish;
+and one use of the app on the real library: launch, search, scroll with art, play, open the
+tagger.
+
+Implementation plan, phase 73:
+
+Wave 0's baseline (`.build/perf-audit/baseline.txt`) missed one row, the metadata parse
+(5.07 s against 5 s); alone it measured 1.54 s, so the miss was load. Rows over 70% alone:
+settings 1.73 ms (87%), Stats' period change 247 ms (99%), Stats' open 292 ms (73%), the
+reader during Analyze Library 15.5 ms (78%), and the database sizes (index 79%, catalog 80%,
+history 72%). The seven auditors' findings are in `.build/perf-audit/{A,B,C,D,E,F,P}.md`;
+the real-time audit passed (A).
+
+- 73.1 Bench lane (`Sources/Tools/Bench`, the budget table): rows for the matcher over many
+  albums with masters of many releases and an artist-only share (E gap 1), the tagger window
+  with 1,741 albums, its refresh and Apply's progress (E, P), Downloads' Approve with its
+  lossy-origin check (F), Organize Selected Files local and on the slow simulated NAS (B2,
+  F1), type-to-select over every fixture title (C2), and a multi-MB body through
+  `HTTPSClient` (D1). Each row's before number is measured on the lane's own branch, before
+  the fix lanes land. Lane `bench`, Opus.
+- 73.2 `HTTPSClient` reads the body in chunks, not a byte at a time (D1: 17 s against 2 ms for
+  3 MB), keeping the size cap and the refusal of redirects. Lane `small`.
+- 73.3 `SampleMeasures` checks a block for clipping with vDSP before the per-sample loop (F3:
+  266 ms of the 1.03 s analysis row). Lane `small`.
+- 73.4 `ThumbnailStore` decodes a thumbnail when it's made, off the main thread (C1: the first
+  draw 0.31 against 0.17 ms at 256 px, 4.7 against 1.8 ms at 1024 px). Lane `small`.
+- 73.5 `ConfigStore` parses the config's `Data` without copying it to `[UInt8]` (P4: 24% of
+  the settings row, at 87% of its budget). Lane `small`.
+- 73.6 A schema part of its own, derived like `recorded`, holding an index on `history
+  (path_id, played_at)`, so Stats' first plays stop sorting 1M rows (B1, P1: 211 of 290 ms;
+  26 ms indexed). The stats part keeps its SQL, so no play is discarded; a test opens an index
+  of the old shape and finds its plays. A second index on `played_at` only if the history row
+  stays under its budget. Lane `library`, Opus.
+- 73.7 One listing of each folder per Organize, Approve or Copy Added Files run, not three per
+  file (`LibraryFolderMove.listedPath`; B2, F1: 0.96 ms a file locally, at least 135 ms a file
+  on the slow simulated NAS). A test that a folder changed during the run is listed again
+  where the move needs it. Lane `library`.
+- 73.8 The scanner's connection checkpoints the WAL less often (B4: 20% of the batch store's
+  samples). Lane `library`.
+- 73.9 Apply's write progress reaches the tagger about 200 times, not twice per file, and the
+  artwork count is kept between refreshes (E1: 42k main-queue blocks for 21k files, 0.69 ms
+  of artwork groups each). A test that the count follows a change. Lane `ui`, Opus.
+- 73.10 Type-to-select folds the titles once per list, not per keystroke (C2: 11.6 to 14.3
+  ms a keystroke over 43k titles). A test that a refreshed list is folded again. Lane `ui`.
+- 73.11 Approve's lossy-origin check decodes its two files at once (F4: 7.2 s serial against
+  about 3.6 s on the slow simulated NAS). Lane `ui`.
+
+For the owner (flags, see Triage): E2, the tag writer reading and planning a batch's files
+concurrently (estimated 4 to 8 times faster planning; the writer's boundary); T1, hashing the
+original while it's copied to the temp file (74 s to about 55 s on the slow NAS row; the
+same); D2, Downloads polling less often while its window is closed (1,440 wakeups a day;
+user-visible); L1, storing a file's path once when it's already normalized (11 MB of the
+47 MB index; stored shape, a rescan); L2 and E5, the catalog's key tables `WITHOUT ROWID` and
+an artist key with release ids (3.9 MB, and artist-only searches; both a re-import of the
+dump); A's `memset` of the held buffer when the renderer is made, so a first fade doesn't
+page-fault on the IO thread (real-time path).
+
+Deferred: A1, a deadline-driven control thread instead of the 10 ms tick (0.28% of a core
+while playing; a real-time design change, ADR 0029); E3 and E4, the matcher's kept and decoded
+tracklists (unmeasured until 73.1's matcher row); B3, more listers on a no-change NAS rescan
+(needs the owner's NAS, ADR 0151); F2, Approve finding its album without reading every track
+(M, about 60 ms); P2, All Time's period (no cheap fix, 99 ms in the sorter). Dropped: D3, the
+Output menu's search (network time), C3 and C4 (unmeasured, or already off the main actor),
+F5, Now Playing's unchanged labels (no number), P3 (1.3% of a sort).
