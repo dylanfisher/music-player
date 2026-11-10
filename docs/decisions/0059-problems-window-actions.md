@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0033](0033-import-from-other-players.md), [0034](0034-folders-and-library-health.md),
   [0050](0050-remove-from-library.md)
+- **Amended by:** [0175](0175-organize-progress-and-the-problems-table.md): the table has a
+  column for each part of a problem, sortable, in a normal window
 
 ## Context
 

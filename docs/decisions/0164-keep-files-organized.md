@@ -6,6 +6,8 @@
   already in the library), [0147](0147-moving-downloads-into-the-library.md) (Approve is the
   library folder's only renamer, and its fallback rename), [0020](0020-tag-writing.md) (the
   undo journal keys a file by its path)
+- **Amended by:** [0175](0175-organize-progress-and-the-problems-table.md): Organize Selected
+  Files' sheet opens before it counts, and the renames show their progress
 - **See also:** [0026](0026-sync-identity-is-the-relative-path.md) (the move list that
   carries stats), [0154](0154-a-move-needs-more-than-a-length.md) (a scan's own move matching)
 
