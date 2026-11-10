@@ -13,7 +13,7 @@ let noValueText = "None"
 /// settings from the schema, a titled box for each section. A checkbox carries its setting's
 /// title on its right; a pop-up or a field has the title on its left, in one column for the
 /// whole pane. Each setting's summary is under it. Settings ▸ Playback, Appearance and Toolbar are one too, with their
-/// sections and no config file, and the Library pane holds one for its sections.
+/// sections and no config file, and Library is one, and the Watched Folders pane holds one for its sections.
 @MainActor
 final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let width = 640.0
@@ -550,7 +550,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             popUp.setAccessibilityLabel(row.title)
             return popUp
         case .folders:
-            preconditionFailure("the Library pane lists \(row.key)")
+            preconditionFailure("the Watched Folders pane lists \(row.key)")
         case .renderer:
             preconditionFailure("the output device's row lists \(row.key)")
         case .barLayout:
@@ -622,7 +622,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         case .output:
             (control as? NSPopUpButton).map(showOutputs)
         case .folders:
-            preconditionFailure("the Library pane lists \(row.key)")
+            preconditionFailure("the Watched Folders pane lists \(row.key)")
         case .renderer:
             preconditionFailure("the output device's row lists \(row.key)")
         case .syncFolder:

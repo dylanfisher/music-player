@@ -1,4 +1,4 @@
-/// What a scan does with the files it finds changed or gone, from Settings ▸ Library
+/// What a scan does with the files it finds changed or gone, from Settings ▸ Watched Folders
 /// (ADR 0094). Files themselves are never touched either way.
 public struct ScanOptions: Equatable, Sendable {
     /// Whether a walk that finished removes the tracks of files it no longer found. A folder

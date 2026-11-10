@@ -39,7 +39,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
 - **Import from Swinsian…** and **Import iTunes Library…** bring play counts, last played,
   date added, ratings, loved tracks and playlists across, matched by path, after a preview of
   what each would change. Running one again adds only the plays since.
-- **Watched folders** are listed in Settings ▸ Library, which adds and removes them;
+- **Watched folders** are listed in Settings ▸ Watched Folders, which adds and removes them;
   ⌘O adds one too. A folder on a network share is stored by the share, so the library follows it when
   macOS mounts it somewhere else, such as `/Volumes/music-1`. A network folder already in the
   library isn't rescanned at launch: it's checked every `pollIntervalMinutes` (60 by default,
@@ -73,7 +73,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 |---|---|
 | Install / bootstrap | `./scripts/setup` |
 | Run the app | `./scripts/dev` (`--home <folder>` keeps the config file, library and state in one folder; `--settings <file>` names another config file) |
-| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|toolbar\|library\|shortcuts\|statusBar\|headerStatus\|toolbarSheet\|downloads]` |
+| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|toolbar\|library\|folders\|shortcuts\|statusBar\|headerStatus\|toolbarSheet\|downloads]` |
 | Run tests: only the targets edited since the last pass (`--fresh` for all), or those changed since a commit | `./scripts/test [--fresh]`, `./scripts/test --changed [ref]` |
 | Build the `.app`, signed ad hoc with the hardened runtime (debug also lets lldb attach) | `./scripts/bundle [debug\|release]` |
 | Build the release `.app` and replace the copy in `/Applications`, quitting it first | `./scripts/install` |
