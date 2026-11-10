@@ -25,7 +25,7 @@ private func copyFolders() throws -> (library: String, source: String) {
     let before = try FileManager.default.attributesOfItem(atPath: source)
     let bytes = try Data(contentsOf: URL(fileURLWithPath: source, isDirectory: false))
 
-    let copy = try copyIntoLibraryFolder(source, libraryFolder: library)
+    let copy = try copyIntoLibraryFolder(source, into: LibraryFolderListings(library))
 
     #expect(copy == library + "/Band/Album/1-02 Song.flac")
     #expect(try Data(contentsOf: URL(fileURLWithPath: copy, isDirectory: false)) == bytes)
@@ -36,12 +36,12 @@ private func copyFolders() throws -> (library: String, source: String) {
 
 @Test func aFileAlreadyAtTheCopysPathIsKeptAndTheCopyRefused() throws {
     let (library, source) = try copyFolders()
-    let copy = try copyIntoLibraryFolder(source, libraryFolder: library)
+    let copy = try copyIntoLibraryFolder(source, into: LibraryFolderListings(library))
     let other = Data("not the same file".utf8)
     try other.write(to: URL(fileURLWithPath: copy, isDirectory: false))
 
     #expect(throws: CopyError.alreadyThere(source, copy)) {
-        try copyIntoLibraryFolder(source, libraryFolder: library)
+        try copyIntoLibraryFolder(source, into: LibraryFolderListings(library))
     }
     #expect(try Data(contentsOf: URL(fileURLWithPath: copy, isDirectory: false)) == other)
 }
@@ -51,7 +51,7 @@ private func copyFolders() throws -> (library: String, source: String) {
     try Data("not audio".utf8).write(to: URL(fileURLWithPath: source, isDirectory: false))
 
     #expect {
-        try copyIntoLibraryFolder(source, libraryFolder: library)
+        try copyIntoLibraryFolder(source, into: LibraryFolderListings(library))
     } throws: { error in
         guard case .unreadable(source, _) = error as? CopyError else { return false }
         return true

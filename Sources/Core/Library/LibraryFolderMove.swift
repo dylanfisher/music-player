@@ -365,10 +365,8 @@ public final class LibraryFolderListings: @unchecked Sendable {
     let libraryFolder: String
     private let lock = NSLock()
     private var caseIgnored: Bool?
-    /// Each folder listed, by path, its names in the order listed.
-    private var listings: [String: [String]] = [:]
-    /// Each folder's first name by `folded`, from `listings`.
-    private var firstNames: [String: [String: String]] = [:]
+    /// Each folder listed, by path: its names, by `folded`, the first listed of any two alike.
+    private var listings: [String: [String: String]] = [:]
     /// Whether each path asked about is a folder.
     private var folders: [String: Bool] = [:]
 
@@ -414,22 +412,17 @@ public final class LibraryFolderListings: @unchecked Sendable {
         }
     }
 
-    /// The first name `folder` lists that's `part` but for case, nil when none is.
+    /// The name `folder` lists that's `part` but for case, nil when none is.
     func name(matching part: String, in folder: String) throws -> String? {
         try lock.withLock {
             if listings[folder] == nil {
                 Self.wait(\.listingSeconds)
-                let names = try FileManager.default.contentsOfDirectory(atPath: folder)
-                listings[folder] = names
-                firstNames[folder] = Dictionary(
-                    names.map { (folded($0), $0) }, uniquingKeysWith: { first, _ in first })
+                listings[folder] = Dictionary(
+                    try FileManager.default.contentsOfDirectory(atPath: folder).map {
+                        (folded($0), $0)
+                    }, uniquingKeysWith: { first, _ in first })
             }
-            // A name found by folding is the one the comparison would find, as the volume
-            // holds no two names alike but for case; one not found is looked for as before.
-            if let name = firstNames[folder]?[folded(part)] { return name }
-            return listings[folder]?.first {
-                $0.compare(part, options: .caseInsensitive) == .orderedSame
-            }
+            return listings[folder]?[folded(part)]
         }
     }
 
@@ -451,12 +444,8 @@ public final class LibraryFolderListings: @unchecked Sendable {
                 let parent = (child as NSString).deletingLastPathComponent
                 let name = (child as NSString).lastPathComponent
                 folders[child] = nil
-                if var names = listings[parent], !names.contains(name) {
-                    names.append(name)
-                    listings[parent] = names
-                    if firstNames[parent]?[folded(name)] == nil {
-                        firstNames[parent]?[folded(name)] = name
-                    }
+                if listings[parent] != nil, listings[parent]?[folded(name)] == nil {
+                    listings[parent]?[folded(name)] = name
                 }
                 child = parent
             }
@@ -470,16 +459,14 @@ public final class LibraryFolderListings: @unchecked Sendable {
             let name = (path as NSString).lastPathComponent
             folders[path] = nil
             listings[path] = nil
-            firstNames[path] = nil
-            if let names = listings[parent] {
-                let kept = names.filter { $0 != name }
-                listings[parent] = kept
-                firstNames[parent] = Dictionary(
-                    kept.map { (folded($0), $0) }, uniquingKeysWith: { first, _ in first })
-            }
+            // The volume holds no other name alike but for case, so none is listed in its place.
+            if listings[parent]?[folded(name)] == name { listings[parent]?[folded(name)] = nil }
         }
     }
 
+    /// `name` as a volume that ignores case compares it, as `Spelling.key` does a path: a
+    /// name the tags spell another way but for case or composition finds the folder that's
+    /// there.
     private func folded(_ name: String) -> String {
         nfc(name).folding(options: .caseInsensitive, locale: nil)
     }

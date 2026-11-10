@@ -2,19 +2,12 @@ import Darwin
 import Foundation
 import Metadata
 
-/// Copies the audio file at `source` into `libraryFolder`, at the path its tags give it
-/// (ADR 0124), and returns the copy's path. The source is only read. A file already at that
-/// path is never replaced: the copy is refused instead. A copy that fails partway is removed,
-/// so no torn file is left for a scan to read. Reads and writes the volumes, so call it off the
-/// main thread.
-public func copyIntoLibraryFolder(_ source: String, libraryFolder: String)
-    throws(CopyError) -> String
-{
-    try copyIntoLibraryFolder(source, into: LibraryFolderListings(libraryFolder))
-}
-
-/// `copyIntoLibraryFolder(_:libraryFolder:)` into the library folder of `listings`, which one
-/// drop's copies share, so each folder is listed once for all of them.
+/// Copies the audio file at `source` into the library folder of `listings`, at the path its
+/// tags give it (ADR 0124), and returns the copy's path. The source is only read. A file
+/// already at that path is never replaced: the copy is refused instead. A copy that fails
+/// partway is removed, so no torn file is left for a scan to read. One drop's copies share
+/// `listings`, so each folder is listed once for all. Reads and writes the volumes, so call it
+/// off the main thread.
 public func copyIntoLibraryFolder(_ source: String, into listings: LibraryFolderListings)
     throws(CopyError) -> String
 {
