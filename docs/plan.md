@@ -665,17 +665,17 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 Asked by the owner on 2026-11-09, as proposed: "Combine Albums for Tagging", a command-palette
 command (and a track menu item) on the albums selected in the library.
 
-- [ ] **Joined for tagging:** it opens the Discogs Tagger with the selected albums joined into
+- [x] **Joined for tagging:** it opens the Discogs Tagger with the selected albums joined into
       one album, their files in disc and track order, and analyzes it, so the matcher compares
       every file with the catalog, and a release of the whole count ranks first.
-- [ ] **Albums with different titles or artists** are allowed, and the tagger names every
+- [x] **Albums with different titles or artists** are allowed, and the tagger names every
       source album on the joined one, so combining "1983" with "1983 [Expanded Reissue]" by
       mistake is easy to see before writing.
-- [ ] **Review and write** as any tagger write: nothing writes until the owner confirms; two
+- [x] **Review and write** as any tagger write: nothing writes until the owner confirms; two
       files that would be the same track show as a conflict in the review, as now; Other
       Releases… and Look Up… work; undo works. After the write every file carries one release
       id, so Separate Releases shows them as one album.
-- [ ] Works with the Discogs API alone, only slower.
+- [x] Works with the Discogs API alone, only slower.
 
 Implementation plan, phase 72 (ADR 0179):
 
@@ -713,6 +713,38 @@ become one album only when those three agree; the Minimal mapping doesn't write 
   API too, since the command is the click. Busy, it says so. Tests: the menus, and the
   tagger opened by it with each source.
 - 72.5 ADR 0179, see-also lines in 0133, 0139 and 0143.
+
+Result, phase 72: shipped all four items (ADR 0179; see-also lines in 0133, 0139 and 0143;
+AGENTS.md unchanged, since the write is a confirmed `TagWriter` edit through the tag editor's
+queue). Combine Albums for Tagging… is in the palette, the track menu after Get Discogs
+Artwork… and the File menu beside it. It opens the tagger in a new scope, Selected Albums as
+One, and analyzes at once from the chosen source, the API too; a busy tagger, no selection, a
+missing catalog or a single album is an alert. The albums go by first disc, then title, each in
+its own order, so an album and its reissue aren't interleaved; the search takes the first's
+title and artist; the combination's id is the first's negated, so left-out files and counts
+don't mix with a source's. It takes a review only when every source has the same one. Where
+the sources' titles differ, the files get the release's album title, and where their artists
+differ, its album artist, whatever the mapping or Keep existing values say
+(`DiscogsMapping.combining`), since Separate Releases makes an album of title, artist and
+release id together and the Minimal mapping writes no title. The album list names every source
+("Persuader – 1983 + Persuader – 1983 [Expanded Reissue]"), a line over the tracklists and the
+row's tooltip list each with its file count, and Apply's question says which albums the files
+come from. Two files on one track, Other Releases…, Look Up…, the write and Undo Tag Edit are
+the existing paths, on the combined album as on any. Tests: the mapping's override
+(`DiscogsMappingTests`), the order, id, details and names (`TaggerCombineTests`), the match
+seeing one album, the review rule, one album refused, the forced title and the question, the
+window's names, the command's tagger with each source and its three alerts, the track menu,
+and a real-catalog match of a split set ranking the six-track release over the three-track
+one (`AlbumMatcherTests`). Check steps `format typecheck arch dupes surface links` passed and
+`./scripts/test --changed main` passed but for `WindowGlassTests.theGlassHeadersAreFrosted`,
+which fails on `main` too while the screen is locked. Not measured: no bench row covers
+these paths, and the matcher's work for one combined album is that of one album of its count.
+Deferred: nothing. Not run in the app: an owner check on a real split album.
+
+**Owner checks:** select "1983" and "1983 [Expanded Reissue]" and run Combine Albums for
+Tagging…: the joined album in the list, the line naming both, a conflict for the repeated
+tracks, then a write and Undo Tag Edit; and a two-CD set split by disc, written with Separate
+Releases on, showing as one album after the rescan.
 
 ### 10. Web remote
 
