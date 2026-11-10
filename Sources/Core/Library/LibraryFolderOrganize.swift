@@ -37,8 +37,9 @@ public struct FilesOrganized: Equatable, Sendable {
 /// problem. On a volume that ignores case, a folder an earlier file of `paths` goes to keeps
 /// that file's spelling, as the folder will once the earlier move makes it, and names are
 /// compared as the volume compares them. Reads the files, so call it off the main thread.
-/// `counted` is told after each path how many it has checked and how many of them move, and
-/// `stopped` is asked before each one: once it says yes, the rest are left out unread.
+/// `counted` is told, after the first path, each 1% of them and the last, how many it has
+/// checked and how many of them move, and `stopped` is asked before each one: once it says
+/// yes, the rest are left out unread.
 public func layoutMoves(
     _ paths: [String], libraryFolder: String,
     counted: (_ checked: Int, _ moving: Int) -> Void = { _, _ in },
@@ -54,7 +55,9 @@ public func layoutMoves(
     var destinations: Set<String> = []
     for (checked, path) in paths.enumerated() {
         guard !stopped() else { break }
-        defer { counted(checked + 1, plan.moved.count) }
+        defer {
+            if reports(checked + 1, of: paths.count) { counted(checked + 1, plan.moved.count) }
+        }
         guard named.insert(nfc(path)).inserted else { continue }
         switch place(path, libraryFolder: libraryFolder, resolvedLibrary: library) {
         case .outside: plan.outside.append(path)
@@ -82,8 +85,8 @@ public func layoutMoves(
 /// says. Every move is recorded in the index at `ledger` before the first rename, and those
 /// that didn't happen are dropped after, so `carryLayoutMoves` carries the stats of those that
 /// did, now or after a failure. Blocks on the volume, so call it off the main thread, and from
-/// one queue at a time: the tag writes'. `progress` is told before each file, and once more
-/// when the renames are done.
+/// one queue at a time: the tag writes'. `progress` is told before the first file and each 1%
+/// of them, and once more when the renames are done.
 public func moveToLayout(
     _ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool, ledger: URL,
     progress: (OrganizeProgress) -> Void
@@ -117,7 +120,9 @@ func moveToLayout(
     let spelling = Spelling(libraryFolder)
     var left: Set<String> = []
     for (done, move) in plan.moved.enumerated() {
-        progress(OrganizeProgress(done: done, total: plan.moved.count, current: move.from))
+        if reports(done, of: plan.moved.count) {
+            progress(OrganizeProgress(done: done, total: plan.moved.count, current: move.from))
+        }
         if checkingAgain, let changed = changedSince(move, libraryFolder, spelling) {
             result.problems.append(changed)
         } else if let problem = rename(move.from, to: move.to, library, calls) {
@@ -314,6 +319,12 @@ private func holdsOnlyOtherFiles(_ folder: String) -> Bool {
             audioFileExtensions.contains((name as NSString).pathExtension.lowercased())
                 || pathIsDirectory(folder + "/" + name)
         }
+}
+
+/// Whether step `step` of `total` is one a progress closure is told of: the first, the last
+/// and each 1% between, so a large library doesn't post a main-thread update per file.
+func reports(_ step: Int, of total: Int) -> Bool {
+    step <= 1 || step >= total || step % max(1, total / 100) == 0
 }
 
 private func parentOf(_ path: String) -> String { (path as NSString).deletingLastPathComponent }

@@ -301,3 +301,29 @@ private func ignoresCase(_ folder: String) -> Bool { pathconf(folder, _PC_CASE_S
         ])
     #expect(told.map(\.left) == [2, 1, 0])
 }
+
+/// A large selection tells its progress about once each 1%, not once a file, and always the
+/// first and the full count.
+@Test func progressOnALargeSelectionIsToldAboutEachPercent() throws {
+    let folders = try OrganizeFolders()
+    let paths = (1...5000).map { folders.root + "/elsewhere/\($0).flac" }
+    var counts: [Int] = []
+    _ = layoutMoves(
+        paths, libraryFolder: folders.library,
+        counted: { checked, _ in
+            counts.append(checked)
+        })
+    #expect(counts.count <= 102)
+    #expect(counts.first == 1 && counts.last == 5000)
+    var plan = FilesOrganized()
+    plan.moved = paths.map {
+        TrackMove(from: $0, to: folders.library + "/" + ($0 as NSString).lastPathComponent)
+    }
+    var told: [OrganizeProgress] = []
+    _ = moveToLayout(
+        plan, libraryFolder: folders.library, ledger: { folders.index }, calls: MoveCalls(),
+        progress: { told.append($0) })
+    #expect(told.count <= 103)
+    #expect(told.first == OrganizeProgress(done: 0, total: 5000, current: paths[0]))
+    #expect(told.last == OrganizeProgress(done: 5000, total: 5000, current: nil))
+}
