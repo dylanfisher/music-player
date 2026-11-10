@@ -287,6 +287,9 @@ public final class LibraryIndex {
             }
             let identity = try database.prepare(
                 "INSERT OR REPLACE INTO \(schemaIdentityTable) (part, sql) VALUES (?, ?)")
+            for index in rebuilt.flatMap(\.indexes) {
+                try database.execute("DROP INDEX IF EXISTS \(quotedIdentifier(index))")
+            }
             for part in rebuilt {
                 let sql = part.sql(separateReleases: separateReleases)
                 try database.execute(sql)

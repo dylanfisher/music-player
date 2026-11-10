@@ -81,6 +81,41 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
         ).map { try $0.text(0) } == ["/x.flac"])
 }
 
+private func historyIndexes(_ index: LibraryIndex) throws -> [String] {
+    try index.database.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'history' ORDER BY name"
+    ).map { try $0.text(0) }
+}
+
+private func playedPaths(_ index: LibraryIndex) throws -> [String] {
+    try index.database.prepare(
+        "SELECT pa.path FROM history h JOIN paths pa ON pa.id = h.path_id"
+    ).map { try $0.text(0) }
+}
+
+@Test func anIndexWithoutTheHistoryByPathPartKeepsItsPlaysAndGainsTheIndex() throws {
+    let library = try TestLibrary()
+    let index = try library.index()
+    try index.recordPlay("/x.flac", at: 100)
+    try index.database.execute(
+        """
+        DROP INDEX \(historyByPathIndex);
+        DELETE FROM schema_identity WHERE part = 'historyByPath'
+        """)
+
+    let opened = try library.index()
+    #expect(try opened.discards().isEmpty)
+    #expect(try playedPaths(opened) == ["/x.flac"])
+    #expect(try historyIndexes(opened) == ["history_path", historyByPathIndex])
+    // A part of an earlier shape is made again, its index dropped first.
+    try opened.database.execute(
+        "UPDATE schema_identity SET sql = 'older' WHERE part = 'historyByPath'")
+    let rebuilt = try library.index()
+    #expect(try rebuilt.discards().isEmpty)
+    #expect(try playedPaths(rebuilt) == ["/x.flac"])
+    #expect(try historyIndexes(rebuilt) == ["history_path", historyByPathIndex])
+}
+
 @Test func idsAndDateAddedSurviveAnIndexRebuild() throws {
     let library = try TestLibrary()
     _ = try library.scan()

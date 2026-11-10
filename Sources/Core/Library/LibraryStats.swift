@@ -78,7 +78,8 @@ extension LibraryIndex {
     }
 
     /// When each album and artist still in the library was first played, and the first play of
-    /// all, from every history row and import's last play: one scan of the whole history.
+    /// all, from every history row and import's last play: one scan of the whole history,
+    /// through `historyByPathIndex`, which holds each path's plays in order, so nothing is sorted.
     func firstPlays(groupByAlbumArtist: Bool) throws -> FirstPlays {
         let artist = artistColumn(TrackFilter(groupByAlbumArtist: groupByAlbumArtist))
         var first = FirstPlays()
@@ -86,8 +87,8 @@ extension LibraryIndex {
             """
             SELECT t.album_id, t.\(artist), f.played
             FROM (SELECT path_id, min(played) AS played FROM (
-                    SELECT path_id, min(played_at) AS played FROM history NOT INDEXED
-                    GROUP BY path_id
+                    SELECT path_id, min(played_at) AS played
+                    FROM history INDEXED BY \(historyByPathIndex) GROUP BY path_id
                     UNION ALL SELECT path_id, played_at FROM (\(importedLastPlaysSQL)))
                 GROUP BY path_id) f
             LEFT JOIN tracks t ON t.file_id = f.path_id

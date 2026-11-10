@@ -39,6 +39,10 @@ enum SchemaPart: String, CaseIterable {
     /// The paths with a row in `history`, which History lists (ADR 0057). Derived from
     /// `history`, so building the part fills it from there, and rebuilding it discards nothing.
     case recorded
+    /// An index on `history` by path and then time, which finds each path's first play
+    /// without sorting the million rows. A part of its own, after `stats`, so adding it kept
+    /// the plays: rebuilding it drops and makes the index, and the table is untouched.
+    case historyByPath
     /// The lines of the Problems window the user dismissed (ADR 0059). A part of its own for
     /// the same reason as `loved`.
     case dismissed
@@ -83,6 +87,7 @@ enum SchemaPart: String, CaseIterable {
         case .scans: scansSchema
         case .removed: removedSchema
         case .recorded: recordedSchema
+        case .historyByPath: historyByPathSchema
         case .dismissed: dismissedSchema
         case .measures: measuresSchema
         case .analysisRun: analysisRunSchema
@@ -115,6 +120,15 @@ enum SchemaPart: String, CaseIterable {
         }
     }
 
+    /// The indexes the part creates on another part's tables, which its rebuild drops first,
+    /// since dropping its tables can't.
+    var indexes: Set<String> {
+        switch self {
+        case .historyByPath: [historyByPathIndex]
+        default: []
+        }
+    }
+
     /// The tables the part creates; nil for the index, which is every table no other part names.
     var tables: Set<String>? {
         switch self {
@@ -129,6 +143,7 @@ enum SchemaPart: String, CaseIterable {
         case .scans: [scannedFoldersTable]
         case .removed: [removedTable]
         case .recorded: [recordedTable]
+        case .historyByPath: []
         case .dismissed: [dismissedProblemsTable]
         case .measures: [measuresTable]
         case .analysisRun: [analysisRunTable, measuredAtTable, analysisFailuresTable]
@@ -157,6 +172,7 @@ let dislikedTable = "disliked"
 let scannedFoldersTable = "scanned_folders"
 let removedTable = "removed"
 let recordedTable = "recorded_paths"
+let historyByPathIndex = "history_path_played"
 let dismissedProblemsTable = "dismissed_problems"
 let measuresTable = "measures"
 let analysisRunTable = "analysis_run"
@@ -407,6 +423,10 @@ private let recordedSchema = """
         path_id INTEGER PRIMARY KEY REFERENCES paths (id)
     );
     \(fillRecordedSQL);
+    """
+
+private let historyByPathSchema = """
+    CREATE INDEX \(historyByPathIndex) ON history (path_id, played_at);
     """
 
 /// Adds the paths with a row in `history` to `recordedTable`, for a fill from scratch.
