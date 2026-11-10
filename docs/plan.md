@@ -664,19 +664,19 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 
 Asked by the owner on 2026-11-09.
 
-- [ ] **The art viewer opens without layout shift.** It opens at its final size: no frame drawn
+- [x] **The art viewer opens without layout shift.** It opens at its final size: no frame drawn
       stretched across the screen and then shrunk, and the thumbnail strip's space is reserved
       before the thumbnails load, from a cheap count of the album's pictures. Thumbnails fill
       in place.
-- [ ] **⌘⌥⇧A shows the artwork viewer,** unless that chord is already taken (check
+- [x] **⌘⌥⇧A shows the artwork viewer,** unless that chord is already taken (check
       `KeyChord` and the menus first; if it is, say which command has it and pick none).
-- [ ] **Watched Folders is its own Settings tab again,** next to Library, so Library is shorter
+- [x] **Watched Folders is its own Settings tab again,** next to Library, so Library is shorter
       (ADR 0168 moved it).
-- [ ] **Snapshots always show** in Settings' short table; the collapse toggle is removed.
-- [ ] **Get Info's previous and next track:** left and right arrow buttons in the bottom button
+- [x] **Snapshots always show** in Settings' short table; the collapse toggle is removed.
+- [x] **Get Info's previous and next track:** left and right arrow buttons in the bottom button
       row move to the previous and next track of the list Get Info was opened from, with
       unsaved edits handled as closing the window handles them (ADR 0160).
-- [ ] **Get Info warns about one title for several tracks:** a save that gives several tracks
+- [x] **Get Info warns about one title for several tracks:** a save that gives several tracks
       the same title asks first, naming the title change, since it's usually a mistake made by
       editing a multiple selection. Other fields shared by every track, such as the album, don't
       ask.
@@ -725,6 +725,28 @@ Library the rest; the palette opens each. The Snapshots list shows with no discl
 gap test uses another disclosure. Get Info's › and ‹ show the next and previous track in the
 same window, off at the ends, off for several tracks, and drop what was typed. A title saved
 over two tracks asks, naming it; an album doesn't.
+
+Result, phase 70: shipped five of the six items (ADR 0177; 0168, 0042, 0172, 0160 and 0021
+amended-by lines). The sixth, ⌘⌥⇧A, already belongs to Show in All Music
+(`track.showInAllMusic`, in the track and View menus), so no chord was assigned, as the item
+says; the owner can pick another. The art viewer now reads the file's pictures (a tag read,
+no picture bytes) and decodes the art together before it shows, with a strip button for
+each picture, so it opens at its final size and the thumbnails fill in place; a close while
+it opens keeps it hidden. Settings ▸ Watched Folders is its own pane again, after Library,
+with the folders list, Folder Changes and Network Folders; Library keeps Library Folder,
+Browsing and Database; `--snapshot-of folders` draws the new pane, and a snapshot from a
+scratch home shows it. The Snapshots list always shows. Get Info has ‹ and › at the left of
+its button row: for a window on one track they step through the track table as it was listed
+when Get Info opened, in the same window, dropping what was typed, as closing does; off for
+several tracks and for the timeline. A save that gives several tracks one non-empty title
+asks "Give all N tracks the title “…”?" in place of the batch question. Tests added: the
+viewer opening laid out and a viewer closed while opening; the two panes' contents and the
+palette opening each; the always-shown Snapshots row; Get Info's steps, ends, multi-track
+case and a row whose track left the library; the browser's list; the title question.
+`./scripts/check format typecheck arch dupes surface` and `links` passed, and
+`./scripts/test --changed main` passed (a Downloads test and some browser status-text tests
+failed once under the parallel run and passed alone or on a rerun). Not done: a step doesn't
+move the browser's selection, and nothing asks about unsaved edits on a step or a close.
 
 ### 72. Combine Albums for Tagging
 
