@@ -20,7 +20,7 @@ public struct CatalogRelease: Equatable, Sendable {
     }
 
     var id: Int
-    var masterID: Int?
+    public internal(set) var masterID: Int?
     /// Whether this is its master's main release.
     var isMainRelease: Bool
     var title: String

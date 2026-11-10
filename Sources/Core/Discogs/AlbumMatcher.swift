@@ -327,17 +327,17 @@ final class AlbumMatcher {
             a.element.score.order != b.element.score.order
                 ? a.element.score.order > b.element.score.order : a.offset < b.offset
         }
+        let reasons = NotExactReason.reasons(
+            tier, shown, tied: tied, foundBy: foundBy, mixedIDs: mixedIDs)
         return AlbumMatch(
             albumID: album.id, tier: tier, release: release, tracks: chosen?.tracks ?? [],
-            mapping: mapping, candidates: sorted.map(\.element),
-            reasons: NotExactReason.reasons(
-                tier, shown, tied: tied, foundBy: foundBy, mixedIDs: mixedIDs),
+            mapping: mapping, candidates: sorted.map(\.element), reasons: reasons,
             origin: origin,
             confidence: shown.map {
                 MatchConfidence.percent(
                     $0, titles: titles, tied: tied, foundBy: foundBy, mixedIDs: mixedIDs)
             },
-            foundBy: foundBy)
+            safety: MatchSafety.of(tier, reasons: reasons), foundBy: foundBy)
     }
 
     /// The best of `scores`, and whether others were as good after the tie-break. The best are

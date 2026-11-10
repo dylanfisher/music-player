@@ -63,7 +63,7 @@ func taggedReleaseIDs(_ album: DiscogsAlbum) -> [Int] {
 
 /// What found a candidate release: the release id its tracks carry, its barcode, its label and
 /// catalog number, or its artist and title.
-enum CandidateKey: Equatable, Sendable {
+public enum CandidateKey: Equatable, Sendable {
     case taggedID, barcode, labelAndCatalogNumber, title
 }
 

@@ -1202,7 +1202,8 @@ private final class HeldSearch {
             case 1:
                 match(
                     album, release, tier: .likely,
-                    reasons: [.tiedAfterTieBreak, .foundByTitleOnly], confidence: 90)
+                    reasons: [.tiedAfterTieBreak, .foundByTitleOnly], confidence: 90,
+                    safety: .safe)
             case 2:
                 match(
                     album, release, tier: .likely, reasons: [.titlesDiffer(1), .foundByTitleOnly],

@@ -11,27 +11,39 @@ func tuningFolder() -> URL {
 }
 
 /// An album of the survey whose tracks all carry one release id, with that id hidden from
-/// the matcher, and what its files say the right answer is.
+/// the matcher, and what its files say the right answer is; or one whose tracks carry none,
+/// with no answer known.
 struct TuningAlbum {
     var name: String
     var album: DiscogsAlbum
-    var releaseID: Int
+    /// Nil for an album whose tracks carry no release id.
+    var releaseID: Int?
     /// Each file's `DISCOGS_RELEASE_ORDINAL_POSITION`, which counts from 0, by file id.
     var ordinals: [Int64: Int]
 }
 
 /// The survey's albums that every track gives one release id, in name order, the ids taken
 /// out of the tracks. With `titlesOnly` the label, catalog number, barcode, date, media and
-/// country go too, as an
-/// album YATE never tagged would have none of them.
-func tuningAlbums(_ records: [SurveyRecord], titlesOnly: Bool) -> [TuningAlbum] {
+/// country go too, as an album YATE never tagged would have none of them. With `untagged`,
+/// instead, the albums no track gives a release id, with all their tags: the library the
+/// tagger has still to match.
+func tuningAlbums(_ records: [SurveyRecord], titlesOnly: Bool, untagged: Bool = false)
+    -> [TuningAlbum]
+{
     let albums = Dictionary(grouping: records.filter { $0.format != nil }, by: \.albumKey)
     var tuning: [TuningAlbum] = []
     var nextFileID: Int64 = 1
     for (key, files) in albums.sorted(by: { $0.key < $1.key }) {
         let ids = Set(files.map { $0.custom[DiscogsKey.releaseID] })
-        guard ids.count == 1, let only = ids.first, let text = only, let releaseID = Int(text)
-        else { continue }
+        let releaseID: Int?
+        if untagged {
+            guard ids == [nil] else { continue }
+            releaseID = nil
+        } else {
+            guard ids.count == 1, let only = ids.first, let text = only, let id = Int(text)
+            else { continue }
+            releaseID = id
+        }
         let sorted = files.sorted {
             ($0.discNumber ?? Int.max, $0.trackNumber ?? Int.max, $0.path)
                 < ($1.discNumber ?? Int.max, $1.trackNumber ?? Int.max, $1.path)
@@ -94,6 +106,8 @@ enum Kinship: Equatable {
 /// What the tuning knows of one album's tagged release beside the match.
 struct TuningOutcome: Equatable {
     var kinship: Kinship
+    /// Another release than the tagged one or a twin, of the tagged one's master.
+    var sameMaster = false
     /// How the tagged release fits the files; nil when it isn't in the dump.
     var taggedFit: ReleaseFit?
     /// The tags' date or `MEDIA` is one the tagged release no longer has.
@@ -110,8 +124,10 @@ func discogsTuning(survey lines: URL, catalog: URL, output: URL) async throws ->
     let records = try loadRecords(lines)
     let releases = try Catalog(at: catalog)
     var out = ["Discogs matcher tuning: \(lines.path) against \(catalog.path)"]
-    for titlesOnly in [false, true] {
-        let albums = tuningAlbums(records, titlesOnly: titlesOnly)
+    var albumLines: [String] = []
+    for run in TuningRun.allCases {
+        let albums = tuningAlbums(
+            records, titlesOnly: run == .titlesOnly, untagged: run == .untagged)
         let started = Date()
         let matches = try await matchAlbums(
             albums.map(\.album), catalogAt: catalog, choosing: [:], skippingVideo: false
@@ -122,33 +138,104 @@ func discogsTuning(survey lines: URL, catalog: URL, output: URL) async throws ->
             }
         }
         let seconds = Date().timeIntervalSince(started)
-        let outcomes = try zip(albums, matches).map { album, match -> TuningOutcome in
-            guard let tagged = try releases.release(id: album.releaseID) else {
-                return TuningOutcome(kinship: match.releaseID == album.releaseID ? .same : .other)
+        let outcomes = try zip(albums, matches).map { album, match -> TuningOutcome? in
+            guard let releaseID = album.releaseID else { return nil }
+            guard let tagged = try releases.release(id: releaseID) else {
+                return TuningOutcome(kinship: match.releaseID == releaseID ? .same : .other)
             }
             var kinship = Kinship.other
-            if match.releaseID == album.releaseID {
+            var sameMaster = false
+            if match.releaseID == releaseID {
                 kinship = .same
-            } else if let chosen = try match.releaseID.flatMap({ try releases.release(id: $0) }),
-                chosen.isTwin(of: tagged)
-            {
-                kinship = .twin
+            } else if let chosen = try match.releaseID.flatMap({ try releases.release(id: $0) }) {
+                if chosen.isTwin(of: tagged) {
+                    kinship = .twin
+                } else {
+                    sameMaster = chosen.masterID != nil && chosen.masterID == tagged.masterID
+                }
             }
             return TuningOutcome(
-                kinship: kinship, taggedFit: releaseFit(album.album, tagged),
+                kinship: kinship, sameMaster: sameMaster, taggedFit: releaseFit(album.album, tagged),
                 tagsOutdated: tagsOutdate(album.album, tagged))
         }
         out.append("")
-        out += tuningLines(
-            albums, matches, outcomes: outcomes, seconds: seconds,
-            heading: titlesOnly
-                ? "Titles only: ids, label, catalog number, barcode, date, media and country hidden"
-                : "Tags: release ids hidden")
+        if run == .untagged {
+            out += untaggedLines(albums, matches, seconds: seconds, heading: run.heading)
+        } else {
+            out += tuningLines(
+                albums, matches, outcomes: outcomes.map { $0! }, seconds: seconds,
+                heading: run.heading)
+        }
+        for ((album, match), outcome) in zip(zip(albums, matches), outcomes) {
+            albumLines.append(albumLine(run, album, match, outcome))
+        }
     }
     let text = out.joined(separator: "\n") + "\n"
+    let perAlbum = output.appendingPathComponent(albumLinesName, isDirectory: false)
     try requireCorpusWrite(report.path, roots: [output])
+    try requireCorpusWrite(perAlbum.path, roots: [output])
     try Data(text.utf8).write(to: report)
+    try Data((albumLines.joined(separator: "\n") + "\n").utf8).write(to: perAlbum)
     return text
+}
+
+/// The file beside the report with one line per album and run, to compare two tunings by.
+let albumLinesName = "albums.tsv"
+
+/// One of the tuning's runs over the survey's albums.
+enum TuningRun: String, CaseIterable {
+    case tags, titlesOnly, untagged
+
+    var heading: String {
+        switch self {
+        case .tags: "Tags: release ids hidden"
+        case .titlesOnly:
+            "Titles only: ids, label, catalog number, barcode, date, media and country hidden"
+        case .untagged: "Untagged: the albums no track gives a release id, no answer known"
+        }
+    }
+}
+
+/// An album's line in `albumLinesName`: the run, the album, its tier, safety, confidence and
+/// chosen release, how it was found, and, with an answer known, how the choice stands to it.
+func albumLine(
+    _ run: TuningRun, _ album: TuningAlbum, _ match: AlbumMatch, _ outcome: TuningOutcome?
+) -> String {
+    let verdict: String =
+        switch outcome {
+        case nil: "-"
+        case let outcome? where outcome.kinship != .other: "right"
+        case let outcome? where outcome.sameMaster: "same master"
+        default: "wrong"
+        }
+    return [
+        run.rawValue, album.name, match.tier.rawValue, match.safety.map { "\($0)" } ?? "-",
+        match.confidence.map(String.init) ?? "-", match.releaseID.map(String.init) ?? "-",
+        match.foundBy.map { "\($0)" } ?? "-", verdict,
+    ].joined(separator: "\t")
+}
+
+/// The tabs Apply to All writes with the least review, by name, as the tagger lists them.
+let applyTabs: [(String, @Sendable (AlbumMatch) -> Bool)] = [
+    ("exact", { $0.tier == .exact }),
+    ("safe", { $0.safety == .safe }),
+    ("likely, not safe", { $0.tier == .likely && $0.safety == nil }),
+]
+
+/// The untagged run's section: the tiers and the safe tabs, with no answer to count against.
+func untaggedLines(
+    _ albums: [TuningAlbum], _ matches: [AlbumMatch], seconds: Double, heading: String
+) -> [String] {
+    var out = ["== \(heading)", "\(albums.count) albums"]
+    for tier in MatchTier.allCases {
+        out.append("\(tier.rawValue): \(matches.count { $0.tier == tier })")
+    }
+    out.append("safe: \(matches.count { $0.safety == .safe })")
+    out.append(
+        String(
+            format: "%.1f s in all, %.1f ms an album", seconds,
+            1000 * seconds / Double(max(albums.count, 1))))
+    return out
 }
 
 /// One run's section of the report: the bar as the owner decided it on 2026-11-07, then the
@@ -179,10 +266,11 @@ func tuningLines(
     for ((album, match), outcome) in zip(zip(albums, matches), outcomes) {
         tiers[match.tier, default: 0] += 1
         let candidates = [match.releaseID].compactMap { $0 } + match.candidates.map(\.releaseID)
-        if candidates.contains(album.releaseID) { found += 1 }
+        let taggedID = album.releaseID!
+        if candidates.contains(taggedID) { found += 1 }
         let line =
             "\(album.name): \(match.tier.rawValue), chose \(match.releaseID.map(String.init) ?? "none"),"
-            + " tagged \(album.releaseID), \(candidates.contains(album.releaseID) ? "a candidate" : "not found"),"
+            + " tagged \(taggedID), \(candidates.contains(taggedID) ? "a candidate" : "not found"),"
             + " \(candidates.count) candidates"
         let isFound = match.tier == .exact || match.tier == .likely
         let isRight = outcome.kinship != .other
@@ -235,6 +323,15 @@ func tuningLines(
     out.append(
         "known misses, the tags' date or MEDIA one the tagged release no longer has:"
             + " \(knownMisses.count)")
+    out.append("-- Apply to All: right (the tagged release or a twin), same master, wrong")
+    for (name, lists) in applyTabs {
+        let listed = zip(matches, outcomes).filter { lists($0.0) }.map(\.1)
+        let right = listed.count { $0.kinship != .other }
+        let sameMaster = listed.count { $0.kinship == .other && $0.sameMaster }
+        out.append(
+            "\(name): \(listed.count), right \(right), same master \(sameMaster),"
+                + " wrong \(listed.count - right - sameMaster)")
+    }
     out.append("-- Raw")
     for tier in MatchTier.allCases {
         out.append("\(tier.rawValue): \(tiers[tier] ?? 0)")
