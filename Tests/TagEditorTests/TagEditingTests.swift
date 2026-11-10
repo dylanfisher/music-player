@@ -125,6 +125,10 @@ private func makeEditing(
                     progress(
                         OrganizeProgress(done: done, total: plan.moved.count, current: move.from))
                 }
+                // As `moveToLayout` does, once more when the renames are done, 0 of 0 included.
+                progress(
+                    OrganizeProgress(
+                        done: plan.moved.count, total: plan.moved.count, current: nil))
                 seen.ran(
                     "move \(plan.moved.map(\.from).joined(separator: " ")) in \(folder)"
                         + (checkingAgain ? ", checking again" : ""))
@@ -917,22 +921,27 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
     try await eventually { libraryUpdated != nil }
     #expect(
         steps == [
-            .moving(OrganizeProgress(done: 0, total: 1, current: "/lib/a.flac")), .updatingUndo,
+            .moving(OrganizeProgress(done: 0, total: 1, current: "/lib/a.flac")),
+            .moving(OrganizeProgress(done: 1, total: 1, current: nil)), .updatingUndo,
             .updatingLibrary,
         ])
     #expect(!ended, "the library isn't updated yet")
     libraryUpdated?()
     #expect(ended)
 
-    // Nothing to move: no steps, and the write ends with its tags.
+    // Nothing to move: no steps, nothing in the status bar, which no summary would clear, and
+    // the write ends with its tags.
     var quiet: [OrganizeStep] = []
     var quietEnded = false
+    var statusBar: [OrganizeProgress] = []
+    editing.organizing = { statusBar.append($0) }
     libraryUpdated = nil
     editing.write(
         [("/lib/b.flac", TagEdit(values: [.title: "B"]))], over: window,
         organizing: { quiet.append($0) }, completion: { _ in quietEnded = true })
     try await eventually { quietEnded }
     #expect(quiet.isEmpty)
+    #expect(statusBar.isEmpty)
 }
 
 /// With the setting off, a write renames nothing.
@@ -970,7 +979,11 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
     gate.open()
     try await eventually { !editing.isWriting && seen.written.count == 2 }
     // The renames' progress reaches the main thread before the write ends.
-    #expect(told == [OrganizeProgress(done: 0, total: 1, current: "/lib/a.flac")])
+    #expect(
+        told == [
+            OrganizeProgress(done: 0, total: 1, current: "/lib/a.flac"),
+            OrganizeProgress(done: 1, total: 1, current: nil),
+        ])
     #expect(
         seen.work == [
             "write /lib/b.flac", "move /lib/a.flac in /lib, checking again",

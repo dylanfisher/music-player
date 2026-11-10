@@ -586,10 +586,13 @@ public final class TagEditing {
                 var result = move(plan, folder, confirmed) { progress in
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated {
-                            self.organizing(progress)
                             // A layout with nothing to move still reports once, 0 of 0, which
-                            // would flash "Organizing files: 0 of 0 moved" in the tagger.
-                            if progress.total > 0 { self.organizeSteps[number]?(.moving(progress)) }
+                            // would flash "Organizing files: 0 of 0 moved" in the tagger, and
+                            // leave "Organizing files: finishing" in the status bar, as nothing
+                            // moved and no summary follows to clear it.
+                            guard progress.total > 0 else { return }
+                            self.organizing(progress)
+                            self.organizeSteps[number]?(.moving(progress))
                         }
                     }
                 }
