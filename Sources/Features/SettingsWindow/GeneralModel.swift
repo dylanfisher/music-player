@@ -166,9 +166,13 @@ public final class GeneralModel {
             }
         }
 
+        /// Each section's prefixes, read once: building the schema checks every setting's
+        /// default, and a pane looks up the section of each of its rows.
+        private static let allPrefixes = allCases.map { ($0, $0.prefixes) }
+
         init(key: String) {
-            let matches = Self.allCases.flatMap { section in
-                section.prefixes.filter { key.hasPrefix($0) }.map { (section, $0.count) }
+            let matches = Self.allPrefixes.flatMap { section, prefixes in
+                prefixes.filter { key.hasPrefix($0) }.map { (section, $0.count) }
             }
             self = matches.max { $0.1 < $1.1 }?.0 ?? .other
         }
