@@ -1,3 +1,4 @@
+import DisplayText
 import Library
 import Settings
 
@@ -23,6 +24,9 @@ struct Problem: Equatable, Sendable {
         self.fix = fix
     }
 }
+
+/// "1 problem", "3 problems".
+func problemCount(_ value: Int) -> String { count(value, "problem") }
 
 /// What the Problems window's buttons do to the rows selected, or for Dismiss All to every row.
 enum ProblemAction: CaseIterable, Sendable {

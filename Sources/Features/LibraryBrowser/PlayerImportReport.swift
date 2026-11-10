@@ -89,7 +89,7 @@ extension ImportPlan {
             notes.append("\(tracks(library.tracksWithoutFiles)) with no file, left out")
         }
         let problems = library.problems.count + library.unlistedProblemCount
-        if problems > 0 { notes.append("\(count(problems, "problem")) reading the library") }
+        if problems > 0 { notes.append("\(problemCount(problems)) reading the library") }
         return notes
     }
 

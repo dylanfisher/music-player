@@ -120,7 +120,11 @@ private func makeEditing(
                 seen.ran("layout \(paths.joined(separator: " ")) in \(folder)")
                 return organize(paths, folder)
             },
-            move: { plan, folder, checkingAgain in
+            move: { plan, folder, checkingAgain, progress in
+                for (done, move) in plan.moved.enumerated() {
+                    progress(
+                        OrganizeProgress(done: done, total: plan.moved.count, current: move.from))
+                }
                 seen.ran(
                     "move \(plan.moved.map(\.from).joined(separator: " ")) in \(folder)"
                         + (checkingAgain ? ", checking again" : ""))
@@ -917,12 +921,16 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
             report.changed = paths
             return report
         }, organize: organizeA)
+    var told: [OrganizeProgress] = []
+    editing.organizing = { told.append($0) }
     editing.write([("/lib/b.flac", TagEdit(values: [.title: "B"]))], over: window)
     let confirmed = organizeA(["/lib/a.flac", "/elsewhere/c.flac"], "/lib")
     editing.organize(confirmed, in: "/lib", over: window)
     #expect(seen.work.count <= 1)
     gate.open()
     try await eventually { !editing.isWriting && seen.written.count == 2 }
+    // The renames' progress reaches the main thread before the write ends.
+    #expect(told == [OrganizeProgress(done: 0, total: 1, current: "/lib/a.flac")])
     #expect(
         seen.work == [
             "write /lib/b.flac", "move /lib/a.flac in /lib, checking again",

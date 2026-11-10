@@ -47,6 +47,10 @@ struct LibraryStatus: Equatable, Sendable {
     /// the library folder: 3 of 20", and how far along it is.
     var copyingText: String?
     var copyingFraction = 0.0
+    /// What Keep Files Organized or Organize Selected Files says while it renames, such as
+    /// "Organizing files: 12 left · Album/01 Song.flac", and how far along it is (ADR 0175).
+    var organizingText: String?
+    var organizingFraction = 0.0
     /// What Analyze Library says while it runs or is paused, such as "Analyzing library: 40 of
     /// 1,200", and how far along it is.
     var analysisText: String?
@@ -152,9 +156,10 @@ struct LibraryStatus: Equatable, Sendable {
             + paused.map { "Scan paused: " + $0 }).joined(separator: " · ")
     }
 
-    /// The scans' text, a tag save's and a copy's, the first part of the activity line.
+    /// The scans' text, a tag save's, a copy's and an organize's, the first part of the
+    /// activity line.
     var scanAndSaveText: String? {
-        let parts = [scanText, savingText, copyingText].compactMap { $0 }
+        let parts = [scanText, savingText, copyingText, organizingText].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -173,19 +178,21 @@ struct LibraryStatus: Equatable, Sendable {
         return Double(values.map(\.read).reduce(0, +)) / Double(values.map(\.toRead).reduce(0, +))
     }
 
-    /// The line beside the bar that fills: the scans, a tag save, a copy and Analyze Library,
-    /// any of them; nil while none runs.
+    /// The line beside the bar that fills: the scans, a tag save, a copy, an organize and
+    /// Analyze Library, any of them; nil while none runs.
     var activityText: String? {
         let parts = [scanAndSaveText, analysisText].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// How far that bar is filled: the scans' fraction while any scans, else the save's, else
-    /// the copy's, else the analysis's. Nil for a bar that moves on its own, or none.
+    /// the copy's, else the organize's, else the analysis's. Nil for a bar that moves on its
+    /// own, or none.
     var activityFraction: Double? {
         if scanText != nil { return scanFraction }
         if savingText != nil { return savingFraction }
         if copyingText != nil { return copyingFraction }
+        if organizingText != nil { return organizingFraction }
         return analysisText.map { _ in analysisFraction }
     }
 

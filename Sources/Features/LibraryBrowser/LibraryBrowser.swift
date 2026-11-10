@@ -115,9 +115,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// A drop's question before it watches new folders, which tests replace.
     var confirmAdding: @MainActor ([String], NSWindow, @escaping (Bool) -> Void) -> Void =
         askToAddFolders
-    /// Organize Selected Files' question, which tests replace.
-    var confirmOrganizing: @MainActor (FilesOrganized, NSWindow, @escaping (Bool) -> Void) -> Void =
-        askToOrganize
+    /// Organize Selected Files' count, which tests replace.
+    var countOrganizing: OrganizeCount = {
+        layoutMoves($0, libraryFolder: $1, counted: $2, stopped: $3)
+    }
+    /// Organize Selected Files' sheet while it's up.
+    var organizeSheet: OrganizeSheet?
     /// Runs the command a key press in one of the browser's lists is bound to.
     public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
     /// Called once, when the table or the timeline first draws rows, or once loading finds none
@@ -1009,6 +1012,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func showSaving(_ progress: (text: String, fraction: Double)?) {
         status.savingText = progress?.text
         status.savingFraction = progress?.fraction ?? 0
+        showActivity()
+    }
+
+    /// Shows how far an organize's renames have got, until `finishOrganizing` gives nil
+    /// (ADR 0175).
+    public func showOrganizing(_ progress: OrganizeProgress?) {
+        status.organizingText = progress.map(organizingStatus)
+        status.organizingFraction =
+            progress.map { $0.total == 0 ? 1 : Double($0.done) / Double($0.total) } ?? 0
         showActivity()
     }
 

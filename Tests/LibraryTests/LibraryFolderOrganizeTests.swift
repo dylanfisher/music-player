@@ -263,3 +263,41 @@ private func ignoresCase(_ folder: String) -> Bool { pathconf(folder, _PC_CASE_S
     #expect(exists(old))
     #expect(!exists(folders.library + "/Artist/Album/01 Retitled.flac"))
 }
+
+@Test func theCountTellsEachPathCheckedAndAStopLeavesTheRestUnread() throws {
+    let folders = try OrganizeFolders()
+    let paths = try (1...3).map {
+        try folders.file("library/Loose/\($0).flac", title: "Song \($0)", track: $0)
+    }
+    var counts: [[Int]] = []
+    let plan = layoutMoves(
+        paths + [paths[0]], libraryFolder: folders.library,
+        counted: { counts.append([$0, $1]) })
+    #expect(plan.moved.count == 3)
+    // A path named twice is checked but moves once.
+    #expect(counts == [[1, 1], [2, 2], [3, 3], [4, 3]])
+    counts = []
+    let stopped = layoutMoves(
+        paths, libraryFolder: folders.library, counted: { counts.append([$0, $1]) },
+        stopped: { counts.count == 1 })
+    #expect(stopped.moved.map(\.from) == [paths[0]])
+    #expect(counts == [[1, 1]])
+}
+
+@Test func theRenamesTellEachFileBeforeItMovesAndTheirEnd() throws {
+    let folders = try OrganizeFolders()
+    let paths = try (1...2).map {
+        try folders.file("library/Loose/\($0).flac", title: "Song \($0)", track: $0)
+    }
+    var told: [OrganizeProgress] = []
+    _ = moveToLayout(
+        layoutMoves(paths, libraryFolder: folders.library), libraryFolder: folders.library,
+        ledger: { folders.index }, calls: MoveCalls(), progress: { told.append($0) })
+    #expect(
+        told == [
+            OrganizeProgress(done: 0, total: 2, current: paths[0]),
+            OrganizeProgress(done: 1, total: 2, current: paths[1]),
+            OrganizeProgress(done: 2, total: 2, current: nil),
+        ])
+    #expect(told.map(\.left) == [2, 1, 0])
+}

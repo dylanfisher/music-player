@@ -28,6 +28,9 @@ public final class TagEditing {
     /// how far along, from 0 to 1, over every write queued and running (ADR 0167); nil once no
     /// write is left (ADR 0108).
     public var saving: (_ progress: (text: String, fraction: Double)?) -> Void = { _ in }
+    /// Called on the main thread as Keep Files Organized or Organize Selected Files renames
+    /// files, for the status bar (ADR 0175).
+    public var organizing: (OrganizeProgress) -> Void = { _ in }
     /// Runs one of the registry's tag commands as its menu item does: an info window's Undo
     /// Tag Edit, Replace Artwork… and Remove Artwork buttons.
     public var run: (CommandID) -> Void = { _ in }
@@ -78,8 +81,11 @@ public final class TagEditing {
         /// Where files go in the library folder, the second argument, by its layout.
         var layout: @Sendable ([String], String) -> FilesOrganized
         /// Renames a plan's files in the library folder, the second argument; with the third,
-        /// each is checked first to still go where the plan says.
-        var move: @Sendable (FilesOrganized, String, Bool) -> FilesOrganized
+        /// each is checked first to still go where the plan says. The last is told how far it
+        /// has got, from the write queue.
+        var move:
+            @Sendable (FilesOrganized, String, Bool, (OrganizeProgress) -> Void) ->
+                FilesOrganized
         /// Points the journal's records of each renamed file at its new path, giving what
         /// couldn't be.
         var follow: @Sendable ([TrackMove]) -> [TagWriteError]
@@ -157,7 +163,10 @@ public final class TagEditing {
             present: { $0.show(after: $1) }, confirm: ask,
             alert: showProblems,
             layout: { layoutMoves($0, libraryFolder: $1) },
-            move: { moveToLayout($0, libraryFolder: $1, checkingAgain: $2, ledger: ledger) },
+            move: {
+                moveToLayout(
+                    $0, libraryFolder: $1, checkingAgain: $2, ledger: ledger, progress: $3)
+            },
             follow: { writer.follow($0.map { ($0.from, $0.to) }) },
             askQuit: askToQuit)
         // A write in place a crash cut short is finished before anything reads the file
@@ -541,7 +550,11 @@ public final class TagEditing {
                 }
             if let target {
                 let (plan, folder, confirmed) = target
-                var result = move(plan, folder, confirmed)
+                var result = move(plan, folder, confirmed) { progress in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { self.organizing(progress) }
+                    }
+                }
                 // The setting is limited to the library folder: an edit of a file elsewhere
                 // isn't a problem.
                 if !confirmed { result.outside = [] }

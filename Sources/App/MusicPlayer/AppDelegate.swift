@@ -708,6 +708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editing.run = { [weak self] in self?.dispatcher?.run($0) }
         editing.isEnabled = { [weak self] in self?.dispatcher?.isEnabled($0) == true }
         editing.saving = { [weak self] progress in self?.browser?.showSaving(progress) }
+        editing.organizing = { [weak self] progress in self?.browser?.showOrganizing(progress) }
         editing.playCounts = { [weak self] paths in
             paths.map { path in
                 do {

@@ -42,49 +42,115 @@ private func organizingBrowser() throws -> (
     return (browser, window, library, inside, outside)
 }
 
-/// What the question was asked about, which its closure can't capture as a var.
-@MainActor
-private final class Asked {
-    var plans: [FilesOrganized] = []
+/// Holds the count until the test opens it, and says whether it saw the stop.
+private final class CountGate: @unchecked Sendable {
+    private let semaphore = DispatchSemaphore(value: 0)
+    // `seen` is guarded by `lock`.
+    private let lock = NSLock()
+    private var seen = false
+
+    func open() { semaphore.signal() }
+
+    /// A count that tells one path checked, waits for `open`, then checks for the stop before
+    /// the rest, as `layoutMoves` does.
+    var count: OrganizeCount {
+        { paths, folder, counted, stopped in
+            counted(1, 0)
+            self.semaphore.wait()
+            guard !stopped() else {
+                self.lock.withLock { self.seen = true }
+                return FilesOrganized()
+            }
+            return layoutMoves(paths, libraryFolder: folder)
+        }
+    }
+
+    var stopSeen: Bool { lock.withLock { seen } }
+}
+
+@MainActor @Test func organizeSelectedFilesOpensAtOnceAndCancelStopsTheCount() async throws {
+    let (browser, window, library, inside, outside) = try organizingBrowser()
+    let gate = CountGate()
+    browser.countOrganizing = gate.count
     var organized: [FilesOrganized] = []
+    let run = Task {
+        await browser.organizeFiles({ [inside, outside] }, in: library, over: window) { plan, _ in
+            organized.append(plan)
+        }
+    }
+    try await waitFor("the count's first file") {
+        browser.organizeSheet?.detail.stringValue.hasPrefix("Checked 1 of 2 tracks") == true
+    }
+    let sheet = try #require(browser.organizeSheet)
+    #expect(sheet.heading.stringValue == OrganizeSheet.countingTitle)
+    #expect(sheet.organizeButton.isHidden)
+    #expect(sheet.bar.doubleValue == 0.5)
+    click(sheet.cancelButton)
+    gate.open()
+    await run.value
+    #expect(gate.stopSeen)
+    #expect(organized.isEmpty)
+    #expect(browser.organizeSheet == nil)
 }
 
 @MainActor @Test func organizeSelectedFilesAsksWithTheCountThatWillMoveAndSkipsTheRest()
     async throws
 {
     let (browser, window, library, inside, outside) = try organizingBrowser()
-    let asked = Asked()
+    var organized: [FilesOrganized] = []
     for answer in [false, true] {
-        browser.confirmOrganizing = { plan, _, reply in
-            asked.plans.append(plan)
-            reply(answer)
+        let run = Task {
+            await browser.organizeFiles({ [inside, outside] }, in: library, over: window) {
+                plan, _ in organized.append(plan)
+            }
         }
-        await browser.organizeFiles([inside, outside], in: library, over: window) { plan, _ in
-            asked.organized.append(plan)
-        }
+        try await waitFor("the question") { browser.organizeSheet?.asking == true }
+        let sheet = try #require(browser.organizeSheet)
+        #expect(sheet.heading.stringValue == "Organize 1 File?")
+        #expect(sheet.detail.stringValue.contains("1 not in the library folder"))
+        #expect(!sheet.organizeButton.isHidden && sheet.bar.isHidden)
+        click(answer ? sheet.organizeButton : sheet.cancelButton)
+        await run.value
     }
-    let plan = try #require(asked.plans.first)
+    // Cancel organizes nothing; Organize hands on the plan it asked about.
+    let plan = try #require(organized.first)
+    #expect(organized.count == 1)
     #expect(plan.moved.map(\.from) == [inside])
     #expect(plan.outside == [outside])
-    let question = organizeQuestion(plan)
-    #expect(question.message == "Organize 1 File?")
-    #expect(question.detail.contains("1 not in the library folder"))
-    // Cancel organizes nothing; Organize hands on the plan it asked about.
-    #expect(asked.organized == [plan])
     // Asking renames nothing.
     #expect(FileManager.default.fileExists(atPath: inside))
 }
 
-@MainActor @Test func organizeSelectedFilesWithNothingToMoveAsksNothing() async throws {
+@MainActor @Test func organizeSelectedFilesWithNothingToMoveClosesWithoutAsking() async throws {
     let (browser, window, library, _, outside) = try organizingBrowser()
-    browser.confirmOrganizing = { _, _, _ in Issue.record("asked with nothing to move") }
-    await browser.organizeFiles([outside], in: library, over: window) { _, _ in
-        Issue.record("organized with nothing to move")
-    }
+    await browser.organizeFiles(
+        { [outside] }, in: library, over: window,
+        organize: { _, _ in Issue.record("organized with nothing to move") })
+    #expect(browser.organizeSheet == nil)
     #expect(browser.status.organizedReport.map(\.line).first?.contains(outside) == true)
-    await browser.organizeFiles([outside], in: nil, over: window) { _, _ in
-        Issue.record("organized with no library folder")
-    }
+    await browser.organizeFiles(
+        { [outside] }, in: nil, over: window,
+        organize: { _, _ in Issue.record("organized with no library folder") })
+}
+
+@MainActor @Test func theRenamesShowInTheStatusBarUntilTheyFinish() throws {
+    let (browser, _, _, _, _) = try organizingBrowser()
+    browser.showOrganizing(OrganizeProgress(done: 1, total: 4, current: "/l/Artist/Album/a.flac"))
+    #expect(browser.status.activityText == "Organizing files: 3 left · Album/a.flac")
+    #expect(browser.status.activityFraction == 0.25)
+    browser.showOrganizing(OrganizeProgress(done: 4, total: 4, current: nil))
+    #expect(browser.status.activityText == "Organizing files: finishing")
+    var organized = FilesOrganized()
+    organized.moved = [TrackMove(from: "/l/a.flac", to: "/l/A/a.flac")]
+    browser.finishOrganizing(organized, carry: LayoutCarry())
+    #expect(browser.status.activityText == nil)
+    #expect(browser.statusText == "Organized 1 file")
+}
+
+@Test func theResultLineCountsTheFilesAndTheProblems() {
+    #expect(organizedSummary(moved: 2340, problems: 3) == "Organized 2,340 files; 3 problems")
+    #expect(organizedSummary(moved: 1, problems: 1) == "Organized 1 file; 1 problem")
+    #expect(organizedSummary(moved: 0, problems: 0) == "No files to organize")
 }
 
 @MainActor @Test func whatWasntMovedIsListedInTheProblemsWindow() throws {

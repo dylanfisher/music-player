@@ -24,14 +24,6 @@ public struct FilesOrganized: Equatable, Sendable {
 
     init() {}
 
-    /// For the status bar: "Organized 12 files · 2 not moved".
-    public var summary: String {
-        var parts = ["Organized \(files(moved.count))"]
-        if !problems.isEmpty { parts.append("\(problems.count) not moved") }
-        if !outside.isEmpty { parts.append("\(outside.count) outside the library folder") }
-        return parts.joined(separator: " · ")
-    }
-
     /// `outside` and `problems` as lines for the Problems window.
     public var problemLines: [String] {
         outside.map { MoveRefusal.outsideLibrary($0).description } + problems
@@ -45,7 +37,13 @@ public struct FilesOrganized: Equatable, Sendable {
 /// problem. On a volume that ignores case, a folder an earlier file of `paths` goes to keeps
 /// that file's spelling, as the folder will once the earlier move makes it, and names are
 /// compared as the volume compares them. Reads the files, so call it off the main thread.
-public func layoutMoves(_ paths: [String], libraryFolder: String) -> FilesOrganized {
+/// `counted` is told after each path how many it has checked and how many of them move, and
+/// `stopped` is asked before each one: once it says yes, the rest are left out unread.
+public func layoutMoves(
+    _ paths: [String], libraryFolder: String,
+    counted: (_ checked: Int, _ moving: Int) -> Void = { _, _ in },
+    stopped: () -> Bool = { false }
+) -> FilesOrganized {
     var plan = FilesOrganized()
     guard let library = resolved(libraryFolder) else {
         plan.problems = [MoveRefusal.notFound(libraryFolder).description]
@@ -54,7 +52,10 @@ public func layoutMoves(_ paths: [String], libraryFolder: String) -> FilesOrgani
     var spelling = Spelling(libraryFolder)
     var named: Set<String> = []
     var destinations: Set<String> = []
-    for path in paths where named.insert(nfc(path)).inserted {
+    for (checked, path) in paths.enumerated() {
+        guard !stopped() else { break }
+        defer { counted(checked + 1, plan.moved.count) }
+        guard named.insert(nfc(path)).inserted else { continue }
         switch place(path, libraryFolder: libraryFolder, resolvedLibrary: library) {
         case .outside: plan.outside.append(path)
         case .inPlace: plan.inPlace += 1
@@ -81,18 +82,21 @@ public func layoutMoves(_ paths: [String], libraryFolder: String) -> FilesOrgani
 /// says. Every move is recorded in the index at `ledger` before the first rename, and those
 /// that didn't happen are dropped after, so `carryLayoutMoves` carries the stats of those that
 /// did, now or after a failure. Blocks on the volume, so call it off the main thread, and from
-/// one queue at a time: the tag writes'.
+/// one queue at a time: the tag writes'. `progress` is told before each file, and once more
+/// when the renames are done.
 public func moveToLayout(
-    _ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool, ledger: URL
+    _ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool, ledger: URL,
+    progress: (OrganizeProgress) -> Void
 ) -> FilesOrganized {
     moveToLayout(
         plan, libraryFolder: libraryFolder, checkingAgain: checkingAgain,
-        ledger: { try LibraryIndex(at: ledger) }, calls: MoveCalls())
+        ledger: { try LibraryIndex(at: ledger) }, calls: MoveCalls(), progress: progress)
 }
 
 func moveToLayout(
     _ plan: FilesOrganized, libraryFolder: String, checkingAgain: Bool = false,
-    ledger: () throws -> LibraryIndex, calls: MoveCalls
+    ledger: () throws -> LibraryIndex, calls: MoveCalls,
+    progress: (OrganizeProgress) -> Void = { _ in }
 ) -> FilesOrganized {
     var result = plan
     result.moved = []
@@ -112,7 +116,8 @@ func moveToLayout(
     }
     let spelling = Spelling(libraryFolder)
     var left: Set<String> = []
-    for move in plan.moved {
+    for (done, move) in plan.moved.enumerated() {
+        progress(OrganizeProgress(done: done, total: plan.moved.count, current: move.from))
         if checkingAgain, let changed = changedSince(move, libraryFolder, spelling) {
             result.problems.append(changed)
         } else if let problem = rename(move.from, to: move.to, library, calls) {
@@ -122,6 +127,7 @@ func moveToLayout(
             left.insert(parentOf(move.from))
         }
     }
+    progress(OrganizeProgress(done: plan.moved.count, total: plan.moved.count, current: nil))
     result.keptFolders = removeEmptied(left, library)
     let moved = Set(result.moved.map(\.from))
     do {
