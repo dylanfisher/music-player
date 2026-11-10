@@ -28,11 +28,11 @@ enum LayoutProblem: Error {
     case unlisted(String)
 }
 
-/// Where the file at `source` goes in `libraryFolder` by its tags: `libraryFolderPath`, with
-/// each part already there named as its folder lists it (`listedPath`). Reads the file and
-/// lists folders, so call it off the main thread.
-func layoutDestination(of source: String, in libraryFolder: String) throws(LayoutProblem)
-    -> String
+/// Where the file at `source` goes in the library folder of `listings` by its tags:
+/// `libraryFolderPath`, with each part already there named as its folder lists it
+/// (`listedPath`). Reads the file and lists folders, so call it off the main thread.
+func layoutDestination(of source: String, in listings: LibraryFolderListings)
+    throws(LayoutProblem) -> String
 {
     let tags: TrackTags
     do {
@@ -41,7 +41,7 @@ func layoutDestination(of source: String, in libraryFolder: String) throws(Layou
         throw .unreadable("\(error)")
     }
     do {
-        return try listedPath(libraryFolderPath(for: tags, of: source), in: libraryFolder)
+        return try listedPath(libraryFolderPath(for: tags, of: source), in: listings)
     } catch {
         throw .unlisted("\(error)")
     }

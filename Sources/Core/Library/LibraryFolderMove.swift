@@ -127,6 +127,7 @@ package struct LibraryFolderMove: Sendable {
         var planned: [Planned] = []
         var taken: [String] = []
         var seen: Set<String> = []
+        let listings = LibraryFolderListings(libraryFolder)
         for file in files {
             let stagedPath = folder + "/" + file.name
             let source = stagingRoot + "/" + stagedPath
@@ -138,7 +139,7 @@ package struct LibraryFolderMove: Sendable {
             }
             let destination: String
             do throws(LayoutProblem) {
-                destination = try layoutDestination(of: source, in: libraryFolder)
+                destination = try layoutDestination(of: source, in: listings)
             } catch {
                 switch error {
                 case .unreadable(let detail): throw MoveRefusal.unreadable(source, detail)
@@ -331,22 +332,20 @@ private func removePlaceholder(_ destination: String, _ placeholder: stat) {
     }
 }
 
-/// `relative`, a path in `libraryFolder`, with each part that's there named as its folder
-/// lists it. On a volume that ignores case, such as the NAS, a part the tags spell in another
-/// case is the same file or folder, and the index and the move list know it by the name it
-/// has.
-func listedPath(_ relative: String, in libraryFolder: String) throws -> String {
-    let ignoresCase = pathconf(libraryFolder, _PC_CASE_SENSITIVE) == 0
-    var path = libraryFolder
-    var listing = true
-    for part in relative.split(separator: "/").map(String.init) {
-        if listing, ignoresCase {
-            let names = try FileManager.default.contentsOfDirectory(atPath: path)
-            if let listed = names.first(where: {
-                $0.compare(part, options: .caseInsensitive) == .orderedSame
-            }) {
+/// `relative`, a path in the library folder of `listings`, with each part that's there named
+/// as its folder lists it. On a volume that ignores case, such as the NAS, a part the tags
+/// spell in another case is the same file or folder, and the index and the move list know it
+/// by the name it has.
+func listedPath(_ relative: String, in listings: LibraryFolderListings) throws -> String {
+    var path = listings.libraryFolder
+    var listing = listings.ignoresCase
+    let parts = relative.split(separator: "/").map(String.init)
+    for (place, part) in parts.enumerated() {
+        if listing {
+            if let listed = try listings.name(matching: part, in: path) {
                 path += "/" + listed
-                listing = pathIsDirectory(path)
+                // What the last part is doesn't matter, so it isn't asked.
+                listing = place < parts.count - 1 && listings.isDirectory(path)
                 continue
             }
             listing = false
@@ -354,6 +353,108 @@ func listedPath(_ relative: String, in libraryFolder: String) throws -> String {
         path += "/" + part
     }
     return path
+}
+
+/// What `listedPath` reads of a library folder, each folder listed once in a run (an Organize,
+/// an Approve, a drop's copies) rather than once a file: on the NAS each listing is a round
+/// trip or more, and an album's files share all three folders. A run tells it of each file and
+/// folder it makes, renames or removes, so a later file finds them as the volume lists them.
+/// Another Mac's changes meanwhile aren't seen, as they weren't between one file's listings
+/// and its rename; the renames refuse a name that's taken all the same.
+public final class LibraryFolderListings: @unchecked Sendable {
+    let libraryFolder: String
+    private let lock = NSLock()
+    private var caseIgnored: Bool?
+    /// Each folder listed, by path, its names in the order listed.
+    private var listings: [String: [String]] = [:]
+    /// Each folder's first name by `folded`, from `listings`.
+    private var firstNames: [String: [String: String]] = [:]
+    /// Whether each path asked about is a folder.
+    private var folders: [String: Bool] = [:]
+
+    /// Asks nothing of the volume, so make it on any thread.
+    public init(_ libraryFolder: String) {
+        self.libraryFolder = libraryFolder
+    }
+
+    /// Whether the volume ignores case; listings are only read when it does.
+    var ignoresCase: Bool {
+        lock.withLock {
+            if let caseIgnored { return caseIgnored }
+            let sensitive = pathconf(libraryFolder, _PC_CASE_SENSITIVE)
+            // A folder not there yet is asked again once a copy has made it.
+            if sensitive >= 0 { caseIgnored = sensitive == 0 }
+            return sensitive == 0
+        }
+    }
+
+    /// The first name `folder` lists that's `part` but for case, nil when none is.
+    func name(matching part: String, in folder: String) throws -> String? {
+        try lock.withLock {
+            if listings[folder] == nil {
+                let names = try FileManager.default.contentsOfDirectory(atPath: folder)
+                listings[folder] = names
+                firstNames[folder] = Dictionary(
+                    names.map { (folded($0), $0) }, uniquingKeysWith: { first, _ in first })
+            }
+            // A name found by folding is the one the comparison would find, as the volume
+            // holds no two names alike but for case; one not found is looked for as before.
+            if let name = firstNames[folder]?[folded(part)] { return name }
+            return listings[folder]?.first {
+                $0.compare(part, options: .caseInsensitive) == .orderedSame
+            }
+        }
+    }
+
+    func isDirectory(_ path: String) -> Bool {
+        lock.withLock {
+            if let known = folders[path] { return known }
+            let found = pathIsDirectory(path)
+            folders[path] = found
+            return found
+        }
+    }
+
+    /// Notes that the run made a file or folder at `path`, and any folders above it it lacked.
+    func added(_ path: String) {
+        lock.withLock {
+            var child = path
+            while child.count > libraryFolder.count {
+                let parent = (child as NSString).deletingLastPathComponent
+                let name = (child as NSString).lastPathComponent
+                folders[child] = nil
+                if var names = listings[parent], !names.contains(name) {
+                    names.append(name)
+                    listings[parent] = names
+                    if firstNames[parent]?[folded(name)] == nil {
+                        firstNames[parent]?[folded(name)] = name
+                    }
+                }
+                child = parent
+            }
+        }
+    }
+
+    /// Notes that the run removed or renamed away the file or folder at `path`.
+    func removed(_ path: String) {
+        lock.withLock {
+            let parent = (path as NSString).deletingLastPathComponent
+            let name = (path as NSString).lastPathComponent
+            folders[path] = nil
+            listings[path] = nil
+            firstNames[path] = nil
+            if let names = listings[parent] {
+                let kept = names.filter { $0 != name }
+                listings[parent] = kept
+                firstNames[parent] = Dictionary(
+                    kept.map { (folded($0), $0) }, uniquingKeysWith: { first, _ in first })
+            }
+        }
+    }
+
+    private func folded(_ name: String) -> String {
+        nfc(name).folding(options: .caseInsensitive, locale: nil)
+    }
 }
 
 /// Whether the part of the folder `folder` that exists, its links followed, is `library` (the

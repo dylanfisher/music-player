@@ -51,6 +51,7 @@ public func layoutMoves(
         return plan
     }
     var spelling = Spelling(libraryFolder)
+    let listings = LibraryFolderListings(libraryFolder)
     var named: Set<String> = []
     var destinations: Set<String> = []
     for (checked, path) in paths.enumerated() {
@@ -59,7 +60,7 @@ public func layoutMoves(
             if reports(checked + 1, of: paths.count) { counted(checked + 1, plan.moved.count) }
         }
         guard named.insert(nfc(path)).inserted else { continue }
-        switch place(path, libraryFolder: libraryFolder, resolvedLibrary: library) {
+        switch place(path, listings, resolvedLibrary: library) {
         case .outside: plan.outside.append(path)
         case .inPlace: plan.inPlace += 1
         case .problem(let line): plan.problems.append(line)
@@ -118,16 +119,19 @@ func moveToLayout(
         return result
     }
     let spelling = Spelling(libraryFolder)
+    let listings = LibraryFolderListings(libraryFolder)
     var left: Set<String> = []
     for (done, move) in plan.moved.enumerated() {
         if reports(done, of: plan.moved.count) {
             progress(OrganizeProgress(done: done, total: plan.moved.count, current: move.from))
         }
-        if checkingAgain, let changed = changedSince(move, libraryFolder, spelling) {
+        if checkingAgain, let changed = changedSince(move, listings, spelling) {
             result.problems.append(changed)
-        } else if let problem = rename(move.from, to: move.to, library, calls) {
+        } else if let problem = rename(move.from, to: move.to, library, calls, listings) {
             result.problems.append(problem)
         } else {
+            listings.removed(move.from)
+            listings.added(move.to)
             result.moved.append(move)
             left.insert(parentOf(move.from))
         }
@@ -177,21 +181,21 @@ private struct Spelling {
 }
 
 /// Why `move`'s file no longer goes where its plan said, nil when it still does.
-private func changedSince(_ move: TrackMove, _ libraryFolder: String, _ spelling: Spelling)
-    -> String?
-{
+private func changedSince(
+    _ move: TrackMove, _ listings: LibraryFolderListings, _ spelling: Spelling
+) -> String? {
     guard pathExists(move.from) else {
         return "\(move.from): not moved, it isn't there any more"
     }
     let now: String
     do throws(LayoutProblem) {
-        now = try layoutDestination(of: move.from, in: libraryFolder)
+        now = try layoutDestination(of: move.from, in: listings)
     } catch {
         switch error {
         case .unreadable(let detail):
             return notMoved(move.from, MoveRefusal.unreadable(move.from, detail))
         case .unlisted(let detail):
-            return MoveRefusal.failed(move.from, libraryFolder, detail).description
+            return MoveRefusal.failed(move.from, listings.libraryFolder, detail).description
         }
     }
     guard spelling.key(now) == spelling.key(move.to) else {
@@ -208,19 +212,19 @@ private enum Place {
     case problem(String)
 }
 
-private func place(_ path: String, libraryFolder: String, resolvedLibrary library: String)
-    -> Place
-{
+private func place(
+    _ path: String, _ listings: LibraryFolderListings, resolvedLibrary library: String
+) -> Place {
     guard let real = resolved(path), isPath(real, under: library) else { return .outside }
     let destination: String
     do throws(LayoutProblem) {
-        destination = try layoutDestination(of: path, in: libraryFolder)
+        destination = try layoutDestination(of: path, in: listings)
     } catch {
         switch error {
         case .unreadable(let detail):
             return .problem(notMoved(path, MoveRefusal.unreadable(path, detail)))
         case .unlisted(let detail):
-            return .problem(MoveRefusal.failed(path, libraryFolder, detail).description)
+            return .problem(MoveRefusal.failed(path, listings.libraryFolder, detail).description)
         }
     }
     return isSameFile(destination, path) ? .inPlace : .move(destination)
@@ -236,9 +240,11 @@ private func isSameFile(_ one: String, _ other: String) -> Bool {
 }
 
 /// Renames `path` to `destination`, making its folders; nil when it moved, else why not. The
-/// folders it made for a file that didn't move are removed while they're empty.
+/// folders it made for a file that didn't move are removed while they're empty, and those it
+/// couldn't remove are told to `listings`.
 private func rename(
-    _ path: String, to destination: String, _ library: String, _ calls: MoveCalls
+    _ path: String, to destination: String, _ library: String, _ calls: MoveCalls,
+    _ listings: LibraryFolderListings
 ) -> String? {
     let parent = parentOf(destination)
     guard isFolder(parent, in: library) else {
@@ -254,7 +260,10 @@ private func rename(
     let problem = renameMaking(path, to: destination, library, calls)
     if problem != nil {
         // The deepest first; `rmdir` refuses one another move has put a file in since.
-        for folder in made where rmdir(folder) != 0 { break }
+        for folder in made where rmdir(folder) != 0 {
+            listings.added(folder)
+            break
+        }
     }
     return problem
 }

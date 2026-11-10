@@ -10,22 +10,30 @@ import Metadata
 public func copyIntoLibraryFolder(_ source: String, libraryFolder: String)
     throws(CopyError) -> String
 {
+    try copyIntoLibraryFolder(source, into: LibraryFolderListings(libraryFolder))
+}
+
+/// `copyIntoLibraryFolder(_:libraryFolder:)` into the library folder of `listings`, which one
+/// drop's copies share, so each folder is listed once for all of them.
+public func copyIntoLibraryFolder(_ source: String, into listings: LibraryFolderListings)
+    throws(CopyError) -> String
+{
     let destination: String
     do throws(LayoutProblem) {
-        destination = try layoutDestination(of: source, in: libraryFolder)
+        destination = try layoutDestination(of: source, in: listings)
     } catch {
         switch error {
         case .unreadable(let detail): throw .unreadable(source, detail)
-        case .unlisted(let detail): throw .failed(source, libraryFolder, detail)
+        case .unlisted(let detail): throw .failed(source, listings.libraryFolder, detail)
         }
     }
+    let parent = (destination as NSString).deletingLastPathComponent
     do {
-        try FileManager.default.createDirectory(
-            atPath: (destination as NSString).deletingLastPathComponent,
-            withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
     } catch {
         throw .failed(source, destination, error.localizedDescription)
     }
+    listings.added(parent)
     let input = open(source, O_RDONLY)
     guard input >= 0 else { throw .failed(source, destination, errorText(errno)) }
     defer { close(input) }
@@ -37,6 +45,7 @@ public func copyIntoLibraryFolder(_ source: String, libraryFolder: String)
         if code == EEXIST { throw .alreadyThere(source, destination) }
         throw .failed(source, destination, errorText(code))
     }
+    listings.added(destination)
     // An SMB write can fail as late as the close.
     var failure = fcopyfile(input, output, nil, copyfile_flags_t(COPYFILE_ALL)) == 0 ? nil : errno
     if close(output) != 0, failure == nil { failure = errno }
@@ -48,6 +57,7 @@ public func copyIntoLibraryFolder(_ source: String, libraryFolder: String)
                 "\(errorText(failure)), and the partial copy couldn't be removed:"
                     + " \(errorText(errno))")
         }
+        listings.removed(destination)
         throw .failed(source, destination, errorText(failure))
     }
     return destination

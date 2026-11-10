@@ -51,6 +51,7 @@ extension LibraryBrowser {
         var copies: [String] = []
         if let libraryFolder {
             let total = plan.filesToCopy.count
+            let listings = LibraryFolderListings(libraryFolder)
             for (done, source) in plan.filesToCopy.enumerated() {
                 showCopying(
                     (
@@ -59,7 +60,7 @@ extension LibraryBrowser {
                     ))
                 let copied = await blockingFileWork {
                     Result { () throws(CopyError) in
-                        try copyIntoLibraryFolder(source, libraryFolder: libraryFolder)
+                        try copyIntoLibraryFolder(source, into: listings)
                     }
                 }
                 switch copied {

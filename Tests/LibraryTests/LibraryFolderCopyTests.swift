@@ -58,3 +58,38 @@ private func copyFolders() throws -> (library: String, source: String) {
     }
     #expect(try FileManager.default.contentsOfDirectory(atPath: library).isEmpty)
 }
+
+@Test func aDropsCopiesFindTheFoldersAnEarlierCopyMadeAsListed() throws {
+    let (library, source) = try copyFolders()
+    guard pathconf(library, _PC_CASE_SENSITIVE) == 0 else { return }
+    let other = (source as NSString).deletingLastPathComponent + "/other.flac"
+    try taggedFLAC(tags: [
+        "TITLE": "Other", "ALBUMARTIST": "BAND", "ALBUM": "album", "TRACKNUMBER": "3",
+        "DISCNUMBER": "1", "DISCTOTAL": "2",
+    ]).write(to: URL(fileURLWithPath: other, isDirectory: false))
+    let listings = LibraryFolderListings(library)
+
+    // The first copy lists the empty library folder, then makes Band/Album in it.
+    #expect(
+        try copyIntoLibraryFolder(source, into: listings) == library + "/Band/Album/1-02 Song.flac")
+    #expect(
+        try copyIntoLibraryFolder(other, into: listings) == library + "/Band/Album/1-03 Other.flac")
+}
+
+@Test func theListingsFollowWhatTheRunAddsAndRemoves() throws {
+    let (library, _) = try copyFolders()
+    guard pathconf(library, _PC_CASE_SENSITIVE) == 0 else { return }
+    let listings = LibraryFolderListings(library)
+    #expect(try listings.name(matching: "band", in: library) == nil)
+
+    try FileManager.default.createDirectory(
+        atPath: library + "/Band/Album", withIntermediateDirectories: true)
+    listings.added(library + "/Band/Album")
+    #expect(try listings.name(matching: "band", in: library) == "Band")
+    #expect(try listings.name(matching: "ALBUM", in: library + "/Band") == "Album")
+    #expect(listings.isDirectory(library + "/Band"))
+
+    try FileManager.default.removeItem(atPath: library + "/Band")
+    listings.removed(library + "/Band")
+    #expect(try listings.name(matching: "band", in: library) == nil)
+}
