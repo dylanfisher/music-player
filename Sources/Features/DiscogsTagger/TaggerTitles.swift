@@ -98,6 +98,7 @@ extension TaggerModel.Scope {
         case .library: "Whole Library"
         case .selection: "Albums Selected in the Library"
         case .unmatched: "Unmatched Albums"
+        case .combined: "Selected Albums as One"
         }
     }
 }

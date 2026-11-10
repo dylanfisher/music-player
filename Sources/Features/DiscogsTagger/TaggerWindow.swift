@@ -68,6 +68,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let releaseLine = NSTextField(labelWithString: "")
     /// Why a Likely or Incomplete album isn't Exact, under the release's lines.
     let reasonsLine = NSTextField(labelWithString: "")
+    /// The albums a combined album joins, under the reasons; hidden for any other (ADR 0179).
+    let combinedLine = NSTextField(labelWithString: "")
     let otherReleasesButton = NSButton(title: "Other Releases…", target: nil, action: nil)
     let lookUpButton = NSButton(title: TaggerText.lookUp, target: nil, action: nil)
     let changesButton = NSButton(title: "View Changes…", target: nil, action: nil)
@@ -238,9 +240,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         releaseLine.lineBreakMode = .byTruncatingTail
         reasonsLine.textColor = .systemOrange
         reasonsLine.lineBreakMode = .byTruncatingTail
+        combinedLine.lineBreakMode = .byTruncatingTail
+        combinedLine.isHidden = true
         // A long release or list of reasons truncates; at the default resistance it would widen
         // the window past the screen and hold it there against a drag.
-        for label in [releaseTitle, releaseLine, reasonsLine] {
+        for label in [releaseTitle, releaseLine, reasonsLine, combinedLine] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
         revealButton.isHidden = true
@@ -249,7 +253,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         reviewButtons.setViews([discogsButton], in: .trailing)
         reviewButtons.spacing = 8
         let detail = NSStackView(views: [
-            releaseTitle, releaseLine, reasonsLine, tracks, reviewButtons,
+            releaseTitle, releaseLine, reasonsLine, combinedLine, tracks, reviewButtons,
         ])
         detail.orientation = .vertical
         detail.alignment = .leading
@@ -531,6 +535,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 ? "" : "\(TaggerText.lookUp) searches the catalog, then Discogs."
         }
         reasonsLine.stringValue = album.flatMap { reasonsText($0.match, separator: " · ") } ?? ""
+        let sources = album?.sources ?? []
+        combinedLine.stringValue = sources.isEmpty ? "" : CombinedAlbum.text(sources)
+        combinedLine.toolTip = sources.isEmpty ? nil : CombinedAlbum.text(sources, separator: "\n")
+        combinedLine.isHidden = sources.isEmpty
         leftOut = album?.leftOut ?? []
         rows = album.map { $0.match.comparison(of: $0.album, leftOut: $0.leftOut) } ?? []
         fileTable.reloadData()
@@ -589,7 +597,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             if shownAlbums[row].isRejected || shownAlbums[row].applied {
                 cell.textColor = .secondaryLabelColor
             }
-            cell.toolTip = reasonsText(shownAlbums[row].match, separator: "\n")
+            let sources = shownAlbums[row].sources
+            let tips = [
+                sources.isEmpty ? nil : CombinedAlbum.text(sources, separator: "\n"),
+                reasonsText(shownAlbums[row].match, separator: "\n"),
+            ].compactMap { $0 }
+            cell.toolTip = tips.isEmpty ? nil : tips.joined(separator: "\n\n")
         }
         if tableView === releaseTable, id == .state {
             cell.textColor =
@@ -626,7 +639,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         if table === albumTable {
             let album = shownAlbums[row]
             switch id {
-            case .album: return albumTitle(album.album)
+            case .album: return album.title
             case .files: return number(album.album.tracks.count)
             case .confidence: return album.match.confidence.map { "\($0)%" } ?? ""
             default: return album.reviewText
@@ -861,7 +874,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             }
             let releases = ReleasesSheet(
                 candidates: candidates, chosen: album.match.releaseID,
-                title: albumTitle(album.album))
+                title: album.title)
             releases.viewRelease = { [self, weak releases] id in
                 guard let over = releases?.window else { return }
                 viewRelease(id, over: over)
@@ -880,7 +893,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             return
         }
         let releases = ReleasesSheet(
-            candidates: [], chosen: album.match.releaseID, title: albumTitle(album.album),
+            candidates: [], chosen: album.match.releaseID, title: album.title,
             lookUp: { [model] in try await model.lookUp($0) }, query: model.lookUpQuery())
         releases.viewRelease = { [self, weak releases] id in
             guard let over = releases?.window else { return }
@@ -945,7 +958,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             }
             let changes = ChangesSheet(
                 set: set, excluded: album.excluded, coverExcluded: album.coverExcluded,
-                title: albumTitle(album.album), releaseID: releaseID)
+                title: album.title, releaseID: releaseID)
             present(changes, over: window) { [self] in
                 guard let answer = changes.result else { return }
                 model.setExcluded(

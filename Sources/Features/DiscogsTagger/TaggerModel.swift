@@ -21,6 +21,9 @@ final class TaggerModel {
         case selection
         /// The albums none of whose tracks has a release id.
         case unmatched
+        /// The selection's albums joined into one, as Combine Albums for Tagging asks
+        /// (ADR 0179).
+        case combined
     }
 
     enum CatalogState: Equatable {
@@ -62,8 +65,14 @@ final class TaggerModel {
         var applied = false
         /// The files the user left out, by id: they aren't matched, read or written.
         var leftOut: Set<Int64> = []
+        /// The library's albums `album` joins, in its files' order; empty for one of the
+        /// library's own (ADR 0179).
+        var sources: [DiscogsAlbum] = []
 
         var id: Int64 { album.id }
+        /// How the album list and the problems name it: "Artist – Title", or each album it
+        /// joins.
+        var title: String { sources.isEmpty ? albumTitle(album) : CombinedAlbum.title(sources) }
         /// The album as it's matched and written: its files but those left out.
         var matched: DiscogsAlbum { Self.kept(album, leaving: leftOut) }
         var isRejected: Bool { review == .rejected }
@@ -101,6 +110,8 @@ final class TaggerModel {
         var fieldCount: Int
         /// The files that get the release's cover.
         var coverCount = 0
+        /// Each combined album's sources, as `CombinedAlbum.text` names them (ADR 0179).
+        var combined: [String] = []
         /// The albums left out, each with why: a file that couldn't be read, or a value no
         /// format holds.
         var problems: [String]
@@ -299,10 +310,16 @@ final class TaggerModel {
     private var rescoreWhenIdle = false
 
     /// The changes `album`'s files would get from the mapping, with the choices applied.
+    /// A combined album's files get the release's title and album artist where its albums
+    /// differ in them, so they become one album (ADR 0179).
     func changeSet(_ files: [AlbumFile], _ album: Album) -> AlbumChangeSet {
-        Discogs.changeSet(
-            for: files, match: album.match,
-            mapping: choices.keepExistingValues ? mapping.keepingExistingValues() : mapping,
+        var used = choices.keepExistingValues ? mapping.keepingExistingValues() : mapping
+        if !album.sources.isEmpty {
+            let combined = CombinedAlbum(album.sources)
+            used = used.combining(titles: combined.titlesDiffer, artists: combined.artistsDiffer)
+        }
+        return Discogs.changeSet(
+            for: files, match: album.match, mapping: used,
             fillingSortArtist: choices.fillSortArtist)
     }
 
@@ -377,7 +394,7 @@ final class TaggerModel {
         case .files: return numbers(a.album.tracks.count, b.album.tracks.count)
         case .confidence: return numbers(a.match.confidence ?? -1, b.match.confidence ?? -1)
         case .review: return a.reviewText.localizedStandardCompare(b.reviewText)
-        default: return albumTitle(a.album).localizedStandardCompare(albumTitle(b.album))
+        default: return a.title.localizedStandardCompare(b.title)
         }
     }
 
@@ -445,16 +462,29 @@ final class TaggerModel {
     // MARK: - Analyze
 
     /// Scopes the window to the library's selection, when there is one and nothing runs, whose
-    /// albums are the scope's; returns whether it did.
-    func scopeToSelection() -> Bool {
-        guard !isBusy else { return false }
+    /// albums are the scope's, or to them joined into one when `combining`; returns whether it
+    /// did. Combining says why when it can't, since the user asked for it.
+    func scopeToSelection(combining: Bool = false) -> Bool {
+        guard !isBusy else {
+            if combining {
+                failed(
+                    "The albums weren't combined",
+                    ["The tagger is busy. Stop it or let it finish, then combine them again."])
+            }
+            return false
+        }
         do {
-            guard try !selectedTracks().isEmpty else { return false }
+            guard try !selectedTracks().isEmpty else {
+                if combining {
+                    failed("No tracks are selected", ["Select albums in the library window first."])
+                }
+                return false
+            }
         } catch {
             failed("The selected tracks couldn't be read", ["\(error)"])
             return false
         }
-        scope = .selection
+        scope = combining ? .combined : .selection
         changed()
         return true
     }
@@ -465,12 +495,13 @@ final class TaggerModel {
     func analyze() {
         guard canAnalyze else { return }
         let selection: Set<Int64>
+        let selects = scope == .selection || scope == .combined
         do {
-            selection = scope == .selection ? Set(try selectedTracks()) : []
+            selection = selects ? Set(try selectedTracks()) : []
         } catch {
             return failed("The selected tracks couldn't be read", ["\(error)"])
         }
-        if scope == .selection, selection.isEmpty {
+        if selects, selection.isEmpty {
             return failed("No tracks are selected", ["Select albums in the library window first."])
         }
         run += 1
@@ -488,14 +519,26 @@ final class TaggerModel {
         work = Task {
             do {
                 let all = try await effects.albums()
-                let albums = all.filter { album in
+                var albums = all.filter { album in
                     switch scope {
                     case .library: true
-                    case .selection: album.tracks.contains { selection.contains($0.fileID) }
+                    case .selection, .combined:
+                        album.tracks.contains { selection.contains($0.fileID) }
                     case .unmatched: album.tracks.allSatisfy { $0.releaseID == nil }
                     }
                 }
-                let reviews = try await effects.reviews()
+                var reviews = try await effects.reviews()
+                var sources: [DiscogsAlbum] = []
+                if scope == .combined {
+                    guard albums.count > 1 else { throw TooFewToCombine() }
+                    let combined = CombinedAlbum(albums)
+                    sources = combined.sources
+                    albums = [combined.album]
+                    // A release chosen for one of them alone fits only its own files.
+                    let first = reviews[sources[0].id]
+                    reviews[combined.album.id] =
+                        sources.allSatisfy { reviews[$0.id] == first } ? first : nil
+                }
                 let chosen = reviews.compactMapValues { review -> Int? in
                     if case .chosen(let id) = review { id } else { nil }
                 }
@@ -523,7 +566,7 @@ final class TaggerModel {
                     let album = albums[index]
                     return Album(
                         album: album, match: match, review: reviews[album.id],
-                        chosen: chosen[album.id], leftOut: leftOut[index])
+                        chosen: chosen[album.id], leftOut: leftOut[index], sources: sources)
                 }
                 forgetChangeCounts()
                 // A staged job's one album opens on its tier's tab, whichever it is.
@@ -545,6 +588,11 @@ final class TaggerModel {
 
             } catch is CancellationError {
                 status = "Analyze stopped; the albums shown are the last run's"
+            } catch is TooFewToCombine {
+                status = "Nothing to combine; the albums shown are the last run's"
+                failed(
+                    "Only one album is selected",
+                    ["Select tracks of two or more albums in the library window to combine them."])
             } catch let error as DiscogsAPIError {
                 status = "Analyze stopped; the albums shown are the last run's"
                 failed(sentence(error.description), [])
@@ -555,6 +603,9 @@ final class TaggerModel {
             finish(current)
         }
     }
+
+    /// A combined scope's selection that holds one album.
+    private struct TooFewToCombine: Error {}
 
     /// Stops the Analyze, read or import running.
     func stop() {
@@ -761,7 +812,7 @@ final class TaggerModel {
             return (set, nil)
         }
         guard hasToken() else {
-            return (set, CoverProblem.needsToken.line(for: albumTitle(album.album)))
+            return (set, CoverProblem.needsToken.line(for: album.title))
         }
         let result: Result<Cover, CoverProblem>
         if let known = covers[releaseID] {
@@ -776,7 +827,7 @@ final class TaggerModel {
         }
         switch result {
         case .success(let cover): return (set.covering(cover, mode: choices.artwork), nil)
-        case .failure(let problem): return (set, problem.line(for: albumTitle(album.album)))
+        case .failure(let problem): return (set, problem.line(for: album.title))
         }
     }
 
@@ -925,7 +976,7 @@ final class TaggerModel {
             guard unread == 0 else {
                 // Each file that couldn't be read is a problem of its own already.
                 plan.problems.append(
-                    "\(albumTitle(album.album)): \(unread) file\(unread == 1 ? "" : "s")"
+                    "\(album.title): \(unread) file\(unread == 1 ? "" : "s")"
                         + " unreadable or no longer in the library")
                 continue
             }
@@ -937,6 +988,9 @@ final class TaggerModel {
                     includingCover: !album.coverExcluded)
                 guard !edits.isEmpty else { continue }
                 plan.albumIDs.append(album.id)
+                if !album.sources.isEmpty {
+                    plan.combined.append(CombinedAlbum.text(album.sources))
+                }
                 plan.files += edits
                 for (path, _) in edits { plan.albumOfPath[path] = album.id }
                 plan.fieldCount += set.files.flatMap(\.changes).count {
@@ -944,7 +998,7 @@ final class TaggerModel {
                 }
                 if !album.coverExcluded { plan.coverCount += set.coveredFiles }
             } catch {
-                plan.problems.append("\(albumTitle(album.album)): \(error)")
+                plan.problems.append("\(album.title): \(error)")
             }
         }
         return plan
@@ -969,6 +1023,9 @@ final class TaggerModel {
             + (plan.coverCount == 0
                 ? "" : " Each cover is its release's primary image from Discogs.")
             + (staged ? Self.stagedWrite : " Undo Tag Edit puts them all back.")
+        for combined in plan.combined {
+            detail += "\n\n\(combined). Their files become one album of the release."
+        }
 
         if !plan.problems.isEmpty {
             detail +=

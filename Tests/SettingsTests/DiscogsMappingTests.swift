@@ -120,6 +120,29 @@ private func mappingProblem(_ json: String) -> String? {
     #expect(minimal[.label].mode == .replace)
 }
 
+@Test func combiningReplacesTheAlbumTitleAndArtistAsAsked() {
+    let minimal = DiscogsPreset.minimal.mapping.keepingExistingValues()
+    let both = minimal.combining(titles: true, artists: true)
+    #expect(both[.album].mode == .replace)
+    #expect(both[.albumArtist].mode == .replace)
+    #expect(both[.album].targets == [.field(.album)])
+    for field in DiscogsField.allCases where field != .album && field != .albumArtist {
+        #expect(both[field] == minimal[field], "\(field)")
+    }
+    let titles = minimal.combining(titles: true, artists: false)
+    #expect(titles[.album].mode == .replace)
+    #expect(titles[.albumArtist] == minimal[.albumArtist])
+    #expect(minimal.combining(titles: false, artists: false) == minimal)
+
+    // A title written to a custom key alone also gets the tag the library groups by.
+    var custom = minimal
+    custom[.album] = DiscogsFieldRule(.fillEmpty, [.key("RELEASETITLE")])
+    #expect(
+        custom.combining(titles: true, artists: false)[.album].targets == [
+            .key("RELEASETITLE"), .field(.album),
+        ])
+}
+
 @Test func aTargetIsAStringUnlessItIsSpelledPerFormatOrNumbered() throws {
     let rule = DiscogsFieldRule(
         .fillEmpty,

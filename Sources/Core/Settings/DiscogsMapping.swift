@@ -51,6 +51,23 @@ public struct DiscogsMapping: SettingValue {
         return mapping
     }
 
+    /// This mapping with the album title, when `titles` is set, and the album artist, when
+    /// `artists` is, replacing the tag the library groups albums by, whatever their mode: the
+    /// albums combined for tagging become one album only when their files agree on both
+    /// (ADR 0179).
+    public func combining(titles: Bool, artists: Bool) -> DiscogsMapping {
+        var mapping = self
+        let forced: [(DiscogsField, TagEditField)] =
+            (titles ? [(.album, .album)] : []) + (artists ? [(.albumArtist, .albumArtist)] : [])
+        for (field, tag) in forced {
+            mapping[field].mode = .replace
+            if !mapping[field].targets.contains(.field(tag)) {
+                mapping[field].targets.append(.field(tag))
+            }
+        }
+        return mapping
+    }
+
     /// This mapping with every field that fills only empty tags replacing them instead: a
     /// staged download's tags are its uploader's, so none is kept over the release's (ADR 0146).
     public func overwriting() -> DiscogsMapping {
