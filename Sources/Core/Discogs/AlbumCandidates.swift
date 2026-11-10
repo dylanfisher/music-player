@@ -75,7 +75,7 @@ func catalogNumbers(_ album: DiscogsAlbum) -> [String] {
 /// What found a candidate release: the release id its tracks carry, its barcode, its label and
 /// catalog number, its artist and title, or its artist alone, when nothing else found a release
 /// that fits (ADR 0174).
-public enum CandidateKey: Equatable, Sendable {
+public enum CandidateKey: String, Codable, Equatable, Sendable {
     case taggedID, barcode, labelAndCatalogNumber, title, artist
 }
 

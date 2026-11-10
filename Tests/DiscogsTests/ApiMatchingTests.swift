@@ -174,12 +174,25 @@ private func renumbered(_ name: String, _ id: Int) -> [UInt8] {
         // A fake of its own, whose cache doesn't hold 1006 yet.
         let fresh = FakeDiscogs()
         fresh.queue("/releases/1006", reply)
-        await #expect(throws: thrown) {
+        let stopped = try await stopping {
             try await run(
                 [album(10, stockholm, releaseIDs: ["1006", "1006", "1006"])], .api,
                 catalog: folder.catalog, api: fresh.api())
         }
+        #expect(stopped.error == thrown)
+        #expect(stopped.matches.isEmpty)
     }
+}
+
+/// The `APIStoppedMatching` that `body` throws.
+private func stopping(_ body: () async throws -> [AlbumMatch]) async throws -> APIStoppedMatching {
+    do {
+        _ = try await body()
+    } catch let stopped as APIStoppedMatching {
+        return stopped
+    }
+    Issue.record("the stop wasn't reported")
+    throw CancellationError()
 }
 
 @Test func cancellingDuringARateLimitWaitStopsTheRun() async throws {
@@ -254,23 +267,72 @@ private func renumbered(_ name: String, _ id: Int) -> [UInt8] {
     #expect(outer.all == [40, nil])
 }
 
-@Test func bothKeepsTheCatalogsMatchesWhenTheAPIStopsAndTheAPIAloneDoesnt() async throws {
+@Test func whenTheAPIStopsBothKeepsTheCatalogsMatchesAndTheAPIAloneItsOwn() async throws {
     let folder = try fixtureCatalog()
     let fake = FakeDiscogs()
     fake.queue("/database/search", .failure(.offline))
-    do {
-        _ = try await run([tiered[0], tiered[3]], .both, catalog: folder.catalog, api: fake.api())
-        Issue.record("the stop wasn't reported")
-    } catch let stopped as APIStoppedMatching {
-        #expect(stopped.error == .offline)
-        #expect(stopped.matches.map(\.tier) == [.exact, .noCandidate])
-        #expect(stopped.matches.first?.releaseID == 1001)
+    let stopped = try await stopping {
+        try await run([tiered[0], tiered[3]], .both, catalog: folder.catalog, api: fake.api())
     }
+    #expect(stopped.error == .offline)
+    #expect(stopped.matches.map(\.tier) == [.exact, .noCandidate])
+    #expect(stopped.matches.first?.releaseID == 1001)
+    // The API alone keeps the albums it matched before the search that failed.
     let alone = FakeDiscogs()
-    alone.queue("/database/search", .failure(.offline))
-    await #expect(throws: DiscogsAPIError.offline) {
-        try await run([tiered[3]], .api, catalog: folder.catalog, api: alone.api())
+    alone.queue("/database/search", .success(barcodeReply), .failure(.offline))
+    let partial = try await stopping {
+        try await run([tiered[0], tiered[3]], .api, catalog: folder.catalog, api: alone.api())
     }
+    #expect(partial.error == .offline)
+    #expect(partial.matches.map(\.releaseID) == [1001])
+}
+
+/// The fake's answer to a barcode search: release 1001.
+private let barcodeReply = HTTPSResponse(
+    status: 200, headers: [:], body: apiFixture("search-barcode"))
+
+private func searches(_ fake: FakeDiscogs) -> Int {
+    fake.requests.filter { $0.url.path == "/database/search" }.count
+}
+
+@Test func aRunAfterOneThatStoppedSearchesOnlyForTheAlbumsItHadntReached() async throws {
+    let folder = try DumpFolder()
+    let fake = FakeDiscogs()
+    fake.queue("/database/search", .success(barcodeReply), .failure(.offline))
+    _ = try await stopping {
+        try await run([tiered[0], tiered[3]], .api, catalog: folder.catalog, api: fake.api())
+    }
+    #expect(searches(fake) == 2)
+    // Album 1's barcode search is kept; album 4, which the stop cut short, is searched again.
+    let matches = try await run(
+        [tiered[0], tiered[3]], .api, catalog: folder.catalog, api: fake.api())
+    #expect(matches.map(\.releaseID) == [1001, nil])
+    let resumed = searches(fake)
+    #expect(
+        fake.requests.filter { $0.url.path == "/database/search" }.dropFirst(2)
+            .allSatisfy { !($0.url.query ?? "").contains("barcode=") })
+    // The run finished, so the next one searches for both again: album 1's barcode, and
+    // album 4's searches as the resumed run made them.
+    _ = try await run([tiered[0], tiered[3]], .api, catalog: folder.catalog, api: fake.api())
+    #expect(searches(fake) == resumed + 1 + (resumed - 2))
+}
+
+@Test func keptCandidatesAreSearchedForAgainWhenTheAlbumChangesOrADayHasPassed() async throws {
+    let fake = FakeDiscogs()
+    let api = fake.api()
+    let searched = CandidateSearch(tiered[0], choosing: nil)
+    await api.keep([(1001, .barcode)], album: 1, searched: searched)
+    #expect(await api.keptCandidates(album: 1, searched: searched)?.map(\.id) == [1001])
+    var retagged = tiered[0]
+    retagged.barcode = "5 000000 000000"
+    #expect(
+        await api.keptCandidates(album: 1, searched: CandidateSearch(retagged, choosing: nil))
+            == nil)
+    #expect(
+        await api.keptCandidates(album: 1, searched: CandidateSearch(tiered[0], choosing: 1002))
+            == nil)
+    fake.advance(DiscogsAPI.keptCandidatesDays * 86_400)
+    #expect(await api.keptCandidates(album: 1, searched: searched) == nil)
 }
 
 /// After an API run, the sheets and Choose ask Discogs nothing more (ADR 0170): Other

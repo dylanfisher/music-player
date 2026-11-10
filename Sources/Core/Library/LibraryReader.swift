@@ -69,6 +69,11 @@ public actor LibraryReader {
         try index.storeDiscogs(kind: kind, id: id, fetchedAt: fetchedAt, json: json)
     }
 
+    /// Removes the Discogs API's entries of `kind` for `ids`.
+    public func removeDiscogs(kind: String, ids: [Int]) throws {
+        try index.removeDiscogs(kind: kind, ids: ids)
+    }
+
     /// A connection for Listening Stats' reads, opened off the main thread.
     public nonisolated func statsReader() async throws -> StatsReader {
         let url = databaseURL

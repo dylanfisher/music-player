@@ -3,6 +3,8 @@
 - **Date:** 2026-11-08
 - **Status:** accepted
 - **Amends:** [0131](0131-discogs-matching.md) (where candidates come from)
+- **Amended by:** [0190](0190-an-unfinished-analyze-resumes.md): the API alone keeps the albums
+  it matched when it stops, and a run after one that stopped resumes where it stopped.
 - **See also:** [0138](0138-the-discogs-api-client.md) (the client), [0133](0133-one-confirmation-for-a-match-set.md)
   (reviews), [0137](0137-the-discogs-token.md) (the token),
   [0179](0179-combining-albums-for-tagging.md) (Combine Albums for

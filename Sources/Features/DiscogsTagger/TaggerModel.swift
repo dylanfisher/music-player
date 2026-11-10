@@ -627,11 +627,26 @@ final class TaggerModel {
                 // A staged job's one album opens on its tier's tab, whichever it is.
                 if staged != nil, let only = self.albums.first { tab = TaggerTab(only.match.tier) }
                 if selected == nil { selectedID = self.albums(in: tab).first?.id }
-                status = String(
-                    format: "Analyzed %@ albums in %.1f s", number(albums.count),
-                    Date().timeIntervalSince(started))
+                let seconds = Date().timeIntervalSince(started)
+                status =
+                    matches.count < albums.count
+                    ? String(
+                        format: "Analyzed %@ of %@ albums in %.1f s", number(matches.count),
+                        number(albums.count), seconds)
+                    : String(
+                        format: "Analyzed %@ albums in %.1f s", number(albums.count), seconds)
                 if alone { status += "; with no catalog, Both asked the Discogs API alone" }
-                if let apiStopped {
+                // The API alone keeps the albums it matched before it stopped (ADR 0190).
+                if let apiStopped, source == .api {
+                    status += "; Discogs stopped, so Analyze again to match the rest"
+                    failed(
+                        sentence(apiStopped.description),
+                        [
+                            "The albums the Discogs API matched before it stopped are shown."
+                                + " Analyze again to match the rest: the albums it already"
+                                + " searched for aren't searched again for a day."
+                        ])
+                } else if let apiStopped {
                     status += "; Discogs stopped, so some albums have only the catalog's match"
                     failed(
                         sentence(apiStopped.description),

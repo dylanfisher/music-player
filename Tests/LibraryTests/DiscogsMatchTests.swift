@@ -133,6 +133,20 @@ private func track(_ path: String, album: String, release: String?, master: Stri
         ])
 }
 
+@Test func removingDiscogsEntriesTakesOnlyThoseOfTheKindAndIds() throws {
+    let index = try LibraryIndex(
+        at: FileManager.default.temporaryDirectory
+            .appendingPathComponent("discogs-cache-\(UUID().uuidString)/library.sqlite"))
+    for (kind, id) in [("found", 1), ("found", 2), ("found", 3), ("release", 1)] {
+        try index.storeDiscogs(kind: kind, id: id, fetchedAt: 10, json: "{}")
+    }
+    try index.removeDiscogs(kind: "found", ids: [1, 3, 4])
+    #expect(try index.discogsCached(kind: "found", id: 1) == nil)
+    #expect(try index.discogsCached(kind: "found", id: 2) != nil)
+    #expect(try index.discogsCached(kind: "found", id: 3) == nil)
+    #expect(try index.discogsCached(kind: "release", id: 1) != nil)
+}
+
 @Test func theDiscogsCacheKeepsAnEntryByKindAndIdThroughAnIndexRebuild() throws {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("discogs-cache-\(UUID().uuidString)/library.sqlite")

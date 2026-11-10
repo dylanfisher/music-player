@@ -3,10 +3,13 @@ import Library
 
 /// Where `DiscogsAPI` keeps what it fetched by id, as JSON text: the index's `discogs_cache`
 /// table in the app, a dictionary in tests (ADR 0138). Searches aren't kept, since their
-/// answer changes.
+/// answer changes, except what an Analyze's searches found for an album until the run ends
+/// (ADR 0190).
 public struct DiscogsCache: Sendable {
     public enum Kind: String, Sendable {
         case release, master
+        /// The candidates the searches found for an album, by album ID.
+        case found
     }
 
     /// An entry and when it was fetched, in seconds since 1970.
@@ -14,13 +17,16 @@ public struct DiscogsCache: Sendable {
 
     public var read: @Sendable (Kind, Int) async throws -> Entry?
     public var store: @Sendable (Kind, Int, Entry) async throws -> Void
+    public var remove: @Sendable (Kind, [Int]) async throws -> Void
 
     public init(
         read: @escaping @Sendable (Kind, Int) async throws -> Entry?,
-        store: @escaping @Sendable (Kind, Int, Entry) async throws -> Void
+        store: @escaping @Sendable (Kind, Int, Entry) async throws -> Void,
+        remove: @escaping @Sendable (Kind, [Int]) async throws -> Void
     ) {
         self.read = read
         self.store = store
+        self.remove = remove
     }
 
     /// The index's cache, through `reader`'s connection.
@@ -30,7 +36,8 @@ public struct DiscogsCache: Sendable {
             store: { kind, id, entry in
                 try await reader.storeDiscogs(
                     kind: kind.rawValue, id: id, fetchedAt: entry.fetchedAt, json: entry.json)
-            })
+            },
+            remove: { kind, ids in try await reader.removeDiscogs(kind: kind.rawValue, ids: ids) })
     }
 }
 

@@ -94,6 +94,10 @@ final class FakeDiscogs: @unchecked Sendable {
         lock.withLock { stored["\(kind.rawValue) \(id)"] = entry }
     }
 
+    func removeCacheEntries(_ kind: DiscogsCache.Kind, _ ids: [Int]) {
+        lock.withLock { for id in ids { stored["\(kind.rawValue) \(id)"] = nil } }
+    }
+
     var transport: HTTPSTransport {
         { [self] url, headers, _, _ throws(HTTPSError) in
             let reply = lock.withLock { () -> Result<HTTPSResponse, HTTPSError>? in
@@ -139,7 +143,8 @@ final class FakeDiscogs: @unchecked Sendable {
     var cache: DiscogsCache {
         DiscogsCache(
             read: { [self] kind, id in cacheEntry(kind, id) },
-            store: { [self] kind, id, entry in setCacheEntry(kind, id, entry) })
+            store: { [self] kind, id, entry in setCacheEntry(kind, id, entry) },
+            remove: { [self] kind, ids in removeCacheEntries(kind, ids) })
     }
 
     func api(token: DiscogsToken? = fakeToken) -> DiscogsAPI {

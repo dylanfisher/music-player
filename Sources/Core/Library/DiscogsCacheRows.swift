@@ -17,4 +17,12 @@ extension LibraryIndex {
             """
         ).run(kind, id, fetchedAt, json)
     }
+
+    /// Removes the entries of `kind` for `ids`, in one transaction.
+    func removeDiscogs(kind: String, ids: [Int]) throws {
+        try inTransaction {
+            let delete = try statement("DELETE FROM \(discogsCacheTable) WHERE kind = ? AND id = ?")
+            for id in ids { try delete.run(kind, id) }
+        }
+    }
 }

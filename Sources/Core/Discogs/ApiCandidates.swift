@@ -13,10 +13,29 @@ enum ApiCandidates {
     static let maximumReleases = 8
 
     /// The candidates found, each once with how it was first found. A search that fails on its
-    /// own reply is logged and the next is tried; any error that stops the run is thrown.
+    /// own reply is logged and the next is tried; any error that stops the run is thrown. With
+    /// a token, what an unfinished run's searches found for the album is used in place of
+    /// searching again, and what these find is kept until the run finishes (ADR 0190).
     static func found(for album: DiscogsAlbum, choosing choice: Int?, api: DiscogsAPI)
         async throws(DiscogsAPIError) -> [(id: Int, foundBy: CandidateKey)]
     {
+        // Without a token nothing is searched, so there's nothing to keep.
+        guard api.hasToken else {
+            return try await searching(for: album, choosing: choice, api: api)
+        }
+        let searched = CandidateSearch(album, choosing: choice)
+        if let kept = await api.keptCandidates(album: album.id, searched: searched) {
+            return kept
+        }
+        let found = try await searching(for: album, choosing: choice, api: api)
+        await api.keep(found, album: album.id, searched: searched)
+        return found
+    }
+
+    /// `found`'s searches, with no kept candidates.
+    private static func searching(
+        for album: DiscogsAlbum, choosing choice: Int?, api: DiscogsAPI
+    ) async throws(DiscogsAPIError) -> [(id: Int, foundBy: CandidateKey)] {
         var found: [(id: Int, foundBy: CandidateKey)] = []
         var seen: Set<Int> = []
         func add(_ ids: [Int], _ key: CandidateKey) {
@@ -100,4 +119,37 @@ enum ApiCandidates {
         }
         return fetched
     }
+}
+
+/// What an album's searches read: when any of it changes, as after a tag edit, the candidates
+/// kept for it are searched for again (ADR 0190).
+struct CandidateSearch: Codable, Equatable {
+    var choice: Int?
+    var taggedIDs: [Int]
+    var barcode: String?
+    var label: String?
+    var catalogNumber: String?
+    var artist: String?
+    var title: String
+
+    init(_ album: DiscogsAlbum, choosing choice: Int?) {
+        self.choice = choice
+        taggedIDs = taggedReleaseIDs(album)
+        barcode = album.barcode
+        label = album.label
+        catalogNumber = album.catalogNumber
+        artist = album.artist
+        title = album.title
+    }
+}
+
+/// An album's candidates as the cache keeps them.
+struct KeptCandidates: Codable {
+    struct Found: Codable {
+        var id: Int
+        var foundBy: CandidateKey
+    }
+
+    var searched: CandidateSearch
+    var found: [Found]
 }

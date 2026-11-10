@@ -170,6 +170,22 @@ private let fakeTokenText = "fakeTOKENfor3tests0nly"
 }
 
 @MainActor
+@Test func whenTheAPIAloneStopsTheAlbumsItMatchedAreShownWithTheAlert() async throws {
+    let two = album(2, "Other", titles: stockholm)
+    let stopped = APIStoppedMatching(matches: [exact(one, nil)], error: .offline)
+    let tagger = await model(
+        Seen(), albums: [one, two], matches: exact, source: .api, matchError: stopped)
+    var alerts: [String] = []
+    tagger.failed = { message, _ in alerts.append(message) }
+    tagger.analyze()
+    await tagger.finished()
+    #expect(alerts == ["There is no connection to Discogs"])
+    #expect(tagger.albums.map(\.id) == [1])
+    #expect(tagger.status.hasPrefix("Analyzed 1 of 2 albums in "))
+    #expect(tagger.status.hasSuffix("; Discogs stopped, so Analyze again to match the rest"))
+}
+
+@MainActor
 @Test func whenTheAPIStopsBothTheCatalogsMatchesAreShownWithTheAlert() async throws {
     let stopped = APIStoppedMatching(matches: [exact(one, nil)], error: .offline)
     let tagger = await model(

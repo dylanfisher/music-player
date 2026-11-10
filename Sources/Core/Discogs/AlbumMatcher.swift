@@ -6,8 +6,10 @@ import Settings
 /// says (ADRs 0131 and 0139), off the calling thread, in their order. The catalog is opened for
 /// this call, so one after an import reads the new file; with `.api` it isn't opened at all.
 /// Cancelling the task stops it before the next album, or during a wait for Discogs's rate
-/// limit, and throws `CancellationError`. A `DiscogsAPIError` that stops the run is thrown;
-/// in Both, as `APIStoppedMatching`, with the matches made.
+/// limit, and throws `CancellationError`. A `DiscogsAPIError` that stops the run is thrown as
+/// `APIStoppedMatching`, with the matches made. What the searches found for each album is kept
+/// until the run finishes, so one stopped by a quit, a crash or an error searches again only
+/// for the albums it hadn't reached (ADR 0190).
 /// `progress` hears each album done and each long wait, off the main thread. `chosen` holds
 /// the release the user chose for an album, by album ID, which is its match whatever the
 /// others score (ADR 0133). `skippingVideo` leaves out the releases that are only Blu-ray, DVD
@@ -63,13 +65,14 @@ public func matchAlbums(
             }
         } catch {
             await api.setWaiting(previous)
-            // Both keeps what the catalog matched, with the albums the API did before it stopped.
-            if source == .both, let error = error as? DiscogsAPIError, error != .cancelled {
+            // The albums the API did before it stopped, and in Both what the catalog matched.
+            if let error = error as? DiscogsAPIError, error != .cancelled {
                 throw APIStoppedMatching(matches: matches, error: error)
             }
             throw error
         }
         await api.setWaiting(previous)
+        await api.forgetCandidates(of: indices.map { albums[$0].id })
         return matches
 
     }
@@ -117,9 +120,9 @@ struct ReleaseNotInCatalog: Error, Equatable, CustomStringConvertible {
     var description: String { "the catalog has no release \(releaseID)" }
 }
 
-/// A Both run whose API pass stopped, as for no connection or a refused token: every album
-/// matched as the catalog pass and the API pass so far had it, and why the API stopped. Only
-/// the API alone loses its run to such an error (ADR 0139).
+/// A run whose API pass stopped, as for no connection or a refused token, and why. With the API
+/// alone, the albums it matched before it stopped, in order, the first of the run's; in Both,
+/// every album, as the catalog pass and the API pass so far matched it (ADRs 0139, 0190).
 public struct APIStoppedMatching: Error, CustomStringConvertible {
     public var matches: [AlbumMatch]
     public var error: DiscogsAPIError

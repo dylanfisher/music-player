@@ -317,6 +317,55 @@ public actor DiscogsAPI {
         }
     }
 
+    // MARK: An unfinished Analyze's candidates
+
+    /// How long an album's candidates are kept for a run that resumes an unfinished one
+    /// (ADR 0190): a run stopped by a quit or a crash is usually run again the same day, and
+    /// past that a search is worth asking again.
+    static let keptCandidatesDays = 1.0
+
+    /// The candidates the searches found for album `id`, kept while `searched` is still what
+    /// they read; nil when none are kept, they're older than `keptCandidatesDays` or the album
+    /// changed.
+    func keptCandidates(album id: Int64, searched: CandidateSearch) async
+        -> [(id: Int, foundBy: CandidateKey)]?
+    {
+        guard
+            let json = await cached(.found, Int(id), maximumAgeDays: Self.keptCandidatesDays)
+        else { return nil }
+        do {
+            let kept = try JSONDecoder().decode(KeptCandidates.self, from: Data(json.utf8))
+            guard kept.searched == searched else { return nil }
+            return kept.found.map { ($0.id, $0.foundBy) }
+        } catch {
+            logger.error("the kept candidates of album \(id) don't decode: \(error)")
+            return nil
+        }
+    }
+
+    /// Keeps what the searches `searched` found for album `id`, until a run that matched it
+    /// finishes.
+    func keep(
+        _ found: [(id: Int, foundBy: CandidateKey)], album id: Int64, searched: CandidateSearch
+    )
+        async
+    {
+        let kept = KeptCandidates(
+            searched: searched,
+            found: found.map { KeptCandidates.Found(id: $0.id, foundBy: $0.foundBy) })
+        await store(.found, Int(id), kept)
+    }
+
+    /// Forgets the kept candidates of `albums`, once a run that matched them has finished, so
+    /// the next run searches again.
+    func forgetCandidates(of albums: [Int64]) async {
+        do {
+            try await cache.remove(.found, albums.map { Int($0) })
+        } catch {
+            logger.error("couldn't forget the kept candidates of \(albums.count) albums: \(error)")
+        }
+    }
+
     // MARK: Cache
 
     /// An entry under `maximumAgeDays` old. One dated in the future, after the clock was set

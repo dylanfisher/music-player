@@ -3,6 +3,8 @@
 - **Date:** 2026-11-08
 - **Status:** accepted
 - **Amends:** [0025](0025-threat-model.md) (rows 60 to 63)
+- **Amended by:** [0190](0190-an-unfinished-analyze-resumes.md): what an album's searches
+  found is kept until the run that searched finishes, for a day at most.
 - **See also:** [0137](0137-the-discogs-token.md) (the token), [0130](0130-discogs-catalog.md)
   (the catalog the API stands in for), [0039](0039-network-control.md) (the LAN client)
 

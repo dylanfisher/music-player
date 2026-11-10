@@ -450,8 +450,9 @@ private let discogsReviewsSchema = """
     """
 
 private let discogsCacheSchema = """
-    -- A row for each release or master fetched from the Discogs API: its kind, "release" or
-    -- "master", its id, when it was fetched in seconds since 1970, and what was kept of it.
+    -- A row for each release or master fetched from the Discogs API, and for each album an
+    -- unfinished Analyze searched for: its kind, "release", "master" or "found", its id, when
+    -- it was fetched in seconds since 1970, and what was kept of it.
     CREATE TABLE \(discogsCacheTable) (
         kind TEXT NOT NULL,
         id INTEGER NOT NULL,
