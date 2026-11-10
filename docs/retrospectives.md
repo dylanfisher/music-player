@@ -4,6 +4,35 @@ Where the time and tokens went over the last few phases, and what changed becaus
 newest entry is first. [plan.md](plan.md#retrospective) says when to write one and what goes in
 it.
 
+## 2026-11-10: phases 73 to 76
+
+| Phase | Implementation | Reviews and bench | Fix rounds |
+|---|---|---|---|
+| 73 | audit: 7 Sonnet auditors, 1.37M tokens, 9 to 30 min each side by side; 4 lanes, 808k tokens, 25 to 51 min side by side | 292k tokens, 50 calls, 6 min; 3 bench runs and an A/B of main | 1 defect and 4 simplify points, then 1 low |
+| 74 | 253k tokens, 121 calls, 36 min | 139k tokens, 24 calls, 3 min | 0 above low; 3 small changes |
+| 75 | 115k tokens, 48 calls, 11 min | 58k tokens, 5 calls, 1 min | 0 above low |
+| 76 | 213k tokens, 112 calls, 33 min | 149k tokens, 26 calls, 2 min | 0 above low; 3 small changes |
+
+The run took 3 hours 15 minutes: phase 73 2 hours 10 minutes, then 74 and 75 side by side and
+76 started beside 74's gate, which saved about 30 minutes. Phase 73's time went to the audit
+(30 minutes for the slowest auditor, B, then P's profiles) and to the lanes; triage was 10
+minutes. The bench lock kept timed runs apart, but each full non-window bench run took about 15
+minutes and three were needed (baseline, after, reruns), and two of the auditors' numbers
+didn't hold up: D1's 17 s for a 3 MB body came from a harness reading on the main actor (7 ms
+through the client), and the baseline's one miss and four "regressions" were load or the Mac's
+drift, which only a rerun alone and an A/B against main's binary showed. Reviews were cheap
+(1 to 3 minutes each) and the first ones found what mattered: a body copied on every chunk,
+and a listing cache keeping two copies. Fixes sent back to the agent that wrote the code took 5
+to 10 minutes each. No retrospective ran from phase 54 to 72, though the plan asks for one
+every third phase; this entry covers only 73 to 76.
+
+Changes: the phase gate's performance audit now says to A/B a row still slower alone against
+main's binary before calling it a regression; the retrospective's cleanup says a worktree's
+`.build` goes with it, so a Result line's evidence goes in the scratchpad first (phase 73's
+baseline went that way). Cleanup: every phase worktree was removed as its branch merged; `git
+worktree list` shows only main, and `../music-player-51gate` is a leftover folder, not a
+worktree, for the owner to delete.
+
 ## 2026-11-08: phases 51h, 52 and 53
 
 | Phase | Implementation | Reviews and bench | Fix rounds |

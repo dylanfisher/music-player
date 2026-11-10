@@ -212,7 +212,9 @@ Run after every phase, before ticking it off.
       line. In an agent session the window rows that quit the app (launch, scrolling, page
       down, resize, row height) hang in `terminate:`, each for its 300 s timeout: leave them out
       by name and list them for the owner's Mac. Rerun a row that misses alone before calling
-      it a miss; a full run's load can push a row past its budget.
+      it a miss; a full run's load can push a row past its budget. A row still slower alone is
+      run against main's binary, alternately, under the bench lock, before it's called a
+      regression: in phase 73 four such rows read the same on main.
 - [ ] **Real-time audit**, if the phase touched playback: everything reachable from the IO proc
       is C in `HALRender` and uses no locks, no allocation, no logging and no ObjC. Ring buffer
       sizing is justified in a comment.
@@ -235,7 +237,8 @@ Every third phase, and before a long run ends, the orchestrator adds a dated ent
 - What changes because of it, in this plan, AGENTS.md, a script or a brief, with the reason.
   Make the change in the same commit as the entry.
 - Cleanup: `git worktree list`, then remove every worktree no running agent is using and run
-  `git worktree prune`. Each one holds a full `.build`, several gigabytes.
+  `git worktree prune`. Each one holds a full `.build`, several gigabytes. Removing one deletes
+  its `.build`, so anything a Result line points at goes in the scratchpad first.
 
 Then `./scripts/test --fresh` and `./scripts/check`. The full run catches what the gate's
 incremental test step can miss ([ADR 0122](decisions/0122-incremental-test-step.md)): a race

@@ -927,8 +927,8 @@ the user sees changes apart from speed.
 - [ ] **Owner checks:** the window rows on the owner's Mac, and the old Mac.
 
 Result, phase 73: 16 commits; one new ADR, 0185. Wave 0 ran every bench row an agent session
-can, without the `window:` rows, on the branch before any fix (`.build/perf-audit/baseline.txt`
-in the phase's worktree): every row in budget but the metadata parse, 5.07 s against 5 s under
+can, without the `window:` rows, on the branch before any fix (its output went with the
+worktree's `.build`; the rows that moved are below): every row in budget but the metadata parse, 5.07 s against 5 s under
 the auditors' load and 1.54 s alone. Seven Sonnet auditors read every module of their area,
 and one profiled the release app and the rows over 70%. The real-time audit passed: the IO proc
 is C, lock and allocation free, 157 ns a 1024-frame callback at 192 kHz. Twelve fixes shipped
@@ -994,8 +994,8 @@ Cost: auditors (Sonnet) A 156k tokens, 52 tool calls, 17 min; B 309k, 102, 30 mi
 bench (Opus) 352k, 159, 51 min with two rounds of follow-ups; library (Opus) 206k, 126, 48 min
 with its gate fixes; ui (Opus) 144k, 78, 25 min; small (Sonnet) 106k, 46, 25 min with its gate
 fix. Gate (Sonnet): review 99k, 23, 3 min, and its second round 58k, 5, 1 min; simplify 71k,
-10, 1 min; architecture 64k, 12, 1 min. About 2.4M subagent tokens, and about 5 hours of wall
-time, most of it the audit and the lanes running side by side.
+10, 1 min; architecture 64k, 12, 1 min. About 2.4M subagent tokens, and 2 hours 10 minutes of wall
+time, with the auditors and then the lanes running side by side.
 
 Out of scope: the test suite's and `./scripts/check`'s speed (landed in 0.20.1); `Sources/Tools`
 apart from what a new bench row needs; any change of behavior, stored data the owner would lose,
