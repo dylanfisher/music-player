@@ -116,3 +116,27 @@ private final class Counted: @unchecked Sendable {
     func set(_ value: Int) { lock.withLock { latest = max(latest, value) } }
     var value: Int { lock.withLock { latest } }
 }
+
+/// Two albums combined for tagging (ADR 0179), "1983" and "1983 [Expanded Reissue]", get the
+/// release's title and id in one batch, and one undo puts both titles back.
+@Test func aCombinedAlbumsWriteGivesOneTitleAndOneUndoPutsBothBack() throws {
+    let urls = try WrittenSample.flac.copies()
+    let writer = TagWriter(
+        journal: TagUndoJournal(
+            dataDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(
+                "discogs-journal-\(UUID().uuidString)", isDirectory: true)))
+    let titles = ["1983", "1983 [Expanded Reissue]"]
+    for (url, title) in zip(urls, titles) {
+        #expect(writer.write(TagEdit(values: [.album: title]), to: [url.path]).failures == [])
+    }
+    let mapping = DiscogsPreset.minimal.mapping.combining(titles: true, artists: false)
+    let set = changeSet(for: try albumFiles(urls), match: match(release), mapping: mapping)
+    let report = writer.write(try set.edits(), origin: .discogsTagger)
+    #expect(report.failures == [])
+    let written = try albumFiles(urls)
+    #expect(written.map(\.metadata.tags.album) == ["Hey Hey", "Hey Hey"])
+    #expect(Set(written.map { $0.metadata.tags.custom[DiscogsKey.releaseID] }).count == 1)
+
+    #expect(writer.undoLast().failures == [])
+    #expect(try albumFiles(urls).map(\.metadata.tags.album) == titles)
+}

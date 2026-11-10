@@ -149,7 +149,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         sourcePopUp.addItems(withTitles: DiscogsSource.allCases.map(\.title))
         sourcePopUp.target = self
         sourcePopUp.action = #selector(sourceChosen)
-        scopePopUp.addItems(withTitles: TaggerModel.Scope.allCases.map(\.title))
+        scopePopUp.addItems(withTitles: shownScopes.map(\.title))
         scopePopUp.target = self
         scopePopUp.action = #selector(scopeChosen)
         for (button, action) in [
@@ -418,7 +418,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         for (item, source) in zip(sourcePopUp.itemArray, DiscogsSource.allCases) {
             item.toolTip = source == .catalog ? nil : tokenTip
         }
-        scopePopUp.selectItem(at: TaggerModel.Scope.allCases.firstIndex(of: model.scope)!)
+        let scopes = shownScopes
+        if scopePopUp.itemTitles != scopes.map(\.title) {
+            scopePopUp.removeAllItems()
+            scopePopUp.addItems(withTitles: scopes.map(\.title))
+        }
+        scopePopUp.selectItem(at: scopes.firstIndex(of: model.scope)!)
         scopePopUp.isEnabled = !model.isBusy
         importButton.isEnabled = !model.isBusy
         mappingButton.isEnabled = sheet == nil
@@ -781,8 +786,15 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         model.chooseSource(DiscogsSource.allCases[sourcePopUp.indexOfSelectedItem])
     }
 
+    /// The Scope pop-up's scopes: the listed ones, and the open combination while there is
+    /// one, which choosing another closes (ADR 0179).
+    private var shownScopes: [TaggerModel.Scope] {
+        TaggerModel.Scope.listed + (model.scope == .combined ? [.combined] : [])
+    }
+
     @objc private func scopeChosen() {
-        model.scope = TaggerModel.Scope.allCases[scopePopUp.indexOfSelectedItem]
+        model.scope = shownScopes[scopePopUp.indexOfSelectedItem]
+        refresh()
     }
 
     @objc private func tabChosen() {

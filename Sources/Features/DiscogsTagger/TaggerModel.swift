@@ -15,15 +15,19 @@ private let logger = moduleLogger()
 @MainActor
 final class TaggerModel {
     /// Which albums Analyze matches.
-    enum Scope: CaseIterable {
+    enum Scope {
         case library
         /// The albums of the tracks selected in the library window.
         case selection
         /// The albums none of whose tracks has a release id.
         case unmatched
-        /// The selection's albums joined into one, as Combine Albums for Tagging asks
-        /// (ADR 0179).
+        /// The albums Combine Albums for Tagging joined into one, which stay those albums
+        /// until another scope is chosen (ADR 0179).
         case combined
+
+        /// The scopes the Scope pop-up offers: a combination is opened by its command only,
+        /// and the pop-up lists it only while it's open.
+        static let listed: [Scope] = [.library, .selection, .unmatched]
     }
 
     enum CatalogState: Equatable {
@@ -190,7 +194,15 @@ final class TaggerModel {
     var hasToken: () -> Bool = { false }
     /// Saves the source the user chose, as this Mac's.
     var sourceSaved: (DiscogsSource) -> Void = { _ in }
-    var scope = Scope.library
+    var scope = Scope.library {
+        didSet { if scope != .combined { combinedTracks = nil } }
+    }
+    /// The library files the open combination was made from, which Analyze joins the albums
+    /// of again; nil when none is open.
+    private(set) var combinedTracks: Set<Int64>?
+    /// Set when a combination is opened, so its first Analyze forgets the files left out of
+    /// an earlier one with the same first album, and so the same id.
+    private var combinationOpened = false
     private(set) var albums: [Album] = [] {
         didSet { tierOrder = [:] }
     }
@@ -473,18 +485,25 @@ final class TaggerModel {
             }
             return false
         }
+        let selected: [Int64]
         do {
-            guard try !selectedTracks().isEmpty else {
-                if combining {
-                    failed("No tracks are selected", ["Select albums in the library window first."])
-                }
-                return false
-            }
+            selected = try selectedTracks()
         } catch {
             failed("The selected tracks couldn't be read", ["\(error)"])
             return false
         }
+        guard !selected.isEmpty else {
+            if combining {
+                failed("No tracks are selected", ["Select albums in the library window first."])
+            }
+            return false
+        }
         scope = combining ? .combined : .selection
+        if combining {
+            // A new combination, even over one open now.
+            combinedTracks = Set(selected)
+            combinationOpened = true
+        }
         changed()
         return true
     }
@@ -495,13 +514,17 @@ final class TaggerModel {
     func analyze() {
         guard canAnalyze else { return }
         let selection: Set<Int64>
-        let selects = scope == .selection || scope == .combined
         do {
-            selection = selects ? Set(try selectedTracks()) : []
+            selection =
+                switch scope {
+                case .selection: Set(try selectedTracks())
+                case .combined: combinedTracks ?? []
+                case .library, .unmatched: []
+                }
         } catch {
             return failed("The selected tracks couldn't be read", ["\(error)"])
         }
-        if selects, selection.isEmpty {
+        if scope == .selection || scope == .combined, selection.isEmpty {
             return failed("No tracks are selected", ["Select albums in the library window first."])
         }
         run += 1
@@ -516,6 +539,8 @@ final class TaggerModel {
         let effects = effects
         let skipsVideo = choices.skipVideo
         let started = Date()
+        let opened = combinationOpened
+        combinationOpened = false
         work = Task {
             do {
                 let all = try await effects.albums()
@@ -534,6 +559,7 @@ final class TaggerModel {
                     let combined = CombinedAlbum(albums)
                     sources = combined.sources
                     albums = [combined.album]
+                    if opened { leftOutFiles[combined.album.id] = nil }
                     // A release chosen for one of them alone fits only its own files.
                     let first = reviews[sources[0].id]
                     reviews[combined.album.id] =

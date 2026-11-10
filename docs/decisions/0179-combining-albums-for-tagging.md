@@ -19,11 +19,14 @@ source album so a mistake shows before writing.
 
 ## Decision
 
-**A scope, not a mode.** The tagger's Scope pop-up gains Selected Albums as One. Analyze in it
-takes the albums the selection touches, as Albums Selected in the Library does, and joins them
-into one `DiscogsAlbum` for the matcher and the writer. A selection of one album is an alert,
-not a match. Because it's a scope, Analyze again, a change of source or of Skip video matches
-the combination again, as with any scope.
+**A scope the command opens.** Combine Albums for Tagging puts the tagger in a scope, Selected
+Albums as One, which keeps the library files selected at that moment. Analyze takes the albums
+those files are in and joins them into one `DiscogsAlbum` for the matcher and the writer. A
+selection of one album is an alert, not a match. Analyze again, a change of source or of Skip
+video joins the same albums again, whatever the library selects by then, so a stray click in
+the library can't change what's being reviewed. The Scope pop-up lists the scope only while a
+combination is open; choosing another scope closes it, and only the command opens one, so
+the pop-up can't combine whatever happens to be selected.
 
 **The order of the files.** The albums go by their first disc number, a file without one
 counting as disc 1, then by title, then by id; each album keeps its own disc and track order.
@@ -31,20 +34,27 @@ A disc set split by disc reads in disc order, and two albums of the same discs, 
 its reissue, are put one after the other instead of interleaved track by track. Sorting every
 file by disc and track would interleave those.
 
-**What the matcher searches with.** The first album's title and artist, and for the label,
-catalog number, barcode, date, media and country the first album's that has one. The matcher
+**What the matcher searches with.** The first album's title, and for the artist, label,
+catalog number, barcode, date, media and country the first album's that has one, as a
+compilation without an album artist has no artist. The matcher
 already ranks a release of the album's count first, so the whole set's release beats one
-disc's. A file two files would share is left on no track, as for any album: the review shows
+disc's. The matcher reads the files in this order and never their disc or track numbers
+(`AlbumMatcher` and the scores compare titles and lengths by position; only `CombinedAlbum`
+reads `DiscogsAlbum.Track.discNumber`), so two albums numbered 1 to 10 and 1 to 14 aren't
+renumbered. A file two files would share is left on no track, as for any album: the review shows
 it as Missing and keeps the album out of Exact.
 
 **An id of its own.** The combined album's id is its first source's, negated; library album
 ids are positive. The session keeps files left out (ADR 0157) and change counts by album id,
-and the combination's must not land on a source album shown later under another scope.
+and the combination's must not land on a source album shown later under another scope. Two
+combinations that start with the same album have the same id, so opening a combination
+forgets the files left out under that id; Analyze again within it keeps them.
 
 **Reviews.** A review is saved on the files, here all of the combination's, and read back by
 library album. The combination takes a review only when every source album has the same one:
 a release chosen for one album alone fits only that album's files, and would force a release
-of the wrong count on the whole.
+of the wrong count on the whole. A release chosen or a rejection on the combination is saved
+on every file of every source, so each source album, shown alone later, takes it too.
 
 **The files become one album.** Each file gets the release id, as any tagger write. That's
 enough only when the sources already agree on title and artist, so where their titles differ

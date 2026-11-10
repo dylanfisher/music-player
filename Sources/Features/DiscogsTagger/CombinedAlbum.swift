@@ -13,8 +13,10 @@ struct CombinedAlbum {
     /// `albums` joined: in order of their first disc, a file without a disc number on disc 1,
     /// then by title, each album's files in its own disc and track order, so a set split by
     /// disc reads in disc order and two albums of the same discs aren't interleaved. The
-    /// search takes the first album's title, artist and details, else the first that has a
-    /// detail. Its id is the first's negated, which no library album has, so what the session
+    /// search takes the first album's title; its artist and each detail are the first
+    /// album's that has one, as a compilation without an artist has none. The matcher reads
+    /// the files in this order and not their disc or track numbers, so none is renumbered.
+    /// Its id is the first's negated, which no library album has, so what the session
     /// keeps for an album isn't mixed with what it keeps for the combination.
     init(_ albums: [DiscogsAlbum]) {
         precondition(!albums.isEmpty, "combining no albums")
@@ -26,7 +28,7 @@ struct CombinedAlbum {
         }
         let first = sources[0]
         album = DiscogsAlbum(
-            id: -first.id, title: first.title, artist: first.artist,
+            id: -first.id, title: first.title, artist: sources.lazy.compactMap(\.artist).first,
             label: sources.lazy.compactMap(\.label).first,
             catalogNumber: sources.lazy.compactMap(\.catalogNumber).first,
             barcode: sources.lazy.compactMap(\.barcode).first,
@@ -42,7 +44,8 @@ struct CombinedAlbum {
 
     /// Whether the albums' titles differ, so the files need one written to be one album.
     var titlesDiffer: Bool { Set(sources.map(\.title)).count > 1 }
-    /// Whether their artists differ, as the library tells albums apart by them too.
+    /// Whether their artists differ, as the library tells albums apart by them too: an album
+    /// with none differs from one with an artist, since the library keeps those apart.
     var artistsDiffer: Bool { Set(sources.map(\.artist)).count > 1 }
 
     /// "Persuader – 1983 + Persuader – 1983 [Expanded Reissue]", the album list's name of it.

@@ -67,8 +67,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
 @Test func theCombinedScopeMatchesTheSelectedAlbumsAsOne() async throws {
     let seen = Seen()
     let tagger = await model(seen, albums: [original, reissue, other], matches: matches)
-    tagger.scope = .combined
     tagger.selectedTracks = { [original.tracks[0].fileID, reissue.tracks[2].fileID] }
+    #expect(tagger.scopeToSelection(combining: true))
     tagger.analyze()
     await tagger.finished()
     #expect(seen.matched.count == 1, "one match of one album")
@@ -82,12 +82,72 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(tagger.status.hasPrefix("Analyzed 1 albums"))
     #expect(tagger.selectedID == -1)
 
-    // The selection scope still matches them apart.
+    // Analyze again joins the same albums, whatever the library selects now.
+    tagger.selectedTracks = { [other.tracks[0].fileID] }
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.albums.map(\.id) == [-1])
+    #expect(tagger.albums.first?.sources.map(\.id) == [1, 2])
+
+    // Another scope closes the combination; the selection scope matches them apart.
+    tagger.selectedTracks = { [original.tracks[0].fileID, reissue.tracks[2].fileID] }
     tagger.scope = .selection
+    #expect(tagger.combinedTracks == nil)
     tagger.analyze()
     await tagger.finished()
     #expect(tagger.albums.map(\.id).sorted() == [1, 2])
     #expect(tagger.albums.allSatisfy { $0.sources.isEmpty })
+}
+
+/// A file left out of one combination isn't left out of the next that starts with the same
+/// album, which has the same id; Analyze again keeps it left out.
+@MainActor
+@Test func aNewCombinationForgetsTheFilesLeftOutOfTheLastOne() async throws {
+    let third = album(4, "1983 [Live]", titles: ["Intro"])
+    let tagger = await model(Seen(), albums: [original, reissue, third], matches: matches)
+    tagger.selectedTracks = { [100, 200] }
+    #expect(tagger.scopeToSelection(combining: true))
+    tagger.analyze()
+    await tagger.finished()
+    await tagger.setLeftOut(true, 101, of: -1)
+    #expect(tagger.albums.first?.leftOut == [101])
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.albums.first?.leftOut == [101], "the same combination keeps it")
+
+    tagger.selectedTracks = { [100, 400] }
+    #expect(tagger.scopeToSelection(combining: true))
+    tagger.analyze()
+    await tagger.finished()
+    #expect(tagger.albums.first?.id == -1)
+    #expect(tagger.albums.first?.leftOut == [])
+}
+
+/// Sources of one title and different artists search with the first artist any has, and
+/// their files get the release's album artist, not its title.
+@MainActor
+@Test func sourcesOfOneTitleAndDifferentArtistsGetOneAlbumArtist() async throws {
+    var unknown = album(1, "1983", titles: ["Intro", "Song"])
+    unknown.artist = nil
+    let named = album(2, "1983", artist: "Flying Lotus", titles: ["Bonus"])
+    let sources = [unknown, named]
+    let tagger = await model(
+        Seen(), albums: sources, matches: matches,
+        files: { ids in
+            sources.flatMap { album in album.tracks.indices.map { file(album, $0) } }
+                .filter { ids.contains($0.id) }
+        })
+    tagger.selectedTracks = { [100, 200] }
+    #expect(tagger.scopeToSelection(combining: true))
+    tagger.analyze()
+    await tagger.finished()
+    let combined = try #require(tagger.albums.first)
+    #expect(combined.album.artist == "Flying Lotus", "the first artist any source has")
+    let (set, _) = try #require(try await tagger.changeSet(for: -1))
+    let changes = set.files.flatMap(\.changes)
+    #expect(changes.filter { $0.field == .albumArtist }.count == 3)
+    #expect(changes.filter { $0.field == .albumArtist }.allSatisfy { $0.new == "Persuader" })
+    #expect(!changes.contains { $0.field == .album }, "one title already")
 }
 
 @MainActor
@@ -100,8 +160,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
         let seen = Seen()
         let tagger = await model(
             seen, albums: [original, reissue], matches: matches, reviews: reviews)
-        tagger.scope = .combined
         tagger.selectedTracks = { [100, 200] }
+        #expect(tagger.scopeToSelection(combining: true))
         tagger.analyze()
         await tagger.finished()
         #expect(seen.matched.count == 1)
@@ -118,8 +178,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     tagger.failed = { message, _ in failures.append(message) }
     tagger.analyze()
     await tagger.finished()
-    tagger.scope = .combined
     tagger.selectedTracks = { [100, 101] }
+    #expect(tagger.scopeToSelection(combining: true))
     tagger.analyze()
     await tagger.finished()
     #expect(failures == ["Only one album is selected"])
@@ -143,8 +203,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
                 titles.flatMap { album in album.tracks.indices.map { file(album, $0) } }
                     .filter { ids.contains($0.id) }
             })
-        tagger.scope = .combined
         tagger.selectedTracks = { [100, 200] }
+        #expect(tagger.scopeToSelection(combining: true))
         tagger.analyze()
         await tagger.finished()
         let (set, _) = try #require(try await tagger.changeSet(for: -1))
@@ -166,8 +226,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
 @MainActor
 @Test func theWindowNamesEveryAlbumACombinedOneJoins() async throws {
     let tagger = await model(Seen(), albums: [original, reissue], matches: matches)
-    tagger.scope = .combined
     tagger.selectedTracks = { [100, 200] }
+    #expect(tagger.scopeToSelection(combining: true))
     tagger.analyze()
     await tagger.finished()
     let controller = TaggerWindow(model: tagger)
@@ -181,8 +241,17 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(!controller.combinedLine.isHidden)
     #expect(controller.combinedLine.stringValue == CombinedAlbum.text(sources))
     #expect(controller.scopePopUp.titleOfSelectedItem == "Selected Albums as One")
+    let listed = TaggerModel.Scope.listed.map(\.title)
+    #expect(controller.scopePopUp.itemTitles == listed + ["Selected Albums as One"])
 
-    tagger.scope = .selection
+    // Choosing another scope closes the combination, which the pop-up then doesn't list.
+    controller.scopePopUp.selectItem(at: 1)
+    _ = controller.scopePopUp.target?.perform(
+        controller.scopePopUp.action, with: controller.scopePopUp)
+    #expect(tagger.scope == .selection)
+    #expect(tagger.combinedTracks == nil)
+    #expect(controller.scopePopUp.itemTitles == listed)
+    #expect(!listed.contains("Selected Albums as One"))
     tagger.analyze()
     await tagger.finished()
     tagger.selectedID = 1
