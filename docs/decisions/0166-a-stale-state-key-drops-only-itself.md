@@ -4,7 +4,8 @@
 - **Status:** accepted
 - **See also:** [0015](0015-config-file.md) (the state file), [0023](0023-failure-table.md)
   (failure table, row "State file corrupt"), [0160](0160-get-info-opens-as-it-stays.md) (the
-  removed `tagEditor.place`)
+  removed `tagEditor.place`), [0187](0187-closing-the-reset-layout-line.md) (closing the
+  banner's line rewrites the file)
 
 ## Context
 
