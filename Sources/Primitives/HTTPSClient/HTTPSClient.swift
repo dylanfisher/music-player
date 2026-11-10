@@ -186,16 +186,14 @@ private final class BodyReader: NSObject, URLSessionDataDelegate, @unchecked Sen
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         let tooLarge: Bool = lock.withLock {
-            guard var state = pending[dataTask.taskIdentifier], state.failure == nil else {
-                return false
-            }
-            state.body.append(data)
-            if state.body.count > state.cap {
-                state.failure = HTTPSError.tooLarge(cap: state.cap)
-                state.body = Data()
-            }
-            pending[dataTask.taskIdentifier] = state
-            return state.failure != nil
+            // Appended in place: a copy of the entry would copy the body so far each chunk.
+            guard pending[dataTask.taskIdentifier]?.failure == nil else { return false }
+            pending[dataTask.taskIdentifier]?.body.append(data)
+            guard let state = pending[dataTask.taskIdentifier], state.body.count > state.cap
+            else { return false }
+            pending[dataTask.taskIdentifier]?.failure = HTTPSError.tooLarge(cap: state.cap)
+            pending[dataTask.taskIdentifier]?.body = Data()
+            return true
         }
         if tooLarge { dataTask.cancel() }
     }
