@@ -11,7 +11,7 @@ private let logger = moduleLogger()
 /// settings in boxes, as Swinsian has its watched folders' settings, then the Browsing and
 /// Database sections: Show Library Health, the database and its snapshots.
 @MainActor
-final class LibraryPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
+final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuItemValidation
 {
     private enum Column: String, CaseIterable {

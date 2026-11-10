@@ -189,7 +189,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 
 @MainActor @Test func theRescansColumnSetsANetworkFoldersInterval() throws {
     let (model, folders) = modelWithFoldersAndValues()
-    let pane = LibraryPane(model: model, actions: actions())
+    let pane = FoldersPane(model: model, actions: actions())
     _ = pane.view
     let column = try #require(pane.table.tableColumns.firstIndex { $0.title == "Rescans" })
     let local = pane.table.delegate?.tableView?(
@@ -220,7 +220,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 @MainActor @Test func theWatchedFoldersHaveAPaneOfTheirOwn() throws {
     var removed: [Int] = []
     var added = 0
-    let pane = LibraryPane(
+    let pane = FoldersPane(
         model: modelWithFolders(),
         actions: actions(addFolder: { added += 1 }, removeFolder: { removed.append($0) }))
     _ = pane.view
@@ -241,7 +241,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 @MainActor @Test func theSelectedFoldersAreRescannedFromAButtonOrTheContextMenu() throws {
     var rescanned: [[Int]] = []
     var all = 0
-    let pane = LibraryPane(
+    let pane = FoldersPane(
         model: modelWithFolders(),
         actions: actions(rescanNow: { all += 1 }, rescanFolders: { rescanned.append($0) }))
     _ = pane.view
@@ -828,7 +828,7 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(kept.minX == saved.minX + 30 && kept.maxY == saved.maxY - 20)
 }
 
-@MainActor @Test func thePaletteOpensTheLibraryPaneOrTheConfigFile() throws {
+@MainActor @Test func thePaletteOpensTheFoldersPaneOrTheConfigFile() throws {
     let schema = AppSettings()
     var opened = 0
     let model = GeneralModel(
@@ -864,7 +864,7 @@ private func waitFor(_ condition: () -> Bool) async throws {
 
 /// Settings ▸ Library has the watched folders, the folders' boxes, Browsing with Show Library
 /// Health, and Database with its snapshots; General has none of them.
-@MainActor @Test func theLibraryPaneHoldsTheFoldersAndTheLibrarySettings() async throws {
+@MainActor @Test func theFoldersPaneHoldsTheFoldersAndTheLibrarySettings() async throws {
     let schema = AppSettings()
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: true, value: { _ in nil },
