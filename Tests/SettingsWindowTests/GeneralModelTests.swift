@@ -337,6 +337,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         keys(.statusBar)
             == [
                 schema.statusBarStyle.key, schema.statusBarLayout.key,
+                schema.totalsFormat.key, schema.totalsListAndSelectionFormat.key,
+                schema.totalsListFormat.key, schema.totalsSelectionFormat.key,
                 schema.downloadsStatusStyle.key,
             ])
     let titleFormat = model.rows.first { $0.key == schema.headerTitleFormat.key }

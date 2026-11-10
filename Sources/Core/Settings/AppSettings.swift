@@ -184,6 +184,23 @@ public struct AppSettings: SettingsSchema {
         "appearance.statusBarLayout", title: "Status Bar Layout",
         default: BarLayout.defaultStatusBar,
         "What the status bar shows, around its centered middle.")
+    public let totalsFormat = Setting(
+        "appearance.totalsFormat", title: "Totals, Nothing Selected",
+        default: TotalsTemplate.nothingSelected,
+        "The status bar's totals while nothing is selected; totals go in braces.")
+    public let totalsListAndSelectionFormat = Setting(
+        "appearance.totalsListAndSelectionFormat",
+        title: "Totals, " + StatusTotals.listAndSelection.title,
+        default: TotalsTemplate.shown(.listAndSelection),
+        "With tracks selected, when a click on the totals chose both.")
+    public let totalsListFormat = Setting(
+        "appearance.totalsListFormat", title: "Totals, " + StatusTotals.list.title,
+        default: TotalsTemplate.shown(.list),
+        "With tracks selected, when a click on the totals chose the list's.")
+    public let totalsSelectionFormat = Setting(
+        "appearance.totalsSelectionFormat", title: "Totals, " + StatusTotals.selection.title,
+        default: TotalsTemplate.shown(.selection),
+        "With tracks selected, when a click on the totals chose the selection's.")
     public let downloadsStatusStyle = Setting(
         "appearance.downloadsStatusStyle", title: "Download Status",
         default: DownloadsStatusStyle.progress,
