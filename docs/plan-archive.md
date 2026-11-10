@@ -490,3 +490,76 @@ the orchestrating session (Opus), without a separate implementer. The gate's rev
 and the tie-break missing a title number's second spelling, both fixed. Full `./scripts/check`
 passed before landing, after a rerun of `PlayerImportBrowserTests`, which failed once under
 load and passed alone.
+
+### 71. Choosing another release for a download
+
+Asked by the owner on 2026-11-09. The service side (stall timers, offline peers, cleanup, and
+recording a new release on a job) is a separate prompt for music-recommender.
+
+- [x] **A staged download can take another release.** In the tagger opened from Downloads,
+      Other Releases… and Look Up… choose another release, as for a library album, instead of
+      refusing with `StagedReleaseFixed`. The write stays in the staging folder (ADR 0146) and is
+      confirmed as any tagger write is. The Downloads row says the album is tagged as another
+      release than the one queued, and Approve still works. When the service offers a call to
+      record the job's new release, the player makes it; until then the player keeps the new
+      release with the staged job and says so.
+
+Implementation plan, phase 71 (ADR 0178):
+
+What exists, found by search (map.md recipes): the staged tagger (`StagedTagging.swift`) fixes
+its release to `StagedJob.releaseID`, refuses any other review with `StagedReleaseFixed`, and
+has no Look Up (`canLookUp` is false for a staged job). Its Apply hands the verdict to
+`resolved`, which Downloads passes to `DownloadsCoordinator.resolved`, which records the files'
+sizes as `tagged` steps in the index's import ledger (`ImportJobs.swift`) and reports the
+verdict. `coordinator.stagedJob(_:)` builds the `StagedJob` the tagger and AutoTag take. The
+service has no call to change a job's release, so `DownloadJob.release` stays the queued one.
+
+- 71.1 The ledger (`Core/Library`): an `ImportStep.Kind.retagged` step, the job's folder as its
+  path and the release its files were tagged as in `destination`; `recordTaggedRelease`, which
+  forgets the step when the release is the queued one, and `taggedReleases()`, giving
+  `TaggedRelease` (folder, release) by job. `TaggedRelease.differs(for:)` is the release a
+  row names: only while the job is staged in that folder and the service lists another.
+  Forgotten with the job's other steps once it's imported. Tests in `ImportJobsTests`.
+- 71.2 The staged tagger (`StagedTagging.swift`, the staged init in `DiscogsTagger.swift`,
+  `canLookUp`): a staged review takes any chosen release, kept for the session; Analyze and
+  Other Releases… match it; Look Up… searches the local catalog only, as every staged match
+  is. Reject still points to Downloads. `resolved` hears the release written with the
+  verdict. Tests in `StagedTaggerTests`: choose and Look Up take another release, and Apply
+  reports it.
+- 71.3 Downloads: `coordinator.resolved` records the release before its report, and
+  `stagedJob(_:)` tags with the recorded one, so a reopened tagger or a rerun keeps it. The
+  model holds the recorded releases for its rows; the row's Tagging cell adds "another
+  release" to the verdict's word, and its tooltip and the album's say which release was
+  queued, which the files are tagged as, and that the service doesn't know yet. The Approve
+  sheet's subtitle names both. Approve itself is unchanged: the old files of an upgrade or a
+  replaced album are still the queued release's. Tests in `DownloadsCoordinatorTests`, the
+  row's and model's tests, and the window's.
+- 71.4 ADR 0178, an amended-by line in 0146 and a see-also in 0147 and 0145. AGENTS.md
+  unchanged: the tagger's write is a confirmed one in the staging folder.
+
+Result, phase 71: shipped the item (ADR 0178; an amended-by line in 0146, see-also lines in
+0145 and 0147; AGENTS.md unchanged, since the tagger's write is a confirmed `TagWriter` write
+inside the staging folder). The staged tagger's Other Releases… and Look Up… choose any release
+in the local catalog; Look Up asks no API, as no staged match does. Apply reports the release it
+wrote with the verdict (the plan's release, taken before the write; a partial write passes
+it on with no verdict, so it's kept all the same), and the coordinator keeps it in this Mac's
+import ledger as a `retagged` step, which the tagger and a rerun of the tag run then match. The Downloads row's
+Tagging cell says "Clean, another release" (or the verdict's own word), its tooltip and the
+album's name both releases, and the Approve sheet's subtitle says "Tagged as Discogs release N,
+queued as M". Approve is unchanged; the album it replaces is still the queued release's.
+Open: music-recommender has no call to record a job's new release, so only the Mac that tagged
+the files knows it; another Mac's row and tagger show the queued one. When the service adds
+the call (likely `POST /v1/downloads/release` with `id` and `release_id`), it goes in
+`RecommenderClient` beside `retry`, in `DownloadsService`, and in
+`DownloadsCoordinator.resolved` before the tagging report; the row stops naming the release once
+the service lists it. Tests: the ledger's record, replace and forget (`ImportJobsTests`), the
+coordinator keeping and forgetting it (`DownloadsCoordinatorTests`), the row, model, window and
+sheet's words, and the staged tagger choosing, looking up and reporting the release, after a
+partial write too, and the plan's release when another is chosen during the write
+(`StagedTaggerTests`). Flakes seen in the parallel runs and passing alone: SettingsWindowTests,
+`aPollThatOverlapsTheRecoveryWaitsForItBeforeTagging`, `ImportCheckpointTests`,
+`PlayCountTests.saveStoresTheCountWithoutAWrite`. Implemented by an Opus implementer (253k
+tokens, 120 tool calls, 32 min, with its review fixes). The gate's review (Sonnet, 67k tokens,
+12 tool calls, 1 min) found the release read after the write and a partial write left
+unrecorded, both fixed, and `taggedAs()` noting a failed read on every poll, now once. Full
+`./scripts/check` passed before landing.
