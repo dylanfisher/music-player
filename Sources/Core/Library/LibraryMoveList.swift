@@ -78,8 +78,11 @@ extension LibraryIndex {
         let from = line.from.precomposedStringWithCanonicalMapping
         let to = line.to.precomposedStringWithCanonicalMapping
         guard let old = try existingPathID(from) else {
-            // A scan matched the move, or an import of this list did: the new path has the stats.
-            guard let new = try existingPathID(to), try pathHasStats(new) else {
+            // A scan matched the move, or an import of this list did: the new path has the
+            // stats, or, a file with none moved in a share folder, the move is noted.
+            guard let new = try existingPathID(to),
+                try pathHasStats(new) || isNotedMove(from: from, to: to, roots)
+            else {
                 return "the old path \(terminalSafe(line.from)) isn't in the library"
             }
             result.alreadyDone += 1

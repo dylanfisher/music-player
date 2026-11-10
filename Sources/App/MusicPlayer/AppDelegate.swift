@@ -91,6 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// What Edit ▸ Copy last copied, for Paste.
     var trackClipboard: TrackClipboard?
     private(set) var watcher: LibraryWatcher?
+    /// Carries the organized files' stats, one organize's or launch's at a time (ADR 0164).
+    let layoutCarrier = LayoutCarrier()
     /// The library's snapshots (ADR 0142), made with the window.
     private(set) var snapshotScheduler: SnapshotScheduler?
     /// Asks for the day's snapshot every hour, once the launch's scans have ended.

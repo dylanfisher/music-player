@@ -193,3 +193,27 @@ private final class Gate: @unchecked Sendable {
     #expect(result.problems.isEmpty)
     #expect(try folders.index.layoutMoves().isEmpty)
 }
+
+@MainActor
+@Test func twoCarriesAtOnceCarryEachMoveOnce() async throws {
+    let folders = try OrganizeFolders()
+    let old = try folders.file("library/song.flac", title: "Song")
+    let moved = folders.organize([old]).moved
+    let url = databaseURL(folders.index)
+    let carrier = LayoutCarrier()
+    let lines = LinesSeen()
+    let carry: @Sendable ([(from: String, to: String)]) async throws -> MoveListImport = {
+        carried in
+        lines.add(carried.map { TrackMove(from: $0.from, to: $0.to) })
+        // Long enough for a carry that doesn't wait to read the moves this one carries.
+        try await Task.sleep(nanoseconds: 200_000_000)
+        return MoveListImport(moved: carried.count)
+    }
+    async let first = carrier.carry(databaseURL: url, serially: writes.run, carry: carry)
+    async let second = carrier.carry(databaseURL: url, serially: writes.run, carry: carry)
+    let results = await [first, second]
+    #expect(lines.all == moved)
+    #expect(results.flatMap(\.carried) == moved)
+    #expect(results.flatMap(\.problems).isEmpty)
+    #expect(try folders.index.layoutMoves().isEmpty)
+}

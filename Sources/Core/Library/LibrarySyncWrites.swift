@@ -191,6 +191,15 @@ extension LibraryIndex {
         return current
     }
 
+    /// Whether the move of `from` to `to`, `paths` rows, is noted, as one this machine made in
+    /// a share folder is; false for paths outside every share folder.
+    func isNotedMove(from: String, to: String, _ roots: SyncRoots) throws -> Bool {
+        guard let old = roots.syncPath(from), let new = roots.syncPath(to) else { return false }
+        return try !statement(
+            "SELECT 1 FROM \(syncMovesTable) WHERE from_path = ? AND to_path = ?"
+        ).map(old, new, row: { _ in () }).isEmpty
+    }
+
     // MARK: Playlists
 
     /// Forgets the changes the playlist `id`'s fields held, once it's deleted.

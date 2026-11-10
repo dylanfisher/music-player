@@ -105,6 +105,11 @@ and not its old one; a move whose file never left is dropped. A carry that throw
 moves for the next one and names each in the Problems window; a carry that runs drops them all
 and names each line the move list refused. A scan between the rename and the move list can
 match the move itself or leave the old path in Lost Stats; either way the move list finishes it.
+Carries run one at a time, each after the one before has dropped its moves; two at once both
+read the same moves. A move the move list finds already made, its old path gone, is done when
+the new path has stats or, a track with none, when the index noted the move for the other Macs.
+Without the second test, a track with no stats would be named as one whose old path isn't in
+the library, since nothing else tells it from a mistyped line in Import Moves.
 
 **Undo follows.** The journal keys each file's record by its path. Right after the renames, on
 the tag writes' own queue, so before any later write or undo can run, every record of a moved

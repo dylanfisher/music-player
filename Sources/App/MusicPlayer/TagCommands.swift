@@ -58,6 +58,7 @@ extension AppDelegate {
     /// their paths now (ADR 0164).
     func carry(_ organized: FilesOrganized?, then report: TagWriteReport?) {
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
+        let carrier = layoutCarrier
         Task { [weak self] in
             let serially: @Sendable (@escaping @Sendable () -> Void) async -> Void = {
                 @MainActor [weak self] work in
@@ -65,7 +66,7 @@ extension AppDelegate {
                 guard let self else { return work() }
                 await self.tagEditing.onWriteQueue(work)
             }
-            let carry = await carryLayoutMoves(databaseURL: databaseURL, serially: serially) {
+            let carry = await carrier.carry(databaseURL: databaseURL, serially: serially) {
                 @MainActor [weak self] lines in
                 guard let watcher = self?.watcher else {
                     throw LibraryNotWatched()

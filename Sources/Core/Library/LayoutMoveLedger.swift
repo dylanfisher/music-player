@@ -52,7 +52,7 @@ public struct LayoutCarry: Equatable, Sendable {
 /// `moveToLayout` runs on, the tag writes': run anywhere else, a read between an organize's
 /// record of its moves and its renames would find the files at their old paths and drop the
 /// moves as never made.
-public func carryLayoutMoves(
+func carryLayoutMoves(
     databaseURL: URL,
     serially: @Sendable (@escaping @Sendable () -> Void) async -> Void,
     carry: @Sendable ([(from: String, to: String)]) async throws -> MoveListImport
@@ -115,6 +115,32 @@ public func carryLayoutMoves(
         result.problems.append("couldn't drop the carried moves, which are carried again: \(error)")
     }
     return result
+}
+
+/// Runs `carryLayoutMoves` one carry at a time, each after the one before has dropped its
+/// moves: two at once would both read the moves, and the second, finding them carried, would
+/// call each of a track with no stats one whose old path isn't in the library.
+@MainActor
+public final class LayoutCarrier {
+    private var last: Task<Void, Never>?
+
+    public init() {}
+
+    /// What `carryLayoutMoves` with these arguments did, once every carry before it is done.
+    public func carry(
+        databaseURL: URL,
+        serially: @escaping @Sendable (@escaping @Sendable () -> Void) async -> Void,
+        carry: @escaping @Sendable ([(from: String, to: String)]) async throws -> MoveListImport
+    ) async -> LayoutCarry {
+        let previous = last
+        let next = Task {
+            await previous?.value
+            return await carryLayoutMoves(
+                databaseURL: databaseURL, serially: serially, carry: carry)
+        }
+        last = Task { _ = await next.value }
+        return await next.value
+    }
 }
 
 /// What `work` returns, run through `serially`.

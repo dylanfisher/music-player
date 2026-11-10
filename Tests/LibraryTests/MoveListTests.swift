@@ -130,6 +130,18 @@ private func expectStats(_ library: MoveListLibrary, _ name: String, id: Int64) 
     try expectStats(library, "A/01.flac", id: old)
 }
 
+@Test func aMoveOfATrackWithNoStatsImportedTwiceInAShareFolderIsAlreadyDone() throws {
+    let library = try MoveListLibrary()
+    try library.index.relocate(share: "smb://HAL9000/music", path: "library", to: library.root)
+    let old = try library.scanned("A/01.m4a", codec: .alac)
+    try library.index.remove([old])
+    try library.create("A/01.flac")
+    try library.scanned("A/01.flac")
+    #expect(try library.importMoves([("A/01.m4a", "A/01.flac")]) == MoveListImport(moved: 1))
+    #expect(try library.importMoves([("A/01.m4a", "A/01.flac")]) == MoveListImport(alreadyDone: 1))
+    #expect(try library.index.existingPathID(library.path("A/01.flac")) == old)
+}
+
 @Test func aMoveBeforeAnyScanLetsTheOldFileGoAndTheStatsWaitForTheNewOne() throws {
     let library = try MoveListLibrary()
     // No scan since the conversion: the index still has the old file and not the new one.
