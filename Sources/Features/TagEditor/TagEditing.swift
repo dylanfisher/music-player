@@ -637,16 +637,16 @@ public final class TagEditing {
         let step = organizeSteps.removeValue(forKey: number)
         let completion = completions.removeValue(forKey: number)
         let unwritten = Set(report.failures.map(\.path) + report.notWritten)
-        // With files moved, the caller hears of the end once the library has them.
-        let waitsForLibrary = organized?.moved.isEmpty == false
-        if !waitsForLibrary { completion?(unwritten) }
-        guard let (action, window) = alertWindows.removeValue(forKey: number) else {
-            if waitsForLibrary { completion?(unwritten) }
-            return
-        }
+        let finish = { completion?(unwritten) }
+        let alert = alertWindows.removeValue(forKey: number)
+        // The caller hears of the end once: with files moved, when the library has them, and
+        // otherwise now.
+        let waitsForLibrary = organized?.moved.isEmpty == false && alert != nil
+        if !waitsForLibrary { finish() }
+        guard let (action, window) = alert else { return }
         if !report.changed.isEmpty || organized != nil {
             if waitsForLibrary { step?(.updatingLibrary) }
-            written(report, organized) { if waitsForLibrary { completion?(unwritten) } }
+            written(report, organized) { if waitsForLibrary { finish() } }
             let changed = Set(report.changed)
             for editor in editors where !changed.isDisjoint(with: editor.paths) {
                 read(into: editor, over: window)
