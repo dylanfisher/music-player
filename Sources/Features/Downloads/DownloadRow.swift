@@ -44,7 +44,9 @@ struct DownloadRow: Equatable, Sendable {
     var taggedAs: Int?
     /// The policy, and once a folder is chosen what it holds.
     var format: String
-    /// The Soulseek folder chosen: its peer and size; empty before one is.
+    /// The Soulseek user the folder chosen is from; empty before one is.
+    var user: String
+    /// The size of the Soulseek folder chosen; empty before one is.
     var candidate: String
     /// For an upgrade, what it replaces, for the source's tooltip.
     var replaces: String?
@@ -79,6 +81,7 @@ struct DownloadRow: Equatable, Sendable {
         releaseID = job.release.releaseID
         self.taggedAs = taggedAs
         format = Self.format(job)
+        user = job.candidate?.peer ?? ""
         candidate = Self.candidate(job)
         replaces = Self.replaces(job)
         state = Self.state(job, formatted: formatted)
@@ -193,7 +196,8 @@ struct DownloadRow: Equatable, Sendable {
     /// its query has got, and a search after a miss says what the last one found; a job not
     /// found says when it searches next, through `formatted`.
     static func state(_ job: DownloadJob, formatted: (Date) -> String = shortTime) -> String {
-        let lastTime = job.reason.map { "; last time: \($0)" } ?? ""
+        let reason = job.reason.map { withoutUser($0, job.candidate?.peer) }
+        let lastTime = reason.map { "; last time: \($0)" } ?? ""
         let again = job.attempt > 1
         let words: String
         switch job.state {
@@ -216,7 +220,7 @@ struct DownloadRow: Equatable, Sendable {
                 job.nextAttemptAt.map {
                     "; searching again \(formatted(Date(timeIntervalSince1970: TimeInterval($0))))"
                 } ?? "; Retry searches again"
-            return "Not found" + (job.reason.map { ": \($0)" } ?? "") + next
+            return "Not found" + (reason.map { ": \($0)" } ?? "") + next
         case .candidateFound: words = "Found, starting the download"
         case .downloading:
             words =
@@ -236,7 +240,31 @@ struct DownloadRow: Equatable, Sendable {
             words = job.failedStage.map { "Failed at \($0.rawValue)" } ?? "Failed"
         case .cancelled: words = "Cancelled"
         }
-        return job.reason.map { "\(words): \($0)" } ?? words
+        return reason.map { "\(words): \($0)" } ?? words
+    }
+
+    /// How a state names the Soulseek user, whose name has a column of its own.
+    static let theUser = "the user"
+
+    /// `reason` with each mention of `user` as a word of its own, as the service writes the
+    /// peer into "<peer> is offline", said as `theUser`.
+    static func withoutUser(_ reason: String, _ user: String?) -> String {
+        guard let user, !user.isEmpty else { return reason }
+        var words = ""
+        var rest = reason[...]
+        while let found = rest.range(of: user) {
+            let before =
+                found.lowerBound == rest.startIndex
+                ? words.last : rest[rest.index(before: found.lowerBound)]
+            let after = found.upperBound == rest.endIndex ? nil : rest[found.upperBound]
+            let alone =
+                !(before?.isLetter ?? false) && !(before?.isNumber ?? false)
+                && !(after?.isLetter ?? false) && !(after?.isNumber ?? false)
+            words += rest[..<found.lowerBound]
+            words += alone ? theUser : String(rest[found])
+            rest = rest[found.upperBound...]
+        }
+        return words + rest
     }
 
     /// The running query and, from the second search on, the attempt, for the state's
@@ -265,12 +293,10 @@ struct DownloadRow: Equatable, Sendable {
         return words + ", \(found.fileCount) file\(found.fileCount == 1 ? "" : "s")"
     }
 
-    /// "made-up-peer, 53 MB": who the folder is from and how big it is.
+    /// "53 MB": how big the folder chosen is.
     static func candidate(_ job: DownloadJob) -> String {
         guard let found = job.candidate else { return "" }
-        let size = ByteCountFormatter.string(
-            fromByteCount: Int64(found.bytes), countStyle: .file)
-        return "\(found.peer), \(size)"
+        return ByteCountFormatter.string(fromByteCount: Int64(found.bytes), countStyle: .file)
     }
 
     static func policyName(_ policy: FormatPolicy) -> String {

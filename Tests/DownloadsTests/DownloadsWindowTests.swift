@@ -42,7 +42,8 @@ private func rows() -> [DownloadRow] {
     #expect(window.tooltip(.tagging, 0) == "a track missing")
     #expect(window.color(.tagging, window.rows[0]) == .systemOrange)
     #expect(window.color(.album, window.rows[0]) == .labelColor, "a staged row is opaque")
-    #expect(window.text(.candidate, 0).hasPrefix("made-up-peer, "))
+    #expect(window.text(.user, 0) == "made-up-peer")
+    #expect(!window.text(.candidate, 0).contains("made-up-peer"))
     #expect(window.text(.state, 1) == "Downloading, 1 of 2 files")
     #expect(window.color(.album, window.rows[1]) != .labelColor, "a download is dimmed")
     let progress = try #require(

@@ -6,7 +6,7 @@ import Settings
 
 /// A column of the Downloads window's table.
 enum DownloadColumn: String, CaseIterable {
-    case source, album, format, state, tagging, candidate, added
+    case source, album, format, state, tagging, user, candidate, added
 
     var title: String {
         switch self {
@@ -15,6 +15,7 @@ enum DownloadColumn: String, CaseIterable {
         case .format: TrackColumn.codec.title
         case .state: "State"
         case .tagging: "Tagging"
+        case .user: "User"
         case .candidate: "Candidate"
         case .added: "Added"
         }
@@ -27,7 +28,8 @@ enum DownloadColumn: String, CaseIterable {
         case .format: 150
         case .state: 340
         case .tagging: 90
-        case .candidate: 150
+        case .user: 120
+        case .candidate: 80
         case .added: 120
         }
     }
@@ -275,6 +277,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         case .state:
             return shown.claimedElsewhere.map { "\(shown.state) · \($0)" } ?? shown.state
         case .tagging: return shown.tagging.label
+        case .user: return shown.user
         case .candidate: return shown.candidate
         case .added: return Self.added.string(from: shown.added)
         }
@@ -297,7 +300,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         case .state:
             return ([text(column, row)] + [shown.stateDetail].compactMap { $0 })
                 .joined(separator: "\n")
-        case .format, .candidate: return text(column, row)
+        case .format, .user, .candidate: return text(column, row)
         case .added: return nil
         }
     }

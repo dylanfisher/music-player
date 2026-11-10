@@ -205,6 +205,33 @@ func aStateSaysHowFarItHasGot(job: DownloadJob, words: String) throws {
     #expect(row.state == words)
 }
 
+/// The user has a column of their own, so the candidate is the folder's size, and a reason
+/// the service wrote with the user's name says "the user".
+@Test func theUserIsAColumnOfTheirOwnAndAStateDoesntNameThem() throws {
+    let offline = job(1, .failed) {
+        $0.failedStage = .download
+        $0.reason = "every candidate failed; the last: made-up-peer is offline: made-up-peer"
+    }
+    let row = try #require(DownloadRow(offline, machine: "Studio"))
+    #expect(row.user == "made-up-peer")
+    #expect(
+        row.candidate == ByteCountFormatter.string(fromByteCount: 55_574_528, countStyle: .file))
+    #expect(
+        row.state == "Failed at download: every candidate failed; the last: the user is offline:"
+            + " the user")
+}
+
+@Test(arguments: [
+    ("bob is offline", "bob", "the user is offline"),
+    ("bobby is offline", "bob", "bobby is offline"),
+    ("track 1 missing; DJ_x is offline", "DJ_x", "track 1 missing; the user is offline"),
+    ("x2 went away", "x", "x2 went away"),
+    ("nothing answered", "", "nothing answered"),
+])
+func aReasonSaysTheUserForTheirNameAlone(reason: String, user: String, words: String) {
+    #expect(DownloadRow.withoutUser(reason, user) == words)
+}
+
 @Test func theSearchsQueryAndTheAttemptAreInTheStatesTooltip() throws {
     let searching = job(1, .searching) {
         $0.attempt = 2
