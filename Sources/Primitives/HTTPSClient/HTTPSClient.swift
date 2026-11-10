@@ -9,7 +9,7 @@ import Foundation
 public final class HTTPSClient: Sendable {
     private let allowedHosts: Set<String>
     private let session: URLSession
-    private let refuser = RedirectRefuser()
+    private let reader = BodyReader()
 
     /// `configuration` is ephemeral unless a caller gives another; tests give one with a stub
     /// protocol. Whatever it is, caching, cookies and stored credentials are turned off in it.
@@ -25,7 +25,7 @@ public final class HTTPSClient: Sendable {
         configuration.httpCookieAcceptPolicy = .never
         configuration.urlCredentialStorage = nil
         configuration.waitsForConnectivity = false
-        session = URLSession(configuration: configuration, delegate: refuser, delegateQueue: nil)
+        session = URLSession(configuration: configuration, delegate: reader, delegateQueue: nil)
     }
 
     deinit { session.invalidateAndCancel() }
@@ -86,24 +86,23 @@ public final class HTTPSClient: Sendable {
     }
 
     private func fetch(_ request: URLRequest, cap: Int) async throws -> HTTPSResponse {
-        let (bytes, response) = try await session.bytes(for: request, delegate: refuser)
-        guard let response = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-        // A redirect is refused in the delegate; this catches one that got through anyway.
-        guard let final = response.url, allows(final) else { throw HTTPSError.refusedAddress }
-        if response.expectedContentLength > cap { throw HTTPSError.tooLarge(cap: cap) }
-        var body: [UInt8] = []
-        body.reserveCapacity(min(max(Int(response.expectedContentLength), 0), cap))
-        for try await byte in bytes {
-            guard body.count < cap else { throw HTTPSError.tooLarge(cap: cap) }
-            body.append(byte)
+        let task = session.dataTask(with: request)
+        let hosts = allowedHosts
+        let (response, body) = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                reader.start(
+                    task, cap: cap, allows: { Self.allows($0, hosts: hosts) },
+                    continuation: continuation)
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
         }
         var headers: [String: String] = [:]
         for (name, value) in response.allHeaderFields {
             if let name = name as? String, let value = value as? String { headers[name] = value }
         }
-        return HTTPSResponse(status: response.statusCode, headers: headers, body: body)
+        return HTTPSResponse(status: response.statusCode, headers: headers, body: Array(body))
     }
 
     static func error(_ error: URLError) -> HTTPSError {
@@ -124,12 +123,95 @@ public final class HTTPSClient: Sendable {
     }
 }
 
-/// Answers every redirect with nil, so the 3xx is the response.
-private final class RedirectRefuser: NSObject, URLSessionTaskDelegate, Sendable {
+/// Collects each task's body in the chunks the network delivers it, and cancels a task whose
+/// body passes its cap. It answers every redirect with nil, so the 3xx is the response.
+private final class BodyReader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private struct Pending {
+        let cap: Int
+        let allows: @Sendable (URL) -> Bool
+        let continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>
+        var response: HTTPURLResponse?
+        var body = Data()
+        var failure: Error?
+    }
+
+    private let lock = NSLock()
+    private var pending: [Int: Pending] = [:]
+
+    func start(
+        _ task: URLSessionTask, cap: Int, allows: @escaping @Sendable (URL) -> Bool,
+        continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>
+    ) {
+        lock.withLock {
+            pending[task.taskIdentifier] = Pending(
+                cap: cap, allows: allows, continuation: continuation)
+        }
+    }
+
     func urlSession(
         _ session: URLSession, task: URLSessionTask,
         willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest
     ) async -> URLRequest? {
         nil
+    }
+
+    func urlSession(
+        _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        let allowed: Bool = lock.withLock {
+            guard var state = pending[dataTask.taskIdentifier] else { return false }
+            if let http = response as? HTTPURLResponse {
+                state.response = http
+                // A redirect is refused above; this catches one that got through anyway.
+                if let final = http.url, state.allows(final) {
+                    if http.expectedContentLength > state.cap {
+                        state.failure = HTTPSError.tooLarge(cap: state.cap)
+                    }
+                } else {
+                    state.failure = HTTPSError.refusedAddress
+                }
+            } else {
+                state.failure = URLError(.badServerResponse)
+            }
+            if state.failure == nil {
+                state.body.reserveCapacity(
+                    min(max(Int(response.expectedContentLength), 0), state.cap))
+            }
+            pending[dataTask.taskIdentifier] = state
+            return state.failure == nil
+        }
+        completionHandler(allowed ? .allow : .cancel)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        let tooLarge: Bool = lock.withLock {
+            guard var state = pending[dataTask.taskIdentifier], state.failure == nil else {
+                return false
+            }
+            state.body.append(data)
+            if state.body.count > state.cap {
+                state.failure = HTTPSError.tooLarge(cap: state.cap)
+                state.body = Data()
+            }
+            pending[dataTask.taskIdentifier] = state
+            return state.failure != nil
+        }
+        if tooLarge { dataTask.cancel() }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?)
+    {
+        guard let state = lock.withLock({ pending.removeValue(forKey: task.taskIdentifier) })
+        else { return }
+        if let failure = state.failure {
+            state.continuation.resume(throwing: failure)
+        } else if let error {
+            state.continuation.resume(throwing: error)
+        } else if let response = state.response {
+            state.continuation.resume(returning: (response, state.body))
+        } else {
+            state.continuation.resume(throwing: URLError(.badServerResponse))
+        }
     }
 }
