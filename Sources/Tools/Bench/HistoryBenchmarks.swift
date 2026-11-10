@@ -70,11 +70,16 @@ let historyBenchmarks = [
     },
     Benchmark(
         name: "history: history table plus its index, 1M synthetic plays",
-        budget: Budget(appleSilicon: 40, oldMac: 40, unit: .megabytes)
+        // phase 73: the history_path_played index, about 16 MB at 1M plays, cut opening Stats
+        // from 299 to 84 ms.
+        budget: Budget(appleSilicon: 50, oldMac: 50, unit: .megabytes)
     ) {
         let library = try playedLibrary.get()
         let bytes = try library.database.prepare(
-            "SELECT sum(pgsize) FROM dbstat WHERE name IN ('history', 'history_path')"
+            """
+            SELECT sum(pgsize) FROM dbstat
+            WHERE name IN ('history', 'history_path', 'history_path_played')
+            """
         ).map { try $0.int(0) }[0]
         return Measured(
             value: Double(bytes) / 1e6,

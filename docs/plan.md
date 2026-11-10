@@ -301,7 +301,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Play timeline: one page of 200 plays, 1M synthetic plays over the fixture library (p95) | < 5 ms | < 15 ms |
 | History, one row per track played, 1M synthetic plays (p95) | < 30 ms | < 80 ms |
 | Record a play, 1M synthetic plays (p95) | < 1 ms | < 6 ms |
-| History table plus its index, 1M synthetic plays | < 40 MB | < 40 MB |
+| History table plus its indexes, 1M synthetic plays (phase 73 added `history_path_played`, about 16 MB, which cut opening Stats from 299 to 84 ms) | < 50 MB | < 50 MB |
 | Build the library health report over every fixture track (p95); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
 | Open Listening Stats on Past Month, 1M synthetic plays: a new connection, every album's first play and the past month's report (p95; phase 43); the old Mac figure is an estimate until its checkpoint | < 400 ms | < 1500 ms |
 | Change the Listening Stats period, each of Past Week, Past Month, Past Year, last year and All Time in turn, 1M synthetic plays (p95; phase 43); the old Mac figure is an estimate until its checkpoint | < 250 ms | < 900 ms |
