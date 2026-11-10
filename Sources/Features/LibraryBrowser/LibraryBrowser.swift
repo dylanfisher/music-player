@@ -115,6 +115,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// A drop's question before it watches new folders, which tests replace.
     var confirmAdding: @MainActor ([String], NSWindow, @escaping (Bool) -> Void) -> Void =
         askToAddFolders
+    /// The Problems window's column widths, kept from the last time, and where a change goes.
+    public var problemColumns = ColumnWidths()
+    public var problemColumnsChanged: (ColumnWidths) -> Void = { _ in }
     /// Organize Selected Files' count, which tests replace.
     var countOrganizing: OrganizeCount = {
         layoutMoves($0, libraryFolder: $1, counted: $2, stopped: $3)
@@ -1198,7 +1201,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             let rows = await problemRows()
             let window = problems ?? makeProblemsWindow()
             problems = window
-            window.show(rows)
+            window.show(rows, widths: problemColumns)
         }
     }
 
@@ -1208,21 +1211,47 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         Task { problems.refresh(await problemRows()) }
     }
 
-    /// The status's problems, then each file's, leaving out those dismissed.
+    /// The status's problems, then each file's, leaving out those dismissed, each with the
+    /// track the index has at its path.
     private func problemRows() async -> [Problem] {
+        var rows: [Problem]
         do {
-            let issues = try await reader.fileIssues().map(\.description)
-            return status.problems
-                + issues.filter { !status.dismissed.contains($0) }.map { Problem($0) }
+            rows =
+                try await status.problems
+                + reader.fileIssues().map(Problem.init)
+                .filter { !status.dismissed.contains($0.line) }
         } catch {
             return status.problems + [Problem(problemsUnreadable(error))]
         }
+        do {
+            let paths = rows.compactMap(\.path)
+            let ids = try await reader.trackIDs(atPaths: paths)
+            let found = Dictionary(
+                zip(paths, ids).compactMap { path, id in id.map { (path, $0) } },
+                uniquingKeysWith: { one, _ in one })
+            let tracks = Dictionary(
+                try await reader.rows(ids: Array(Set(found.values))).map { ($0.id, $0) },
+                uniquingKeysWith: { one, _ in one })
+            for index in rows.indices {
+                guard let path = rows[index].path, let id = found[path], let track = tracks[id]
+                else { continue }
+                rows[index].track = terminalSafe(
+                    [track.artist, track.title].compactMap { $0 }.joined(separator: " – "))
+            }
+        } catch {
+            rows.append(Problem("couldn't look up the problems' tracks: \(error)"))
+        }
+        return rows
     }
 
     private func makeProblemsWindow() -> ProblemsWindow {
         let window = ProblemsWindow()
         window.act = { [weak self] action, selected in
             Task { await self?.fix(selected, by: action) }
+        }
+        window.columnsResized = { [weak self] widths in
+            self?.problemColumns = widths
+            self?.problemColumnsChanged(widths)
         }
         return window
     }

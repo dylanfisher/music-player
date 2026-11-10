@@ -122,17 +122,25 @@ extension ImportPlan {
     var problems: [Problem] {
         let source = terminalSafe(library.source)
         var rows: [Problem] = []
-        func list(_ items: [String], _ what: String, fix: (String) -> Problem.Fix? = { _ in nil }) {
+        func list(
+            _ items: [String], _ what: String, paths: Bool = false,
+            fix: (String) -> Problem.Fix? = { _ in nil }
+        ) {
             let shown = PlaylistFile.maximumProblems
             rows += items.prefix(shown).map {
-                Problem("\(source): \(what): \(terminalSafe($0))", fix: fix($0))
+                let line = "\(source): \(what): \(terminalSafe($0))"
+                // A miss's row is about the track's file, which the library lists.
+                guard paths else { return Problem(line, fix: fix($0)) }
+                return Problem(
+                    line, kind: "", path: terminalSafe($0), detail: "\(what), in \(source)",
+                    fix: fix($0))
             }
             if items.count > shown {
                 rows.append(Problem("\(source): \(number(items.count - shown)) more \(what)"))
             }
         }
-        list(unmatched, "not in the library") { .locate(path: $0) }
-        list(unreadFormat, "not in the library, a format this app doesn't read yet")
+        list(unmatched, "not in the library", paths: true) { .locate(path: $0) }
+        list(unreadFormat, "not in the library, a format this app doesn't read yet", paths: true)
         list(existingPlaylists, "not made, a playlist has the name")
         list(
             unmappedPlaylists.map { "\($0.name) (\($0.reasons.joined(separator: "; ")))" },

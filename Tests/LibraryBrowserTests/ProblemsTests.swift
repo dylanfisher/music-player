@@ -38,8 +38,8 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
         others: (1...(healthLinesListed + 1)).map { "/M/\($0).flac" },
         otherIDs: (1...(healthLinesListed + 1)).map { Int64($0) })
     let lost = healthProblems(found, of: .lostStats)
-    #expect(lost.first == Problem("/M/1.flac", fix: .remove(pathID: 1)))
-    #expect(lost.last == Problem("… and 1 more"))
+    #expect(lost.first == Problem("/M/1.flac", kind: "Lost Stats", fix: .remove(pathID: 1)))
+    #expect(lost.last == Problem("… and 1 more", kind: "Lost Stats"))
     #expect(healthProblems(found, of: .removed).first?.fix == .restore(pathID: 1))
     #expect(healthProblems(found, of: .unreadable).allSatisfy { $0.fix == nil })
 }
@@ -216,4 +216,108 @@ private func locatingBrowser() throws -> (
     browser.libraryChanged(.scanned(folder: folder.path, ScanSummary()))
     #expect(try index.rows(ids: [id])[0].playCount == 0)
     browser.problems?.window.close()
+}
+
+/// Each part of a problem in its column, said plainly, whichever place it came from.
+@Test func eachKindOfProblemFillsTheColumns() {
+    func columns(_ problem: Problem) -> [String] { ProblemColumn.allCases.map { $0.text(problem) } }
+    let failure = Problem(
+        FileIssue(path: "/M/A/a.flac", problem: .failure(.malformed), offset: 12, detail: "bad"))
+    #expect(
+        columns(failure) == [
+            "Can't read", "", "a.flac", "/M/A", "the file is damaged: bad (at byte 12)",
+        ])
+    #expect(failure.line == "/M/A/a.flac: failure malformed: bad (at byte 12)")
+    let warning = Problem(
+        FileIssue(path: "/M/b.flac", problem: .warning(.badNumber), offset: nil, detail: "x"))
+    #expect(warning.kind == "Tag warning" && warning.detail.hasPrefix("a track or disc number"))
+    let folder = Problem(ScanIssue(kind: .rootUnavailable, path: "/Volumes/music", detail: "gone"))
+    #expect(columns(folder) == ["Folder not there", "", "music", "/Volumes", "gone"])
+    let organized = Problem("/l/b.flac: not moved, /l/A/b.flac is already there")
+        .kinded(ProblemKind.organized)
+    #expect(
+        columns(organized) == [
+            "Organizing", "", "b.flac", "/l", "not moved, /l/A/b.flac is already there",
+        ])
+    #expect(
+        columns(Problem("the sync failed: no folder", kind: "Sync")) == [
+            "Sync", "", "", "", "the sync failed: no folder",
+        ])
+    var plan = ImportPlan(
+        library: PlayerLibrary(player: .swinsian, source: "/s/Library.sqlite"), prefix: nil)
+    plan.unmatched = ["/Old/a.flac"]
+    #expect(
+        columns(plan.problems[0]).suffix(3) == [
+            "a.flac", "/Old", "not in the library, in /s/Library.sqlite",
+        ])
+}
+
+/// The status's rows each say which report they're from.
+@Test func theStatusesRowsSayWhereTheyreFrom() {
+    var status = LibraryStatus()
+    status.notices = ["earlier play counts discarded"]
+    status.addedFilesReport = [Problem("/a.mp3: not added")]
+    status.apply(.scanFailed(folder: "/M", reason: "gone"))
+    #expect(status.problems.map(\.kind) == ["Notice", "Adding files", "Scan failed"])
+    #expect(status.problems.last?.path == "/M" && status.problems.last?.detail == "gone")
+    #expect(status.problemLines.last == "/M: the scan failed: gone")
+}
+
+@MainActor @Test func theTableSortsByAnyColumnAndKeepsTheSelection() throws {
+    let window = ProblemsWindow()
+    let rows = [
+        Problem("/M/b.flac: second", kind: "Tag warning"),
+        Problem("/M/c.flac: first", kind: "Can't read"),
+        Problem("/M/a.flac: third", kind: "Tag warning"),
+    ]
+    window.show(rows)
+    defer { window.window.close() }
+    #expect(
+        window.table.tableColumns.map(\.title) == ["Kind", "Track", "File", "Folder", "Detail"])
+    #expect(window.table.headerView != nil)
+    window.table.selectRowIndexes([0], byExtendingSelection: false)
+    window.table.sortDescriptors = [NSSortDescriptor(key: "file", ascending: true)]
+    #expect(window.rows.map(\.path) == ["/M/a.flac", "/M/b.flac", "/M/c.flac"])
+    #expect(window.selected == [rows[0]])
+    window.table.sortDescriptors = [NSSortDescriptor(key: "detail", ascending: false)]
+    #expect(window.rows.map(\.detail) == ["third", "second", "first"])
+    // Rows the column holds the same keep the order they came in.
+    window.table.sortDescriptors = [NSSortDescriptor(key: "kind", ascending: true)]
+    #expect(window.rows == [rows[1], rows[0], rows[2]])
+    // A refresh keeps the sort.
+    window.refresh(Array(rows.reversed()))
+    #expect(window.rows == [rows[1], rows[2], rows[0]])
+}
+
+@MainActor @Test func theColumnWidthsKeptAreAppliedAndAResizeReported() throws {
+    let window = ProblemsWindow()
+    var reported: [ColumnWidths] = []
+    window.columnsResized = { reported.append($0) }
+    window.show([Problem("plain")], widths: ColumnWidths(["kind": 150, "gone": 90]))
+    defer { window.window.close() }
+    let kind = try #require(window.table.tableColumn(withIdentifier: .init("kind")))
+    #expect(kind.width == 150)
+    #expect(reported.isEmpty)
+    kind.width = 180
+    #expect(reported.last?.widths["kind"] == 180)
+    #expect(reported.last?.widths.keys.sorted() == ProblemColumn.allCases.map(\.rawValue).sorted())
+}
+
+/// The browser lists each problem with the track the index has at its path, and keeps the
+/// widths the window reports.
+@MainActor @Test func theProblemsWindowNamesTheTrackAndKeepsItsWidths() async throws {
+    let (browser, index, ids) = try problemsBrowser()
+    let path = try #require(try index.paths(ids: [ids[0]])[ids[0]])
+    let row = try #require(try index.rows(ids: [ids[0]]).first)
+    browser.finishAdding("Added", [Problem(path + ": not added")])
+    try await waitFor("the Problems window") { browser.problems?.rows.isEmpty == false }
+    let window = try #require(browser.problems)
+    defer { window.window.close() }
+    let listed = try #require(window.rows.first { $0.path == path })
+    #expect(listed.track == [row.artist, row.title].compactMap { $0 }.joined(separator: " – "))
+    var kept: [ColumnWidths] = []
+    browser.problemColumnsChanged = { kept.append($0) }
+    window.table.tableColumns[0].width = 140
+    #expect(kept.last?.widths["kind"] == 140)
+    #expect(browser.problemColumns == kept.last)
 }

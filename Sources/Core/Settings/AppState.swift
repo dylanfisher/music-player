@@ -99,6 +99,10 @@ public struct AppState: SettingsSchema {
     public let taggerSheets = Setting(
         "discogsTagger.sheets", title: "Discogs Tagger Sheets", default: TaggerSheetLayouts(),
         "The size, column widths and sort each of the Discogs tagger's sheets was left at.")
+    public let problemsColumns = Setting(
+        "problems.columns", title: "Library Problems Columns", default: ColumnWidths(),
+        "The Library Problems window's column widths, by column. A column not listed has its"
+            + " own.")
     public let downloadsColumns = Setting(
         "downloads.columns", title: "Downloads Columns", default: ColumnWidths(),
         "The Downloads window's column widths, by column. A column not listed has its own.")

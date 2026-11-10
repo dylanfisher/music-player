@@ -22,8 +22,13 @@ public struct MetadataError: Error, Equatable, CustomStringConvertible {
     }
 
     /// For the user, by kind: the path and the detail are in `description`.
+    public var userMessage: String { kind.userMessage }
+}
+
+extension MetadataError.Kind {
+    /// For the user: "the file is damaged".
     public var userMessage: String {
-        switch kind {
+        switch self {
         case .unreadable: "the file can't be read"
         case .unrecognizedFormat: "it isn't in a format the app plays"
         case .malformed: "the file is damaged"

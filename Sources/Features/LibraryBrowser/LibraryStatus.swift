@@ -204,7 +204,9 @@ struct LibraryStatus: Equatable, Sendable {
     /// that count nothing still have a list to show. Nil when there's nothing to list.
     var problemsTitle: String? {
         guard hasProblems else { return nil }
-        let folders = Set(folderLines.filter { !dismissed.contains($0.line) }.map(\.folder)).count
+        let folders = Set(
+            folderLines.filter { !dismissed.contains($0.problem.line) }.map(\.folder)
+        ).count
         var problems: [String] = []
         if fileIssueCount > 0 { problems.append(files(fileIssueCount)) }
         if folders > 0 { problems.append(count(folders, "folder")) }
@@ -218,22 +220,31 @@ struct LibraryStatus: Equatable, Sendable {
 
     /// Every notice and folder problem not dismissed, for the top of the problems list.
     var problems: [Problem] {
-        let after = syncProblems + folderLines.map(\.line)
+        let reports =
+            notices.map { Problem($0, kind: ProblemKind.notice) }
+            + playlistFileReport.map { $0.kinded(ProblemKind.imported) }
+            + addedFilesReport.map { $0.kinded(ProblemKind.added) }
+            + organizedReport.map { $0.kinded(ProblemKind.organized) }
+            + importedMovesReport.map { $0.kinded(ProblemKind.movesImported) }
         return
-            (notices.map { Problem($0) } + playlistFileReport + addedFilesReport
-            + organizedReport + importedMovesReport + healthProblems
-            + after.map { Problem($0) }).filter { !dismissed.contains($0.line) }
+            (reports + healthProblems + syncProblems.map { Problem($0, kind: ProblemKind.sync) }
+            + folderLines.map(\.problem)).filter { !dismissed.contains($0.line) }
     }
 
     var problemLines: [String] { problems.map(\.line) }
 
-    /// Each folder's failed scan and the problems its last scan had, as lines.
-    private var folderLines: [(folder: String, line: String)] {
+    /// Each folder's failed scan and the problems its last scan had.
+    private var folderLines: [(folder: String, problem: Problem)] {
         failures.sorted { $0.key < $1.key }.map {
-            ($0.key, "\($0.key): the scan failed: \($0.value)")
+            (
+                $0.key,
+                Problem(
+                    "\($0.key): the scan failed: \($0.value)", kind: ProblemKind.scanFailed,
+                    path: $0.key, detail: $0.value)
+            )
         }
             + folderIssues.sorted { $0.key < $1.key }.flatMap { folder, issues in
-                issues.map { (folder, $0.description) }
+                issues.map { (folder, Problem($0)) }
             }
     }
 }

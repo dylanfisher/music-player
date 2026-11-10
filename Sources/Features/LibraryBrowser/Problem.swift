@@ -1,5 +1,6 @@
 import DisplayText
 import Library
+import Metadata
 import Settings
 
 /// One row of the Problems window, and what it offers besides Dismiss (ADR 0059).
@@ -15,13 +16,111 @@ struct Problem: Equatable, Sendable {
         case locate(path: String)
     }
 
-    /// As the window shows it, and as a dismissal stores it.
+    /// As ⌘C copies it, and as a dismissal stores it.
     var line: String
     var fix: Fix?
+    /// What sort of problem it is, for the Kind column: "Tag warning", "Organizing".
+    var kind: String
+    /// The file or folder it's about, nil for a problem about neither.
+    var path: String?
+    /// What's wrong, without the path.
+    var detail: String
+    /// The track at `path`, "Artist – Title", looked up when the window lists the rows.
+    var track: String?
 
-    init(_ line: String, fix: Fix? = nil) {
+    /// A problem whose line is "<path>: <detail>", or just a path, when it starts with a "/";
+    /// any other line is all detail. A path that holds ": " splits early, which only the File
+    /// and Folder columns show: the line stays whole.
+    init(_ line: String, kind: String = "", fix: Fix? = nil) {
+        var path: String?
+        var detail = line
+        if line.hasPrefix("/") {
+            if let colon = line.range(of: ": ") {
+                path = String(line[..<colon.lowerBound])
+                detail = String(line[colon.upperBound...])
+            } else {
+                path = line
+                detail = ""
+            }
+        }
+        self.init(line, kind: kind, path: path, detail: detail, fix: fix)
+    }
+
+    init(_ line: String, kind: String, path: String?, detail: String, fix: Fix? = nil) {
         self.line = line
         self.fix = fix
+        self.kind = kind
+        self.path = path
+        self.detail = detail
+    }
+
+    /// A file the index stores a warning or failure for, the failure said plainly first.
+    init(_ issue: FileIssue) {
+        let kind: String
+        var detail = issue.detail + byteNote(issue.offset)
+        switch issue.problem {
+        case .warning(let warning):
+            kind = ProblemKind.tagWarning
+            detail = ProblemKind.warning(warning) + ": " + detail
+        case .failure(let failure):
+            kind = ProblemKind.unreadable
+            detail = failure.userMessage + ": " + detail
+        }
+        self.init(issue.description, kind: kind, path: issue.path, detail: detail)
+    }
+
+    /// What the last scan of a folder found wrong with it or an entry in it.
+    init(_ issue: ScanIssue) {
+        self.init(
+            issue.description, kind: ProblemKind.folder(issue.kind), path: issue.path,
+            detail: issue.detail)
+    }
+
+    /// The problem with `kind` given, unless it has its own.
+    func kinded(_ kind: String) -> Problem {
+        var problem = self
+        if problem.kind.isEmpty { problem.kind = kind }
+        return problem
+    }
+}
+
+/// The Kind column's words for the problems from each place (ADR 0175).
+enum ProblemKind {
+    static let notice = "Notice"
+    static let sync = "Sync"
+    static let scanFailed = "Scan failed"
+    static let unreadable = "Can't read"
+    static let tagWarning = "Tag warning"
+    static let imported = "Import or export"
+    static let added = "Adding files"
+    static let organized = "Organizing"
+    static let movesImported = "Move list"
+
+    /// What a stored tag warning means, for the Detail column before the reader's own words.
+    static func warning(_ kind: MetadataWarning.Kind) -> String {
+        switch kind {
+        case .badNumber: "a track or disc number isn't a plain number, its first digits kept"
+        case .badText: "text isn't valid in its encoding, so it was read leniently"
+        case .badValue: "a value its field can't hold was left out"
+        case .unreadableField: "a tag field or picture can't be read and was skipped"
+        case .nonSyncsafeFrameSize: "an ID3 frame size is written the way old iTunes wrote it"
+        case .truncated: "the file is shorter than its header says"
+        }
+    }
+
+    /// A folder's scan issue in a few words.
+    static func folder(_ kind: ScanIssue.Kind) -> String {
+        switch kind {
+        case .rootUnavailable: "Folder not there"
+        case .rootEmpty: "Folder empty"
+        case .rootVanished: "Folder went away"
+        case .listedTwice: "Listed twice"
+        case .unreadable: "Can't list"
+        case .symbolicLink: "Link not followed"
+        case .networkFolderMarkedLocal: "Network folder"
+        case .stagingFolderSkipped: "Staging folder skipped"
+        case .insideStagingFolder: "In the staging folder"
+        }
     }
 }
 
@@ -88,12 +187,12 @@ enum ProblemAction: CaseIterable, Sendable {
 /// each Removed one with Restore. The "… and N more" line has no path, so no fix.
 func healthProblems(_ findings: HealthFindings, of check: HealthCheck) -> [Problem] {
     findings.lines.enumerated().map { position, line in
-        guard position < findings.pathIDs.count else { return Problem(line) }
+        guard position < findings.pathIDs.count else { return Problem(line, kind: check.title) }
         let id = findings.pathIDs[position]
         switch check {
-        case .lostStats: return Problem(line, fix: .remove(pathID: id))
-        case .removed: return Problem(line, fix: .restore(pathID: id))
-        default: return Problem(line)
+        case .lostStats: return Problem(line, kind: check.title, fix: .remove(pathID: id))
+        case .removed: return Problem(line, kind: check.title, fix: .restore(pathID: id))
+        default: return Problem(line, kind: check.title)
         }
     }
 }

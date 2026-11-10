@@ -302,6 +302,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             groupByAlbumArtist: layout.groupByAlbumArtist, thumbnails: thumbnails)
         browser.setTableAppearance(layout.tableAppearance)
         browser.statsHeight = layout.statsHeight
+        browser.problemColumns = state[\.problemsColumns]
+        browser.problemColumnsChanged = { saver.set(\.problemsColumns, $0) }
         if let timelineTable = layout.timelineTable { browser.showTimelineColumns(timelineTable) }
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
