@@ -1124,6 +1124,8 @@ private final class HeldSearch {
     let empty = TaggerWindow(model: none)
     defer { empty.window?.close() }
     #expect(!empty.discogsButton.isEnabled)
+    // An empty tab, the one way to have no album selected.
+    tagger.tab = .noCandidate
     tagger.selectedID = nil
     controller.refresh()
     #expect(!controller.discogsButton.isEnabled)

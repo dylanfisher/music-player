@@ -67,6 +67,14 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Set while `refresh` selects the model's albums in the list, so the list's notifications
     /// of it aren't taken for the user's.
     private var selectingAlbums = false
+    /// Where the album list last showed the selected album, which it scrolls to when that
+    /// changes.
+    private var listedPlace: ListedPlace?
+    private struct ListedPlace: Equatable {
+        var tab: TaggerTab
+        var id: Int64?
+        var row: Int
+    }
     let releaseTitle = NSTextField(labelWithString: "")
     let releaseLine = NSTextField(labelWithString: "")
     /// Why a Likely or Incomplete album isn't Exact, under the release's lines.
@@ -235,6 +243,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             albumTable, [(.album, 200), (.files, 36), (.confidence, 48), (.review, 64)],
             source: self)
         albumTable.allowsMultipleSelection = true
+        // A click below the rows, or a Command-click on the one row selected, keeps it.
+        albumTable.allowsEmptySelection = false
         for column in albumTable.tableColumns {
             column.sortDescriptorPrototype = NSSortDescriptor(
                 key: column.identifier.rawValue, ascending: true)
@@ -494,18 +504,44 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         artworkButton.isEnabled = !model.isBusy && artwork > 0
 
         shownAlbums = model.albums(in: model.tab)
-        albumTable.reloadData()
-        selectingAlbums = true
-        // The detail's album is selected last, so it's the list's `selectedRow`.
-        let others = shownAlbums.indices.filter {
-            shownAlbums[$0].id != model.selectedID && model.selectedIDs.contains(shownAlbums[$0].id)
+        // An album selected that the tab doesn't list, as one an Analyze moved, gives way to
+        // the tab's first, so the list never shows nothing selected while it has albums.
+        var row = shownAlbums.firstIndex { $0.id == model.selectedID }
+        if row == nil, let first = shownAlbums.first {
+            model.selectedID = first.id
+            row = 0
         }
-        albumTable.selectRowIndexes(IndexSet(others), byExtendingSelection: false)
-        if let row = shownAlbums.firstIndex(where: { $0.id == model.selectedID }) {
-            albumTable.selectRowIndexes([row], byExtendingSelection: true)
+        // Set before the reload too: a table that can't be left empty selects a row of its own
+        // as it reloads.
+        selectingAlbums = true
+        albumTable.reloadData()
+        if let row {
+            // The detail's album is selected last, so it's the list's `selectedRow`.
+            let others = shownAlbums.indices.filter {
+                $0 != row && model.selectedIDs.contains(shownAlbums[$0].id)
+            }
+            if others.isEmpty {
+                albumTable.selectRowIndexes([row], byExtendingSelection: false)
+            } else {
+                albumTable.selectRowIndexes(IndexSet(others), byExtendingSelection: false)
+                albumTable.selectRowIndexes([row], byExtendingSelection: true)
+            }
         }
         selectingAlbums = false
+        keepSelectedInView()
         showSelected()
+    }
+
+    /// Scrolls the album list to the selected album when it is listed in another place than
+    /// the list last showed it: another tab, another album, or another row after a sort or a
+    /// match. A refresh that leaves it where it was doesn't scroll, so the list stays where
+    /// the user scrolled it.
+    private func keepSelectedInView() {
+        let row = albumTable.selectedRow
+        let place = row >= 0 ? ListedPlace(tab: model.tab, id: model.selectedID, row: row) : nil
+        guard place != listedPlace else { return }
+        listedPlace = place
+        if row >= 0 { albumTable.scrollRowToVisible(row) }
     }
 
     /// Apply's button: all the tab's albums, or those selected when several are.
@@ -765,6 +801,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         guard id != model.selectedID || ids != model.selectedIDs else { return }
         model.selectedID = id
         model.selectedIDs = ids
+        // A row the user selected is where they are; a later refresh scrolls only once it
+        // moves.
+        listedPlace = row >= 0 ? ListedPlace(tab: model.tab, id: id, row: row) : nil
         showSelected()
     }
 
