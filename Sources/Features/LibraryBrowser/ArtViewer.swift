@@ -4,9 +4,10 @@ import KeyChord
 import Metadata
 
 /// An album's art opened over the whole screen, centered and as large as the screen allows but
-/// never past its own pixels, over a dimmed backdrop. It shows the art it opened with at once
-/// and replaces it with the art decoded off the main thread at the screen's pixels. When the
-/// file holds more than one picture, a strip of their thumbnails runs along the bottom, and a
+/// never past its own pixels, over a dimmed backdrop. It shows once the art is decoded off the
+/// main thread at the screen's pixels and the file's pictures are listed, so it opens at its
+/// final layout. When the file holds more than one picture, a strip of their thumbnails runs
+/// along the bottom, its room kept before they decode, and a
 /// click on one, ← and → and the buttons at the sides step through them, stopping at either
 /// end, under a line saying which, "2 of 3 · Back Cover". A click anywhere else or Esc closes it, and
 /// so does the window it opened from closing or the app going to the background, since it
@@ -26,9 +27,14 @@ final class ArtViewer {
     private(set) var shown = 0
     /// The file the pictures are in, and where a decode reports its failure.
     private var file: (path: String, failed: (String) -> Void)?
+    /// The screen it covers, whose pixels the art is decoded at.
+    private let screen: NSScreen
+    private(set) var isClosed = false
 
-    /// `owner` is the window the art was opened from.
+    /// `owner` is the window the art was opened from; `image` is drawn until the art is
+    /// decoded, and in its place if the decode fails.
     init(image: NSImage, screen: NSScreen, owner: NSWindow?) {
+        self.screen = screen
         window = ArtViewerWindow(
             contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         view = ArtViewerView(frame: NSRect(origin: .zero, size: screen.frame.size))
@@ -65,46 +71,68 @@ final class ArtViewer {
         window.makeFirstResponder(view)
     }
 
-    /// Decodes `art` from the file at `path` at the screen's pixels and shows it. `failed` gets
-    /// what went wrong, and the opening art stays.
-    @discardableResult
-    func load(_ art: EmbeddedArt, path: String, failed: @escaping (String) -> Void) -> Task<
-        Void, Never
-    > {
-        let side = max(window.frame.width, window.frame.height) * window.backingScaleFactor
-        let loader = ArtworkLoader(maxPixelSize: Int(side.rounded(.up)), capacity: 1)
+    /// Opens on `art` from the file at `path` at its final layout: it reads the file's
+    /// pictures and decodes `art` at the screen's pixels together, off the main thread, then
+    /// lays out the strip, a button a picture, and the art, and only then shows the window.
+    /// The thumbnails fill their buttons as they decode. `failed` gets what went wrong; a
+    /// failed decode still opens, on the art it was made with, and a failed read opens with no
+    /// strip. A close before both are done drops them, and the window never shows.
+    func open(_ art: EmbeddedArt, path: String, failed: @escaping (String) -> Void) async {
         let opening = session
-        return Task {
-            let result = await loader.load(art, path: path)
-            guard opening == session, window.isVisible else { return }
-            switch result {
-            case .success(let image):
-                view.image = NSImage(cgImage: image, size: .zero)
-                view.isDecoded = true
-            case .failure(let error): failed("couldn't open the art of \(path): \(error)")
+        async let decoded = decode(art, path: path)
+        async let listed = Self.pictures(at: path)
+        let (image, pictures) = await (decoded, listed)
+        guard opening == session, !isClosed else { return }
+        switch image {
+        case .success(let image): showDecoded(image)
+        case .failure(let error): failed("couldn't open the art of \(path): \(error)")
+        }
+        switch pictures {
+        case .success(let pictures): show(pictures, current: art, path: path, failed)
+        case .failure(let error): failed("couldn't read the pictures of \(path): \(error)")
+        }
+        window.contentView?.layoutSubtreeIfNeeded()
+        show()
+    }
+
+    /// `art` from the file at `path`, decoded off the main thread at the screen's pixels.
+    private func decode(_ art: EmbeddedArt, path: String) async -> Result<CGImage, any Error> {
+        let side = max(screen.frame.width, screen.frame.height) * screen.backingScaleFactor
+        let loader = ArtworkLoader(maxPixelSize: Int(side.rounded(.up)), capacity: 1)
+        return await loader.load(art, path: path)
+    }
+
+    private func showDecoded(_ image: CGImage) {
+        view.image = NSImage(cgImage: image, size: .zero)
+        view.isDecoded = true
+    }
+
+    /// Every picture in the file at `path`, read off the main thread without their bytes.
+    private static func pictures(at path: String) async -> Result<
+        [EmbeddedPicture], MetadataError
+    > {
+        await blockingFileWork {
+            Result { () throws(MetadataError) in
+                try readMetadata(
+                    at: URL(fileURLWithPath: path, isDirectory: false), pictures: true
+                ).metadata.pictures
             }
         }
     }
 
-    /// Reads every picture in the file at `path` off the main thread, for stepping, `current`
-    /// being the one shown. A file of one picture shows no buttons or count.
+    /// Decodes `art` from the file at `path` at the screen's pixels and shows it, as a step
+    /// does. `failed` gets what went wrong, and the art shown stays.
     @discardableResult
-    func readPictures(path: String, current: EmbeddedArt, failed: @escaping (String) -> Void)
-        -> Task<Void, Never>
-    {
+    func load(_ art: EmbeddedArt, path: String, failed: @escaping (String) -> Void) -> Task<
+        Void, Never
+    > {
         let opening = session
         return Task {
-            let read = await blockingFileWork {
-                Result { () throws(MetadataError) in
-                    try readMetadata(
-                        at: URL(fileURLWithPath: path, isDirectory: false), pictures: true
-                    ).metadata.pictures
-                }
-            }
+            let result = await decode(art, path: path)
             guard opening == session, window.isVisible else { return }
-            switch read {
-            case .success(let pictures): show(pictures, current: current, path: path, failed)
-            case .failure(let error): failed("couldn't read the pictures of \(path): \(error)")
+            switch result {
+            case .success(let image): showDecoded(image)
+            case .failure(let error): failed("couldn't open the art of \(path): \(error)")
             }
         }
     }
@@ -192,8 +220,10 @@ final class ArtViewer {
         view.chosen = shown
     }
 
+    /// Closes it, or, before `open` shows it, keeps it from showing.
     func close() {
-        guard window.isVisible else { return }
+        guard !isClosed else { return }
+        isClosed = true
         session += 1
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers = []

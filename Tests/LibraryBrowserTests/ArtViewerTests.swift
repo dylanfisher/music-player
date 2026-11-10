@@ -185,3 +185,49 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     guard viewer.window.isVisible else { return }
     #expect(viewer.imageFrame.size == CGSize(width: 10, height: 10))
 }
+
+/// The viewer shows only once it's at its final layout: the art decoded at its own size and
+/// the strip's room kept, a button a picture, before the thumbnails decode, so nothing moves
+/// as they fill in (phase 70).
+@MainActor @Test func theViewerOpensAtItsFinalLayout() async throws {
+    let url = try flacWithPictures([4, 3, 6])
+    let front = try #require(try readMetadata(at: url, pictures: true).metadata.art)
+    let viewer = ArtViewer(
+        image: NSImage(size: NSSize(width: 4, height: 4)), screen: try #require(NSScreen.main),
+        owner: nil)
+    defer { viewer.close() }
+    let opening = Task { await viewer.open(front, path: url.path) { Issue.record("\($0)") } }
+    #expect(!viewer.window.isVisible, "nothing shows before the art and the pictures are read")
+    await opening.value
+    // Another test's posting that the app resigned active closes the viewer, which then
+    // never shows.
+    guard !viewer.isClosed else { return }
+    #expect(viewer.window.isVisible)
+    #expect(viewer.image?.size == CGSize(width: 20, height: 10), "the front cover, decoded")
+    #expect(viewer.thumbnailButtons.count == 3)
+    #expect(viewer.placeText == "2 of 3 · Front Cover")
+    let opened = viewer.imageFrame
+    #expect(opened.size == CGSize(width: 20, height: 10))
+    try await waitFor("the thumbnails") {
+        viewer.isClosed || viewer.thumbnails.allSatisfy { $0 != nil }
+    }
+    guard !viewer.isClosed else { return }
+    viewer.window.contentView?.layoutSubtreeIfNeeded()
+    #expect(viewer.imageFrame == opened, "the thumbnails fill in place")
+}
+
+/// A viewer closed while it opens, as by the owner window closing, never shows.
+@MainActor @Test func aViewerClosedWhileItOpensNeverShows() async throws {
+    let url = try flacWithPictures([3])
+    let art = try #require(try readMetadata(at: url, pictures: true).metadata.art)
+    let viewer = ArtViewer(
+        image: NSImage(size: NSSize(width: 4, height: 4)), screen: try #require(NSScreen.main),
+        owner: nil)
+    var closed = 0
+    viewer.closed = { closed += 1 }
+    let opening = Task { await viewer.open(art, path: url.path) { Issue.record("\($0)") } }
+    viewer.close()
+    await opening.value
+    #expect(!viewer.window.isVisible)
+    #expect(closed == 1)
+}

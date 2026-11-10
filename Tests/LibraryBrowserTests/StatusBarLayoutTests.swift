@@ -141,6 +141,7 @@ private func column(
     browser.showPlaying(path: playing.path)
     browser.openPlayingArt()
     let viewer = try #require(browser.table.artViewer)
+    await browser.table.artOpening?.value
     #expect(viewer.window.isVisible)
     viewer.close()
     // Laid out again, the art keeps its one click.

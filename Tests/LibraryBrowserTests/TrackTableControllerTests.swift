@@ -978,6 +978,7 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
     }
     controller.openHoveredArt()
     let viewer = try #require(controller.artViewer)
+    await controller.artOpening?.value
     #expect(viewer.window.isVisible)
     await model.setSort(.title, ascending: true)
     await model.refresh()
@@ -1103,6 +1104,7 @@ private func hoveredRescanTable() async throws -> (
     defer { window.close() }
     controller.openHoveredArt()
     let viewer = try #require(controller.artViewer)
+    await controller.artOpening?.value
     try index.database.prepare("UPDATE tracks SET title = ? WHERE file_id = ?").run(
         "Retitled", rows[album.lowerBound].id)
     await model.refresh()

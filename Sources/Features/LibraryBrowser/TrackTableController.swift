@@ -694,19 +694,24 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     }
 
     /// Opens `image`, the art embedded in `track`'s file, over the screen, decoded at the
-    /// screen's size. It stays open across refreshes while `track` is listed with that art.
+    /// screen's size, once it's decoded. It stays open across refreshes while `track` is listed
+    /// with that art.
     func openArt(_ image: NSImage, _ embedded: EmbeddedArt, of track: TrackRow) {
         guard let screen = table.window?.screen ?? NSScreen.main else { return }
+        // One still opening would otherwise show over this one.
+        artViewer?.close()
         viewerTrack = track
         let viewer = ArtViewer(image: image, screen: screen, owner: table.window)
         viewer.closed = { [weak self, weak viewer] in
             if self?.artViewer === viewer { self?.artViewer = nil }
         }
         artViewer = viewer
-        viewer.show()
-        viewer.load(embedded, path: track.path, failed: actions.failed)
-        viewer.readPictures(path: track.path, current: embedded, failed: actions.failed)
+        let failed = actions.failed
+        artOpening = Task { await viewer.open(embedded, path: track.path, failed: failed) }
     }
+
+    /// The art viewer's opening, which reads and decodes before it shows; for tests.
+    private(set) var artOpening: Task<Void, Never>?
 
     /// A refresh, as a scan's every 2 s, keeps the viewer open while its track is still listed
     /// with the same art and album; otherwise the art shown may no longer be the list's.
