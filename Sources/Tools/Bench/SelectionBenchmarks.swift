@@ -52,6 +52,43 @@ let selectionBenchmarks = [
     },
 ]
 
+/// The keys type-to-select's row types, each a new query a second after the last: every
+/// letter, and two no title starts with, which read every row.
+private let typedSelections = "abcdefghijklmnopqrstuvwxyz".map(String.init) + ["qx", "zq"]
+
+/// Type-to-select over every fixture track sorted by title, a key at a time, from the key to
+/// the row found, as the track table finds it: the list's names, read once per list, then the
+/// first that starts with the query, ignoring case and accents. The match is the browser's
+/// (`TypeSelect.firstIndex`), copied here until it's reachable from the bench.
+let typeSelectBenchmarks = [
+    Benchmark(
+        name: "selection: type-to-select a key over every fixture title, sorted by title (p95)",
+        budget: Budget(appleSilicon: 20, oldMac: 80, unit: .milliseconds)
+    ) {
+        let databaseURL = try scannedLibrary.get().databaseURL
+        let samples = try onMainActor {
+            let model = try await loadedModel(databaseURL)
+            await model.setSort(.title, ascending: true)
+            _ = try await model.trackNames()
+            var samples: [Double] = []
+            for query in typedSelections {
+                let start = DispatchTime.now().uptimeNanoseconds
+                let names = try await model.trackNames()
+                let folded = query.folding(
+                    options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+                _ = names.firstIndex {
+                    $0.title.folding(
+                        options: [.caseInsensitive, .diacriticInsensitive], locale: nil
+                    ).hasPrefix(folded)
+                }
+                samples.append(Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6)
+            }
+            return samples
+        }
+        return Measured(value: p95(samples), notes: [slowestNote(samples)])
+    }
+]
+
 /// Milliseconds from ⌘A's selection of every row to the end of `body`, on a copy of the
 /// fixture index that `prepare` readies first, the median of three.
 private func selectionMeasured<T: Sendable>(

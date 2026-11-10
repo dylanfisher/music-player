@@ -1,5 +1,6 @@
 import CommonCrypto
 import Foundation
+import Library
 import zlib
 
 /// Discogs dump files for tests and the bench, in the dumps' format: gzipped XML named
@@ -115,5 +116,124 @@ public enum DiscogsDumpFixture {
             xml += "\n"
         }
         return xml
+    }
+}
+
+extension DiscogsDumpFixture {
+    /// A library album a shaped dump is made for: its artist, title and tracks as the library
+    /// has them.
+    public struct Album: Sendable {
+        public var artist: String?
+        public var title: String
+        public var tracks: [(title: String, seconds: Double)]
+
+        public init(artist: String?, title: String, tracks: [(title: String, seconds: Double)]) {
+            self.artist = artist
+            self.title = title
+            self.tracks = tracks
+        }
+    }
+
+    /// What `writeShapedSet` wrote.
+    public struct Shaped: Sendable {
+        public var masters: Int
+        public var releases: Int
+        /// The albums, by their index in the albums given, whose master is titled otherwise,
+        /// so only a search by their artist alone finds it (ADR 0174).
+        public var artistOnly: Set<Int>
+    }
+
+    /// The artist Discogs credits a compilation to, as the matcher searches for it.
+    static let various = "Various"
+
+    /// Writes a dump set shaped as the 2026-11-01 dump is where it matters to the matcher
+    /// (phase 73): each of `albums` is one master of 20 to 100 releases, most near 20 and a
+    /// few near 100, as a popular album's are. The releases of a master share its tracklist
+    /// with the differences pressings have: a second of difference, a bonus track, a track
+    /// fewer, a few seconds' difference throughout, remastered titles; and they differ in
+    /// country, year and format, as the tie-break reads them. About one album in fourteen with
+    /// an artist has its master under another title, so only an artist-only search finds it.
+    /// "Various Artists" albums are credited to Discogs's "Various".
+    public static func writeShapedSet(date: String, albums: [Album], in folder: URL) throws
+        -> Shaped
+    {
+        var masters = ""
+        var releases = ""
+        var artistIDs: [String: Int] = [:]
+        var artistOnly: Set<Int> = []
+        var releaseID = 0
+        for (index, album) in albums.enumerated() {
+            // An album with no artist is a compilation's.
+            let artist = album.artist.map { $0 == variousArtists ? various : $0 } ?? various
+            let artistID = artistIDs[artist] ?? artistIDs.count + 1
+            artistIDs[artist] = artistID
+            let credit =
+                "<artists><artist><id>\(artistID)</id><name>\(escaped(artist))</name></artist>"
+                + "</artists>"
+            let hidden = artist != various && index % 14 == 5
+            if hidden { artistOnly.insert(index) }
+            let title = hidden ? "Untitled Sessions \(index)" : album.title
+            let master = index + 1
+            // 20 to 100, mostly near 20: a square of an even spread.
+            let spread = index * 7919 % 81
+            let count = 20 + spread * spread / 80
+            masters +=
+                "<master id=\"\(master)\"><main_release>\(releaseID + 1)</main_release>\(credit)"
+                + "<title>\(escaped(title))</title><year>\(1990 + index % 30)</year></master>\n"
+            for variant in 0..<count {
+                releaseID += 1
+                releases += shapedRelease(
+                    id: releaseID, master: master, isMain: variant == 0, credit: credit,
+                    title: title, tracks: album.tracks, variant: variant)
+            }
+        }
+        try writeSet(date: date, masters: masters, releases: releases, in: folder)
+        return Shaped(masters: albums.count, releases: releaseID, artistOnly: artistOnly)
+    }
+
+    /// One release of a shaped master, its `variant` choosing how it differs from the album.
+    private static func shapedRelease(
+        id: Int, master: Int, isMain: Bool, credit: String, title: String,
+        tracks: [(title: String, seconds: Double)], variant: Int
+    ) -> String {
+        var listed = tracks
+        switch variant % 6 {
+        case 1: listed = listed.map { ($0.title, $0.seconds + 1) }
+        case 2: listed.append(("Bonus Track", 200))
+        case 3 where listed.count > 1: listed.removeLast()
+        case 4: listed = listed.map { ($0.title, $0.seconds + 7) }
+        case 5: listed = listed.map { ($0.title + " (Remastered)", $0.seconds) }
+        default: break
+        }
+        let countries = ["UK", "US", "Germany", "Japan", "Europe", "France"]
+        let format = ["CD", "Vinyl", "File"][variant % 3]
+        var xml =
+            "<release id=\"\(id)\">\(credit)<title>\(escaped(title))</title><labels>"
+            + "<label name=\"Label \(master % 211)\" catno=\"SHP \(id)\" id=\"\(master % 211)\"/>"
+            + "</labels><extraartists><artist><id>5\(id % 100)</id><name>Engineer \(id % 100)"
+            + "</name><role>Mastered By</role></artist></extraartists><formats>"
+            + "<format name=\"\(format)\" qty=\"1\" text=\"\"><descriptions><description>Album"
+            + "</description></descriptions></format></formats><genres><genre>Rock</genre>"
+            + "</genres><country>\(countries[variant % countries.count])</country>"
+            + "<released>\(1990 + variant % 30)</released>"
+            + "<master_id is_main_release=\"\(isMain)\">\(master)</master_id><tracklist>"
+        for (number, track) in listed.enumerated() {
+            let seconds = Int(track.seconds.rounded())
+            let duration = "\(seconds / 60):" + String(format: "%02d", seconds % 60)
+            xml +=
+                "<track><position>\(number + 1)</position><title>\(escaped(track.title))</title>"
+                + "<duration>\(duration)</duration></track>"
+        }
+        return xml
+            + "</tracklist><identifiers><identifier type=\"Barcode\" value=\"5 012 \(id)\"/>"
+            + "</identifiers></release>\n"
+    }
+
+    /// `text` for XML text or an attribute: each character markup could take as a character
+    /// reference.
+    private static func escaped(_ text: String) -> String {
+        text.unicodeScalars.map { scalar in
+            "&<>\"".unicodeScalars.contains(scalar) ? "&#\(scalar.value);" : String(scalar)
+        }.joined()
     }
 }

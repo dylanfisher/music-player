@@ -6,9 +6,10 @@ let benchmarks =
     + healthBenchmarks + playlistBenchmarks + historyBenchmarks + statsBenchmarks
     + readerBenchmarks
     + windowBenchmarks
-    + scrollBenchmarks + artworkBenchmarks + selectionBenchmarks + queueBenchmarks
+    + scrollBenchmarks + artworkBenchmarks + selectionBenchmarks + typeSelectBenchmarks
+    + queueBenchmarks
     + paletteBenchmarks
     + playbackBenchmarks + playLatencyBenchmarks + timeToSoundBenchmarks + scrubBenchmarks
     + tagWriterBenchmarks + tagEditorBenchmarks + tagBatchBenchmarks
     + analysisBenchmarks
-    + discogsBenchmarks
+    + discogsBenchmarks + downloadsBenchmarks + httpsBenchmarks

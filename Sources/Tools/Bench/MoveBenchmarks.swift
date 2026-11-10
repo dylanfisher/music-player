@@ -56,5 +56,78 @@ let moveBenchmarks = [
                     + " \(lost) left for Lost Stats as ambiguous: the fixtures share few lengths",
                 String(format: "health report after it %.2f s", reportSeconds),
             ])
-    }
+    },
+    Benchmark(
+        name:
+            "library: Organize Selected Files over about \(organizedFileCount) fixture files in a"
+            + " library folder of every fixture artist, plan and move, local",
+        budget: Budget(appleSilicon: 15, oldMac: 60, unit: .seconds)
+    ) {
+        try organizeRun()
+    },
 ]
+
+/// About how many files Organize Selected Files' row moves: the first fixture artists' whole
+/// folders, enough to reach it.
+private let organizedFileCount = 2_000
+
+/// Organize Selected Files as the browser runs it once the user confirms: the plan of where
+/// each file goes by its tags, then its moves, each file checked again first (ADR 0164). The
+/// files are clones of the first fixture artists' folders, beside an empty folder for each other
+/// fixture artist, so the library folder lists as the fixture library does; the fixture
+/// layout isn't the library folder's, so every file moves.
+private func organizeRun() throws -> Measured {
+    let root = try defaultFixturesDirectory()
+    _ = try generateFixtures(count: fullLibraryFileCount, in: root)
+    let byArtist = Dictionary(
+        grouping: try loadManifest(in: root).files.filter { $0.malformation == nil }
+    ) { String($0.path.prefix { $0 != "/" }) }
+    return try withScratchDirectory("organize") { directory in
+        let library = directory.appendingPathComponent("library folder", isDirectory: true)
+        var paths: [String] = []
+        var cloned = 0
+        for artist in byArtist.keys.sorted() {
+            let folder = library.appendingPathComponent(artist, isDirectory: true)
+            if paths.count < organizedFileCount {
+                try FileManager.default.createDirectory(
+                    at: library, withIntermediateDirectories: true)
+                // A clone, which on APFS costs no copy of the audio.
+                try FileManager.default.copyItem(
+                    at: root.appendingPathComponent(artist, isDirectory: true), to: folder)
+                paths += byArtist[artist]!.map { library.path + "/" + $0.path }
+                cloned += 1
+            } else {
+                try FileManager.default.createDirectory(
+                    at: folder, withIntermediateDirectories: true)
+            }
+        }
+        let ledger = libraryFileURL(in: directory)
+        _ = try LibraryIndex(at: ledger)
+        var planned: FilesOrganized?
+        let planSeconds = seconds { planned = layoutMoves(paths, libraryFolder: library.path) }
+        guard let plan = planned, plan.moved.count == paths.count, plan.problems.isEmpty else {
+            throw BenchError.expected(
+                "every one of \(paths.count) files to move: \(String(describing: planned))")
+        }
+        var moved: FilesOrganized?
+        let moveSeconds = seconds {
+            moved = moveToLayout(
+                plan, libraryFolder: library.path, checkingAgain: true, ledger: ledger,
+                progress: { _ in })
+        }
+        guard let done = moved, done.moved.count == plan.moved.count, done.problems.isEmpty
+        else {
+            throw BenchError.expected(
+                "every planned file moved: \(String(describing: moved?.problems.prefix(3)))")
+        }
+        return Measured(
+            value: planSeconds + moveSeconds,
+            notes: [
+                String(
+                    format: "%d files of %d artists: the plan %.2f s, the moves %.2f s;"
+                        + " %.2f ms a file",
+                    paths.count, cloned, planSeconds, moveSeconds,
+                    (planSeconds + moveSeconds) * 1000 / Double(paths.count))
+            ])
+    }
+}

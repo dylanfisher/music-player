@@ -1,5 +1,6 @@
 import Foundation
 import Log
+import Metadata
 
 /// How a FLAC file's Vorbis comments are written, varied so parsers meet what real taggers do.
 struct VorbisStyle: Sendable {
@@ -81,4 +82,34 @@ private func picture(_ art: Artwork) -> Data {
     body.appendBigEndian(UInt32(art.data.count))
     body.append(art.data)
     return body
+}
+
+/// Writes to `url` the audio of the FLAC file at `seed` under new tags: an album's track, as a
+/// tagger leaves it, with 4 KB of padding. The seed's other metadata is dropped.
+public func writeTaggedFLAC(
+    from seed: URL, to url: URL, artist: String, album: String, title: String, trackNumber: Int,
+    trackTotal: Int
+) throws {
+    let data = try Data(contentsOf: seed)
+    let notFLAC = FixtureError.unexpectedSeed("\(seed.path) isn't a FLAC file")
+    guard data.starts(with: Data(flacMarker.utf8)) else { throw notFLAC }
+    // Each block's header: the last-block flag and type in a byte, then a 24-bit length.
+    var offset = flacMarker.utf8.count
+    var last = false
+    while !last {
+        guard offset + 4 <= data.count else { throw notFLAC }
+        last = data[offset] & 0x80 != 0
+        let length =
+            Int(data[offset + 1]) << 16 | Int(data[offset + 2]) << 8 | Int(data[offset + 3])
+        offset += 4 + length
+    }
+    let tags = FixtureTags(
+        title: title, artist: artist, album: album, albumArtist: nil, genre: nil, date: nil,
+        trackNumber: trackNumber, trackTotal: trackTotal, discNumber: nil, discTotal: nil,
+        compilation: false, comment: nil)
+    try flacFile(
+        streamInfo: data[8..<flacCommentHeaderOffset], frames: data[offset...], tags: tags,
+        art: nil,
+        style: VorbisStyle(lowercaseKeys: false, combinedTrackNumber: false, paddingBytes: 4096)
+    ).write(to: url)
 }
