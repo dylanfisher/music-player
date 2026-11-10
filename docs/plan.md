@@ -705,6 +705,48 @@ Asked by the owner on 2026-11-10.
       extends the selection, Reject acts on all of it, and Apply reads "Apply to N Selected…".
       Owner check: confirm it in the current build; any gap found becomes an item here.
 
+Implementation plan, phase 74 (ADR 0186):
+
+What exists, found by search (map.md recipes): the tracklists are two `inListScrollView` lists
+side by side, the files' scroller hidden, kept together by `tracklistScrolled`, which follows
+one clip view's bounds notification with the other's `setBoundsOrigin`; with responsive
+scrolling the moved list is drawn before the main thread hears of it, so the other lags a
+frame. `TaggerWindow.refresh` reloads the album list and selects `model.selectedID`'s row
+without scrolling to it, and a model album not listed in the tab, as after Analyze moved it,
+leaves the list with nothing selected; a click below the rows empties it too. A rematch moves
+the tab to the album's new tier (`rematch`). `TagEditing.enqueue` runs the write, then Keep
+Files Organized's `move` (whose `OrganizeProgress` goes to the status bar), then the journal's
+`follow`, then on the main thread calls the tagger's completion and then `written`, whose
+`carry` updates the library; the tagger's line stays on its last tag count through all of it.
+
+- 74.1 The album list keeps its place (fix, `Features/DiscogsTagger`): `refresh` selects the
+  tab's first album when the selected one isn't listed in it, and scrolls the list to the
+  selected album whenever its tab, album or row differs from what the list last showed, so
+  a refresh that leaves it in place doesn't move the list; the list can't be emptied by a
+  click (`allowsEmptySelection`). Tests in `TaggerPlaceTests`: Other Releases… closed, a
+  release chosen that keeps the album in its tab, one that moves it to Likely, and an album
+  selected outside the tab.
+- 74.2 The two tracklists scroll as one (fix): `SideBySideTables`, an `NSScrollView` whose
+  document holds both tables, each in a clip view of its own so it fits its columns to its
+  half, with both headers in a row above that doesn't scroll; one scroller, at the release's
+  side. The tables forward a scroll to a row and a drag's autoscroll to the shared document.
+  `tracklistScrolled` goes. Tests: one scroll view encloses both, a scroll leaves both at the
+  same visible offset, a row scrolled to in either shows in both, both headers show over
+  their columns.
+- 74.3 The write's last steps (feat, `Core/Library`, `Features/TagEditor`, `DiscogsTagger`,
+  App): `OrganizeStep`, beside `OrganizeProgress`: moving (with it), updating Undo Tag Edit,
+  updating the library. `TagEditing.write` takes an `organizing` closure told each step of
+  that write's Keep Files Organized: the renames' reports, then before `follow`, then, when
+  files moved, before `written`, whose new last argument the app calls once `carry` has run;
+  the write's completion waits for it. `TaggerModel.Write` passes it on; `WriteProgress.text`
+  shows "Organizing files: N of M moved", "Updating Undo Tag Edit for the moved files…",
+  "Updating the library…" for the oldest write in a step while no write is on its tags; a
+  step redraws once, the renames' reports already come about each 1%, so the tag reports'
+  throttle stays as it is. Tests in `TagEditingTests` (the steps in order, the completion
+  after the library's update) and `TaggerModelTests`/`TaggerWindowTests` (each line).
+- 74.4 Several albums selected: owner check only.
+- 74.5 ADR 0186: one scroll view for the tracklists, and the write's steps.
+
 ### 76. A layout editor for the status bar's totals
 
 Asked by the owner on 2026-11-10: the status bar's totals, "1,204 tracks, 5.1 GiB, 3 days 2
