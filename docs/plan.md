@@ -677,6 +677,43 @@ command (and a track menu item) on the albums selected in the library.
       id, so Separate Releases shows them as one album.
 - [ ] Works with the Discogs API alone, only slower.
 
+Implementation plan, phase 72 (ADR 0179):
+
+What exists, found by search (map.md recipes): the tagger's Analyze scopes to the library's
+selection (`TaggerModel.Scope.selection`) and matches each of its albums, a `DiscogsAlbum` from
+the index (`discogsAlbums`, one per album id, tracks in disc and track order). The matcher
+compares the files in that order with each candidate's tracklist and ranks a release of the
+album's count first; a file two files would share is left on no track, which the review shows
+as Missing and keeps the album out of Exact. Reviews are saved on the files and read back by
+album id. `DiscogsTagger.show()` scopes to the selection and analyzes with the catalog only.
+Separate Releases makes an album of title, artist and release id (ADR 0143), so the files
+become one album only when those three agree; the Minimal mapping doesn't write the title.
+
+- 72.1 The mapping (`Core/Settings`): `DiscogsMapping.combining(titles:artists:)`, the mapping
+  with the album title, or the album artist, replacing its tag, whatever its mode and the
+  Keep existing values choice say, and writing the tag the index groups by. Tests in
+  `DiscogsMappingTests`.
+- 72.2 The model (`Features/DiscogsTagger`): a `Scope.combined`, "Selected Albums as One";
+  Analyze in it joins the selection's albums (`CombinedAlbum.swift`): albums by their first
+  disc, then title, each in its own disc and track order; the first's title, artist and
+  details for the search; an id of its own (the first source's, negated), so a session's
+  left-out files and counts don't mix with a source's. `Album.sources` names them; it takes
+  a review only when every source has the same one. Fewer than two albums is an alert. Its
+  changes come from `combining`, for the title when the sources' titles differ and the
+  album artist when their artists do. Tests in `TaggerCombineTests`: the join and its order,
+  the match seeing one album, the review, the forced title, fewer than two.
+- 72.3 Naming the sources: the album list's cell ("Persuader – 1983 + Persuader – 1983
+  [Expanded Reissue]"), a line over the tracklists ("Combined from 2 albums: … (10 files) ·
+  … (14 files)"), the album list's tooltip, and Apply's confirmation. Window and
+  confirmation tests.
+- 72.4 The command (`Core/Commands`, App): `track.combineForTagging`, "Combine Albums for
+  Tagging…", in the track menu after Get Discogs Artwork… and in the File menu beside it,
+  enabled with tracks selected; it calls `DiscogsTagger.combineSelection()`, which shows the
+  window in the combined scope and analyzes at once from whichever source is chosen, the
+  API too, since the command is the click. Busy, it says so. Tests: the menus, and the
+  tagger opened by it with each source.
+- 72.5 ADR 0179, see-also lines in 0133, 0139 and 0143.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
