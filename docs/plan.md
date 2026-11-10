@@ -664,17 +664,17 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 
 Asked by the owner on 2026-11-09 (ADR 0164 is Keep Files Organized).
 
-- [ ] **Organize Selected Files opens at once.** The confirmation opens as soon as the command
+- [x] **Organize Selected Files opens at once.** The confirmation opens as soon as the command
       runs, counting the tracks and files to rename with live progress, and Cancel works while it
       counts. Its buttons and summary appear when the count is done. A test with a slow counting
       stand-in.
-- [ ] **Progress after Organize.** Once confirmed, the status area at the bottom left shows how
+- [x] **Progress after Organize.** Once confirmed, the status area at the bottom left shows how
       many files are left, progress, and the current file or folder, until the run ends, then a
       one-line result ("Organized 2,340 files; 3 problems"). Library Problems opens only when
       there were problems, as now.
-- [ ] **Library Problems is a normal window.** It no longer floats above other apps' windows or
+- [x] **Library Problems is a normal window.** It no longer floats above other apps' windows or
       the app's own; it can go behind them like any document window.
-- [ ] **Library Problems as a table.** A standard table like the tagger's album list: a column
+- [x] **Library Problems as a table.** A standard table like the tagger's album list: a column
       for each piece (the problem's kind, the track or album, the file's path, the folder, the
       detail), sortable by any column, with resizable columns that are remembered, and the
       window's frame remembered (ADR 0158). The problem text is plain enough to act on.
@@ -714,6 +714,40 @@ widths as `downloads.columns`, a `ColumnWidths` in `AppState` (ADR 0169), the pa
   and wired by App. The Track column is looked up from the index by path. Tests: the columns'
   text for each kind of row, sorting by a column, the widths reported and applied.
 - 68.6 ADR 0175, cross-linked from 0164 and 0059.
+
+Result, phase 68: shipped all four items (ADR 0175; amended-by lines in 0164 and 0059). Organize
+Selected Files opens `OrganizeSheet` as the command runs, before the selection's paths are
+read, with "Checked N of M tracks · K files to rename so far" and a bar fed by `layoutMoves`'
+new `counted` closure; Cancel sets the stop that `layoutMoves` asks before each file, so the
+count ends unread and nothing is renamed. Once counted the sheet shows the old question and
+Organize; a count with nothing to move closes it and reports as before. `moveToLayout` tells
+an `OrganizeProgress` before each file and after the last; `TagEditing.organizing` brings it to
+the main thread and the status bar shows "Organizing files: N left · Album/01 Song.flac", then
+"finishing" while the folders are tidied and the stats carried, until `finishOrganizing` says
+"Organized 2,340 files; 3 problems" (Keep Files Organized's renames show the same way).
+`FilesOrganized.summary` went; `problemCount` is the one "N problems". Library Problems is a
+titled `NSWindow`, no longer a utility panel. Its table has Kind, Track, File, Folder and Detail
+columns, each sortable, rows the column holds equal keeping their order; widths are kept as
+`problems.columns` in `state.json`, wired by App as the Downloads window's are. File issues,
+scan issues, failed scans, health lines and an import's misses fill the columns from their own
+fields, a file issue's failure and warning said in words; the other reports' lines split at
+the first ": " after a leading path and take their report's kind. The Track column is looked up
+by path through `trackIDs(atPaths:)` and `rows(ids:)`. `line` is unchanged, so earlier
+dismissals still match. Tests: the count's progress and stop, the renames' progress, the
+progress reaching the main thread through `TagEditing`, the sheet up before a held count with
+Cancel stopping it, Organize and Cancel through the sheet's buttons, the status text and the
+result line, the normal window, each kind of row's columns, the statuses' kinds, sorting with
+the selection kept across a refresh, the widths applied and reported, and the browser's track
+lookup and kept widths. Check steps `format typecheck arch dupes surface links` passed and
+`./scripts/test --changed main` passed. Not measured: no bench row covers these paths. Deferred:
+the sort isn't kept across launches (only the widths were asked for), and the organizer's and
+move list's lines are still strings made in Core, split for the columns rather than built
+structured, since the tag editor and Core are being changed by phases 69 to 71 in parallel.
+
+**Owner checks:** Organize Selected Files on a few thousand tracks on the NAS: the sheet at
+once, the count moving, Cancel mid-count, then a real run with the status bar's count and
+file, and the result line; Library Problems behind Finder, a sort by Folder, a column
+resized and the window moved, both kept after a relaunch.
 
 ### 69. Tagger columns and the releases window
 
