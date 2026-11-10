@@ -7,7 +7,8 @@ import Settings
 /// Config File, with Remove Obsolete Setting while the file has keys the app doesn't know. An
 /// alert would interrupt on every save of a half-edited line; the banner just stays until the
 /// file is good. Problems that leave the rest of the file applying can be closed, and stay
-/// hidden until the file is edited; one that blocks the file can't.
+/// hidden until the file is edited; one that blocks the file can't. The lines saying what of the
+/// saved layout was reset close too, which saves the state file without it.
 @MainActor
 public final class ConfigBanner: NSViewController {
     static let removeTitle = "Remove Obsolete Setting"
@@ -20,6 +21,8 @@ public final class ConfigBanner: NSViewController {
     public var openConfigFile: () -> Void = {}
     /// Takes the unknown keys out of the config file.
     public var removeObsoleteSettings: () -> Void = {}
+    /// Saves the state file without what was reset when it was read, then shows the banner again.
+    public var closeStateDiscard: () -> Void = {}
     private let label = NSTextField(wrappingLabelWithString: "")
     private lazy var removeButton = NSButton(
         title: Self.removeTitle, target: self, action: #selector(remove))
@@ -36,7 +39,7 @@ public final class ConfigBanner: NSViewController {
         var path: String
         var unwatched: String?
         var stateFailure: String?
-        var stateDiscarded: String?
+        var stateDiscarded: [String]
         var configEdits: Int
     }
 
@@ -70,7 +73,6 @@ public final class ConfigBanner: NSViewController {
         removeButton.setContentHuggingPriority(.required, for: .horizontal)
         closeButton.isBordered = false
         closeButton.controlSize = .small
-        closeButton.toolTip = "Hide these warnings until the config file changes"
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
         let row = NSStackView(views: [icon, label, removeButton, button, closeButton])
         row.detachesHiddenViews = true
@@ -82,11 +84,12 @@ public final class ConfigBanner: NSViewController {
     }
 
     /// Shows what's wrong, or hides the banner when nothing is. `unwatched` says why the library
-    /// isn't watched. `stateFailure` is why the window layout couldn't be saved to the state file.
+    /// isn't watched. `stateFailure` is why the window layout couldn't be saved to the state file,
+    /// and `stateDiscarded` says what of it was reset when it was read, a line each.
     /// `configEdits` counts the edits to the config file, as `ConfigStore.edits` does.
     public func show(
         problems: [ConfigProblem], writeFailure: String?, path: String, unwatched: String? = nil,
-        stateFailure: String?, stateDiscarded: String?, configEdits: Int
+        stateFailure: String?, stateDiscarded: [String], configEdits: Int
     ) {
         shown = Shown(
             problems: problems, writeFailure: writeFailure, path: path, unwatched: unwatched,
@@ -112,12 +115,17 @@ public final class ConfigBanner: NSViewController {
             + (unwatched.map { [$0] } ?? []))
             .map { "\(name): \($0)" }
             + (stateFailure.map { ["couldn't save the window layout: \($0)"] } ?? [])
-            + (stateDiscarded.map { ["the saved window layout was reset: \($0)"] } ?? [])
+            + stateDiscarded
         view.isHidden = lines.isEmpty
         let obsolete = problems.filter { $0.obsoleteKey != nil }.count
         removeButton.isHidden = obsolete == 0
         removeButton.title = obsolete > 1 ? Self.removeAllTitle : Self.removeTitle
-        closeButton.isHidden = problems.isEmpty || problems.contains(where: \.blocks)
+        let closesProblems = !problems.isEmpty && !problems.contains(where: \.blocks)
+        closeButton.isHidden = !closesProblems && stateDiscarded.isEmpty
+        closeButton.toolTip =
+            closesProblems
+            ? "Hide these warnings until the config file changes"
+            : "Hide this, saving the window layout without what was reset"
         guard let first = lines.first else { return }
         let more = lines.count > 1 ? " (\(lines.count - 1) more)" : ""
         let waiting =
@@ -140,11 +148,15 @@ public final class ConfigBanner: NSViewController {
     /// Whether the close button shows, for tests.
     var canDismiss: Bool { !closeButton.isHidden }
 
-    /// Hides the problems shown, none of which blocks the file, until its contents change.
+    /// Hides the problems shown, unless one blocks the file, until its contents change, and has
+    /// the state file saved without what was reset.
     @objc func dismissWarnings() {
         guard let shown, canDismiss else { return }
-        dismissed = (shown.configEdits, shown.problems)
+        if !shown.problems.contains(where: \.blocks) {
+            dismissed = (shown.configEdits, shown.problems)
+        }
         render()
+        if !shown.stateDiscarded.isEmpty { closeStateDiscard() }
     }
 
     @objc private func open() { openConfigFile() }

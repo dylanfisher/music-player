@@ -11,13 +11,22 @@ private let logger = moduleLogger()
 public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
     public let schema: Schema
     public let fileURL: URL
-    /// What was dropped when the file was read, and why, for the window to show: the keys that
-    /// didn't match, or the whole file. Nil when it all decoded or wasn't there.
-    public let discardReason: String?
     private let descriptors: [SettingDescriptor]
     private let byKey: [String: SettingDescriptor]
     private let lock = NSLock()
     private var overrides: [String: any SettingValue]
+    private var discardedLines: [String]
+
+    /// What was dropped when the file was read, and why, for the window to show: a line for
+    /// each key that didn't match, named by its setting's title, or one for the whole file.
+    /// Empty when it all decoded or wasn't there, and after `forgetDiscarded`.
+    public var discarded: [String] { lock.withLock { discardedLines } }
+
+    /// The `discarded` lines as one, nil when there are none.
+    public var discardReason: String? {
+        let lines = discarded
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
 
     /// Reads `fileURL`. A missing file means nothing has been changed. Throws only when the file
     /// is there but can't be read.
@@ -34,7 +43,7 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
             data = try Data(contentsOf: fileURL)
         } catch CocoaError.fileReadNoSuchFile {
             overrides = [:]
-            discardReason = nil
+            discardedLines = []
             logger.info("no state file at \(fileURL.path), using defaults")
             return
         } catch {
@@ -43,14 +52,22 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
         do {
             let parsed = try parse(data, path: fileURL.path, settings: byKey)
             overrides = parsed.values
-            discardReason = parsed.dropped.map { "\($0)" }
+            let dropped: [SettingProblem] =
+                if case .invalid(_, let problems)? = parsed.dropped { problems } else { [] }
+            discardedLines = dropped.map { [byKey] problem in
+                if let title = byKey[problem.key]?.title {
+                    "the saved \(title) setting was reset: \(problem.reason)"
+                } else {
+                    "the saved setting \"\(problem.key)\" was dropped: \(problem.reason)"
+                }
+            }
             if let dropped = parsed.dropped {
                 logger.error("dropped from the state file, not matching this build: \(dropped)")
             }
         } catch {
             logger.error("discarded \(fileURL.path), which doesn't match this build: \(error)")
             overrides = [:]
-            discardReason = "\(error)"
+            discardedLines = ["the saved window layout was reset: \(error)"]
             return
         }
         logger.info("loaded \(self.overrides.count) saved values from \(fileURL.path)")
@@ -72,6 +89,14 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
                 path: nil, problems: [SettingProblem(key: setting.key, reason: reason)])
         }
         try update { $0[setting.key] = value }
+    }
+
+    /// Writes the file from the values in effect, which leaves out what was discarded, then
+    /// empties `discarded`, so the file reads back as it is now. A failed write throws and keeps
+    /// the lines.
+    public func forgetDiscarded() throws {
+        try update { _ in }
+        lock.withLock { discardedLines = [] }
     }
 
     /// Changes a copy of the overrides, writes it, and only then makes it current, so a failed

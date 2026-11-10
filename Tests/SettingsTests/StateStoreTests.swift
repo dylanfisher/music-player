@@ -413,8 +413,11 @@ private func problems(_ json: String) -> [SettingProblem] {
     let state = try StateStore(AppState(), fileURL: url)
     #expect(state[\.sidebarWidth] == 250)
     #expect(state[\.queueWidth] == AppState().queueWidth.defaultValue)
-    #expect(state.discardReason?.contains("window.old") == true)
-    #expect(state.discardReason?.contains("window.queueWidth") == true)
+    #expect(
+        state.discarded == [
+            #"the saved setting "window.old" was dropped: unknown setting"#,
+            #"the saved Queue Width setting was reset: expected an integer"#,
+        ])
     try state.set(\.queueVisible, to: !AppState().queueVisible.defaultValue)
     let saved = try StateStore(AppState(), fileURL: url)
     #expect(saved.discardReason == nil)
@@ -424,6 +427,50 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(try StateStore(AppState(), fileURL: url).discardReason != nil)
     try state.set(\.sidebarWidth, to: 300)
     #expect(try StateStore(AppState(), fileURL: url).discardReason == nil)
+}
+
+/// A file that isn't a JSON object has no keys to name, so its line names the whole layout.
+@Test func aStateFileThatIsntAnObjectIsResetWhole() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data("[1]".utf8).write(to: url)
+    let state = try StateStore(AppState(), fileURL: url)
+    #expect(state.discarded.count == 1)
+    #expect(state.discarded.first?.hasPrefix("the saved window layout was reset: ") == true)
+}
+
+/// Forgetting the discard drops the stale keys from the file at once, so the next launch reads
+/// it clean, and keeps the values that matched.
+@Test func forgettingTheDiscardRewritesTheFileWithoutTheStaleKeys() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"{"window.sidebarWidth": 250, "discogsTagger.sheets": {"x": 1}}"#.utf8)
+        .write(to: url)
+    let state = try StateStore(AppState(), fileURL: url)
+    #expect(state.discarded.first?.hasPrefix("the saved Discogs Tagger Sheets setting") == true)
+    try state.forgetDiscarded()
+    #expect(state.discarded.isEmpty)
+    let reread = try StateStore(AppState(), fileURL: url)
+    #expect(reread.discardReason == nil)
+    #expect(reread[\.sidebarWidth] == 250)
+}
+
+/// A rewrite that fails keeps the lines, so the banner goes on saying what was reset.
+@Test func aFailedRewriteKeepsTheDiscard() throws {
+    let url = temporaryFile()
+    let folder = url.deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer {
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: folder.path)
+    }
+    try Data(#"{"window.old": 1}"#.utf8).write(to: url)
+    let state = try StateStore(AppState(), fileURL: url)
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: folder.path)
+    #expect(throws: (any Error).self) { try state.forgetDiscarded() }
+    #expect(state.discarded.count == 1)
 }
 
 @Test func paletteVisitsSurviveAReloadAndRejectUnknownKeys() throws {

@@ -34,6 +34,15 @@ final class LayoutSaver {
         }
     }
 
+    /// Rewrites the state file now without what was discarded when it was read, for the banner's
+    /// close button. It's a pending write like the others, so a failure is reported as `failure`
+    /// and retried with the next flush.
+    func forgetDiscarded() {
+        let settings = settings
+        pending[settings.fileURL.lastPathComponent] = { try settings.forgetDiscarded() }
+        flush()
+    }
+
     /// Writes everything pending now, as the app quits. A write that fails stays pending.
     func flush() {
         scheduled = false

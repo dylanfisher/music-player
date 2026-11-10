@@ -11,25 +11,25 @@ import Testing
             ConfigProblem(line: 3, message: #"unknown setting "a.flg""#),
             ConfigProblem(line: 5, message: "isn't valid JSON"),
         ], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-        stateDiscarded: nil, configEdits: 1)
+        stateDiscarded: [], configEdits: 1)
     #expect(!banner.view.isHidden)
     #expect(banner.text.hasPrefix(#"config.json: line 3: unknown setting "a.flg" (1 more)."#))
     banner.show(
         problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-        stateDiscarded: nil, configEdits: 1)
+        stateDiscarded: [], configEdits: 1)
     #expect(banner.view.isHidden)
     banner.show(
         problems: [], writeFailure: "disk full", path: "/x/config.json", stateFailure: nil,
-        stateDiscarded: nil, configEdits: 1)
+        stateDiscarded: [], configEdits: 1)
     #expect(banner.text == "config.json: couldn't save: disk full.")
     banner.show(
         problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: "disk full",
-        stateDiscarded: nil, configEdits: 1)
+        stateDiscarded: [], configEdits: 1)
     #expect(!banner.view.isHidden)
     #expect(banner.text == "couldn't save the window layout: disk full.")
     banner.show(
         problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-        stateDiscarded: "not JSON", configEdits: 1)
+        stateDiscarded: ["the saved window layout was reset: not JSON"], configEdits: 1)
     #expect(banner.text == "the saved window layout was reset: not JSON.")
     #expect(banner.removeButtonTitle == nil)
 }
@@ -42,7 +42,7 @@ import Testing
     func show(_ problems: [ConfigProblem]) {
         banner.show(
             problems: problems, writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-            stateDiscarded: nil, configEdits: 1)
+            stateDiscarded: [], configEdits: 1)
     }
     show([old])
     #expect(
@@ -60,7 +60,7 @@ import Testing
     #expect(banner.removeButtonTitle == nil)
     banner.show(
         problems: [], writeFailure: nil, path: "/x/config.json", unwatched: "not watched",
-        stateFailure: nil, stateDiscarded: nil, configEdits: 1)
+        stateFailure: nil, stateDiscarded: [], configEdits: 1)
     #expect(banner.text == "config.json: not watched.")
 }
 
@@ -71,7 +71,7 @@ import Testing
     func show(_ problems: [ConfigProblem], edits: Int, writeFailure: String? = nil) {
         banner.show(
             problems: problems, writeFailure: writeFailure, path: "/x/config.json",
-            stateFailure: nil, stateDiscarded: nil, configEdits: edits)
+            stateFailure: nil, stateDiscarded: [], configEdits: edits)
     }
     show([token], edits: 1)
     #expect(banner.canDismiss)
@@ -106,7 +106,7 @@ import Testing
     func show(_ problems: [ConfigProblem]) {
         banner.show(
             problems: problems, writeFailure: nil, path: "/x/config.json", stateFailure: nil,
-            stateDiscarded: nil, configEdits: 1)
+            stateDiscarded: [], configEdits: 1)
     }
     show([token(line: 2), old])
     banner.dismissWarnings()
@@ -118,4 +118,39 @@ import Testing
     // Remove Obsolete Setting took one out, moving the other.
     show([token(line: 4)])
     #expect(banner.view.isHidden)
+}
+
+/// A line saying what of the saved layout was reset closes, alone or under a problem that
+/// blocks the config file, which stays; closing has the state file saved without it, and a
+/// failed save shows as any.
+@MainActor @Test func aResetLineClosesAndHasTheStateFileSaved() {
+    let banner = ConfigBanner()
+    var closed = 0
+    banner.closeStateDiscard = { closed += 1 }
+    let reset = "the saved Discogs Tagger Sheets setting was reset: x: unknown key"
+    func show(_ problems: [ConfigProblem], discarded: [String], stateFailure: String? = nil) {
+        banner.show(
+            problems: problems, writeFailure: nil, path: "/x/config.json",
+            stateFailure: stateFailure, stateDiscarded: discarded, configEdits: 1)
+    }
+    show([], discarded: [reset])
+    #expect(banner.text == "\(reset).")
+    #expect(banner.canDismiss)
+    banner.dismissWarnings()
+    #expect(closed == 1)
+    show([], discarded: [])
+    #expect(banner.view.isHidden, "hidden once the file is saved")
+
+    show([], discarded: [reset], stateFailure: "disk full")
+    #expect(banner.text == "couldn't save the window layout: disk full (1 more).")
+    #expect(!banner.view.isHidden, "a failed save is never hidden")
+
+    let blocking = ConfigProblem(line: 3, message: "isn't valid JSON")
+    show([blocking], discarded: [reset])
+    #expect(banner.canDismiss)
+    banner.dismissWarnings()
+    #expect(closed == 2)
+    show([blocking], discarded: [])
+    #expect(!banner.view.isHidden, "the blocking problem stays")
+    #expect(!banner.canDismiss)
 }

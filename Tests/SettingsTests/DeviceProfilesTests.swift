@@ -162,7 +162,7 @@ func aStoredProfileWithAnUnknownOrMissingKeyAtAnyLevelIsDiscarded(_ json: String
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data(#"{"output.profiles": \#(json)}"#.utf8).write(to: url)
     let state = try StateStore(AppState(), fileURL: url)
-    #expect(state.discardReason?.contains("output.profiles") == true)
+    #expect(state.discardReason?.contains("Device Profiles") == true)
     #expect(state[\.deviceProfiles] == DeviceProfiles(profiles: []))
 }
 

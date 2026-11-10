@@ -87,3 +87,27 @@ private func store() throws -> StateStore<AppState> {
     #expect(reloaded[\.sidebarWidth] == 300)
     #expect(reloaded[\.queueWidth] == 320)
 }
+
+/// Closing the banner's reset line rewrites the file at once, so it reads back with nothing
+/// discarded; a write that fails is reported as any layout save is, and kept for the next.
+@MainActor @Test func forgettingTheDiscardRewritesTheFileOrReportsWhyNot() throws {
+    let settings = try store()
+    let folder = settings.fileURL.deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try Data(#"{"window.sidebarWidth": 250, "window.old": 1}"#.utf8).write(to: settings.fileURL)
+    let state = try StateStore(AppState(), fileURL: settings.fileURL)
+    #expect(!state.discarded.isEmpty)
+    let saver = LayoutSaver(state)
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: folder.path)
+    saver.forgetDiscarded()
+    #expect(saver.failure?.hasPrefix("settings.json: ") == true)
+    #expect(!state.discarded.isEmpty)
+
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path)
+    saver.forgetDiscarded()
+    #expect(saver.failure == nil)
+    #expect(state.discarded.isEmpty)
+    let reread = try StateStore(AppState(), fileURL: settings.fileURL)
+    #expect(reread.discardReason == nil)
+    #expect(reread[\.sidebarWidth] == 250)
+}

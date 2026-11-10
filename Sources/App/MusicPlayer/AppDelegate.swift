@@ -238,6 +238,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings.changed = { [weak self] keys in self?.settingsChanged(keys) }
             settings.problemsChanged = { [weak self] in self?.showConfigProblems() }
             saver?.failureChanged = { [weak self] in self?.showConfigProblems() }
+            banner.closeStateDiscard = { [weak self] in
+                self?.saver?.forgetDiscarded()
+                self?.showConfigProblems()
+            }
             banner.openConfigFile = { [weak dispatcher] in dispatcher?.run(.openConfigFile) }
             banner.removeObsoleteSettings = { [weak self, weak settings] in
                 do {
