@@ -98,7 +98,8 @@ public struct AppState: SettingsSchema {
         "Where the palette was dragged. Null opens it centered near the top of the screen.")
     public let taggerSheets = Setting(
         "discogsTagger.sheets", title: "Discogs Tagger Sheets", default: TaggerSheetLayouts(),
-        "The size, column widths and sort each of the Discogs tagger's sheets was left at.")
+        "The size, column widths, order and sort each of the Discogs tagger's sheets was left"
+            + " at, and the album list's width, columns and sort.")
     public let problemsColumns = Setting(
         "problems.columns", title: "Library Problems Columns", default: ColumnWidths(),
         "The Library Problems window's column widths, by column. A column not listed has its"

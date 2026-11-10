@@ -15,7 +15,9 @@ import TagWriter
 /// API, and Both as the API alone, still analyze (ADR 0139). After an import stopped before
 /// it finished it offers Resume Import and Start Over.
 @MainActor
-final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate,
+    NSSplitViewDelegate
+{
     static let title = "Discogs Tagger"
     /// The pasteboard type of a dragged tracklist row: the file's id.
     static let fileRowType = NSPasteboard.PasteboardType("\(bundleIdentifier).discogs-file")
@@ -50,6 +52,11 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     private(set) var headerRows: [NSStackView] = []
     let tabs = NSSegmentedControl()
     let albumTable = NSTableView()
+    /// The album list left of its divider, the tracklists right.
+    private let split = NSSplitView()
+    /// Set once the album list has the layout it was left at, after which each change to it
+    /// is saved.
+    private var keepsAlbumList = false
     /// The album's files, and beside them the release's tracks they're on: two tables of the
     /// same rows, scrolled and selected together, so each column's source is plain.
     let fileTable = NSTableView()
@@ -83,7 +90,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     var choicesChosen: (TaggerChoices) -> Void = { _ in }
     var dumpsFolder: () -> URL? = { nil }
     var dumpsFolderChosen: (URL) -> Void = { _ in }
-    /// The sheets' layouts, which each sheet opens at, and what saves them once one closes.
+    /// The sheets' layouts, which each sheet opens at, and the album list's; and what saves
+    /// them once a sheet closes or the album list changes.
     var sheetLayouts = TaggerSheetLayouts()
     var sheetLayoutsChosen: (TaggerSheetLayouts) -> Void = { _ in }
 
@@ -249,9 +257,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             view.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -8).isActive = true
         }
 
-        let split = NSSplitView()
         split.isVertical = true
         split.dividerStyle = .thin
+        split.delegate = self
         split.addArrangedSubview(albums)
         split.addArrangedSubview(detail)
         albums.widthAnchor.constraint(greaterThanOrEqualToConstant: 280).isActive = true
@@ -643,6 +651,39 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     private func isLeftOut(_ row: Int) -> Bool {
         row < rows.count && rows[row].fileID.map(leftOut.contains) == true
     }
+
+    /// Gives the album list the pane width, column order, widths and sort it was left at, and
+    /// saves each change from then on. Called once the window has its frame (ADR 0158).
+    func keepAlbumList() {
+        guard !keepsAlbumList, let window else { return }
+        if let saved = sheetLayouts.albumList {
+            window.contentView?.layoutSubtreeIfNeeded()
+            split.setPosition(CGFloat(saved.paneWidth), ofDividerAt: 0)
+            window.contentView?.layoutSubtreeIfNeeded()
+            albumTable.apply(saved.table)
+        }
+        keepsAlbumList = true
+    }
+
+    /// Saves the album list's layout as it is now, once it has the one it was left at.
+    private func albumListChanged() {
+        guard keepsAlbumList, let pane = albumTable.enclosingScrollView else { return }
+        let now = TaggerSheetLayouts.AlbumList(
+            paneWidth: Double(pane.frame.width), table: albumTable.layout)
+        guard now != sheetLayouts.albumList else { return }
+        sheetLayouts.albumList = now
+        sheetLayoutsChosen(sheetLayouts)
+    }
+
+    func tableViewColumnDidResize(_ notification: Notification) {
+        if notification.object as? NSTableView === albumTable { albumListChanged() }
+    }
+
+    func tableViewColumnDidMove(_ notification: Notification) {
+        if notification.object as? NSTableView === albumTable { albumListChanged() }
+    }
+
+    func splitViewDidResizeSubviews(_ notification: Notification) { albumListChanged() }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard let changed = notification.object as? NSTableView else { return }

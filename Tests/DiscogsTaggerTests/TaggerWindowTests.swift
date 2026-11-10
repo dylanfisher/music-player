@@ -764,7 +764,7 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     let layout = try #require(saved.last?.fieldMapping)
     #expect(layout.width == 820 && layout.height == 410)
     #expect(
-        mapping.table.tableColumns.map { layout.columns[$0.identifier.rawValue] }
+        mapping.table.tableColumns.map { layout.table.widths[$0.identifier.rawValue] }
             == widths.map {
                 Double($0)
             })
@@ -786,9 +786,9 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     let releases = ReleasesSheet(candidates: [(summary, nil)], chosen: 1, title: "Stockholm")
     releases.sort(by: .year, ascending: false)
     var layouts = releases.recorded(in: TaggerSheetLayouts())
-    #expect(layouts.otherReleases?.sortColumn == "year")
-    #expect(layouts.otherReleases?.sortAscending == false)
-    layouts.otherReleases?.columns["gone"] = 99
+    #expect(layouts.otherReleases?.table.sortColumn == "year")
+    #expect(layouts.otherReleases?.table.sortAscending == false)
+    layouts.otherReleases?.table.widths["gone"] = 99
     layouts.otherReleases?.width = 5000
     layouts.otherReleases?.height = 10
     let again = ReleasesSheet(candidates: [(summary, nil)], chosen: 1, title: "Stockholm")

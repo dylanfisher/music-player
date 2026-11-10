@@ -208,6 +208,7 @@ public final class DiscogsTagger {
         } else {
             let made = makeWindow()
             made.window?.keepsFrame(as: TaggerWindow.title)
+            made.keepAlbumList()
             made.showWindow(nil)
         }
         let scoped = model.isStaged ? opening : model.scopeToSelection()

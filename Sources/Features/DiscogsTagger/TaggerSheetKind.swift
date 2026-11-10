@@ -1,7 +1,7 @@
 import AppKit
 import Settings
 
-/// The kinds of tagger sheet, each of which keeps its own size, column widths and sort in
+/// The kinds of tagger sheet, each of which keeps its own size, column widths, order and sort in
 /// `state.json` (ADR 0136).
 enum TaggerSheetKind {
     case otherReleases, viewRelease, viewChanges, fieldMapping
@@ -18,8 +18,9 @@ enum TaggerSheetKind {
 }
 
 extension TaggerSheet {
-    /// Gives the sheet the size, widths and sort it was left at: the size within its minimum
-    /// and `room`, the screen's; a column or a sort the sheet no longer has is ignored.
+    /// Gives the sheet the size, column order, widths and sort it was left at: the size within
+    /// its minimum and `room`, the screen's; a column or a sort the sheet no longer has is
+    /// ignored.
     func apply(_ layouts: TaggerSheetLayouts, room: NSSize?) {
         guard let window, let layout = layouts[keyPath: Self.layoutKind.layout] else { return }
         var size = NSSize(
@@ -31,36 +32,17 @@ extension TaggerSheet {
                 height: min(size.height, max(room.height, window.minSize.height)))
         }
         window.setContentSize(size)
-        // Laid out at the new size first, so the table's resizing to fit it doesn't spread
-        // the widths set after.
         window.contentView?.layoutSubtreeIfNeeded()
-        for column in table.tableColumns {
-            if let width = layout.columns[column.identifier.rawValue] {
-                column.width = CGFloat(width)
-            }
-        }
-        if let key = layout.sortColumn,
-            table.tableColumns.contains(where: {
-                $0.identifier.rawValue == key && $0.sortDescriptorPrototype != nil
-            })
-        {
-            table.sortDescriptors = [NSSortDescriptor(key: key, ascending: layout.sortAscending)]
-        }
+        table.apply(layout.table)
     }
 
     /// `layouts` with this sheet's as it is now.
     func recorded(in layouts: TaggerSheetLayouts) -> TaggerSheetLayouts {
         guard let window else { return layouts }
         let size = window.contentRect(forFrameRect: window.frame).size
-        let sort = table.sortDescriptors.first
         var recorded = layouts
         recorded[keyPath: Self.layoutKind.layout] = TaggerSheetLayouts.Layout(
-            width: Double(size.width), height: Double(size.height),
-            columns: Dictionary(
-                uniqueKeysWithValues: table.tableColumns.map {
-                    ($0.identifier.rawValue, Double($0.width))
-                }),
-            sortColumn: sort?.key, sortAscending: sort?.ascending ?? true)
+            width: Double(size.width), height: Double(size.height), table: table.layout)
         return recorded
     }
 }
