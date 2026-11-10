@@ -4,6 +4,7 @@ import Testing
 
 @testable import Discogs
 @testable import DiscogsTagger
+@testable import Fixtures
 @testable import Settings
 
 /// The owner's report (69): the album list's widths are gone at the next launch. Nothing
@@ -84,4 +85,44 @@ import Testing
     #expect(reopened.albumTable.sortDescriptors == [mostFirst])
     #expect(reopened.shownAlbums.map(\.id) == [1, 2])
     second.window?.close()
+}
+
+/// A sheet's columns dragged into another order open in that order, a column it no longer
+/// has ignored (69).
+@MainActor
+@Test func aSheetKeepsItsColumnOrder() throws {
+    let summary = ReleaseSummary(
+        id: 1, artist: "Persuader", title: "Stockholm", label: "Svek", catalogNumber: "SK 1",
+        country: "Sweden", year: "2000", format: "CD", trackCount: 3)
+    let releases = ReleasesSheet(candidates: [(summary, nil)], chosen: 1, title: "Stockholm")
+    releases.table.moveColumn(6, toColumn: 0)
+    var layouts = releases.recorded(in: TaggerSheetLayouts())
+    let order = releases.table.tableColumns.map(\.identifier.rawValue)
+    #expect(order.first == "year")
+    #expect(layouts.otherReleases?.table.order == order)
+    layouts.otherReleases?.table.order.insert("gone", at: 1)
+    let again = ReleasesSheet(candidates: [(summary, nil)], chosen: 1, title: "Stockholm")
+    again.apply(layouts, room: nil)
+    #expect(again.table.tableColumns.map(\.identifier.rawValue) == order)
+}
+
+/// Layouts given once the window is up, as another tagger's change is, are the ones its
+/// sheets open at, so the tagger opened from Downloads and the library's share them (69).
+@MainActor
+@Test func layoutsGivenLaterReachTheOpenWindowsSheets() async throws {
+    let made = await model(
+        Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    let tagger = DiscogsTagger(model: made)
+    tagger.show()
+    let controller = try #require(tagger.window?.windowController as? TaggerWindow)
+    let window = try #require(tagger.window)
+    tagger.sheetLayouts = TaggerSheetLayouts(
+        fieldMapping: .init(
+            width: 830, height: 420,
+            table: TableLayout(widths: [:], order: [], sortColumn: nil, sortAscending: true)))
+    click(controller.mappingButton)
+    let sheet = try #require(window.attachedSheet)
+    #expect(sheet.contentRect(forFrameRect: sheet.frame).size == NSSize(width: 830, height: 420))
+    (sheet.windowController as? MappingSheet)?.endSheet()
+    window.close()
 }

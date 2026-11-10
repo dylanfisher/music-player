@@ -48,9 +48,12 @@ public final class DiscogsTagger {
         get { model.sourceSaved }
         set { model.sourceSaved = newValue }
     }
-    /// The size, column widths and sort each sheet was left at, set before the window is
-    /// first shown, and what saves them as a sheet closes.
-    public var sheetLayouts = TaggerSheetLayouts()
+    /// The layout each sheet and the album list were left at, set before the window is first
+    /// shown, and what saves them as a sheet closes or the album list changes. Set later, as
+    /// another tagger's change is, the sheets open at it.
+    public var sheetLayouts = TaggerSheetLayouts() {
+        didSet { controller?.sheetLayouts = sheetLayouts }
+    }
     public var sheetLayoutsChosen: (TaggerSheetLayouts) -> Void = { _ in }
     /// Asks Get Artwork's question over the window, then calls back with Fill Missing,
     /// Replace, or nil for Cancel; tests answer it.

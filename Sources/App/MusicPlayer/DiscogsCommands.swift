@@ -40,6 +40,21 @@ extension AppDelegate {
             })
     }
 
+    /// The tagger's layouts as last chosen: those of a tagger made already, which hears every
+    /// change, else the state file's (ADR 0176).
+    func taggerLayouts() -> TaggerSheetLayouts {
+        (discogsTagger ?? stagedTagger)?.sheetLayouts ?? state?[\.taggerSheets]
+            ?? TaggerSheetLayouts()
+    }
+
+    /// Saves the layouts one tagger chose and gives them to the other, so neither saves over
+    /// the other's with an older copy.
+    func taggerLayoutsChosen(_ layouts: TaggerSheetLayouts) {
+        discogsTagger?.sheetLayouts = layouts
+        stagedTagger?.sheetLayouts = layouts
+        saver?.set(\.taggerSheets, layouts)
+    }
+
     /// The tagger, made on first use; nil, after saying why, when the library can't be read.
     func discogsTaggerController() -> DiscogsTagger? {
         if let discogsTagger { return discogsTagger }
@@ -65,8 +80,8 @@ extension AppDelegate {
                     startingOver: startingOver, progress: progress)
             })
         tagger.selectedTracks = { [weak browser] in try browser?.selectedTrackIDs() ?? [] }
-        if let state { tagger.sheetLayouts = state[\.taggerSheets] }
-        tagger.sheetLayoutsChosen = { [weak self] in self?.saver?.set(\.taggerSheets, $0) }
+        tagger.sheetLayouts = taggerLayouts()
+        tagger.sheetLayoutsChosen = { [weak self] in self?.taggerLayoutsChosen($0) }
         tagger.sourceChosen = { [weak self] in self?.saver?.set(\.taggerSource, $0) }
         tagger.write = { [weak self] files, window, progress, completion in
             self?.tagEditing.write(files, over: window, progress: progress, completion: completion)

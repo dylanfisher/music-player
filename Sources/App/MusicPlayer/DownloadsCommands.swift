@@ -71,6 +71,8 @@ extension AppDelegate {
                 mapping: settings[\.discogsMapping],
                 savedMappings: settings[\.discogsSavedMappings], choices: taggerChoices(settings),
                 resolved: resolved)
+            tagger.sheetLayouts = taggerLayouts()
+            tagger.sheetLayoutsChosen = { [weak self] in self?.taggerLayoutsChosen($0) }
             stagedTagger = tagger
             tagger.show()
         }
