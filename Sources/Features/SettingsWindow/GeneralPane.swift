@@ -85,7 +85,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// replaced it.
     private var colorGenerations: [String: Int] = [:]
     /// The rows hidden under disclosures, by key, and the disclosures' triangles: the fallback
-    /// rows until opened or given a value, and the snapshot list under `snapshotsKey`.
+    /// rows until opened or given a value.
     private(set) var fallbackRows: [String: NSGridRow] = [:]
     private(set) var disclosures: [String: NSButton] = [:]
     /// Each row group's line of buttons, by the group's title, which its later rows join.
@@ -298,11 +298,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         grid.addRow(with: [NSTextField(labelWithString: "Database:"), line])
     }
 
-    /// The key the snapshot list's row and disclosure go under.
-    static let snapshotsKey = "library.snapshots"
-
-    /// The last snapshot's time with Back Up Now, then a disclosure, closed at first, over the
-    /// snapshots with Restore…, which would make the Database section the pane's tallest.
+    /// The last snapshot's time with Back Up Now, then the snapshots, a short list, with
+    /// Restore….
     private func addSnapshotRows(to grid: NSGridView) {
         let last = NSTextField(wrappingLabelWithString: "")
         last.preferredMaxLayoutWidth = Self.summaryWidth
@@ -333,12 +330,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         cell.orientation = .vertical
         cell.alignment = .leading
         cell.spacing = 6
-        grid.addRow(with: [
-            NSGridCell.emptyContentView, disclosureLine(SnapshotList.title, Self.snapshotsKey),
-        ])
-        let row = grid.addRow(with: [NSTextField(labelWithString: "Snapshots:"), cell])
-        row.isHidden = true
-        fallbackRows[Self.snapshotsKey] = row
+        grid.addRow(with: [NSTextField(labelWithString: SnapshotList.title + ":"), cell])
     }
 
     /// Reads the index's size and the snapshots off the main actor and shows them; a pane

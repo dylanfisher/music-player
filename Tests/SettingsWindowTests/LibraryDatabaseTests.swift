@@ -90,21 +90,30 @@ private func settingsPane(
     #expect(pane.backUpButton?.isEnabled == true)
 }
 
-/// The snapshot list waits under a disclosure, closed at first, so the Database section stays
-/// short; Last Snapshot and Back Up Now stay in view.
-@MainActor @Test func theSnapshotListIsUnderADisclosure() async throws {
+/// The snapshot list always shows, short, under Last Snapshot and Back Up Now, with no
+/// disclosure to open (phase 70).
+@MainActor @Test func theSnapshotListAlwaysShows() async throws {
     let pane = settingsPane()
     _ = pane.view
     await pane.showDatabase()
-    let row = try #require(pane.fallbackRows[GeneralPane.snapshotsKey])
-    let triangle = try #require(pane.disclosures[GeneralPane.snapshotsKey])
-    #expect(row.isHidden && triangle.state == .off)
     #expect(pane.lastSnapshotLabel?.stringValue == database.lastSnapshotText)
-    click(triangle)
-    #expect(!row.isHidden)
-    #expect(pane.snapshotList?.table.numberOfRows == 2)
-    click(triangle)
-    #expect(row.isHidden)
+    let list = try #require(pane.snapshotList)
+    #expect(list.table.numberOfRows == 2)
+    let grid = try #require(
+        sequence(first: list.scroll as NSView, next: \.superview).compactMap { $0 as? NSGridView }
+            .first)
+    let rows = (0..<grid.numberOfRows).map(grid.row(at:))
+    let listRow = try #require(
+        rows.first { row in
+            (0..<row.numberOfCells).contains {
+                row.cell(at: $0).contentView?.subviews.contains(list.scroll) == true
+            }
+        })
+    #expect(!listRow.isHidden)
+    #expect(
+        !pane.disclosures.values.contains { triangle in
+            sequence(first: triangle as NSView, next: \.superview).contains { $0 === grid }
+        }, "no disclosure in the Database box")
 }
 
 @MainActor @Test func theSnapshotFolderDefaultsToBackupsBesideTheLibrary() throws {
@@ -151,10 +160,10 @@ private func settingsPane(
     #expect(older.takenText == LibraryDatabase.writtenText(older.written))
 }
 
-/// Opening and closing Snapshots leaves the pane's top at the window's top: the window is
+/// Opening and closing a disclosure leaves the pane's top at the window's top: the window is
 /// resized after the layout pass that changed the pane's height, not inside it, which left the
 /// scroll view at its old height plus the change and an empty strip above it.
-@MainActor @Test func closingTheSnapshotsLeavesNoGapAtTheTop() async throws {
+@MainActor @Test func closingADisclosureLeavesNoGapAtTheTop() async throws {
     let pane = settingsPane()
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled],
@@ -180,7 +189,7 @@ private func settingsPane(
     }
     try await settle()
     expectPaneFillsTheWindow("at first")
-    let triangle = try #require(pane.disclosures[GeneralPane.snapshotsKey])
+    let triangle = try #require(pane.disclosures[AppSettings().receiverAddress.key])
     click(triangle)
     try await settle()
     expectPaneFillsTheWindow("opened")
