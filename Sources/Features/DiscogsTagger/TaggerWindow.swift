@@ -216,6 +216,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         choices.spacing = 12
         resumeBox.setViews([resumeLabel, resumeButton, startOverButton], in: .leading)
         resumeBox.spacing = 12
+        // Hidden until there's an import to resume, so the first refresh, which most often finds
+        // none, doesn't lay out the whole window before it's shown.
+        resumeBox.isHidden = true
         for label in [catalogLabel, resumeLabel] {
             label.lineBreakMode = .byTruncatingTail
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
