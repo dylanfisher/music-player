@@ -43,3 +43,45 @@ import Testing
     #expect(reopened.albumTable.tableColumns.map(\.width) == widths)
     second.window?.close()
 }
+
+/// A click on an album list's header sorts by it and a second reverses it, as setting the
+/// table's descriptors does; the sort is saved and a new window opens with it (69).
+@MainActor
+@Test func theAlbumListSortsByAHeaderClickAndKeepsTheSort() async throws {
+    let albums = [
+        album(1, "Stockholm", titles: ["A", "B", "C"]),
+        album(2, "Second", artist: "Abba", titles: ["A"]),
+    ]
+    let made = await model(
+        Seen(), albums: albums,
+        matches: { album, _ in
+            match(album, release(Int(album.id), album.title, titles: ["A"]), tier: .exact)
+        })
+    made.analyze()
+    await made.finished()
+    let first = DiscogsTagger(model: made)
+    var saved = TaggerSheetLayouts()
+    first.sheetLayoutsChosen = { saved = $0 }
+    first.show()
+    let controller = try #require(first.window?.windowController as? TaggerWindow)
+    #expect(controller.shownAlbums.map(\.id) == [2, 1])
+    let files = try #require(controller.albumTable.tableColumns[1].sortDescriptorPrototype)
+    let mostFirst = NSSortDescriptor(key: "files", ascending: false)
+    controller.albumTable.sortDescriptors = [mostFirst]
+    #expect(controller.shownAlbums.map(\.id) == [1, 2], "the most files first")
+    controller.albumTable.sortDescriptors = [files]
+    #expect(controller.shownAlbums.map(\.id) == [2, 1])
+    controller.albumTable.sortDescriptors = [mostFirst]
+    #expect(saved.albumList?.table.sortColumn == "files")
+    #expect(saved.albumList?.table.sortAscending == false)
+    first.window?.close()
+
+    made.sortAlbums(by: nil)
+    let second = DiscogsTagger(model: made)
+    second.sheetLayouts = saved
+    second.show()
+    let reopened = try #require(second.window?.windowController as? TaggerWindow)
+    #expect(reopened.albumTable.sortDescriptors == [mostFirst])
+    #expect(reopened.shownAlbums.map(\.id) == [1, 2])
+    second.window?.close()
+}

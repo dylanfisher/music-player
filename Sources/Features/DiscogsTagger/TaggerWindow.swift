@@ -228,6 +228,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         let albums = taggerTable(
             albumTable, [(.album, 200), (.files, 36), (.confidence, 48), (.review, 64)],
             source: self)
+        for column in albumTable.tableColumns {
+            column.sortDescriptorPrototype = NSSortDescriptor(
+                key: column.identifier.rawValue, ascending: true)
+        }
         let tracks = tracklists()
 
         releaseTitle.font = .boldSystemFont(ofSize: NSFont.systemFontSize + 2)
@@ -625,13 +629,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             case .album: return albumTitle(album.album)
             case .files: return number(album.album.tracks.count)
             case .confidence: return album.match.confidence.map { "\($0)%" } ?? ""
-            default:
-                if album.applied { return "Written" }
-                switch album.review {
-                case .rejected: return "Rejected"
-                case .chosen: return "Chosen"
-                case nil: return ""
-                }
+            default: return album.reviewText
             }
         }
         let comparison = rows[row]
@@ -681,6 +679,20 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     func tableViewColumnDidMove(_ notification: Notification) {
         if notification.object as? NSTableView === albumTable { albumListChanged() }
+    }
+
+    func tableView(
+        _ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]
+    ) {
+        guard tableView === albumTable else { return }
+        let sort = albumTable.sortDescriptors.first
+        model.sortAlbums(
+            by: sort.flatMap { sort in
+                sort.key.flatMap(TaggerColumn.init(rawValue:)).map {
+                    TaggerModel.AlbumSort(column: $0, ascending: sort.ascending)
+                }
+            })
+        albumListChanged()
     }
 
     func splitViewDidResizeSubviews(_ notification: Notification) { albumListChanged() }

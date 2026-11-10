@@ -445,3 +445,39 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     await tagger.setLeftOut(true, 703, of: 7)
     #expect(tagger.albums.first?.matched.tracks.map(\.fileID) == [703], "the last file stays")
 }
+
+/// The album list sorts by any of its columns either way, an album with no confidence under
+/// every one, and by artist and then title between equal albums and with no sort (69).
+@MainActor
+@Test func theAlbumListSortsByEachColumnAndThenByArtistAndTitle() async {
+    let albums = [
+        album(1, "Stockholm", titles: ["A", "B", "C"]),
+        album(2, "Second", artist: "Abba", titles: ["A", "B"]),
+        album(3, "Third", artist: "Abba", titles: ["A", "B", "C"]),
+        album(4, "Fourth", artist: "Cars", titles: ["A"]),
+    ]
+    let confidences: [Int64: Int] = [1: 90, 2: 40, 3: 90]
+    let tagger = await model(
+        Seen(), albums: albums,
+        matches: { album, _ in
+            match(
+                album, release(Int(album.id), album.title, titles: ["A"]), tier: .likely,
+                confidence: confidences[album.id])
+        }, reviews: [4: .rejected, 2: .chosen(releaseID: 2)])
+    tagger.analyze()
+    await tagger.finished()
+    func order(_ column: TaggerColumn?, ascending: Bool = true) -> [Int64] {
+        tagger.sortAlbums(
+            by: column.map { TaggerModel.AlbumSort(column: $0, ascending: ascending) })
+        return tagger.albums(in: .likely).map(\.id)
+    }
+    #expect(order(nil) == [2, 3, 4, 1], "by artist, then title")
+    #expect(order(.album) == [2, 3, 4, 1])
+    #expect(order(.album, ascending: false) == [1, 4, 3, 2])
+    #expect(order(.files) == [4, 2, 3, 1], "ties by artist, then title")
+    #expect(order(.files, ascending: false) == [3, 1, 2, 4])
+    #expect(order(.confidence) == [4, 2, 3, 1], "none first")
+    #expect(order(.confidence, ascending: false) == [3, 1, 2, 4])
+    #expect(order(.review) == [3, 1, 2, 4], "none, Chosen, Rejected")
+    #expect(order(.review, ascending: false) == [4, 2, 3, 1])
+}

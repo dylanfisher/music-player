@@ -67,6 +67,16 @@ final class TaggerModel {
         /// The album as it's matched and written: its files but those left out.
         var matched: DiscogsAlbum { Self.kept(album, leaving: leftOut) }
         var isRejected: Bool { review == .rejected }
+        /// The album list's Review cell: what was done with the album in this session, or what
+        /// the user decided.
+        var reviewText: String {
+            if applied { return "Written" }
+            switch review {
+            case .rejected: return "Rejected"
+            case .chosen: return "Chosen"
+            case nil: return ""
+            }
+        }
 
         /// `album` without the files in `leftOut`.
         static func kept(_ album: DiscogsAlbum, leaving leftOut: Set<Int64>) -> DiscogsAlbum {
@@ -183,6 +193,13 @@ final class TaggerModel {
     /// one at a time.
     private(set) var rematchingID: Int64?
     var tab = TaggerTab.exact
+    /// The album list's column and direction, from a click on its header.
+    struct AlbumSort: Equatable {
+        var column: TaggerColumn
+        var ascending: Bool
+    }
+    /// Nil lists the albums by artist and then title.
+    private(set) var albumSort: AlbumSort?
     var selectedID: Int64?
     var mapping: DiscogsMapping {
         didSet { forgetChangeCounts() }
@@ -318,18 +335,50 @@ final class TaggerModel {
         changed()
     }
 
-    /// The albums `tab` lists, by artist and then title.
+    /// The albums `tab` lists, in `albumSort`'s order; by artist and then title without one,
+    /// and between albums it finds equal.
     func albums(in tab: TaggerTab) -> [Album] {
         if let order = tierOrder[tab] { return order.map { albums[$0] } }
         let order = albums.indices.filter { tab.lists(albums[$0].match) }.sorted { a, b in
-            let (a, b) = (albums[a].album, albums[b].album)
-            let artist = (a.artist ?? "").localizedStandardCompare(b.artist ?? "")
+            let (a, b) = (albums[a], albums[b])
+            if let albumSort {
+                let order = Self.compare(a, b, by: albumSort.column)
+                if order != .orderedSame {
+                    return order == (albumSort.ascending ? .orderedAscending : .orderedDescending)
+                }
+            }
+            let artist = (a.album.artist ?? "").localizedStandardCompare(b.album.artist ?? "")
             return artist != .orderedSame
                 ? artist == .orderedAscending
-                : a.title.localizedStandardCompare(b.title) == .orderedAscending
+                : a.album.title.localizedStandardCompare(b.album.title) == .orderedAscending
         }
         tierOrder[tab] = order
         return order.map { albums[$0] }
+    }
+
+    /// Lists the albums by `column`, or by artist and then title for nil, as a click on the
+    /// album list's header does.
+    func sortAlbums(by sort: AlbumSort?) {
+        guard sort != albumSort else { return }
+        albumSort = sort
+        tierOrder = [:]
+        changed()
+    }
+
+    /// How two albums compare in the album list's `column`: the counts as numbers, no
+    /// confidence under every one, the rest as Finder sorts names.
+    private static func compare(_ a: Album, _ b: Album, by column: TaggerColumn)
+        -> ComparisonResult
+    {
+        func numbers(_ x: Int, _ y: Int) -> ComparisonResult {
+            x < y ? .orderedAscending : x > y ? .orderedDescending : .orderedSame
+        }
+        switch column {
+        case .files: return numbers(a.album.tracks.count, b.album.tracks.count)
+        case .confidence: return numbers(a.match.confidence ?? -1, b.match.confidence ?? -1)
+        case .review: return a.reviewText.localizedStandardCompare(b.reviewText)
+        default: return albumTitle(a.album).localizedStandardCompare(albumTitle(b.album))
+        }
     }
 
     func count(_ tab: TaggerTab) -> Int { albums.count { tab.lists($0.match) } }
