@@ -60,8 +60,7 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
    parallel, each on its own branch and worktree, then 72, which builds on 69's tagger. All five
    are done.
 7. Phase 73, the performance audit, set by the owner on 2026-11-10, is done.
-8. Phases 74 to 76, the owner's feedback of 2026-11-10, run after 73: 74 and 75 in parallel,
-   each on its own branch and worktree, then 76.
+8. Phases 74 to 76, the owner's feedback of 2026-11-10, are done.
 9. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
@@ -184,6 +183,9 @@ that phase's Result line, and delete its line here.
 
 - **74** ([phase](plan-archive.md#74-tagger-scrolling-keeping-your-place-and-the-writes-last-steps)):
   the owner checks and two questions under its Result line.
+
+- **76** ([phase](plan-archive.md#76-a-layout-editor-for-the-status-bars-totals)): the owner
+  checks and two questions under its Result line.
 
 ### Answers
 
@@ -684,73 +686,6 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
-
-### 76. A layout editor for the status bar's totals
-
-Asked by the owner on 2026-11-10: the status bar's totals, "1,204 tracks, 5.1 GiB, 3 days 2
-hours (3 tracks selected, …)", get a template like the title line's (`TitleTemplate`,
-`{title} – {artist} – {album}`), edited the same way in Settings.
-
-- [ ] **Tokens** for the list's totals and the selection's: track count, size and duration of
-      each, and time remaining (the planner finds what that means today; the queue's or the
-      playing track's, and asks the owner if neither exists).
-- [ ] **A template per state the click cycles through** (`StatusTotals`: List and Selection,
-      List Only, Selection Only), plus the line shown while nothing is selected, each with a
-      default that reads as the bar does now, so nothing changes until the owner edits one.
-- [ ] **Anything else simple and useful** the planner finds while building it, kept small: for
-      example albums or artists in the list, the playlist's missing count, the timeline's plays,
-      which the summary already appends today. Each one listed in the phase's plan before it's
-      built.
-- [ ] Bad templates are reported as the title line's are (ADR 0085's banner and builder), and
-      Reset to Default restores the bar as it is now. Tests for each token, each state and a bad
-      template.
-
-Implementation plan, phase 76 (ADR 0188):
-
-What exists, found by search (map.md recipes): `LibraryStatus.summary` builds the totals from
-`TrackTotals.text(selected:)` ("1,204 tracks, 5.1 GiB, 3 days 2 hours", "3 tracks selected,
-…") by `StatusTotals`, falling back to the list's while nothing is selected, then appends
-" · N tracks not in the library" for a playlist and the health check's "N more items with no
-track to list"; on the timeline it shows the plays instead. `TrackTotals` comes from
-`LibraryIndex.trackTotals(ids:)`, a cache of each track's size and length. `TitleTemplate`
-parses and fills `{token}` text over the closed `TitleToken` enum; its setting kind
-`.template(tokens)` gives Settings a text field with a token help button, a problem line under
-it (checked with `TitleTemplate` itself) and the banner for a bad value in the file; template
-rows have no Reset to Default yet, the bar builder has one. **Time remaining:** nothing in the
-app shows one today. The seek bar shows elapsed and total time, the queue shows each item's
-length, and no total or countdown of the queue or the playing track exists. So the token is
-left out, and the question goes to the owner (proposal in the report).
-
-- 76.1 Refactor (`Core/Settings`): `TitleTemplate` becomes `TokenTemplate<Token>` over a
-  `TemplateToken` protocol (raw name, help, an example template), with `TitleTemplate` a
-  typealias for `TokenTemplate<TitleToken>`. Behavior unchanged: `TitleTemplateTests` pass as
-  they are.
-- 76.2 The tokens and settings (`Core/Settings`): `TotalsToken`, `{tracks}`, `{size}`,
-  `{duration}`, `{albums}` for the list, the same four as `{selectedTracks}` … for the
-  selection, empty while nothing is selected, and `{missing}`, the playlist's tracks not in the
-  library. Four `TotalsTemplate` settings in Appearance after the status bar's layout:
-  `appearance.totalsFormat` (nothing selected), `appearance.totalsListAndSelectionFormat`,
-  `appearance.totalsListFormat`, `appearance.totalsSelectionFormat`, each defaulting to the
-  bar's text now. Tests in `TotalsTemplateTests`: defaults, tokens, a bad template refused by
-  the setting with the totals tokens named.
-- 76.3 Extras, kept small: `{albums}` and `{selectedAlbums}`, the count of distinct albums
-  (`TrackTotals.albumCount`, the album id added to `trackTotals`' cache; `LibraryQueryTests`;
-  the totals bench row rerun), and `{missing}`: a template that names it shows the count where
-  it says, and the bar doesn't append " · N tracks not in the library" too. Artists left out:
-  which artist (track, album or the pane's grouping) is a choice for the owner. The timeline's
-  plays and the health count stay appended as now.
-- 76.4 The bar (`Features/LibraryBrowser`): `TotalsFormats`, the four templates, which
-  `summary` fills in place of `TrackTotals.text`, which goes. Tests in `LibraryStatusTests`:
-  each default against the bar's text now for each state and with nothing selected, each
-  token, `{missing}` moving the count, selection tokens empty with nothing selected.
-- 76.5 Wiring (App): `TotalsFormats(settings)` at launch and on a change of its keys
-  (`SettingsChanges`), as `StatusBarLayout`. Test: a config change redraws the totals.
-- 76.6 Settings (`Features/SettingsWindow`): the four rows in the Status Bar section; the
-  problem line checks a template with its own setting (`SettingDescriptor.problem`), so the
-  totals rows refuse `{title}` and the title rows `{tracks}`; template rows get Reset to
-  Default, off while the value is the default, the title rows too. Tests in
-  `GeneralModelTests`.
-- 76.7 ADR 0188.
 
 ### 10. Web remote
 

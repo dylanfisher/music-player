@@ -1395,3 +1395,112 @@ order, then "Wrote …". Several albums with Shift and Command: Reject acts on a
 "Updating the library…" until the second's tags and renames finish (ADR 0186); and whether the
 tracklists' one border with a 1-pixel divider, where there were two tables 6 points apart,
 looks right.
+
+### 76. A layout editor for the status bar's totals
+
+Asked by the owner on 2026-11-10: the status bar's totals, "1,204 tracks, 5.1 GiB, 3 days 2
+hours (3 tracks selected, …)", get a template like the title line's (`TitleTemplate`,
+`{title} – {artist} – {album}`), edited the same way in Settings.
+
+- [ ] **Tokens** for the list's totals and the selection's: track count, size and duration of
+      each, and time remaining (the planner finds what that means today; the queue's or the
+      playing track's, and asks the owner if neither exists).
+- [x] **A template per state the click cycles through** (`StatusTotals`: List and Selection,
+      List Only, Selection Only), plus the line shown while nothing is selected, each with a
+      default that reads as the bar does now, so nothing changes until the owner edits one.
+- [x] **Anything else simple and useful** the planner finds while building it, kept small: for
+      example albums or artists in the list, the playlist's missing count, the timeline's plays,
+      which the summary already appends today. Each one listed in the phase's plan before it's
+      built.
+- [x] Bad templates are reported as the title line's are (ADR 0085's banner and builder), and
+      Reset to Default restores the bar as it is now. Tests for each token, each state and a bad
+      template.
+
+Implementation plan, phase 76 (ADR 0188):
+
+What exists, found by search (map.md recipes): `LibraryStatus.summary` builds the totals from
+`TrackTotals.text(selected:)` ("1,204 tracks, 5.1 GiB, 3 days 2 hours", "3 tracks selected,
+…") by `StatusTotals`, falling back to the list's while nothing is selected, then appends
+" · N tracks not in the library" for a playlist and the health check's "N more items with no
+track to list"; on the timeline it shows the plays instead. `TrackTotals` comes from
+`LibraryIndex.trackTotals(ids:)`, a cache of each track's size and length. `TitleTemplate`
+parses and fills `{token}` text over the closed `TitleToken` enum; its setting kind
+`.template(tokens)` gives Settings a text field with a token help button, a problem line under
+it (checked with `TitleTemplate` itself) and the banner for a bad value in the file; template
+rows have no Reset to Default yet, the bar builder has one. **Time remaining:** nothing in the
+app shows one today. The seek bar shows elapsed and total time, the queue shows each item's
+length, and no total or countdown of the queue or the playing track exists. So the token is
+left out, and the question goes to the owner (proposal in the report).
+
+- 76.1 Refactor (`Core/Settings`): `TitleTemplate` becomes `TokenTemplate<Token>` over a
+  `TemplateToken` protocol (raw name, help, an example template), with `TitleTemplate` a
+  typealias for `TokenTemplate<TitleToken>`. Behavior unchanged: `TitleTemplateTests` pass as
+  they are.
+- 76.2 The tokens and settings (`Core/Settings`): `TotalsToken`, `{tracks}`, `{size}`,
+  `{duration}`, `{albums}` for the list, the same four as `{selectedTracks}` … for the
+  selection, empty while nothing is selected, and `{missing}`, the playlist's tracks not in the
+  library. Four `TotalsTemplate` settings in Appearance after the status bar's layout:
+  `appearance.totalsFormat` (nothing selected), `appearance.totalsListAndSelectionFormat`,
+  `appearance.totalsListFormat`, `appearance.totalsSelectionFormat`, each defaulting to the
+  bar's text now. Tests in `TotalsTemplateTests`: defaults, tokens, a bad template refused by
+  the setting with the totals tokens named.
+- 76.3 Extras, kept small: `{albums}` and `{selectedAlbums}`, the count of distinct albums
+  (`TrackTotals.albumCount`, the album id added to `trackTotals`' cache; `LibraryQueryTests`;
+  the totals bench row rerun), and `{missing}`: a template that names it shows the count where
+  it says, and the bar doesn't append " · N tracks not in the library" too. Artists left out:
+  which artist (track, album or the pane's grouping) is a choice for the owner. The timeline's
+  plays and the health count stay appended as now.
+- 76.4 The bar (`Features/LibraryBrowser`): `TotalsFormats`, the four templates, which
+  `summary` fills in place of `TrackTotals.text`, which goes. Tests in `LibraryStatusTests`:
+  each default against the bar's text now for each state and with nothing selected, each
+  token, `{missing}` moving the count, selection tokens empty with nothing selected.
+- 76.5 Wiring (App): `TotalsFormats(settings)` at launch and on a change of its keys
+  (`SettingsChanges`), as `StatusBarLayout`. Test: a config change redraws the totals.
+- 76.6 Settings (`Features/SettingsWindow`): the four rows in the Status Bar section; the
+  problem line checks a template with its own setting (`SettingDescriptor.problem`), so the
+  totals rows refuse `{title}` and the title rows `{tracks}`; template rows get Reset to
+  Default, off while the value is the default, the title rows too. Tests in
+  `GeneralModelTests`.
+- 76.7 ADR 0188.
+
+Result, phase 76: shipped three items and most of the first (ADR 0188); time remaining is
+left out for the owner's answer, since nothing in the app shows one today. The title line's
+template became `TokenTemplate<Token>`, with `TitleTemplate` kept as its name for the title's
+tokens, and the totals got `TotalsTemplate`: `{tracks}`, `{size}`, `{duration}`,
+`{selectedTracks}`, `{selectedSize}`, `{selectedDuration}`, and the extras `{albums}`,
+`{selectedAlbums}` and `{missing}` (a playlist's missing count; with it in the template, the
+" · N tracks not in the library" line isn't added too). Artists was left out: track artist,
+album artist and the Artist pane give three counts. Four settings, in Settings ▸ Appearance ▸
+Status Bar: Totals, Nothing Selected (`appearance.totalsFormat`) and one for each choice a
+click cycles through, each defaulting to what the bar shows now, so nothing changes until one
+is edited; the selection's tokens are empty while nothing is selected. The timeline's plays and
+the health count are appended as before. Each template row checks its text with its own
+setting's tokens (`SettingDescriptor.problem`; before, every row parsed as a title), a bad one
+from config.json shows in ADR 0085's banner, and template rows got a Reset to Default button,
+the title rows too, since the control is shared. Visible change besides: an empty template's
+error now suggests "such as {title} — {artist}". Tests: the defaults, tokens and bad templates
+(`TotalsTemplateTests`), each token, state, the empty selection and `{missing}`
+(`LibraryStatusTests`), the click cycle and a format change redrawing
+(`LibraryBrowserTests`), album counts (`LibraryQueryTests`), each row's own tokens and Reset
+(`GeneralModelTests`). Not done: an app-level test of a config change (no pattern for one in
+`MusicPlayerTests`; covered in the browser). Bench, alone: the totals after a play 0.49 to
+0.57 ms (budget 2 ms), 16% slower for counting albums, an array of flags where a set took
+1.24 ms; search keystrokes unchanged (6.57 ms; the reader's 8.85 ms). The gate's review found
+nothing above low (a template that renders empty gives a blank bar, the user's choice); from
+simplify, the text helpers' file is renamed `TotalsText.swift`, a template row reads its
+default from its setting, and three comments are plainer. Full `./scripts/check` passed but for
+`theGlassHeadersAreFrosted`.
+
+Cost: implementer (Opus) 213k tokens, 112 tool calls, 33 min with its gate fixes; gate review
+(Sonnet) 80k, 14, 1 min; simplify and architecture (Sonnet) 69k, 12, 1 min.
+
+**Owner checks:** with config untouched, the bar reads as before in all three click states and
+with nothing selected, and a playlist with missing tracks still adds its line. In Settings ▸
+Appearance ▸ Status Bar, `{tracks} on {albums}` in Totals, Nothing Selected updates the bar as
+you type; `{title}` in a totals row shows a red line naming the totals tokens and saves nothing;
+Reset to Default restores the field and the bar and greys out; `{tracks} ({missing} missing)` on
+a playlist with missing tracks shows the count only there; a bad template written in
+config.json shows in the banner; the Reset to Default button under the title fields looks
+right. And two answers: whether `{remaining}` should be the queue's time left (the rest of the
+playing track and everything queued; the proposal, redrawn once a second while playing) or the
+playing track's; and which artist count `{artists}` should be, if any.
