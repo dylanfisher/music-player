@@ -260,8 +260,9 @@ private func rename(
         listings.added(destination, making: made)
         return nil
     }
-    // The deepest first; `rmdir` refuses one another move has put a file in since.
-    for folder in made where rmdir(folder) != 0 {
+    // The deepest first; `rmdir` refuses one another move has put a file in since. One the
+    // failed rename never made isn't there to note.
+    for folder in made where rmdir(folder) != 0 && pathExists(folder) {
         listings.added(folder)
         break
     }
