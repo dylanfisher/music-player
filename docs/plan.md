@@ -179,6 +179,9 @@ that phase's Result line, and delete its line here.
 - **73** ([phase](plan-archive.md#73-performance-audit)): the owner checks under its Result
   line, and the flagged fixes in its "For the owner" paragraph, each a yes or no.
 
+- **75** ([phase](plan-archive.md#75-closing-the-reset-layout-banner)): the owner checks under
+  its Result line, and whether its wording will do.
+
 ### Answers
 
 - **38.11 Tag-write error** ([phase](plan-archive.md#38b-table-navigation-and-palette-adr-0088)):
@@ -701,53 +704,6 @@ Asked by the owner on 2026-11-10.
       ([ADR 0183](decisions/0183-several-albums-selected-in-the-tagger.md)): Shift or Command
       extends the selection, Reject acts on all of it, and Apply reads "Apply to N Selected…".
       Owner check: confirm it in the current build; any gap found becomes an item here.
-
-### 75. Closing the reset-layout banner
-
-Asked by the owner on 2026-11-10. When `state.json` has a key that doesn't match this build,
-the settings banner says "the saved window layout was reset: …", but it has no close button,
-and the stale key stays in the file until something else saves state.
-
-- [ ] **A close button for a state-discard line too** (`Sources/Features/SettingsWindow/
-      ConfigBanner.swift`, `render()`); today only config problems get one.
-- [ ] **Closing it rewrites `state.json` right away** (`StateStore`) from the values it loaded,
-      which drops the stale keys, then clears `discardReason`, so the banner hides and the
-      message doesn't come back on the next launch. If that write fails, the usual "couldn't
-      save the window layout" shows; the error is never hidden.
-- [ ] **The line names only the setting that was reset,** "the Discogs tagger's sheet sizes
-      were reset", not the whole window layout.
-- [ ] Tests: closing the banner hides it and leaves a `state.json` that reads back with no
-      discard reason; a failed write still shows the error.
-
-Implementation plan, phase 75 (ADR 0187):
-
-What exists, found by search (map.md recipes): `StateStore` (`Core/Settings`) parses
-`state.json` key by key (ADR 0166) and keeps `discardReason`, a `SettingsError` printed whole
-("…/state.json: \"discogsTagger.sheets\": …"), set once at launch. The app passes it to
-`ConfigBanner.show(stateDiscarded:)`, which prefixes "the saved window layout was reset: ";
-the close button shows only for config problems that don't block. `LayoutSaver` (App) writes
-state changes and reports a failed write as `failure`, which the banner shows as "couldn't
-save the window layout: …". Each setting already has its name, `Setting.title` ("Discogs
-Tagger Sheets"), declared beside its key in `AppState`.
-
-- 75.1 Lines per setting (`Core/Settings`): `StateStore.discarded`, one line for each key
-  dropped, named by its title: "the saved Discogs Tagger Sheets setting was reset: …"; a key
-  this build lacks, by its key; a file that isn't a JSON object, as "the saved window layout
-  was reset: …". `discardReason` stays as those lines joined, for the fuzzer, the failure
-  drill and the existing tests. Tests in `StateStoreTests`.
-- 75.2 Forgetting the discard (`Core/Settings`): `StateStore.forgetDiscarded()` writes the
-  file from the values in effect, which drops the stale keys, then clears `discarded`; a
-  failed write throws and keeps it. Tests: the file reads back with no discard reason; an
-  unwritable folder throws and the lines stay.
-- 75.3 The saver (App): `LayoutSaver.forgetDiscarded()` queues that write as a pending one
-  and flushes, so a failure is reported as `failure`, the usual banner line, and retried with
-  the next save, as any failed layout write. Tests in `LayoutSaverTests`.
-- 75.4 The banner (`Features/SettingsWindow`): `show(stateDiscarded:)` takes the lines; the
-  close button also shows while there are any, and closing calls `closeStateDiscard`, besides
-  hiding the config problems it can. The app wires it to the saver and redraws the banner.
-  Tests in `ConfigBannerTests`: the button shows for a discard alone and with a blocking
-  problem, which stays; closing calls the closure; a failed write's line shows.
-- 75.5 ADR 0187, a see-also line in 0166.
 
 ### 76. A layout editor for the status bar's totals
 

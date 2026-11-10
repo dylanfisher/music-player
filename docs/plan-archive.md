@@ -1211,3 +1211,79 @@ tracklists (unmeasured until 73.1's matcher row); B3, more listers on a no-chang
 (M, about 60 ms); P2, All Time's period (no cheap fix, 99 ms in the sorter). Dropped: D3, the
 Output menu's search (network time), C3 and C4 (unmeasured, or already off the main actor),
 F5, Now Playing's unchanged labels (no number), P3 (1.3% of a sort).
+
+### 75. Closing the reset-layout banner
+
+Asked by the owner on 2026-11-10. When `state.json` has a key that doesn't match this build,
+the settings banner says "the saved window layout was reset: …", but it has no close button,
+and the stale key stays in the file until something else saves state.
+
+- [x] **A close button for a state-discard line too** (`Sources/Features/SettingsWindow/
+      ConfigBanner.swift`, `render()`); today only config problems get one.
+- [x] **Closing it rewrites `state.json` right away** (`StateStore`) from the values it loaded,
+      which drops the stale keys, then clears `discardReason`, so the banner hides and the
+      message doesn't come back on the next launch. If that write fails, the usual "couldn't
+      save the window layout" shows; the error is never hidden.
+- [x] **The line names only the setting that was reset,** "the Discogs tagger's sheet sizes
+      were reset", not the whole window layout.
+- [x] Tests: closing the banner hides it and leaves a `state.json` that reads back with no
+      discard reason; a failed write still shows the error.
+
+Implementation plan, phase 75 (ADR 0187):
+
+What exists, found by search (map.md recipes): `StateStore` (`Core/Settings`) parses
+`state.json` key by key (ADR 0166) and keeps `discardReason`, a `SettingsError` printed whole
+("…/state.json: \"discogsTagger.sheets\": …"), set once at launch. The app passes it to
+`ConfigBanner.show(stateDiscarded:)`, which prefixes "the saved window layout was reset: ";
+the close button shows only for config problems that don't block. `LayoutSaver` (App) writes
+state changes and reports a failed write as `failure`, which the banner shows as "couldn't
+save the window layout: …". Each setting already has its name, `Setting.title` ("Discogs
+Tagger Sheets"), declared beside its key in `AppState`.
+
+- 75.1 Lines per setting (`Core/Settings`): `StateStore.discarded`, one line for each key
+  dropped, named by its title: "the saved Discogs Tagger Sheets setting was reset: …"; a key
+  this build lacks, by its key; a file that isn't a JSON object, as "the saved window layout
+  was reset: …". `discardReason` stays as those lines joined, for the fuzzer, the failure
+  drill and the existing tests. Tests in `StateStoreTests`.
+- 75.2 Forgetting the discard (`Core/Settings`): `StateStore.forgetDiscarded()` writes the
+  file from the values in effect, which drops the stale keys, then clears `discarded`; a
+  failed write throws and keeps it. Tests: the file reads back with no discard reason; an
+  unwritable folder throws and the lines stay.
+- 75.3 The saver (App): `LayoutSaver.forgetDiscarded()` queues that write as a pending one
+  and flushes, so a failure is reported as `failure`, the usual banner line, and retried with
+  the next save, as any failed layout write. Tests in `LayoutSaverTests`.
+- 75.4 The banner (`Features/SettingsWindow`): `show(stateDiscarded:)` takes the lines; the
+  close button also shows while there are any, and closing calls `closeStateDiscard`, besides
+  hiding the config problems it can. The app wires it to the saver and redraws the banner.
+  Tests in `ConfigBannerTests`: the button shows for a discard alone and with a blocking
+  problem, which stays; closing calls the closure; a failed write's line shows.
+- 75.5 ADR 0187, a see-also line in 0166.
+
+Result, phase 75: shipped all four items (ADR 0187; a see-also line in 0166). `StateStore`
+reports one line for each key of `state.json` it dropped, named by the setting's title ("the
+saved Discogs Tagger Sheets setting was reset: …"; "the saved setting "window.old" was dropped:
+unknown setting"); only a file that isn't a JSON object still reads "the saved window layout
+was reset". The banner has a close button for those lines, even under a config problem that
+blocks the file, which stays shown. Closing rewrites `state.json` through `LayoutSaver` from
+the values in effect, which drops the stale keys, then clears the lines; a failed write shows
+"couldn't save the window layout: state.json: …", keeps the lines and is retried with the next
+save. The owner's wording, "the Discogs tagger's sheet sizes were reset", would need a second
+hand-written name beside each of the 27 state settings' titles; the title is the one name
+(ADR 0187), and the owner can say otherwise. Tests: the lines, the rewrite, a failed rewrite
+(`StateStoreTests`), the saver's failure and retry (`LayoutSaverTests`), and closing alone and
+under a blocking problem (`ConfigBannerTests`), all in temporary folders. Bench: settings load
+1.21 ms (73's 1.10 ms; budget 2 ms). The gate's review (Sonnet) found nothing above low; left
+as they are: the close button's tooltip doesn't say it rewrites `state.json` when config
+warnings show too, closing after a whole-file reset replaces an unreadable file with `{}` and
+keeps no copy (as the next layout save would), and the rewrite flushes other pending saves
+early. Full `./scripts/check` passed but for `theGlassHeadersAreFrosted`.
+
+Cost: implementer (Opus) 115k tokens, 48 tool calls, 11 min; gate review with simplify and
+architecture (Sonnet) 58k, 5, 1 min.
+
+**Owner checks:** quit, add `"window.old": 1` and `"discogsTagger.sheets": {"x": 1}` to
+`state.json`, launch: the banner names the unknown key "(1 more)" and its tooltip lists the
+Discogs Tagger Sheets line. Click the X: it hides, both keys are gone from the file, and a
+relaunch shows nothing. Again with the state folder at `chmod 500`: "couldn't save the window
+layout: state.json: …" with the lines kept; restore it and close again. With a config.json
+syntax error as well, the X clears only the state lines. And whether the wording above will do.
