@@ -93,3 +93,20 @@ private func copyFolders() throws -> (library: String, source: String) {
     listings.removed(library + "/Band")
     #expect(try listings.name(matching: "band", in: library) == nil)
 }
+
+@Test func foldersTheRunMadeAreKnownWithoutListingThem() throws {
+    let (library, _) = try copyFolders()
+    guard pathconf(library, _PC_CASE_SENSITIVE) == 0 else { return }
+    let listings = LibraryFolderListings(library)
+    #expect(try listings.name(matching: "band", in: library) == nil)
+    try FileManager.default.createDirectory(
+        atPath: library + "/Band/Album", withIntermediateDirectories: true)
+    // The file isn't on disk, so a name found for it comes from what the run told.
+    listings.added(
+        library + "/Band/Album/01 Song.flac", making: [library + "/Band/Album", library + "/Band"])
+    #expect(try listings.name(matching: "BAND", in: library) == "Band")
+    #expect(try listings.name(matching: "album", in: library + "/Band") == "Album")
+    #expect(
+        try listings.name(matching: "01 song.flac", in: library + "/Band/Album") == "01 Song.flac")
+    #expect(listings.isDirectory(library + "/Band/Album"))
+}

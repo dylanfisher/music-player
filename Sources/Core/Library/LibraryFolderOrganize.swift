@@ -130,8 +130,6 @@ func moveToLayout(
         } else if let problem = rename(move.from, to: move.to, library, calls, listings) {
             result.problems.append(problem)
         } else {
-            listings.removed(move.from)
-            listings.added(move.to)
             result.moved.append(move)
             left.insert(parentOf(move.from))
         }
@@ -239,9 +237,9 @@ private func isSameFile(_ one: String, _ other: String) -> Bool {
         && first.st_ino == second.st_ino
 }
 
-/// Renames `path` to `destination`, making its folders; nil when it moved, else why not. The
-/// folders it made for a file that didn't move are removed while they're empty, and those it
-/// couldn't remove are told to `listings`.
+/// Renames `path` to `destination`, making its folders; nil when it moved, else why not, and
+/// tells `listings` what changed. The folders it made for a file that didn't move are removed
+/// while they're empty.
 private func rename(
     _ path: String, to destination: String, _ library: String, _ calls: MoveCalls,
     _ listings: LibraryFolderListings
@@ -257,13 +255,15 @@ private func rename(
         made.append(missing)
         missing = parentOf(missing)
     }
-    let problem = renameMaking(path, to: destination, library, calls)
-    if problem != nil {
-        // The deepest first; `rmdir` refuses one another move has put a file in since.
-        for folder in made where rmdir(folder) != 0 {
-            listings.added(folder)
-            break
-        }
+    guard let problem = renameMaking(path, to: destination, library, calls) else {
+        listings.removed(path)
+        listings.added(destination, making: made)
+        return nil
+    }
+    // The deepest first; `rmdir` refuses one another move has put a file in since.
+    for folder in made where rmdir(folder) != 0 {
+        listings.added(folder)
+        break
     }
     return problem
 }

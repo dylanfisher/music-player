@@ -436,14 +436,18 @@ public final class LibraryFolderListings: @unchecked Sendable {
         }
     }
 
-    /// Notes that the run made a file or folder at `path`, and any folders above it it lacked.
-    func added(_ path: String) {
+    /// Notes that the run made a file or folder at `path`, and any folders above it it lacked,
+    /// `made` among them: folders it made empty, so they needn't be listed.
+    func added(_ path: String, making made: [String] = []) {
         lock.withLock {
+            for folder in made { listings[folder] = [:] }
+            folders[path] = nil
             var child = path
             while child.count > libraryFolder.count {
                 let parent = (child as NSString).deletingLastPathComponent
                 let name = (child as NSString).lastPathComponent
-                folders[child] = nil
+                // Something is in it now, so it's a folder.
+                folders[parent] = true
                 if listings[parent] != nil, listings[parent]?[folded(name)] == nil {
                     listings[parent]?[folded(name)] = name
                 }
