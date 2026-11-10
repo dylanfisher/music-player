@@ -1,21 +1,17 @@
-/// Text with tokens in braces, such as `{title} — {artist}`, filled from the playing track:
-/// what `appearance.windowTitle` and the toolbar's Title Line, `appearance.headerTitleFormat`,
-/// hold (ADR 0087). `{{` and `}}` write a brace; any other brace holds a token, so an unknown
-/// name or a lone brace is the value's problem.
-public struct TitleTemplate: SettingValue {
+/// Text with tokens in braces, such as `{title} — {artist}`, filled from the values the tokens
+/// name: the playing track's for a `TitleTemplate` (ADR 0087), the status bar's totals for a
+/// `TotalsTemplate` (ADR 0188). `{{` and `}}` write a brace; any other brace holds a token, so
+/// an unknown name or a lone brace is the value's problem.
+public struct TokenTemplate<Token: TemplateToken>: SettingValue {
     public enum Part: Equatable, Sendable {
         case text(String)
-        case token(TitleToken)
+        case token(Token)
     }
 
     public let template: String
     /// The text and tokens in order; empty when the template has a problem.
     public let parts: [Part]
     private let templateProblem: String?
-
-    public static let windowTitle = TitleTemplate("{title} — {artist}")
-    /// Swinsian's toolbar line: "FI3AC2384210 by Aleksi Perälä from Alithia E'".
-    public static let titleLine = TitleTemplate("{title} by {artist} from {album}")
 
     public init(_ template: String) {
         self.template = template
@@ -31,9 +27,11 @@ public struct TitleTemplate: SettingValue {
 
     public func problem() -> String? { templateProblem }
 
-    public static var typeName: String { "a string with tokens in braces, such as {title}" }
+    public static var typeName: String {
+        "a string with tokens in braces, such as \(Token.example)"
+    }
     public static var kind: SettingKind {
-        .template(TitleToken.allCases.map { .init(name: $0.placeholder, help: $0.help) })
+        .template(Token.allCases.map { .init(name: $0.placeholder, help: $0.help) })
     }
 
     public init(from decoder: any Decoder) throws {
@@ -57,7 +55,7 @@ public struct TitleTemplate: SettingValue {
     /// empty one takes the text before it along. The text before the first token stays only
     /// when that token has a value, and the text after the last only when that one does, so
     /// nothing dangles at either end. The result is trimmed of spaces and newlines.
-    public func fill(_ value: (TitleToken) -> String?) -> String {
+    public func fill(_ value: (Token) -> String?) -> String {
         let (parts, values) = Self.droppingEmptyGroups(parts) { token in
             value(token).flatMap { trimmed($0).isEmpty ? nil : $0 }
         }
@@ -92,13 +90,11 @@ public struct TitleTemplate: SettingValue {
         return trimmed(filled)
     }
 
-    private static let closers: [Character: Character] = ["(": ")", "[": "]"]
-
     /// Whether `closer` closes the last bracket `text` leaves open.
     private static func closes(_ closer: Character, in text: String) -> Bool {
         var open: [Character] = []
         for character in text {
-            if let match = closers[character] {
+            if let match = bracketClosers[character] {
                 open.append(match)
             } else if open.last == character {
                 open.removeLast()
@@ -109,14 +105,14 @@ public struct TitleTemplate: SettingValue {
 
     private enum Item {
         case character(Character)
-        case token(TitleToken, String)
+        case token(Token, String)
     }
 
     /// `parts` without the bracketed groups whose tokens are all empty, and each token's
     /// value, "" when empty and nil for text. A bracket with no token before its match is plain
     /// text.
     private static func droppingEmptyGroups(
-        _ parts: [Part], _ value: (TitleToken) -> String?
+        _ parts: [Part], _ value: (Token) -> String?
     ) -> ([Part], [String?]) {
         let items: [Item] = parts.flatMap { part -> [Item] in
             switch part {
@@ -128,7 +124,7 @@ public struct TitleTemplate: SettingValue {
         var dropped = Set<Int>()
         for (index, item) in items.enumerated() {
             guard case .character(let character) = item else { continue }
-            if let closer = closers[character] {
+            if let closer = bracketClosers[character] {
                 open.append((closer, index))
             } else if let last = open.last, last.closer == character {
                 open.removeLast()
@@ -175,7 +171,7 @@ public struct TitleTemplate: SettingValue {
     private static func parse(_ template: String) -> Result<[Part], Problem> {
         guard !trimmed(template).isEmpty else {
             return .failure(
-                Problem(message: "empty; write a template such as \(windowTitle.template)"))
+                Problem(message: "empty; write a template such as \(Token.example)"))
         }
         let scalars = Array(template.unicodeScalars)
         var parts: [Part] = []
@@ -194,8 +190,8 @@ public struct TitleTemplate: SettingValue {
                         Problem(message: "a { with no } after it; write {{ for a brace"))
                 }
                 let name = String(String.UnicodeScalarView(scalars[(index + 1)..<close]))
-                guard let token = TitleToken(rawValue: name) else {
-                    let tokens = TitleToken.allCases.map(\.placeholder).joined(separator: ", ")
+                guard let token = Token(rawValue: name) else {
+                    let tokens = Token.allCases.map(\.placeholder).joined(separator: ", ")
                     return .failure(
                         Problem(message: "no token {\(name)}; the tokens are \(tokens)"))
                 }
@@ -214,6 +210,9 @@ public struct TitleTemplate: SettingValue {
         return .success(parts)
     }
 }
+
+/// The brackets a template's empty groups are found by, each with its closer.
+private let bracketClosers: [Character: Character] = ["(": ")", "[": "]"]
 
 private func trimmed(_ text: String) -> String {
     text.trimmingCharacters(in: .whitespacesAndNewlines)

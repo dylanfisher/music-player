@@ -17,3 +17,6 @@ TagEditorWindow.windowDidBecomeKey | NSWindowDelegate
 # dump and mirrors (ADR 0137).
 DiscogsToken.customMirror | CustomReflectable
 ServiceToken.customMirror | CustomReflectable
+# Called through a typealias, which the check doesn't follow: TitleTemplate("…") outside
+# Settings constructs a TokenTemplate.
+TokenTemplate.init | TitleTemplate

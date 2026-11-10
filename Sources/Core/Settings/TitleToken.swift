@@ -1,13 +1,21 @@
+/// What `appearance.windowTitle` and the toolbar's Title Line, `appearance.headerTitleFormat`,
+/// hold: text filled from the playing track (ADR 0087).
+public typealias TitleTemplate = TokenTemplate<TitleToken>
+
+extension TokenTemplate where Token == TitleToken {
+    public static var windowTitle: TitleTemplate { TitleTemplate("{title} — {artist}") }
+    /// Swinsian's toolbar line: "FI3AC2384210 by Aleksi Perälä from Alithia E'".
+    public static var titleLine: TitleTemplate { TitleTemplate("{title} by {artist} from {album}") }
+}
+
 /// A field of the playing track that a `TitleTemplate` names in braces, as `{artist}`.
 /// The names are the track table's columns' where they share one.
-public enum TitleToken: String, CaseIterable, Sendable {
+public enum TitleToken: String, TemplateToken {
     case title, artist, album, albumArtist, composer, genre, year, trackNumber, discNumber,
         format
 
-    /// The token as a template writes it.
-    var placeholder: String { "{\(rawValue)}" }
+    public static var example: String { TitleTemplate.windowTitle.template }
 
-    /// What it stands for, as the setting's help lists it.
     public var help: String {
         switch self {
         case .title: "The title, or the file's name when it has no title tag"
