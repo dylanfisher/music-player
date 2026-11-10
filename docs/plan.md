@@ -726,6 +726,39 @@ recording a new release on a job) is a separate prompt for music-recommender.
       record the job's new release, the player makes it; until then the player keeps the new
       release with the staged job and says so.
 
+Implementation plan, phase 71 (ADR 0178):
+
+What exists, found by search (map.md recipes): the staged tagger (`StagedTagging.swift`) fixes
+its release to `StagedJob.releaseID`, refuses any other review with `StagedReleaseFixed`, and
+has no Look Up (`canLookUp` is false for a staged job). Its Apply hands the verdict to
+`resolved`, which Downloads passes to `DownloadsCoordinator.resolved`, which records the files'
+sizes as `tagged` steps in the index's import ledger (`ImportJobs.swift`) and reports the
+verdict. `coordinator.stagedJob(_:)` builds the `StagedJob` the tagger and AutoTag take. The
+service has no call to change a job's release, so `DownloadJob.release` stays the queued one.
+
+- 71.1 The ledger (`Core/Library`): an `ImportStep.Kind.retagged` step, the job's folder as its
+  path and the release its files were tagged as in `destination`; `recordTaggedRelease`, which
+  forgets the step when the release is the queued one, and `taggedReleases()`, giving
+  `TaggedRelease` (folder, release) by job. `TaggedRelease.differs(for:)` is the release a
+  row names: only while the job is staged in that folder and the service lists another.
+  Forgotten with the job's other steps once it's imported. Tests in `ImportJobsTests`.
+- 71.2 The staged tagger (`StagedTagging.swift`, the staged init in `DiscogsTagger.swift`,
+  `canLookUp`): a staged review takes any chosen release, kept for the session; Analyze and
+  Other Releases… match it; Look Up… searches the local catalog only, as every staged match
+  is. Reject still points to Downloads. `resolved` hears the release written with the
+  verdict. Tests in `StagedTaggerTests`: choose and Look Up take another release, and Apply
+  reports it.
+- 71.3 Downloads: `coordinator.resolved` records the release before its report, and
+  `stagedJob(_:)` tags with the recorded one, so a reopened tagger or a rerun keeps it. The
+  model holds the recorded releases for its rows; the row's Tagging cell adds "another
+  release" to the verdict's word, and its tooltip and the album's say which release was
+  queued, which the files are tagged as, and that the service doesn't know yet. The Approve
+  sheet's subtitle names both. Approve itself is unchanged: the old files of an upgrade or a
+  replaced album are still the queued release's. Tests in `DownloadsCoordinatorTests`, the
+  row's and model's tests, and the window's.
+- 71.4 ADR 0178, an amended-by line in 0146 and a see-also in 0147 and 0145. AGENTS.md
+  unchanged: the tagger's write is a confirmed one in the staging folder.
+
 ### 72. Combine Albums for Tagging
 
 Asked by the owner on 2026-11-09, as proposed: "Combine Albums for Tagging", a command-palette
