@@ -31,17 +31,19 @@ enum ApiCandidates {
                     try await api.search(barcode: barcode)
                 }, .barcode)
         }
-        if found.count == tagged, let number = album.catalogNumber, let label = album.label {
-            for name in labelNames(label) where found.count == tagged {
-                add(
-                    try await searching(album) { () async throws(DiscogsAPIError) -> [Int] in
-                        try await api.search(catalogNumber: number, label: name)
-                    }, .labelAndCatalogNumber)
+        if found.count == tagged, let label = album.label {
+            for number in catalogNumbers(album) where found.count == tagged {
+                for name in labelNames(label) where found.count == tagged {
+                    add(
+                        try await searching(album) { () async throws(DiscogsAPIError) -> [Int] in
+                            try await api.search(catalogNumber: number, label: name)
+                        }, .labelAndCatalogNumber)
+                }
             }
         }
         guard found.count == tagged else { return found }
         for artist in artistNames(album.artist) where found.count == tagged {
-            for title in [album.title] + CatalogKey.titleVariants(album.title)
+            for title in [album.title] + CatalogKey.titleVariants(album.title, artist: album.artist)
             where found.count == tagged {
                 add(
                     try await searching(album) { () async throws(DiscogsAPIError) -> [Int] in

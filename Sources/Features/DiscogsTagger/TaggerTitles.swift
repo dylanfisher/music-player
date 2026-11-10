@@ -118,6 +118,7 @@ extension NotExactReason {
         case .releaseIDsDiffer: "its files carry different release IDs, or only some carry one"
         case .tiedAfterTieBreak: "other releases fit as well"
         case .foundByTitleOnly: "found by title only"
+        case .foundByArtistOnly: "found by artist only, not by its title"
         }
     }
 }

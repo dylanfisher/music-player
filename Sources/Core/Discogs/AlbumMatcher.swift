@@ -193,6 +193,10 @@ final class AlbumMatcher {
     /// user chose it.
     let skipsVideo: Bool
 
+    /// The releases artist-only searches have read, which the albums of one artist read again
+    /// and again; emptied past `artistOnlyCached`.
+    private var artistOnlyCache: [Int: CatalogRelease] = [:]
+
     init(_ catalog: Catalog?, skippingVideo: Bool) {
         self.catalog = catalog
         skipsVideo = skippingVideo
@@ -214,16 +218,46 @@ final class AlbumMatcher {
         var found = try candidateIDs(for: album, in: catalog)
         var seen = Set(found.map(\.id))
         for candidate in extra where seen.insert(candidate.id).inserted { found.append(candidate) }
-        let foundBy = Dictionary(uniqueKeysWithValues: found.map { ($0.id, $0.foundBy) })
+        var foundBy = Dictionary(uniqueKeysWithValues: found.map { ($0.id, $0.foundBy) })
         var candidates = found.map(\.id)
         if let choice, !candidates.contains(choice) { candidates.append(choice) }
-        for id in candidates {
-            guard let release = try fetched[id] ?? catalog?.release(id: id) else { continue }
+        func scored(_ id: Int, cached: Bool = false) throws -> ReleaseScore? {
+            let read =
+                cached ? try artistOnlyRelease(id) : try fetched[id] ?? catalog?.release(id: id)
+            guard let release = read else { return nil }
             if skipsVideo, release.isVideo, id != choice, !tagged.contains(String(id)) {
-                continue
+                return nil
             }
             releases[id] = release
-            scores.append(ReleaseScore.best(release, seconds: seconds, titles: titles))
+            return ReleaseScore.best(release, seconds: seconds, titles: titles)
+        }
+        for id in candidates {
+            if let score = try scored(id) { scores.append(score) }
+        }
+        // Nothing found: the artist's other releases, kept only when they fit as Likely would,
+        // so a wrong album title still finds its release (ADR 0174).
+        if choice == nil, tagged.isEmpty, let catalog, scores.isEmpty {
+            var read = 0
+            func keep(_ id: Int, _ score: ReleaseScore?) {
+                read += 1
+                guard let score, score.isLikely else { return }
+                scores.append(score)
+                foundBy[id] = .artist
+            }
+            for (master, main) in try artistOnlyReleases(album.artist, in: catalog)
+            where read < artistOnlyScored && seen.insert(main).inserted {
+                let first = try scored(main, cached: true)
+                keep(main, first)
+                // A master's releases mostly share a tracklist: the rest of them only when its
+                // main release's titles pair with the album's.
+                guard let master, let first, first.tracklist >= artistOnlyMainRelease else {
+                    continue
+                }
+                for id in try catalog.releaseIDs(master: master)
+                where read < artistOnlyScored && seen.insert(id).inserted {
+                    keep(id, try scored(id, cached: true))
+                }
+            }
         }
 
         let tier: MatchTier
@@ -244,7 +278,10 @@ final class AlbumMatcher {
             if !tagged.isEmpty {
                 tier = .incomplete
             } else if best.fitsTracklist {
-                tier = !tied && best.durationsAgree ? .exact : .likely
+                // Found by artist alone, it's never Exact, which Apply to All writes unread.
+                tier =
+                    !tied && best.durationsAgree && foundBy[best.releaseID] != .artist
+                    ? .exact : .likely
             } else {
                 tier = best.isLikely ? .likely : .incomplete
             }
@@ -259,6 +296,15 @@ final class AlbumMatcher {
             others: others, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
             titles: titles,
             origin: chosen.map { fetched[$0.releaseID] != nil } == true ? .api : .catalog)
+    }
+
+    /// Release `id` for an artist-only search, read once a run while the cache holds it.
+    private func artistOnlyRelease(_ id: Int) throws -> CatalogRelease? {
+        if let release = artistOnlyCache[id] { return release }
+        guard let release = try catalog?.release(id: id) else { return nil }
+        if artistOnlyCache.count >= artistOnlyCached { artistOnlyCache = [:] }
+        artistOnlyCache[id] = release
+        return release
     }
 
     /// `album`'s match with `release`, the one the user chose, scored alone and tiered by its

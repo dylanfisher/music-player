@@ -155,7 +155,8 @@ func discogsTuning(survey lines: URL, catalog: URL, output: URL) async throws ->
                 }
             }
             return TuningOutcome(
-                kinship: kinship, sameMaster: sameMaster, taggedFit: releaseFit(album.album, tagged),
+                kinship: kinship, sameMaster: sameMaster,
+                taggedFit: releaseFit(album.album, tagged),
                 tagsOutdated: tagsOutdate(album.album, tagged))
         }
         out.append("")

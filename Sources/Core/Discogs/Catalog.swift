@@ -127,6 +127,33 @@ public final class Catalog {
         try titleMatches(column: "artist_key", key: CatalogKey.fold(artist), limit: limit)
     }
 
+    /// The main release of each master credited to an artist whose name folds as `artist`'s,
+    /// with the master, then each release with no master, at most `limit` of each, in id
+    /// order: what an artist-only search scores first (ADR 0174), in two reads.
+    func mainReleases(byArtist artist: String, limit: Int) throws -> [(
+        master: Int?, release: Int
+    )] {
+        let key = CatalogKey.fold(artist)
+        guard !key.isEmpty else { return [] }
+        let masters = try database.prepare(
+            """
+            SELECT DISTINCT keys.master_id, masters.main_release_id FROM title_keys AS keys
+            JOIN masters ON masters.id = keys.master_id
+            WHERE keys.artist_key = ? AND masters.main_release_id IS NOT NULL
+            ORDER BY keys.master_id LIMIT ?
+            """
+        ).map(key, limit) { row -> (master: Int?, release: Int) in
+            (try row.int(0), try row.int(1))
+        }
+        let releases = try database.prepare(
+            """
+            SELECT DISTINCT release_id FROM title_keys WHERE artist_key = ? AND master_id IS NULL
+            ORDER BY release_id LIMIT ?
+            """
+        ).map(key, limit) { row -> (master: Int?, release: Int) in (nil, try row.int(0)) }
+        return masters + releases
+    }
+
     /// The masters, and the releases with no master, whose title folds as `title`'s, at most
     /// `limit`, masters first. The keys are indexed by artist first, so this reads every one,
     /// as only Look Up asks for.

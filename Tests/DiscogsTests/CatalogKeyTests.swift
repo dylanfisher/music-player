@@ -55,6 +55,44 @@ import Testing
     #expect(CatalogKey.titleVariants("[SK 032]") == [])
 }
 
+@Test func aTitleIsAlsoTriedWithoutTheLabelInfoAndFormatWordsALibraryAddsToIt() {
+    #expect(CatalogKey.titleVariants("Ghost [WIGCD 32]") == ["Ghost"])
+    #expect(CatalogKey.titleVariants("Funf (OSTGUTCD15)") == ["Funf"])
+    #expect(CatalogKey.titleVariants("Absorb WEB") == ["Absorb"])
+    #expect(CatalogKey.titleVariants("Live In South Beach CD2") == ["Live In South Beach"])
+    #expect(CatalogKey.titleVariants("Arctic Night [EP]") == ["Arctic Night"])
+    // "(2014)" folds away already, as Discogs's "(2)" does; a square bracket didn't.
+    #expect(CatalogKey.titleVariants("Louis Armstrong [1930]") == ["Louis Armstrong"])
+    // A step at a time, each a spelling: the format word, then the leading number.
+    #expect(
+        CatalogKey.titleVariants("(CURLE 024) Talis / Into The Red WEB")
+            == ["(CURLE 024) Talis / Into The Red", "Talis / Into The Red"])
+    #expect(
+        CatalogKey.titleVariants("Fabric 53-(Fabric105D)-WEB")
+            == ["Fabric 53-(Fabric105D)", "Fabric 53"])
+    // The artist's name before a dash, after a leading catalog number.
+    #expect(
+        CatalogKey.titleVariants("[did034] - Zzzzra & Axs - Ala Ned Rex", artist: "Zzzzra & Axs")
+            == ["Zzzzra & Axs - Ala Ned Rex", "Ala Ned Rex"])
+    #expect(CatalogKey.titleVariants("VA - Kompakt Total 12", artist: nil) == ["Kompakt Total 12"])
+    // Brackets of words with no digit are the title's own.
+    #expect(CatalogKey.titleVariants("Altogether Lost (The Remixes)") == [])
+    #expect(CatalogKey.titleVariants("Side A - Side B", artist: "Side C") == [])
+}
+
+@Test func aTitleNamesTheCatalogNumberInItsBrackets() {
+    #expect(CatalogKey.catalogNumbers(inTitle: "Ghost [WIGCD 32]") == ["WIGCD 32"])
+    #expect(CatalogKey.catalogNumbers(inTitle: "(ACRE 021) Evelyn EP WEB") == ["ACRE 021"])
+    #expect(
+        CatalogKey.catalogNumbers(inTitle: "Snake at Number 2 (APNEA027-WEB)")
+            == ["APNEA027-WEB", "APNEA027"])
+    // A year, a disc or format words aren't numbers, nor is a bracket of words.
+    #expect(CatalogKey.catalogNumbers(inTitle: "Phoenix (2014)") == [])
+    #expect(CatalogKey.catalogNumbers(inTitle: "10 Years (Disc 1)") == [])
+    #expect(CatalogKey.catalogNumbers(inTitle: "Arctic Night [EP]") == [])
+    #expect(CatalogKey.catalogNumbers(inTitle: "Altogether Lost (The Remixes)") == [])
+}
+
 @Test func theMatchKeyFoldsMarksOutsideTheLatinTableAsTheLibraryTaggerAlwaysDid() {
     // The service keeps these marks; the player re-checks at auto-tag (ADR 0148), so the golden
     // cases leave them out and this is the player's side of that difference.

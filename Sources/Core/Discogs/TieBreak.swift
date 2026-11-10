@@ -22,9 +22,11 @@ func tieBreak(
     _ scores: [ReleaseScore], releases: [Int: CatalogRelease], album: DiscogsAlbum
 ) -> (ReleaseScore, tied: Bool) {
     let barcode = album.barcode.map(CatalogKey.barcode).flatMap { $0.isEmpty ? nil : $0 }
-    let number = album.catalogNumber.flatMap(CatalogKey.catalogNumber)
+    // With no number in the tags, the one the title names in brackets (ADR 0174).
+    let taggedNumber = catalogNumbers(album).first
+    let number = taggedNumber.flatMap(CatalogKey.catalogNumber)
     let spelledBarcode = barcode == nil ? nil : album.barcode?.trimmingCharacters(in: .whitespaces)
-    let spelledNumber = album.catalogNumber?.trimmingCharacters(in: .whitespaces)
+    let spelledNumber = taggedNumber?.trimmingCharacters(in: .whitespaces)
     // Each step gives a release a weight; the releases of the highest weight above 0 stay.
     // A catalog number counts double on the first label, which `CATALOGNUMBER` is (ADR 0128).
     func numberWeight(_ release: CatalogRelease, _ same: (String) -> Bool) -> Int {

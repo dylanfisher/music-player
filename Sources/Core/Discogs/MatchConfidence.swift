@@ -13,6 +13,8 @@ enum MatchConfidence {
     static let outOfOrder = 10.0
     static let tied = 5.0
     static let foundByTitleOnly = 5.0
+    /// Points off for a release found among the artist's, the album's title not finding it.
+    static let foundByArtistOnly = 15.0
     static let releaseIDsDiffer = 10.0
 
     /// The confidence of `score`, the chosen release's as the window shows it, against the
@@ -43,6 +45,7 @@ enum MatchConfidence {
         points -= outOfOrder * Double(score.outOfOrder) / Double(longer)
         if tied { points -= Self.tied }
         if foundBy == .title { points -= foundByTitleOnly }
+        if foundBy == .artist { points -= foundByArtistOnly }
         if mixedIDs { points -= releaseIDsDiffer }
         return Int(min(100, max(0, points)).rounded())
     }

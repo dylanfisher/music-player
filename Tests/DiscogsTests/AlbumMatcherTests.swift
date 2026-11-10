@@ -145,6 +145,47 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(result.mapping.isEmpty)
 }
 
+/// An album whose title finds nothing is looked for among its artist's releases, which only
+/// count when they fit as Likely would; found that way, it's never Exact (ADR 0174).
+@Test func anAlbumWithAWrongTitleIsFoundByItsArtistAloneAndIsOnlyLikely() throws {
+    let result = try match(
+        album(stockholmTitles, title: "Untitled Rip 2004"), releases: release(10, tracks: stockholm)
+    )
+    #expect(result.tier == .likely)
+    #expect(result.releaseID == 10)
+    #expect(result.reasons == [.foundByArtistOnly])
+    #expect(result.confidence == 85)
+    #expect(result.safety == nil)
+
+    let unlike = try match(
+        album(["One", "Two", "Three"], title: "Untitled Rip 2004"),
+        releases: release(10, tracks: stockholm))
+    #expect(unlike.tier == .noCandidate, "the artist's releases that don't fit aren't kept")
+    let anyone = try match(
+        album(stockholmTitles, artist: "Unknown Artist", title: "Untitled Rip 2004"),
+        releases: release(10, artist: "Unknown Artist", tracks: stockholm))
+    #expect(anyone.tier == .noCandidate, "a credit for no known artist isn't searched alone")
+}
+
+/// A catalog number in the title's brackets, with no number in the tags, finds the release on
+/// the album's label and settles a tie as the tags' number would (ADR 0174).
+@Test func aCatalogNumberInTheTitleFindsTheReleaseAndSettlesTheTie() throws {
+    let found = try match(
+        album(stockholmTitles, artist: "Nobody", title: "Holm [SK 032]", label: "Svek"),
+        releases: release(10, tracks: stockholm))
+    #expect(found.tier == .exact)
+    #expect(found.foundBy == .labelAndCatalogNumber)
+
+    let releases =
+        release(10, master: 100, catno: "SK 031", tracks: stockholm)
+        + release(11, master: 100, catno: "SK 032", tracks: stockholm)
+    let tied = try match(
+        album(stockholmTitles, title: "Stockholm [SK 032]"), masters: master(100, main: 10),
+        releases: releases)
+    #expect(tied.releaseID == 11)
+    #expect(tied.tier == .exact)
+}
+
 @Test func anAlbumWithOneReleaseIDIsMatchedToThatReleaseThoughAnotherFits() throws {
     let result = try match(
         album(stockholmTitles, releaseIDs: ["11", "11", "11"]),

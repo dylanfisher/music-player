@@ -20,6 +20,9 @@ public enum NotExactReason: Equatable, Sendable {
     case tiedAfterTieBreak
     /// Found by artist and title only: no release id, barcode or catalog number led to it.
     case foundByTitleOnly
+    /// Found by artist alone, among the artist's releases, when no title search found one
+    /// that fits (ADR 0174).
+    case foundByArtistOnly
 
     /// The reasons for `score`, the chosen release's, at `tier`; none for a tier other than
     /// Likely or Incomplete.
@@ -54,6 +57,7 @@ public enum NotExactReason: Equatable, Sendable {
         }
         if tied { reasons.append(.tiedAfterTieBreak) }
         if foundBy == .title { reasons.append(.foundByTitleOnly) }
+        if foundBy == .artist { reasons.append(.foundByArtistOnly) }
         return reasons
     }
 }
