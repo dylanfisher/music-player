@@ -8,7 +8,8 @@
   [0039](0039-network-control.md) (local subnets, IP literals, `LocalHTTPClient`),
   [0144](0144-the-service-token.md) (the token and the settings),
   [0146](0146-staged-tag-writes.md) and [0147](0147-moving-downloads-into-the-library.md) (what
-  the jobs are for)
+  the jobs are for), [0178](0178-another-release-for-a-staged-download.md) (the call to
+  record a job's new release, still to come)
 
 ## Context
 

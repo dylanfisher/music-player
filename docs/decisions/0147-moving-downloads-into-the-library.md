@@ -14,7 +14,8 @@
 - **See also:** [0026](0026-sync-identity-is-the-relative-path.md) (the move list that
   carries stats),
   [0028](0028-network-folders-by-share.md) (paths by share),
-  [0146](0146-staged-tag-writes.md) (the staged tag write before this)
+  [0146](0146-staged-tag-writes.md) (the staged tag write before this),
+  [0178](0178-another-release-for-a-staged-download.md) (files tagged as another release)
 
 ## Context
 

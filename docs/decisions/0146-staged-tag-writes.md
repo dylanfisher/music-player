@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0020](0020-tag-writing.md) (who writes music files, and when),
   [0133](0133-one-confirmation-for-a-match-set.md) (what counts as the confirmation)
+- **Amended by:** [0178](0178-another-release-for-a-staged-download.md): the staged tagger
+  can choose another release in the local catalog, which the player keeps with the job.
 - **See also:** [0131](0131-discogs-matching.md) (the tiers),
   [0132](0132-discogs-field-mapping.md) (the mapping), [0144](0144-the-service-token.md) (the
   staging folder setting), [0147](0147-moving-downloads-into-the-library.md) (Approve)

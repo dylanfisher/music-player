@@ -718,7 +718,7 @@ Asked by the owner on 2026-11-09.
 Asked by the owner on 2026-11-09. The service side (stall timers, offline peers, cleanup, and
 recording a new release on a job) is a separate prompt for music-recommender.
 
-- [ ] **A staged download can take another release.** In the tagger opened from Downloads,
+- [x] **A staged download can take another release.** In the tagger opened from Downloads,
       Other Releases… and Look Up… choose another release, as for a library album, instead of
       refusing with `StagedReleaseFixed`. The write stays in the staging folder (ADR 0146) and is
       confirmed as any tagger write is. The Downloads row says the album is tagged as another
@@ -758,6 +758,27 @@ service has no call to change a job's release, so `DownloadJob.release` stays th
   row's and model's tests, and the window's.
 - 71.4 ADR 0178, an amended-by line in 0146 and a see-also in 0147 and 0145. AGENTS.md
   unchanged: the tagger's write is a confirmed one in the staging folder.
+
+Result, phase 71: shipped the item (ADR 0178; an amended-by line in 0146, see-also lines in
+0145 and 0147; AGENTS.md unchanged, since the tagger's write is a confirmed `TagWriter` write
+inside the staging folder). The staged tagger's Other Releases… and Look Up… choose any release
+in the local catalog; Look Up asks no API, as no staged match does. Apply reports the release it
+wrote with the verdict, and the coordinator keeps it in this Mac's import ledger as a
+`retagged` step, which the tagger and a rerun of the tag run then match. The Downloads row's
+Tagging cell says "Clean, another release" (or the verdict's own word), its tooltip and the
+album's name both releases, and the Approve sheet's subtitle says "Tagged as Discogs release N,
+queued as M". Approve is unchanged; the album it replaces is still the queued release's.
+Open: music-recommender has no call to record a job's new release, so only the Mac that tagged
+the files knows it; another Mac's row and tagger show the queued one. When the service adds
+the call (likely `POST /v1/downloads/release` with `id` and `release_id`), it goes in
+`RecommenderClient` beside `retry`, in `DownloadsService`, and in
+`DownloadsCoordinator.resolved` before the tagging report; the row stops naming the release once
+the service lists it. Tests: the ledger's record, replace and forget (`ImportJobsTests`), the
+coordinator keeping and forgetting it (`DownloadsCoordinatorTests`), the row, model, window and
+sheet's words, and the staged tagger choosing, looking up and reporting the release
+(`StagedTaggerTests`). Flakes seen in the parallel runs and passing alone: SettingsWindowTests,
+`aPollThatOverlapsTheRecoveryWaitsForItBeforeTagging`, `ImportCheckpointTests`,
+`PlayCountTests.saveStoresTheCountWithoutAWrite`.
 
 ### 72. Combine Albums for Tagging
 
