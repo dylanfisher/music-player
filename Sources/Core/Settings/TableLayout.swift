@@ -33,6 +33,8 @@ public struct TableLayout: Codable, Equatable, Sendable {
 
     /// What's wrong with the layout, or nil.
     func problem() -> String? {
-        widths.values.contains { !($0 > 0) } ? "a column's width isn't positive" : nil
+        if widths.values.contains(where: { !($0 > 0) }) { return "a column's width isn't positive" }
+        if Set(order).count != order.count { return "a column is named twice in the order" }
+        return nil
     }
 }

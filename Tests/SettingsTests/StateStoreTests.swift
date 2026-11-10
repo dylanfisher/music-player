@@ -579,6 +579,11 @@ private func problems(_ json: String) -> [SettingProblem] {
                 + #" {"widths": {"album": -1}, "order": [], "sortAscending": true}}}}"#,
             "column's width isn't positive"
         ),
+        (
+            #"{"discogsTagger.sheets": {"otherReleases": {"width": 900, "height": 480, "table":"#
+                + #" {"widths": {}, "order": ["year", "artist", "year"], "sortAscending": true}}}}"#,
+            "named twice in the order"
+        ),
     ] {
         try Data(json.utf8).write(to: url)
         let discarded = try StateStore(AppState(), fileURL: url)
