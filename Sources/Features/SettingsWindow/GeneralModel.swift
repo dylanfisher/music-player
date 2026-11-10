@@ -184,11 +184,11 @@ public final class GeneralModel {
     /// The sections in order, each with its rows in schema order; the Watched Folders pane
     /// shows the watched folders in a list of their own.
     var sections: [(section: Section, rows: [Row])] {
-        Section.allCases.compactMap { section in
-            let shown = rows.filter {
-                ![.folders, .renderer].contains($0.control) && Section(key: $0.key) == section
-            }
-            return shown.isEmpty ? nil : (section, shown)
+        let shown = Dictionary(
+            grouping: rows.filter { ![.folders, .renderer].contains($0.control) },
+            by: { Section(key: $0.key) })
+        return Section.allCases.compactMap { section in
+            shown[section].map { (section, $0) }
         }
     }
     /// The watched folders' row, which the Watched Folders pane shows.
