@@ -485,4 +485,8 @@ searching only albums with no candidate and reading at most 50 masters brought i
 found against 465 at 100. A tie only within one master took 26 good albums out of Safe; a tie
 across both masters and titles took 5. `DownloadsCoordinatorTests`' lease test failed once
 under the parallel run and passed three times alone, outside this phase's code. Implemented in
-the orchestrating session (Opus), without a separate implementer.
+the orchestrating session (Opus), without a separate implementer. The gate's review (Sonnet,
+101k tokens, 17 tool calls, 4 min) found Both no longer sending artist-only matches to the API
+and the tie-break missing a title number's second spelling, both fixed. Full `./scripts/check`
+passed before landing, after a rerun of `PlayerImportBrowserTests`, which failed once under
+load and passed alone.
