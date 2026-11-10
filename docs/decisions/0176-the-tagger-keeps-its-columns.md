@@ -29,9 +29,13 @@ And no table kept its column order, though each lets a header be dragged.
 - **The album list is kept with the sheets,** as `albumList` in `discogsTagger.sheets`, so it
   goes through the plumbing the sheets have: one setting, one closure, one copy per tagger. The
   type keeps its name, `TaggerSheetLayouts`.
-- **Saved as it changes,** not as the window closes: a column's resize or move, a sort, a drag of
-  the divider. The window can stay open until quit. The layout saver coalesces the steps of a
-  drag. It's applied once the window's frame is placed (ADR 0158), the divider first, then the
+- **Saved as the user changes it,** not as the window closes: a drag of a column's edge (while
+  the header reports the column it resizes), a column's move, a sort, and the end of a drag of
+  the divider (seen in the split view's `mouseDown`, since a resize of the window posts the
+  same notifications as a drag). The table's own resizing to fit, as the window resizes, isn't
+  saved, so it can't replace the widths the user chose. The window can stay open until quit.
+  The layout saver coalesces the steps of a drag. A stored order that names a column twice is
+  discarded with the rest of the setting. It's applied once the window's frame is placed (ADR 0158), the divider first, then the
   columns, so the table's resizing to the frame doesn't spread the widths, as Downloads does.
 - **The sort is the model's:** Album, Files, Match or Review, either way; equal albums, and no
   sort, keep the artist-then-title order the list had. An album with no confidence sorts under

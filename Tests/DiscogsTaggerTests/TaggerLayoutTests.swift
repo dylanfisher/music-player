@@ -22,12 +22,14 @@ import Testing
     let window = try #require(first.window)
     window.setContentSize(NSSize(width: 1200, height: 700))
     window.contentView?.layoutSubtreeIfNeeded()
-    let split = try #require(controller.albumTable.enclosingScrollView?.superview as? NSSplitView)
-    split.setPosition(460, ofDividerAt: 0)
+    controller.split.setPosition(460, ofDividerAt: 0)
+    controller.split.dividerDragged()
     window.contentView?.layoutSubtreeIfNeeded()
     // As a drag of a column's edge leaves them: the others take up the difference.
-    controller.albumTable.tableColumns[1].width = 90
-    controller.albumTable.sizeToFit()
+    dragColumnEdge(of: controller.albumTable) {
+        controller.albumTable.tableColumns[1].width = 90
+        controller.albumTable.sizeToFit()
+    }
     let widths = controller.albumTable.tableColumns.map(\.width)
     let pane = try #require(controller.albumTable.enclosingScrollView).frame.width
     #expect(saved.albumList?.paneWidth == Double(pane))
@@ -124,5 +126,46 @@ import Testing
     let sheet = try #require(window.attachedSheet)
     #expect(sheet.contentRect(forFrameRect: sheet.frame).size == NSSize(width: 830, height: 420))
     (sheet.windowController as? MappingSheet)?.endSheet()
+    window.close()
+}
+
+/// A header that reports a column's edge being dragged, as AppKit's does during the drag.
+private final class DraggingHeader: NSTableHeaderView {
+    override var resizedColumn: Int { 1 }
+}
+
+/// Runs `resize` as a drag of a column's edge in `table`'s header.
+@MainActor
+private func dragColumnEdge(of table: NSTableView, _ resize: () -> Void) {
+    let header = table.headerView
+    table.headerView = DraggingHeader()
+    resize()
+    table.headerView = header
+}
+
+/// A resize of the window alone, which drags no divider and resizes the columns only to fit,
+/// leaves the saved layout as the user left it; nor does the first layout save one (69).
+@MainActor
+@Test func aWindowResizeAloneSavesNoAlbumListLayout() async throws {
+    let made = await model(
+        Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    let tagger = DiscogsTagger(model: made)
+    var saves = 0
+    tagger.sheetLayoutsChosen = { _ in saves += 1 }
+    tagger.show()
+    let window = try #require(tagger.window)
+    window.contentView?.layoutSubtreeIfNeeded()
+    let controller = try #require(window.windowController as? TaggerWindow)
+    let widths = controller.albumTable.tableColumns.map(\.width)
+    window.setContentSize(NSSize(width: 1300, height: 760))
+    window.contentView?.layoutSubtreeIfNeeded()
+    // As a resize that moves the divider leaves it, with no drag.
+    controller.split.setPosition(460, ofDividerAt: 0)
+    window.contentView?.layoutSubtreeIfNeeded()
+    window.setContentSize(NSSize(width: 1000, height: 600))
+    window.contentView?.layoutSubtreeIfNeeded()
+    #expect(controller.albumTable.tableColumns.map(\.width) != widths, "resized to fit")
+    #expect(saves == 0)
+    #expect(tagger.sheetLayouts.albumList == nil)
     window.close()
 }

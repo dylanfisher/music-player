@@ -15,9 +15,7 @@ import TagWriter
 /// API, and Both as the API alone, still analyze (ADR 0139). After an import stopped before
 /// it finished it offers Resume Import and Start Over.
 @MainActor
-final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate,
-    NSSplitViewDelegate
-{
+final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     static let title = "Discogs Tagger"
     /// The pasteboard type of a dragged tracklist row: the file's id.
     static let fileRowType = NSPasteboard.PasteboardType("\(bundleIdentifier).discogs-file")
@@ -53,7 +51,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let tabs = NSSegmentedControl()
     let albumTable = NSTableView()
     /// The album list left of its divider, the tracklists right.
-    private let split = NSSplitView()
+    let split = DividerSplitView()
     /// Set once the album list has the layout it was left at, after which each change to it
     /// is saved.
     private var keepsAlbumList = false
@@ -263,7 +261,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
         split.isVertical = true
         split.dividerStyle = .thin
-        split.delegate = self
+        // Only a drag is saved: a resize of the window moves the divider too, and the
+        // notifications of a resize can't be told from those of a drag.
+        split.dividerDragged = { [weak self] in self?.albumListChanged() }
         split.addArrangedSubview(albums)
         split.addArrangedSubview(detail)
         albums.widthAnchor.constraint(greaterThanOrEqualToConstant: 280).isActive = true
@@ -673,8 +673,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         sheetLayoutsChosen(sheetLayouts)
     }
 
+    /// Saves a width the user dragged a column's edge to. The table's own resizing to fit, as
+    /// the window resizes, isn't saved: it would replace the widths the user chose.
     func tableViewColumnDidResize(_ notification: Notification) {
-        if notification.object as? NSTableView === albumTable { albumListChanged() }
+        guard notification.object as? NSTableView === albumTable,
+            (albumTable.headerView?.resizedColumn ?? -1) >= 0
+        else { return }
+        albumListChanged()
     }
 
     func tableViewColumnDidMove(_ notification: Notification) {
@@ -694,8 +699,6 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             })
         albumListChanged()
     }
-
-    func splitViewDidResizeSubviews(_ notification: Notification) { albumListChanged() }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard let changed = notification.object as? NSTableView else { return }
@@ -1042,5 +1045,18 @@ extension NSWindowController {
     func endSheet() {
         guard let window, let parent = window.sheetParent else { return }
         parent.endSheet(window)
+    }
+}
+
+/// A split view that says when the user has dragged its divider.
+final class DividerSplitView: NSSplitView {
+    /// Called as a drag of the divider ends.
+    var dividerDragged: () -> Void = {}
+
+    /// A click on the split view itself is on a divider; AppKit tracks its drag here until the
+    /// mouse goes up.
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        dividerDragged()
     }
 }
