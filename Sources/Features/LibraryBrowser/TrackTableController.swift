@@ -927,18 +927,16 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// Selects the first row whose sort column starts with `query`, centered, as Go to Item
     /// lands on one.
     private func typeToSelect(_ query: String) {
-        let column = model.sortColumn
         Task {
-            let names: [TrackName]
+            let texts: [String]
             do {
-                names = try await model.trackNames()
+                texts = try await model.typeSelectTexts()
             } catch {
                 actions.failed("couldn't read the tracks' names: \(error)")
                 return
             }
             guard query == typeSelect?.query else { return }
-            let texts = names.lazy.map { typeSelectText($0, sortedBy: column) }
-            guard let row = TypeSelect.firstIndex(startingWith: query, in: texts) else {
+            guard let row = TypeSelect.firstIndex(startingWith: query, inFolded: texts) else {
                 NSSound.beep()
                 return
             }

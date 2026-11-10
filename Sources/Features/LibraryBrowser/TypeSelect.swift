@@ -37,8 +37,16 @@ final class TypeSelect {
     /// The first of `texts`, in display order, that starts with `query`, ignoring case and
     /// accents, so "ré" finds "Resume".
     static func firstIndex(startingWith query: String, in texts: some Sequence<String>) -> Int? {
+        firstIndex(startingWith: query, inFolded: texts.lazy.map(fold))
+    }
+
+    /// `firstIndex(startingWith:in:)` over texts already passed through `fold`, so a list folded
+    /// once serves every key typed into it.
+    static func firstIndex(startingWith query: String, inFolded texts: some Sequence<String>)
+        -> Int?
+    {
         let folded = fold(query)
-        for (index, text) in texts.enumerated() where fold(text).hasPrefix(folded) {
+        for (index, text) in texts.enumerated() where text.hasPrefix(folded) {
             return index
         }
         return nil

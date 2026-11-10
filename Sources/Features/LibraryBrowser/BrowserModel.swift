@@ -61,6 +61,7 @@ public final class BrowserModel {
     /// Counts applied changes, so names read for one list aren't used for the next.
     private var applied = 0
     private var names: (applied: Int, list: [TrackName])?
+    private var foldedNames: (applied: Int, texts: [String])?
     /// The list the last play from the table queued, as its track IDs in play order, its
     /// queue, and the library change it was read after, so a play from the same list can keep
     /// the queue the engine plays (ADR 0097, 0104).
@@ -721,6 +722,25 @@ public final class BrowserModel {
             guard mine == applied else { continue }
             names = (mine, list)
             return list
+        }
+        throw NamesKeptChanging()
+    }
+
+    /// The shown tracks' type-to-select texts in table order, through `TypeSelect.fold`: folded
+    /// once per change of the list, off the main actor, since folding 43k titles takes longer
+    /// than a key's wait should. A list that changed while they were folded is read again.
+    func typeSelectTexts() async throws -> [String] {
+        for _ in 0..<Self.nameReads {
+            if let foldedNames, foldedNames.applied == applied { return foldedNames.texts }
+            let mine = applied
+            let column = sortColumn
+            let list = try await trackNames()
+            let texts = await Task.detached {
+                list.map { TypeSelect.fold(typeSelectText($0, sortedBy: column)) }
+            }.value
+            guard mine == applied else { continue }
+            foldedNames = (mine, texts)
+            return texts
         }
         throw NamesKeptChanging()
     }

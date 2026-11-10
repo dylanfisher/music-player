@@ -222,6 +222,32 @@ import Testing
     #expect(typeSelectText(names[1], sortedBy: .album) == "Anima")
 }
 
+/// The folded texts are kept for one list: a sort or a search makes a new list, folded again.
+@MainActor @Test func typeSelectTextsAreFoldedAgainForANewList() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: true,
+        groupByAlbumArtist: false)
+    await model.load(BrowserState(source: nil))
+    func expected(_ column: TrackColumn) async throws -> [String] {
+        try await model.trackNames().map { TypeSelect.fold(typeSelectText($0, sortedBy: column)) }
+    }
+    let byTitle = try await model.typeSelectTexts()
+    #expect(byTitle == (try await expected(.title)))
+    #expect(try await model.typeSelectTexts() == byTitle)
+
+    await model.setSort(.artist, ascending: false)
+    let byArtist = try await model.typeSelectTexts()
+    #expect(byArtist != byTitle)
+    #expect(byArtist == (try await expected(.artist)))
+
+    let title = try #require(try await model.trackNames().first?.title)
+    await model.setSearch(title)
+    let searched = try await model.typeSelectTexts()
+    #expect(searched.count < byArtist.count)
+    #expect(searched == (try await expected(.artist)))
+}
+
 /// A sort that lands while the names are read makes them stale; they're read again.
 @MainActor @Test func trackNamesReadAgainWhenTheListChangesMeanwhile() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
