@@ -664,11 +664,11 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 
 Asked by the owner on 2026-11-09.
 
-- [ ] **Sort the album list by any column:** a click on Album, Files, Match or Review sorts by
+- [x] **Sort the album list by any column:** a click on Album, Files, Match or Review sorts by
       it, a second click reverses it, and the sort is remembered.
-- [ ] **Column widths are remembered** between launches. The owner reports they aren't: find
+- [x] **Column widths are remembered** between launches. The owner reports they aren't: find
       why with a test that relaunches the window, then fix it.
-- [ ] **The releases window remembers itself.** The sheet or window for choosing a release
+- [x] **The releases window remembers itself.** The sheet or window for choosing a release
       (Other Releases, Look Up) keeps its size, its position where it has one, and its column
       widths and order, like every other window (ADR 0158). This includes the tagger opened from
       Downloads (Open in Tagger).
@@ -688,6 +688,23 @@ Plan:
   tagger gets the layouts and saves them, and the two taggers share one copy. A window test of
   the order.
 - 69.4 ADR 0176, cross-linked from 0136 and 0158.
+
+Result, phase 69: shipped all three items (ADR 0176). Why the widths went: nothing recorded the
+album list. The sheets kept their layouts (ADR 0136), the window's own table had none, and its
+divider always started at 340 points. A test that shows the tagger, drags the divider to 460
+and widens Files, then opens a second tagger with what the first saved, failed with every
+column back at its default; it passes now. The album list keeps its pane's width and its
+columns' widths, order and sort in `discogsTagger.sheets`, saved as each changes and applied
+once the frame is placed. A header click sorts by Album, Files, Match or Review and a second
+reverses it, ties and no sort in artist-then-title order. The sheets now keep their column order
+too, through the same `TableLayout`. Open in Tagger's tagger gets and saves the layouts, and the
+two taggers share one copy so neither saves over the other's. A sheet has no position of its
+own; it opens over the tagger's window, which keeps its frame. The setting's shape changed, so
+a saved one is discarded once. Tests: the relaunch, the sort in the model and through the
+header, the sheets' order, layouts reaching an open window, the setting's round trip and
+discards. Not run in the app: an owner check that the widths, the divider and a sort survive a
+relaunch, and that a sheet from Open in Tagger (View Changes now; Other Releases once phase 71
+lets a staged album choose) keeps its size.
 
 ### 70. Artwork, Settings and Get Info
 
