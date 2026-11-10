@@ -140,9 +140,11 @@ struct MainWindowFixture {
         window.window.layoutIfNeeded()
     }
 
-    /// The window's frame and every split view's panes, in window coordinates.
+    /// The window's size and every split view's panes, in window coordinates. The window's
+    /// origin is left out: it opens on the main screen, which follows what the user is doing
+    /// with a second display, so two fixtures can open on different screens.
     var layout: [NSRect] {
-        var frames = [window.window.frame]
+        var frames = [NSRect(origin: .zero, size: window.window.frame.size)]
         func walk(_ view: NSView) {
             if let split = view as? NSSplitView {
                 frames += split.arrangedSubviews.map { $0.convert($0.bounds, to: nil) }

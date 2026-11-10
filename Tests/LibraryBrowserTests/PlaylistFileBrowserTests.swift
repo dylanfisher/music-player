@@ -3,6 +3,7 @@ import Foundation
 import Settings
 import Testing
 
+@testable import Fixtures
 @testable import Library
 @testable import LibraryBrowser
 
@@ -49,7 +50,7 @@ private func temporaryFolder() throws -> URL {
     let huge = dir.appendingPathComponent("Huge.pls")
     try Data(count: PlaylistFile.maximumBytes + 1).write(to: huge)
     browser.importPlaylists(from: [list, huge])
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while browser.status.playlistFileReport.isEmpty, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }

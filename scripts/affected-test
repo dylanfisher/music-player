@@ -48,7 +48,7 @@ expect $'Tests/LogTests/ModuleLoggerTests.swift\nPackage.swift' 0 'all'
 expect 'Sources/Core/NoSuchModule/A.swift' 1 'affected: Sources/Core/NoSuchModule/A.swift is in no target'"'"'s folder in Package.swift'
 
 out=$(swift scripts/affected.swift --inputs)
-for want in Sources Tests Package.swift scripts/test docs/plan.md; do
+for want in Sources Tests Package.swift scripts/test scripts/clear-windows.m docs/plan.md; do
   grep -qx "$want" <<<"$out" ||
     { printf 'affected-test: --inputs is missing %s in:\n%s\n' "$want" "$out" >&2; problems=$((problems + 1)); }
 done

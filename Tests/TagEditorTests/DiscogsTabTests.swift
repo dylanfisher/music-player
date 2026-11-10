@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import Discogs
+@testable import Fixtures
 @testable import Metadata
 @testable import TagEditor
 @testable import TagWriter
@@ -49,7 +50,7 @@ private let stockholm = ReleaseDetail(
 /// Waits a few seconds for `condition`.
 @MainActor
 private func waitFor(_ what: String, _ condition: () -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(5)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while !condition() {
         try #require(Date() < deadline, "timed out waiting for \(what)")
         try await Task.sleep(for: .milliseconds(5))

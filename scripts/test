@@ -11,10 +11,17 @@
 #
 # scripts/affected.swift says which paths a test reads and which test targets a changed path
 # affects. `--changed` is the inner loop; ./scripts/check runs the plain form.
+#
+# Every form but the last runs each test target's bundle itself, TEST_JOBS at a time (default:
+# the performance cores), with every window clear (scripts/clear-windows.m). `swift test` runs
+# the bundles one after another (ADR 0182). A target's output goes to .build/test-logs.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 stamp=.build/test-pass
+logs=.build/test-logs
+# Each target's seconds in its last run, so the longest start first.
+durations=.build/test-durations
 
 fresh=0 changed=0 ref=HEAD args=()
 while [ $# -gt 0 ]; do
@@ -47,15 +54,92 @@ swift_test() {
 
 if [ "${#args[@]}" -gt 0 ]; then swift_test "${args[@]}"; exit; fi
 
-# run <test targets, one per line, or `all`> — swift test over just those targets.
+# test_target <test target> — runs the target's bundle with the helper `swift test` uses, its
+# output in its log, and prints one line saying how it went. It fails when the process does, or
+# when the process started a run and never printed its summary (ADR 0127). Run by xargs, so it
+# reads its settings from exported variables.
+test_target() {
+  local target=$1 start=$SECONDS status=0 executable log started ended summary
+  executable=$bin/$target.xctest/Contents/MacOS/$target
+  log=$logs/$target.log
+  # Set here rather than exported: /usr/bin/xargs is protected by SIP, which drops DYLD_ variables
+  # from what it runs.
+  DYLD_INSERT_LIBRARIES=$clear DYLD_FRAMEWORK_PATH=$platform/Library/Frameworks \
+    DYLD_LIBRARY_PATH=$platform/usr/lib NO_COLOR=1 \
+    "$helper" --test-bundle-path "$executable" "$executable" --testing-library swift-testing \
+    >"$log" 2>&1 || status=$?
+  echo "$((SECONDS - start)) $target" >>"$logs/durations"
+  started=$(grep -c '^◇ Test run started\.$' "$log" || true)
+  ended=$(grep -cE '^[✔✘] Test run with ' "$log" || true)
+  summary=$(grep -E '^[✔✘] Test run with ' "$log" | sed -E 's/^[✔✘] Test run with //' || true)
+  if [ "$status" = 0 ] && [ "$started" = 1 ] && [ "$ended" = 1 ]; then
+    echo "✔ $target: $summary"
+    return 0
+  fi
+  if [ "$started" != 1 ] || [ "$ended" != 1 ]; then
+    echo "✘ $target: the test process exited partway through, with status $status"
+  else
+    echo "✘ $target: $summary"
+  fi
+  touch "$logs/$target.failed"
+}
+
+# test_targets <test targets, one per line> — builds the tests, then runs each target's bundle,
+# TEST_JOBS at a time, the longest in its last run first. Prints each failing target's issues
+# once all have run.
+test_targets() {
+  # The helper runs Swift Testing's tests only, so an XCTest case would never run.
+  if git grep --untracked -lq '^import XCTest' -- Tests; then
+    echo "XCTest tests, which scripts/test doesn't run: $(git grep --untracked -l '^import XCTest' -- Tests)" >&2
+    return 1
+  fi
+  swift build --build-tests
+  bin=$(swift build --build-tests --show-bin-path)
+  helper=$(dirname "$(xcrun --find swift)")/../libexec/swift/pm/swiftpm-testing-helper
+  if [ ! -x "$helper" ]; then echo "no Swift Testing helper at $helper" >&2; return 1; fi
+  platform=$(xcrun --show-sdk-platform-path)/Developer
+  clear=.build/clear-windows.dylib
+  if [ ! -e "$clear" ] || [ scripts/clear-windows.m -nt "$clear" ]; then
+    clang -dynamiclib -fobjc-arc -framework AppKit -o "$clear" scripts/clear-windows.m
+  fi
+  export bin helper platform clear logs
+  export -f test_target
+  rm -rf "$logs"
+  mkdir -p "$logs"
+  # An Intel Mac has no performance cores to count.
+  local jobs=${TEST_JOBS:-$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || sysctl -n hw.physicalcpu)}
+  local start=$SECONDS failed
+  echo "running $(wc -l <<<"$1" | tr -d ' ') test targets, $jobs at a time"
+  touch "$durations"
+  # A target with no time yet sorts as 0 seconds, after the timed ones.
+  awk 'FILENAME == ARGV[1] { seconds[$2] = $1; next } { print seconds[$0] + 0, $0 }' \
+    "$durations" <(printf '%s\n' "$1") | sort -rn | cut -d' ' -f2 |
+    xargs -P "$jobs" -n 1 bash -c 'test_target "$0"'
+  # This run's times, and the last run's for the targets this one skipped.
+  awk '{ seconds[$2] = $1 } END { for (t in seconds) print seconds[t], t }' \
+    "$durations" "$logs/durations" >"$durations.new"
+  mv "$durations.new" "$durations"
+  failed=$(find "$logs" -name '*.failed' -exec basename {} .failed \; | sort)
+  for target in $failed; do
+    printf '\n\033[1m%s\033[0m (%s)\n' "$target" "$logs/$target.log"
+    # Each issue with the values under it, or the end of the log when the process died.
+    awk '/^✘ / { shown = 1; print; next } /^↳ / && shown { print; next } { shown = 0 }' \
+      "$logs/$target.log" | grep . || tail -20 "$logs/$target.log"
+  done
+  echo "$((SECONDS - start)) s"
+  if [ -n "$failed" ]; then
+    echo "failed: $(tr '\n' ' ' <<<"$failed")" >&2
+    return 1
+  fi
+}
+
+# run <test targets, one per line, or `all`> — the bundles of just those targets.
 run() {
   case "$1" in
     "") echo "no test reads what changed — skipped" ;;
-    all) swift_test ;;
-    *)
-      echo "running $(tr '\n' ' ' <<<"$1")"
-      swift_test --filter "^($(paste -sd '|' - <<<"$1"))\."
-      ;;
+    # Every file under Tests affects its own target, so this lists every test target.
+    all) test_targets "$(git ls-files --cached --others --exclude-standard Tests | swift scripts/affected.swift)" ;;
+    *) test_targets "$1" ;;
   esac
 }
 

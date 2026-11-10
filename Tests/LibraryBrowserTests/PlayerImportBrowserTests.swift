@@ -1,10 +1,10 @@
 import AppKit
-import Fixtures
 import Foundation
 import SQLite
 import Settings
 import Testing
 
+@testable import Fixtures
 @testable import Library
 @testable import LibraryBrowser
 
@@ -177,7 +177,7 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
         contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
         backing: .buffered, defer: false)
     browser.importLibrary(.swinsian, from: library, over: window)
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while browser.importSheet == nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }

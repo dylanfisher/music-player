@@ -3,6 +3,7 @@ import DisplayText
 import Settings
 import Testing
 
+@testable import Fixtures
 @testable import Library
 @testable import LibraryBrowser
 
@@ -135,7 +136,7 @@ import Testing
                 charactersIgnoringModifiers: String(character), isARepeat: false, keyCode: 0))
         #expect(table.takeKey(event))
     }
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while table.selectedRowIndexes != [typed], Date() < deadline {
         try await Task.sleep(nanoseconds: 20_000_000)
     }
@@ -810,7 +811,7 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
     let point = NSPoint(x: column.midX, y: table.rect(ofRow: row).midY)
     // Asks for the art, which loads off the main thread.
     controller.showArtHover(at: point)
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while controller.artHover.isHidden, Date() < deadline {
         try await Task.sleep(nanoseconds: 20_000_000)
         controller.showArtHover(at: point)
@@ -842,7 +843,7 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
         rows.indices.first { rows[$0].art != nil && controller.artRow($0) == $0 })
     table.scrollRowToVisible(row)
     let corner = NSPoint(x: column.minX + 1, y: table.rect(ofRow: row).maxY - 1)
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while controller.artHover.isHidden, Date() < deadline {
         controller.showArtHover(at: corner)
         try await Task.sleep(nanoseconds: 20_000_000)
@@ -870,7 +871,7 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
                 && table.rect(ofRow: $0).maxY <= clip.bounds.maxY
         })
     let point = NSPoint(x: column.midX, y: table.rect(ofRow: row).midY)
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while controller.hoveredArt(at: point) == nil, Date() < deadline {
         controller.showArtHover(at: point)
         try await Task.sleep(nanoseconds: 20_000_000)
@@ -906,7 +907,7 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
         }, "no short album with art before another")
     func hover(_ row: Int) async throws {
         let point = NSPoint(x: column.midX, y: table.rect(ofRow: row).midY)
-        let deadline = Date().addingTimeInterval(10)
+        let deadline = Date().addingTimeInterval(waitLimit)
         repeat {
             controller.showArtHover(at: point)
             if !controller.artHover.isHidden,
@@ -941,7 +942,7 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
     table.scrollRowToVisible(row)
     let point = NSPoint(x: table.rect(ofColumn: art).midX, y: table.rect(ofRow: row).midY)
     func hover() async throws {
-        let deadline = Date().addingTimeInterval(10)
+        let deadline = Date().addingTimeInterval(waitLimit)
         repeat {
             controller.showArtHover(at: point)
             if !controller.artHover.isHidden { return }
@@ -971,7 +972,7 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
     let row = try #require(rows.indices.first { rows[$0].art != nil })
     table.scrollRowToVisible(row)
     let point = NSPoint(x: table.rect(ofColumn: art).midX, y: table.rect(ofRow: row).midY)
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while controller.artHover.isHidden, Date() < deadline {
         controller.showArtHover(at: point)
         try await Task.sleep(nanoseconds: 20_000_000)
@@ -1019,7 +1020,7 @@ private func hoveredRescanTable() async throws -> (
     window.displayIfNeeded()
     let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
     let point = NSPoint(x: table.rect(ofColumn: art).midX, y: table.rect(ofRow: start).midY)
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while controller.artHover.isHidden, Date() < deadline {
         controller.showArtHover(at: point)
         try await Task.sleep(nanoseconds: 20_000_000)

@@ -15,6 +15,7 @@ import Foundation
 /// The package graph, the toolchain, and the scripts that pick and run the tests.
 let shared: Set<String> = [
     "Package.swift", "Package.resolved", ".xcode-version", "scripts/test", "scripts/affected.swift",
+    "scripts/clear-windows.m",
 ]
 
 /// Files outside every target's folder that a test reads, with the test target that reads them.

@@ -36,10 +36,10 @@ func writableBrowserDatabase() throws -> URL {
     return databaseURL
 }
 
-/// Waits up to 10 seconds for `condition`, then records what it saw.
+/// Waits up to `waitLimit` for `condition`, then records what it saw.
 @MainActor
 func waitFor(_ what: String, _ condition: () async throws -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while try await !condition() {
         guard Date() < deadline else {
             Issue.record("timed out waiting for \(what)")

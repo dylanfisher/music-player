@@ -3,6 +3,7 @@ import Foundation
 import Settings
 import Testing
 
+@testable import Fixtures
 @testable import Library
 @testable import LibraryBrowser
 
@@ -184,7 +185,7 @@ private func play(_ count: Int, of rows: [TrackRow], from start: Int, _ index: L
         thumbnails: nil)
     await browser.load(BrowserState(source: .timeline))
     #expect(browser.showsTimeline)
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while browser.rowID(at: 1) == nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
@@ -297,7 +298,7 @@ private func pick(_ title: String, in menu: NSMenu, of delegate: any NSMenuDeleg
 /// Waits up to 10 seconds for `condition`.
 @MainActor
 private func waitUntil(_ condition: () -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while !condition(), Date() < deadline { try await Task.sleep(nanoseconds: 10_000_000) }
 }
 

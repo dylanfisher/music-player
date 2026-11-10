@@ -244,6 +244,9 @@ func theGlassHeadersAreFrosted(_ appearance: NSAppearance.Name) throws {
     // The test's window is never key, and an inactive window's material is a flat color, as
     // the glass's own backdrop is.
     for material in materials { material.state = .active }
+    // `scripts/test` makes each window clear, and the window server draws a clear window's
+    // materials as nothing. At 1% it draws them, and the window is still too faint to see.
+    window.alphaValue = 0.01
     window.displayIfNeeded()
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))
     #expect(added.headerCell is ClearHeaderCell)

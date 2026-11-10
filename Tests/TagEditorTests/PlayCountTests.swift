@@ -112,7 +112,7 @@ private func makeEditing(_ seen: Seen, confirm: Bool = true) -> TagEditing {
 private func loaded(_ editing: TagEditing, _ paths: [String]) async throws -> TagEditorWindow {
     let window = NSWindow()
     editing.open(paths, over: window)
-    let deadline = Date().addingTimeInterval(5)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while editing.editors.first(where: { $0.paths == paths })?.isLoaded != true {
         try #require(Date() < deadline, "timed out reading \(paths)")
         try await Task.sleep(for: .milliseconds(5))

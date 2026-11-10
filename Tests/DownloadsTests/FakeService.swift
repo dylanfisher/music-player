@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Downloads
+@testable import Fixtures
 @testable import LocalNetwork
 @testable import Recommender
 
@@ -99,12 +100,15 @@ final class FakeClock: @unchecked Sendable {
     }
 }
 
-/// Yields until `condition` holds, failing the test if it never does.
+/// Yields until `condition` holds, failing the test if it doesn't within `waitLimit`. A count
+/// of yields isn't a limit: while other processes have the cores, the work waited for doesn't
+/// run, and the yields return at once.
 func eventually(
     _ what: String, isolation: isolated (any Actor)? = #isolation,
     sourceLocation: SourceLocation = #_sourceLocation, _ condition: () async -> Bool
 ) async {
-    for _ in 0..<20_000 {
+    let deadline = Date().addingTimeInterval(waitLimit)
+    while Date() < deadline {
         if await condition() { return }
         await Task.yield()
     }

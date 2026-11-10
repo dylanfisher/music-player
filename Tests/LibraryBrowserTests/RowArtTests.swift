@@ -3,6 +3,7 @@ import Foundation
 import Metadata
 import Testing
 
+@testable import Fixtures
 @testable import LibraryBrowser
 
 /// Reads that wait until the test lets them go, counting how many wait at once.
@@ -51,7 +52,7 @@ private final class HeldReads: @unchecked Sendable {
         // Asked again while it loads, as a redraw does.
         #expect(rowArt.image(art, path: "/m/\(track).flac", stamp: stamp) == nil)
     }
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while reads.count < filesReadAtOnce, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }

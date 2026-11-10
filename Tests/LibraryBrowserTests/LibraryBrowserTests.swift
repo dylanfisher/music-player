@@ -1,12 +1,12 @@
 import AppKit
 import Commands
-import Fixtures
 import Foundation
 import KeyChord
 import Settings
 import Testing
 
 @testable import Analysis
+@testable import Fixtures
 @testable import Library
 @testable import LibraryBrowser
 
@@ -27,7 +27,7 @@ import Testing
         }
         send(.scanning(folder: "/Music/last", ScanProgress()))
     }.value
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while browser.status.scanning["/Music/last"] == nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
@@ -149,7 +149,7 @@ import Testing
     await browser.showOnly(.genre, id: genre.id)
     #expect(states.last?.columns[0].selection != nil)
     browser.toggleBrowser()
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while states.last?.columns[0].selection != nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
@@ -197,7 +197,7 @@ import Testing
     var summary = ScanSummary()
     summary.read = 1
     browser.libraryChanged(.edited(summary))
-    let deadline = Date().addingTimeInterval(5)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while refreshes == 0, Date() < deadline { try await Task.sleep(nanoseconds: 10_000_000) }
     #expect(refreshes == 1)
 }
@@ -214,7 +214,7 @@ import Testing
     var refreshes = 0
     browser.libraryRefreshed = { refreshes += 1 }
     func waitForRefreshes(_ count: Int) async throws {
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(waitLimit)
         while refreshes < count, Date() < deadline {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
