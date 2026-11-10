@@ -344,13 +344,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let titleFormat = model.rows.first { $0.key == schema.headerTitleFormat.key }
     // It's a template like the window's title, with the same tokens.
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
-    guard case .template(let titleTokens, _) = titleFormat?.control,
-        case .template(let windowTokens, _) = windowTitle?.control
-    else {
-        Issue.record("\(String(describing: titleFormat)) \(String(describing: windowTitle))")
-        return
-    }
-    #expect(titleTokens == windowTokens)
+    #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
     let listed = sections.flatMap(\.rows).map(\.key)
     #expect(listed.count == AppSettings().settings.count - 15)
     #expect(!listed.contains(AppSettings().resume.key))
@@ -984,7 +978,7 @@ private func helpButton(in view: NSView) -> NSButton? {
         settings: schema.settings, searcherInstalled: true, value: { saved[$0] },
         set: { saved[$0] = $1 }, isBlocked: { false })
     let row = try #require(model.rows.first { $0.key == key })
-    guard case .template(let tokens, _) = row.control else {
+    guard case .template(let tokens) = row.control else {
         Issue.record("\(row.control)")
         return
     }

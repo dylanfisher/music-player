@@ -17,9 +17,9 @@ public final class GeneralModel {
         /// A number field; `whole` takes integers only, `optional` means empty is null.
         case number(whole: Bool, optional: Bool)
         case text(optional: Bool)
-        /// A text field for a template, beside a help button that lists its tokens and Reset
-        /// to Default, which puts back `defaultText`.
-        case template([SettingKind.Token], defaultText: String)
+        /// A text field for a template, beside a help button that lists its tokens, and Reset
+        /// to Default.
+        case template([SettingKind.Token])
         /// Watched folders, which the Watched Folders pane lists, adds and removes.
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
@@ -268,8 +268,7 @@ public final class GeneralModel {
             case .optional(.number): .number(whole: false, optional: true)
             case .string: .text(optional: false)
             case .optional(.string): .text(optional: true)
-            case .template(let tokens):
-                .template(tokens, defaultText: templateText(setting.defaultValue))
+            case .template(let tokens): .template(tokens)
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
             case .optional(.stagingFolder): .stagingFolder
@@ -451,10 +450,10 @@ public final class GeneralModel {
 
     /// The default a template row's Reset to Default puts back.
     func templateDefault(_ key: String) -> String {
-        guard let row = rows.first(where: { $0.key == key }),
-            case .template(_, let defaultText) = row.control
-        else { preconditionFailure("\(key) isn't a template") }
-        return defaultText
+        guard let setting = templates[key] else {
+            preconditionFailure("\(key) isn't a template")
+        }
+        return templateText(setting.defaultValue)
     }
 
     /// Saves the template row `key`'s default, as typing it would.

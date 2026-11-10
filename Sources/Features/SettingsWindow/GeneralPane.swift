@@ -469,7 +469,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             popUp.action = #selector(chose(_:))
             popUp.setAccessibilityLabel(row.title)
             return popUp
-        case .template(let tokens, _):
+        case .template(let tokens):
             let field = textField(row, optional: false)
             let help = NSButton(title: "", target: self, action: #selector(showTokens(_:)))
             help.bezelStyle = .helpButton
