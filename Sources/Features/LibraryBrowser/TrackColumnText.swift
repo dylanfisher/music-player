@@ -102,6 +102,8 @@ extension TrackColumn {
         case .publisher: row.publisher ?? ""
         case .catalogNumber: row.catalogNumber ?? ""
         case .barcode: row.barcode ?? ""
+        case .discogsReleaseID: row.discogsReleaseID ?? ""
+        case .discogsMasterID: row.discogsMasterID ?? ""
         case .copyright: row.copyright ?? ""
         case .encoder: row.encoder ?? ""
         case .comment: row.comment ?? ""

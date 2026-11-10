@@ -137,7 +137,8 @@ public enum SmartValue: Codable, Equatable, Sendable {
 public enum SmartField: String, Codable, CaseIterable, Sendable {
     case title, artist, album, albumArtist, genre, composer, comment, codec, path
     case grouping, mood, work, conductor, lyricist, movementName, originalDate, discSubtitle,
-        key, publisher, catalogNumber, barcode, copyright, encoder, description, fileName, fileType
+        key, publisher, catalogNumber, barcode, copyright, encoder, description, fileName, fileType,
+        discogsReleaseID, discogsMasterID
     case year, trackNumber, discNumber, duration, sampleRate, bitDepth, playCount, skipCount,
         rating
     case trackTotal, discTotal, movementNumber, bpm, bitRate, channels, size, loved, compilation
@@ -161,7 +162,7 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
             .grouping, .mood, .work, .conductor, .lyricist, .movementName, .originalDate,
             .discSubtitle,
             .key, .publisher, .catalogNumber, .barcode, .copyright, .encoder, .description,
-            .fileName, .fileType:
+            .fileName, .fileType, .discogsReleaseID, .discogsMasterID:
             .text
         case .year, .trackNumber, .discNumber, .duration, .sampleRate, .bitDepth, .playCount,
             .skipCount, .rating, .trackTotal, .discTotal, .movementNumber, .bpm, .bitRate,
@@ -187,9 +188,16 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
     /// accents. Numbers but true peaks compare as whole numbers, so a duration of 200.4 seconds
     /// "is 200", as the table shows it; sizes compare in megabytes, bit rates in kilobits a
     /// second and cutoffs in hertz. A file not analyzed has no measures, so no rule on one
-    /// holds for it but "isn't".
+    /// holds for it but "isn't". The Discogs IDs compare as written, not as the numbers they
+    /// sort by, so "Discogs Release ID is" nothing picks the tracks without one.
     var expression: String {
-        let expression = self == .size ? "f.size_bytes / 1000000.0" : column.expression
+        let expression =
+            switch self {
+            case .size: "f.size_bytes / 1000000.0"
+            case .discogsReleaseID: "t.discogs_release_id"
+            case .discogsMasterID: "t.discogs_master_id"
+            default: column.expression
+            }
         return kind == .number && !isSigned ? "CAST(\(expression) AS INTEGER)" : expression
     }
 

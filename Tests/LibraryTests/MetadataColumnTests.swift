@@ -95,6 +95,9 @@ private let addedColumns: [(TrackColumn, String, [String])] = [
     (.publisher, "LABEL", ["Blue Note", "ECM", "Impulse"]),
     (.mood, "MOOD", ["Ambient", "dub Techno", "House, Techno"]),
     (.barcode, "BARCODE", ["1", "2", "3"]),
+    // As numbers: as text, 10 would come before 9.
+    (.discogsReleaseID, "DISCOGS_RELEASE_ID", ["9", "10", "1234"]),
+    (.discogsMasterID, "DISCOGS_MASTER_ID", ["9", "10", "1234"]),
     (.copyright, "COPYRIGHT", ["A", "B", "C"]),
     (.encoder, "ENCODEDBY", ["A", "B", "C"]),
     (.comment, "COMMENT", ["A", "B", "C"]),
@@ -215,6 +218,28 @@ private let addedColumns: [(TrackColumn, String, [String])] = [
     #expect(try matching(SmartRule(.dateModified, .inLast, .number(1))) == ["fast", "slow"])
     #expect(try matching(SmartRule(.fileType, .is, .text("flac"))) == ["fast", "slow"])
     #expect(SmartRule(.loved, .is, .number(2)).problem != nil)
+}
+
+@Test func aRuleOnTheDiscogsIDsPicksTheTracksWithOrWithoutOne() throws {
+    let (index, rows, _) = try taggedLibrary(
+        [
+            "tagged": ["DISCOGS_RELEASE_ID": "1234", "DISCOGS_MASTER_ID": "56"],
+            "untagged": [:],
+        ])
+    #expect(rows["tagged.flac"]?.discogsReleaseID == "1234")
+    #expect(rows["tagged.flac"]?.discogsMasterID == "56")
+    #expect(rows["untagged.flac"]?.discogsReleaseID == nil)
+    func matching(_ rule: SmartRule) throws -> [String] {
+        let id = try index.createPlaylist(
+            named: "rule", rules: SmartRules(match: .all, rules: [rule]))
+        let found = try names(index, .path, TrackFilter(source: .playlist(id)))
+        try index.deletePlaylist(id)
+        return found
+    }
+    #expect(try matching(SmartRule(.discogsReleaseID, .is, .text(""))) == ["untagged"])
+    #expect(try matching(SmartRule(.discogsReleaseID, .isNot, .text(""))) == ["tagged"])
+    #expect(try matching(SmartRule(.discogsMasterID, .is, .text("56"))) == ["tagged"])
+    #expect(try matching(SmartRule(.discogsReleaseID, .startsWith, .text("12"))) == ["tagged"])
 }
 
 // MARK: Grouping by album artist

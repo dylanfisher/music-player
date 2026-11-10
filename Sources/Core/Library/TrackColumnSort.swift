@@ -65,6 +65,9 @@ extension TrackColumn {
         case .publisher: "t.publisher COLLATE NOCASE"
         case .catalogNumber: "t.catalog_number COLLATE NOCASE"
         case .barcode: "t.barcode"
+        // YATE writes the IDs as numbers, so 9 sorts before 10.
+        case .discogsReleaseID: "CAST(t.discogs_release_id AS INTEGER)"
+        case .discogsMasterID: "CAST(t.discogs_master_id AS INTEGER)"
         case .copyright: "t.copyright COLLATE NOCASE"
         case .encoder: "t.encoder COLLATE NOCASE"
         case .comment: "t.comment COLLATE NOCASE"

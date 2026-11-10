@@ -57,6 +57,8 @@ extension TrackColumn {
         case .publisher: "Publisher"
         case .catalogNumber: "Catalog #"
         case .barcode: "Barcode"
+        case .discogsReleaseID: "Discogs Release ID"
+        case .discogsMasterID: "Discogs Master ID"
         case .copyright: "Copyright"
         case .encoder: "Encoder"
         case .comment: "Comment"

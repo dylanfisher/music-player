@@ -53,6 +53,9 @@ public struct TrackRow: Equatable, Sendable {
     public var mood: String? = nil
     public var catalogNumber: String? = nil
     public var barcode: String? = nil
+    /// `DISCOGS_RELEASE_ID` and `DISCOGS_MASTER_ID`, as written.
+    public var discogsReleaseID: String? = nil
+    public var discogsMasterID: String? = nil
     public var bpm: Int? = nil
     public var key: String? = nil
     public var conductor: String? = nil
