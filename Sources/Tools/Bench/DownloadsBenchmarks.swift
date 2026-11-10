@@ -129,16 +129,18 @@ let downloadsBenchmarks = [
     Benchmark(
         name:
             "downloads: Approve a staged \(stagedTrackCount)-file album, the same, its"
-            + " lossy-origin check on the slow simulated NAS",
+            + " lossy-origin check and listings on the slow simulated NAS",
         budget: Budget(appleSilicon: 10, oldMac: 40, unit: .seconds)
     ) {
-        let run = try approveRun(latency: nasFileLatency)
+        let run = try withSimulatedListings { try approveRun(latency: nasFileLatency) }
         return Measured(
             value: run.seconds,
             notes: approveNotes(run) + [
                 String(
-                    format: "%.0f ms to open a file, %.0f ms a 1 MB block; the moves are local",
-                    nasFileLatency.openSeconds * 1000, nasFileLatency.readSeconds * 1000)
+                    format: "%.0f ms to open a file, %.0f ms a 1 MB block; the library folder's"
+                        + " listings %.0f ms each",
+                    nasFileLatency.openSeconds * 1000, nasFileLatency.readSeconds * 1000,
+                    slowNAS.listingSeconds * 1000)
             ])
     },
 ]

@@ -63,9 +63,30 @@ let moveBenchmarks = [
             + " library folder of every fixture artist, plan and move, local",
         budget: Budget(appleSilicon: 15, oldMac: 60, unit: .seconds)
     ) {
-        try organizeRun()
+        try organizeRun(fileCount: organizedFileCount)
+    },
+    Benchmark(
+        name:
+            "library: Organize Selected Files over about \(organizedNASFileCount) fixture files,"
+            + " the same, the library folder's listings on the slow simulated NAS",
+        budget: Budget(appleSilicon: 15, oldMac: 30, unit: .seconds)
+    ) {
+        try withSimulatedListings { try organizeRun(fileCount: organizedNASFileCount) }
     },
 ]
+
+/// The files the NAS row organizes, which keep it under half a minute.
+private let organizedNASFileCount = 200
+
+/// `body` with the library folder's listings slowed as the slow simulated NAS's: a listing
+/// costs `slowNAS.listingSeconds`, any other question `slowNAS.operationSeconds`. The files'
+/// tag reads and renames stay local.
+func withSimulatedListings<T>(_ body: () throws -> T) rethrows -> T {
+    LibraryFolderListings.latency = LibraryFolderListings.Latency(
+        listingSeconds: slowNAS.listingSeconds, callSeconds: slowNAS.operationSeconds)
+    defer { LibraryFolderListings.latency = nil }
+    return try body()
+}
 
 /// About how many files Organize Selected Files' row moves: the first fixture artists' whole
 /// folders, enough to reach it.
@@ -76,7 +97,7 @@ private let organizedFileCount = 2_000
 /// files are clones of the first fixture artists' folders, beside an empty folder for each other
 /// fixture artist, so the library folder lists as the fixture library does; the fixture
 /// layout isn't the library folder's, so every file moves.
-private func organizeRun() throws -> Measured {
+private func organizeRun(fileCount: Int) throws -> Measured {
     let root = try defaultFixturesDirectory()
     _ = try generateFixtures(count: fullLibraryFileCount, in: root)
     let byArtist = Dictionary(
@@ -88,7 +109,7 @@ private func organizeRun() throws -> Measured {
         var cloned = 0
         for artist in byArtist.keys.sorted() {
             let folder = library.appendingPathComponent(artist, isDirectory: true)
-            if paths.count < organizedFileCount {
+            if paths.count < fileCount {
                 try FileManager.default.createDirectory(
                     at: library, withIntermediateDirectories: true)
                 // A clone, which on APFS costs no copy of the audio.

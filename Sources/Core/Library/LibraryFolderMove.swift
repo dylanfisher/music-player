@@ -377,10 +377,36 @@ public final class LibraryFolderListings: @unchecked Sendable {
         self.libraryFolder = libraryFolder
     }
 
+    /// What each listing, and each other question to the volume, waits first, for the bench's
+    /// slow simulated NAS.
+    package struct Latency: Sendable {
+        var listingSeconds: Double
+        var callSeconds: Double
+
+        package init(listingSeconds: Double, callSeconds: Double) {
+            self.listingSeconds = listingSeconds
+            self.callSeconds = callSeconds
+        }
+    }
+
+    /// Nil, as the app leaves it, waits nothing.
+    package static var latency: Latency? {
+        get { latencyLock.withLock { storedLatency } }
+        set { latencyLock.withLock { storedLatency = newValue } }
+    }
+    private static let latencyLock = NSLock()
+    // Guarded by `latencyLock`.
+    nonisolated(unsafe) private static var storedLatency: Latency?
+
+    private static func wait(_ seconds: KeyPath<Latency, Double>) {
+        if let latency { Thread.sleep(forTimeInterval: latency[keyPath: seconds]) }
+    }
+
     /// Whether the volume ignores case; listings are only read when it does.
     var ignoresCase: Bool {
         lock.withLock {
             if let caseIgnored { return caseIgnored }
+            Self.wait(\.callSeconds)
             let sensitive = pathconf(libraryFolder, _PC_CASE_SENSITIVE)
             // A folder not there yet is asked again once a copy has made it.
             if sensitive >= 0 { caseIgnored = sensitive == 0 }
@@ -392,6 +418,7 @@ public final class LibraryFolderListings: @unchecked Sendable {
     func name(matching part: String, in folder: String) throws -> String? {
         try lock.withLock {
             if listings[folder] == nil {
+                Self.wait(\.listingSeconds)
                 let names = try FileManager.default.contentsOfDirectory(atPath: folder)
                 listings[folder] = names
                 firstNames[folder] = Dictionary(
@@ -409,6 +436,7 @@ public final class LibraryFolderListings: @unchecked Sendable {
     func isDirectory(_ path: String) -> Bool {
         lock.withLock {
             if let known = folders[path] { return known }
+            Self.wait(\.callSeconds)
             let found = pathIsDirectory(path)
             folders[path] = found
             return found

@@ -332,8 +332,9 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | The tagger window with those 1,741 albums analyzed, a refresh of its Exact tab (median of 20; 73.1); the old Mac figure is an estimate until its checkpoint | < 10 ms | < 40 ms |
 | The same window, Apply to All in Exact: the main thread's time for the write's progress, two reports a file, as the tag writer sends them (73.1: 192 to 286 s for about 18,400 files before 73.9, 5 to 8 ms a report; the budget is 73.9's aim); the old Mac figure is an estimate until its checkpoint | < 5 s | < 20 s |
 | Approve a staged 12-file fixture album, local: the sheet's moves, the lossy-origin check of its two five-minute 24/96 files, and the import (73.1); the old Mac figure is an estimate until its checkpoint | < 5 s | < 30 s |
-| The same with the lossy-origin check on the slow simulated NAS: 23 ms to open, 10 ms a 1 MB block (73.1); the old Mac figure is an estimate until its checkpoint | < 10 s | < 40 s |
+| The same with the lossy-origin check and the library folder's listings on the slow simulated NAS: 23 ms to open, 10 ms a 1 MB block, 45 ms a listing (73.1); the old Mac figure is an estimate until its checkpoint | < 10 s | < 40 s |
 | Organize Selected Files over 2,000 fixture files in a library folder of every fixture artist, local: the plan and the moves (73.1); the old Mac figure is an estimate until its checkpoint | < 15 s | < 60 s |
+| The same over about 200 fixture files, the library folder's listings on the slow simulated NAS: 45 ms a listing, 10 ms any other question (73.1); the old Mac figure is an estimate until its checkpoint | < 15 s | < 30 s |
 | Type-to-select a key over every fixture title, sorted by title (p95; 73.1); the old Mac figure is an estimate until its checkpoint | < 20 ms | < 80 ms |
 | A 3 MB body read through `HTTPSClient` from a stand-in server, asked from the main actor (73.1); the old Mac figure is an estimate until its checkpoint | < 50 ms | < 200 ms |
 | The real catalog of that dump (51.13: 35.89 GB) | < 40 GB | none |
