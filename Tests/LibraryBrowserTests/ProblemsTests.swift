@@ -321,3 +321,22 @@ private func locatingBrowser() throws -> (
     #expect(kept.last?.widths["kind"] == 140)
     #expect(browser.problemColumns == kept.last)
 }
+
+/// A failed track lookup lists the rows without tracks and one line that stays the same, so it
+/// can be dismissed for good.
+@MainActor @Test func aFailedTrackLookupAddsOneStableLine() async throws {
+    let (browser, index, _) = try problemsBrowser()
+    try index.database.execute("DROP TABLE tracks")
+    browser.finishAdding("Added", [Problem("/M/a.flac: not added")])
+    try await waitFor("the Problems window") { browser.problems?.rows.isEmpty == false }
+    let window = try #require(browser.problems)
+    defer { window.window.close() }
+    let notes = window.rows.filter { $0.line.hasPrefix("couldn't look up") }
+    #expect(notes.count == 1 && notes[0].kind == "Notice")
+    #expect(window.rows.contains { $0.path == "/M/a.flac" && $0.track == nil })
+    await browser.fix(notes, by: .dismiss)
+    browser.showProblems()
+    try await waitFor("the refresh") {
+        browser.problems?.rows.contains { $0.line.hasPrefix("couldn't look up") } == false
+    }
+}

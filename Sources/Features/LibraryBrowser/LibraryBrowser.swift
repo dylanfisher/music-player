@@ -1239,7 +1239,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     [track.artist, track.title].compactMap { $0 }.joined(separator: " – "))
             }
         } catch {
-            rows.append(Problem("couldn't look up the problems' tracks: \(error)"))
+            // One line that stays the same, so it can stay dismissed; the error goes to the log.
+            logger.error("couldn't look up the problems' tracks: \(error)")
+            let line = "couldn't look up the tracks of these problems; the Track column is empty"
+            if !status.dismissed.contains(line) {
+                rows.append(Problem(line, kind: ProblemKind.notice))
+            }
         }
         return rows
     }
