@@ -204,11 +204,16 @@ final class TaggerModel {
     /// an earlier one with the same first album, and so the same id.
     private var combinationOpened = false
     private(set) var albums: [Album] = [] {
-        didSet { tierOrder = [:] }
+        didSet {
+            tierOrder = [:]
+            keptArtworkGroups = nil
+        }
     }
     /// Each tab's albums as places in `albums`, in list order, once sorted: the window lists
     /// them on every progress report, and sorting thousands each time stalls it.
     private var tierOrder: [TaggerTab: [Int]] = [:]
+    /// `artworkGroups` once made, for the same reason: the window counts them on every refresh.
+    private var keptArtworkGroups: [ArtworkGroup]?
     /// The files left out of each album, by album id, kept for the session so a new Analyze
     /// leaves them out too (ADR 0157).
     private var leftOutFiles: [Int64: Set<Int64>] = [:]
@@ -368,6 +373,17 @@ final class TaggerModel {
         sourceChosen = true
         sourceSaved(source)
         changed()
+    }
+
+    /// What the window's Get Artwork covers: the albums listed and not rejected whose files
+    /// are tagged with a release id, or that Apply wrote one to this session.
+    var artworkGroups: [ArtworkGroup] {
+        if let keptArtworkGroups { return keptArtworkGroups }
+        let groups = albums.filter { !$0.isRejected }.flatMap { album in
+            Self.artworkGroups(album.matched, written: album.applied ? album.match.releaseID : nil)
+        }
+        keptArtworkGroups = groups
+        return groups
     }
 
     /// The albums `tab` lists, in `albumSort`'s order; by artist and then title without one,
@@ -1129,7 +1145,10 @@ final class TaggerModel {
                 { [weak self] progress in
                     guard let self, writing[number] != nil else { return }
                     writing[number]?.progress = progress
-                    changed()
+                    // The writer reports twice a file, and each change redraws the window, so
+                    // the first, about 200 more and the last, as Analyze's progress.
+                    let steps = progress.read + progress.written
+                    if steps == 1 || isReported(steps, of: 2 * progress.total) { changed() }
                 },
                 { [weak self] unwritten in
                     guard let self else { return }

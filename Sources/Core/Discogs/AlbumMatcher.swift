@@ -182,7 +182,7 @@ private final class ProgressReporter: @unchecked Sendable {
 
 /// Whether the `done`th of `count` steps is reported: about 200 reports in all and the last,
 /// since each one redraws the window and thousands of albums would stall it.
-func isReported(_ done: Int, of count: Int) -> Bool {
+package func isReported(_ done: Int, of count: Int) -> Bool {
     done == count || done % max(1, count / 200) == 0
 }
 

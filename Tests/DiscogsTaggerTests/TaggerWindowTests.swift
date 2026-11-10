@@ -930,6 +930,51 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
             == "Wrote 12 tags to 3 files; Undo Tag Edit puts them back")
 }
 
+/// A large write redraws the window about 200 times, not twice a file, and its last report
+/// shows: every file written.
+@MainActor
+@Test func aLargeWritesProgressRedrawsAboutTwoHundredTimesAndShowsTheLast() async throws {
+    let one = album(1, "Stockholm", titles: stockholm)
+    let tagger = await model(
+        Seen(), albums: [one],
+        matches: { album, _ in
+            match(album, release(10, "Stockholm", titles: stockholm), tier: .exact)
+        })
+    tagger.analyze()
+    await tagger.finished()
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    var report: (TagWriteProgress) -> Void = { _ in }
+    controller.write = { _, progress, _ in report = progress }
+    let files = (0..<1_000).map { (path: "/m/1/\($0).flac", edit: TagEdit()) }
+    tagger.apply(
+        TaggerModel.ApplyPlan(albumIDs: [1], files: files, fieldCount: 1_000, problems: []))
+    var redraws = 0
+    let refresh = tagger.changed
+    tagger.changed = {
+        redraws += 1
+        refresh()
+    }
+    var progress = TagWriteProgress(total: files.count)
+    progress.read = 1
+    report(progress)
+    #expect(
+        controller.statusLabel.stringValue
+            == "Writing 1,000 tags to 1,000 files: 0 of 1,000 written")
+    for _ in files {
+        progress.written += 1
+        report(progress)
+        progress.read = min(progress.read + 1, files.count)
+        if progress.read + progress.written < 2 * files.count { report(progress) }
+    }
+    #expect((200...202).contains(redraws), "\(redraws) redraws")
+    #expect(tagger.writeProgress?.progress == progress)
+    #expect(
+        controller.statusLabel.stringValue
+            == "Writing 1,000 tags to 1,000 files: 1,000 of 1,000 written")
+    #expect(controller.progress.doubleValue == 1)
+}
+
 /// What the stand-in Look Up Release search was asked.
 private final class Queries: @unchecked Sendable {
     // `asked` is guarded by `lock`.

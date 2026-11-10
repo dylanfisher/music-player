@@ -32,14 +32,6 @@ extension TaggerModel {
         return groups
     }
 
-    /// What the window's Get Artwork covers: the albums listed and not rejected whose files
-    /// are tagged with a release id, or that Apply wrote one to this session.
-    var artworkGroups: [ArtworkGroup] {
-        albums.filter { !$0.isRejected }.flatMap { album in
-            Self.artworkGroups(album.matched, written: album.applied ? album.match.releaseID : nil)
-        }
-    }
-
     /// Reads the groups' paths, fetches each release's cover and works out which files get it.
     /// `progress` hears the albums done and how many there are.
     func planArtwork(

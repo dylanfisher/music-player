@@ -54,6 +54,28 @@ private func artworkTagger(
             == [ArtworkGroup(title: "Persuader – Other", releaseID: 20, fileIDs: [200, 201])])
 }
 
+/// The groups are kept between refreshes, and made again when an album changes: written by
+/// Apply, it counts; rejected, it doesn't.
+@MainActor @Test func theArtworkCountFollowsAChangeOfTheAlbums() async throws {
+    let tagger = await artworkTagger()
+    let window = TaggerWindow(model: tagger.model)
+    defer { window.window?.close() }
+    window.write = { _, _, _ in }
+    window.refresh()
+    #expect(window.artworkButton.title == "Get Artwork for 1 Album…")
+
+    tagger.model.apply(
+        TaggerModel.ApplyPlan(
+            albumIDs: [2], files: [(path: "/m/200", edit: TagEdit())], fieldCount: 1,
+            problems: []))
+    #expect(tagger.model.artworkGroups.map(\.releaseID) == [1001, 20])
+    #expect(window.artworkButton.title == "Get Artwork for 2 Albums…")
+
+    await tagger.model.setRejected(true, [1])
+    #expect(tagger.model.artworkGroups.map(\.releaseID) == [20])
+    #expect(window.artworkButton.title == "Get Artwork for 1 Album…")
+}
+
 /// It asks once, with the count; Fill Missing writes the cover to the files without art or
 /// with smaller art, as one batch, and Cancel writes nothing.
 @MainActor @Test func getArtworkAsksThenWritesTheFrontCovers() async throws {
