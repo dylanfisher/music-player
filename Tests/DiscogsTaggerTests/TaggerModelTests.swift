@@ -41,8 +41,10 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(!tagger.canAnalyze, "one run at a time")
     gate.open()
     try await eventually { tagger.activity == .analyzing(done: 1, total: 3) }
+    #expect(tagger.activityLine == "Discogs tagger: analyzing 1 of 3 albums")
     for _ in 0..<2 { gate.open() }
     await tagger.finished()
+    #expect(tagger.activityLine == nil)
     #expect(seen.matched == [[1: 11]], "the chosen release is the match")
     #expect(tagger.count(.likely) == 2)
     #expect(tagger.count(.matched) == 1)
@@ -258,6 +260,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     await tagger.finished()
     let planning = Task { await tagger.plan([1]) }
     try await eventually { tagger.activity == .reading(done: 0, total: 3) }
+    #expect(tagger.activityLine == "Discogs tagger: reading 0 of 3 files")
     tagger.stop()
     gate.open()
     #expect(await planning.value == nil)
@@ -287,6 +290,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
         mapping: DiscogsPreset.minimal.mapping, savedMappings: [], choices: defaultChoices)
     tagger.importDump(from: URL(fileURLWithPath: "/dumps", isDirectory: true))
     #expect(tagger.activity == .importing(nil))
+    #expect(tagger.activityLine == "Importing the Discogs catalog")
     #expect(!tagger.canAnalyze)
     gate.open()
     // checkCatalog sets the catalog, then awaits the unfinished import.

@@ -126,3 +126,21 @@ private func artworkTagger(
     try await eventually { !written.isEmpty }
     #expect(written == ["/m/101"])
 }
+
+/// While the covers are fetched, the question at quit hears how far it has got; once they're
+/// handed to the writer, the tag editor's queue tells it instead (ADR 0191).
+@MainActor @Test func getArtworksFetchIsUnfinishedWorkUntilItEnds() async throws {
+    let tagger = await artworkTagger()
+    tagger.askArtwork = { _, _, reply in reply(.replace) }
+    var written = false
+    tagger.write = { _, _, _, _, _ in written = true }
+    var told: [[String]] = []
+    #expect(tagger.unfinishedWork.isEmpty)
+    tagger.getArtwork(tagger.model.artworkGroups, over: NSWindow()) { _ in
+        told.append(tagger.unfinishedWork)
+    }
+    try await eventually { written }
+    #expect(told.first == ["Getting covers: 0 of 1"])
+    #expect(told.last == [])
+    #expect(tagger.unfinishedWork.isEmpty)
+}

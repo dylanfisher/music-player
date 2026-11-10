@@ -4,6 +4,7 @@ import Artwork
 import Commands
 import Discogs
 import DiscogsTagger
+import DisplayText
 import Downloads
 import HALOutput
 import KeyChord
@@ -544,15 +545,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyVolumeKeys()
     }
 
-    /// Asks first while tag writes are queued (ADR 0167), then saves the play state before
-    /// quitting, waiting up to `resumeWaitSeconds` for the engine's place.
+    /// Asks first while work a quit would cut short is under way (ADR 0191), or the tag
+    /// editor's own question while only tag writes are queued (ADR 0167), then saves the play
+    /// state before quitting, waiting up to `resumeWaitSeconds` for the engine's place.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if let question = QuitQuestion(
+            running: unfinishedWork, alsoListing: madeTagEditing?.unfinishedWork ?? [])
+        {
+            // Asked after returning, as the tag editor's question is.
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    let quit = question.ask()
+                    guard quit, let self else {
+                        return sender.reply(toApplicationShouldTerminate: quit)
+                    }
+                    if !self.saveResumeThenQuit(sender) { self.replyToQuit(sender) }
+                }
+            }
+            return .terminateLater
+        }
         let held = madeTagEditing?.holdQuit { [weak self] quit in
             guard quit, let self else { return sender.reply(toApplicationShouldTerminate: quit) }
             if !saveResumeThenQuit(sender) { replyToQuit(sender) }
         }
         if held == true { return .terminateLater }
         return saveResumeThenQuit(sender) ? .terminateLater : .terminateNow
+    }
+
+    /// The work under way outside the tag editor's queue that a quit cuts short, a line each,
+    /// from the parts made already.
+    private var unfinishedWork: [String] {
+        (browser?.unfinishedWork ?? []) + (discogsTagger?.unfinishedWork ?? [])
+            + (stagedTagger?.unfinishedWork ?? []) + downloads.unfinishedWork
     }
 
     /// Saves the play state, then quits; false, doing nothing, without a saver.

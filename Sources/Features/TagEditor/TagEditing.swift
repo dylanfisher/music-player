@@ -1,6 +1,7 @@
 import AppKit
 import Commands
 import Discogs
+import DisplayText
 import Library
 import Log
 import Metadata
@@ -165,6 +166,8 @@ public final class TagEditing {
     /// how many files each writes, and its last report, nil before its first. Cleared when the
     /// queue drains, so the status bar's count never falls back.
     private var batches: [Int: (files: Int, progress: TagWriteProgress?)] = [:]
+    /// The newest step of an organize since the queue was last empty, for the question at quit.
+    private var organizeProgress: OrganizeProgress?
     private var lastWrite = 0
     /// Each open window's latest read, so an earlier read that comes back late is dropped.
     private var reads: [ObjectIdentifier: ReadStop] = [:]
@@ -259,12 +262,28 @@ public final class TagEditing {
         return true
     }
 
+    /// What the queue is doing, for the question at quit (ADR 0191): "Saving tags: 3 of 20"
+    /// while a write has files left, "Organizing 12 files" while an organize has, and else,
+    /// for an undo or a step not yet reported, "2 tag writes queued". Empty when idle.
+    public var unfinishedWork: [String] {
+        guard isWriting else { return [] }
+        var lines: [String] = []
+        let all = TagWriteProgress.combined(
+            batches.values.compactMap(\.progress), total: batches.values.map(\.files).reduce(0, +))
+        if all.written < all.total { lines.append(Self.savingStatus(all).text) }
+        if let organize = organizeProgress, organize.left > 0 {
+            lines.append("Organizing \(files(organize.left))")
+        }
+        return lines.isEmpty ? [count(pendingWrites, "tag write") + " queued"] : lines
+    }
+
     /// Lowers the count of writes and undos not finished, and quits if that was the last and
     /// Wait and Quit is waiting.
     private func writeEnded() {
         pendingWrites -= 1
         guard pendingWrites == 0 else { return }
         batches = [:]
+        organizeProgress = nil
         saving(nil)
         quitWhenDone.map { quit in
             quitWhenDone = nil
@@ -591,6 +610,7 @@ public final class TagEditing {
                             // leave "Organizing files: finishing" in the status bar, as nothing
                             // moved and no summary follows to clear it.
                             guard progress.total > 0 else { return }
+                            self.organizeProgress = progress
                             self.organizing(progress)
                             self.organizeSteps[number]?(.moving(progress))
                         }
@@ -699,7 +719,7 @@ private func askToQuit(
         "Wait and Quit quits once they're written. With Quit Anyway, files not yet written"
         + " keep their old tags, and one cut short is put right at the next launch."
     alert.addButton(withTitle: "Wait and Quit")
-    alert.addButton(withTitle: "Quit Anyway")
+    alert.addButton(withTitle: QuitQuestion.quitAnyway)
     alert.addButton(withTitle: "Cancel")
     switch alert.runModal() {
     case .alertFirstButtonReturn: answer(.waitAndQuit)

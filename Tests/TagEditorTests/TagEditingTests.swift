@@ -86,6 +86,7 @@ private func makeEditing(
     organize: @escaping @Sendable ([String], String) -> FilesOrganized = { _, _ in
         FilesOrganized()
     },
+    renaming: @escaping @Sendable () -> Void = {},
     askQuit:
         @escaping @MainActor (Int, @escaping @MainActor (TagEditing.QuitAnswer) -> Void) ->
         Void = { _, _ in Issue.record("asked to quit") }
@@ -125,6 +126,7 @@ private func makeEditing(
                     progress(
                         OrganizeProgress(done: done, total: plan.moved.count, current: move.from))
                 }
+                renaming()
                 // As `moveToLayout` does, once more when the renames are done, 0 of 0 included.
                 progress(
                     OrganizeProgress(
@@ -500,6 +502,41 @@ private final class Titles: @unchecked Sendable {
     #expect(quit == true)
     #expect(unwritten.count == 2)
     #expect(!editing.isWriting)
+}
+
+/// The question at quit hears what the queue is doing: a write by its files, an organize by
+/// the files it has left, and an undo, which counts none, as a write queued (ADR 0191).
+@MainActor
+@Test func theQueueSaysWhatItIsDoingForTheQuestionAtQuit() async throws {
+    let gate = Gate()
+    var written = TagWriteProgress(total: 2)
+    written.read = 2
+    written.written = 2
+    let editing = makeEditing(
+        Seen(),
+        write: { _, paths in
+            gate.wait()
+            var report = TagWriteReport()
+            report.changed = paths
+            return report
+        },
+        undo: {
+            gate.wait()
+            return TagWriteReport()
+        }, progress: [written], organize: organizeA, renaming: { gate.wait() })
+    #expect(editing.unfinishedWork.isEmpty)
+    editing.write(
+        [("/a.flac", TagEdit(values: [.title: "A"])), ("/b.flac", TagEdit())], over: window)
+    #expect(editing.unfinishedWork == ["Saving tags: 0 of 2"])
+    editing.undo(over: window, from: .discogsTagger)
+    gate.open()
+    try await eventually { editing.unfinishedWork == ["1 tag write queued"] }
+    editing.organize(organizeA(["/lib/a.flac"], "/lib"), in: "/lib", over: window)
+    gate.open()
+    try await eventually { editing.unfinishedWork == ["Organizing 1 file"] }
+    gate.open()
+    try await eventually { !editing.isWriting }
+    #expect(editing.unfinishedWork.isEmpty)
 }
 
 /// Back and Forward step the key info window's tabs, wrapping at the ends, and leave anything

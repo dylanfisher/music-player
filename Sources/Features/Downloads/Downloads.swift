@@ -108,6 +108,25 @@ package final class Downloads {
     /// The Approve… in progress, until its sheet shows or it stops.
     var reviewing: Task<Void, Never>?
     private var reviewCount = 0
+    /// The albums Approve and Resume Here are moving into the library now, by run.
+    private var imports: [Int: String] = [:]
+    private var importCount = 0
+
+    /// "Moving Artist - Title (2001) into the library", a line for each import running, for
+    /// the question at quit (ADR 0191). The service's downloads go on without the app, and a
+    /// tag run's lease and journal have it run again at the next launch, so neither is here.
+    package var unfinishedWork: [String] {
+        imports.sorted { $0.key < $1.key }.map { "Moving \($0.value) into the library" }
+    }
+
+    /// Runs `run`, the import of `album`, listed in `unfinishedWork` until it returns.
+    func importing<T>(_ album: String, _ run: () async -> T) async -> T {
+        importCount += 1
+        let number = importCount
+        imports[number] = album
+        defer { imports[number] = nil }
+        return await run()
+    }
 
     /// The selected library tracks' ids, for From Library Selection.
     package var selectedTracks: () throws -> [Int64] = { [] }
@@ -581,6 +600,7 @@ package final class Downloads {
             }
         }
         let state = ReviewState(claimed: resuming)
+        let album = DownloadRow.album(job.release)
         let approve = ApproveSheet(
             job: job, album: DownloadRow.album(job.release), resuming: resuming,
             taggedAs: session.model.taggedAs(id))
@@ -594,10 +614,11 @@ package final class Downloads {
                 return
             }
             Task {
-                let outcome =
+                let outcome = await self.importing(album) {
                     resuming
-                    ? await coordinator.resumeHere(approved)
-                    : await coordinator.approve(approved)
+                        ? await coordinator.resumeHere(approved)
+                        : await coordinator.approve(approved)
+                }
                 switch outcome {
                 case .imported: break
                 case .refused(let why): self.alert("The album wasn't imported", [why])

@@ -21,6 +21,15 @@ public final class DiscogsTagger {
 
     let model: TaggerModel
     private var controller: TaggerWindow?
+    /// What Get Artwork's fetch says while it runs, "Getting covers: 3 of 20"; its write then
+    /// goes through the tag editor's queue.
+    var coverFetch: String?
+
+    /// What the tagger is doing, for the question at quit (ADR 0191): an Analyze, the reading
+    /// before Apply, a catalog import, or Get Artwork's fetch. Empty when idle.
+    public var unfinishedWork: [String] {
+        [model.activityLine, coverFetch].compactMap { $0 }
+    }
 
     /// The selected library tracks' ids, for the selection scope.
     public var selectedTracks: () throws -> [Int64] {

@@ -100,3 +100,24 @@ func formatsKilohertz(hertz: Double, expected: String) {
     row.isMarked = false
     #expect(cell.backgroundStyle == .normal)
 }
+
+/// Nothing running asks nothing, and work another question covers is asked about only beside
+/// work it doesn't; the lines are listed in order, with what quitting does (ADR 0191).
+@Test func theQuitQuestionListsTheWorkUnderWay() throws {
+    #expect(QuitQuestion(running: []) == nil)
+    #expect(QuitQuestion(running: [], alsoListing: ["Saving tags: 3 of 20"]) == nil)
+
+    let one = try #require(QuitQuestion(running: ["Organizing 12 files"]))
+    #expect(one.message == "Quit with work in progress?")
+    #expect(
+        one.detail
+            == "• Organizing 12 files\n\nQuitting stops it where it is. What it has finished"
+            + " stays done.")
+
+    let two = try #require(
+        QuitQuestion(running: ["Getting covers: 3 of 20"], alsoListing: ["Saving tags: 3 of 20"]))
+    #expect(
+        two.detail
+            == "• Saving tags: 3 of 20\n• Getting covers: 3 of 20\n\nQuitting stops them where"
+            + " they are. What they have finished stays done.")
+}

@@ -349,6 +349,17 @@ final class TaggerModel {
     }
 
     var isBusy: Bool { activity != .idle }
+    /// What the tagger is doing, for the question at quit (ADR 0191); nil when idle.
+    var activityLine: String? {
+        switch activity {
+        case .idle: nil
+        case .analyzing(let done, let total):
+            "Discogs tagger: analyzing \(number(done)) of \(number(total)) albums"
+        case .reading(let done, let total):
+            "Discogs tagger: reading \(number(done)) of \(number(total)) files"
+        case .importing: "Importing the Discogs catalog"
+        }
+    }
     /// Whether Analyze can start: the catalog source needs a catalog in place, Both a finished
     /// check, and the API nothing more (ADR 0139).
     var canAnalyze: Bool {

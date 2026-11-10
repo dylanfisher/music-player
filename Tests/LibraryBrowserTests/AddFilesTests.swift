@@ -117,3 +117,14 @@ private final class Asked {
     #expect(browser.statusText.contains("no library folder is set"))
     window.close()
 }
+
+/// A copy into the library folder is listed in the question at quit while it runs (ADR 0191).
+@MainActor @Test func aCopyIsUnfinishedWorkWhileItRuns() throws {
+    let (browser, window, _, _) = try addingBrowser()
+    #expect(browser.unfinishedWork.isEmpty)
+    browser.showCopying(("Copying into the library folder: 1 of 2", 0))
+    #expect(browser.unfinishedWork == ["Copying into the library folder: 1 of 2"])
+    browser.showCopying(nil)
+    #expect(browser.unfinishedWork.isEmpty)
+    window.close()
+}

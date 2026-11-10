@@ -1039,6 +1039,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showActivity()
     }
 
+    /// What the browser is doing that a quit would cut short, for the question at quit (ADR
+    /// 0191): a drop's copy into the library folder. A scan and Analyze Library carry on at
+    /// the next launch, and a save and an organize are the tag editor's to tell.
+    public var unfinishedWork: [String] { [status.copyingText].compactMap { $0 } }
+
     /// Shows where Analyze Library is while it runs or is paused, beside the scans' line and in
     /// Library Health; nil once it's done. While it runs the table refreshes as during a scan,
     /// so its measure columns fill in; once it has `stopped`, at its end or paused, the table

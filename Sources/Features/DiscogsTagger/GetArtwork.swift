@@ -119,18 +119,22 @@ extension DiscogsTagger {
             [weak self] fill in
             guard let self, let fill else { return }
             Task {
-                showing(TaggerModel.artworkProgress(0, of: groups.count))
+                let show = { (progress: (text: String, fraction: Double)?) in
+                    self.coverFetch = progress?.text
+                    showing(progress)
+                }
+                show(TaggerModel.artworkProgress(0, of: groups.count))
                 let plan: CoverPlan
                 do {
                     plan = try await self.model.planArtwork(groups, fill: fill) { done, total in
-                        showing(TaggerModel.artworkProgress(done, of: total))
+                        show(TaggerModel.artworkProgress(done, of: total))
                     }
                 } catch {
-                    showing(nil)
+                    show(nil)
                     return self.artworkAlert(
                         "The albums' files couldn't be found", ["\(error)"], window)
                 }
-                showing(nil)
+                show(nil)
                 guard !plan.edits.isEmpty else {
                     return self.artworkAlert(
                         "No file needed a cover",

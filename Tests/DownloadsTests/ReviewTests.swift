@@ -250,3 +250,15 @@ private final class ClaimGate: @unchecked Sendable {
     #expect(try await Downloads.machineName(databaseURL: database) == id)
     #expect(!id.isEmpty && id.count <= Downloads.machineNameCap)
 }
+
+/// While Approve's import runs, the question at quit lists its album (ADR 0191).
+@MainActor
+@Test func anImportIsUnfinishedWorkUntilItReturns() async {
+    let downloads = Downloads()
+    #expect(downloads.unfinishedWork.isEmpty)
+    let during = await downloads.importing("Persuader - Stockholm (2000)") {
+        downloads.unfinishedWork
+    }
+    #expect(during == ["Moving Persuader - Stockholm (2000) into the library"])
+    #expect(downloads.unfinishedWork.isEmpty)
+}

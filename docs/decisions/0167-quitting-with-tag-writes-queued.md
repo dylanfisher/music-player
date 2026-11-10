@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-09
 - **Status:** accepted
+- **Amended by:** [0191](0191-quitting-with-work-in-progress.md): while other work runs too,
+  the tag writes are listed in one question with it, without Wait and Quit.
 - **See also:** [0107](0107-tags-written-in-place-within-the-padding.md) (a write cut short is
   put right at the next launch), [0108](0108-faster-tag-writes.md) (the status bar's "Saving
   tags"), [0095](0095-play-state-across-quits.md) (the play state saved at quit)
