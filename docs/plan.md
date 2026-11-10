@@ -679,6 +679,42 @@ Asked by the owner on 2026-11-09 (ADR 0164 is Keep Files Organized).
       detail), sortable by any column, with resizable columns that are remembered, and the
       window's frame remembered (ADR 0158). The problem text is plain enough to act on.
 
+Implementation plan, phase 68 (ADR 0175):
+
+What exists, found by search (map.md recipes): `LibraryBrowser.organizeFiles` reads every
+selected file's tags with `layoutMoves` before `askToOrganize`'s `NSAlert` opens, so a large
+selection on the NAS shows nothing for minutes. `TagEditing.enqueue` runs `moveToLayout` on the
+tag writes' queue with no progress; the status bar has slots for a save, a copy and Analyze
+(`LibraryStatus.savingText` and the rest). `ProblemsWindow` is a utility `NSPanel` with one
+headerless column of lines; `Problem` is a line and a fix. The Downloads window keeps its column
+widths as `downloads.columns`, a `ColumnWidths` in `AppState` (ADR 0169), the pattern to follow.
+
+- 68.1 Counting (`Core/Library`): `layoutMoves` takes a progress closure, told the files checked
+  and the moves found so far, and a stop check read before each file. Tests: the counts as it
+  goes, and a stop leaves the rest unread.
+- 68.2 The sheet (`Features/LibraryBrowser/OrganizeSheet.swift`): a sheet of its own, opened
+  as the command runs, before the selection's paths are read: "Checking N of M tracks", a bar
+  and Cancel, which stops the count; once counted, the question's text and Organize, or OK
+  when nothing moves. `confirmOrganizing` goes; the counting is an injected closure. Tests,
+  through the sheet's buttons with `Fixtures.click`: a counting stand-in held on a gate shows
+  the sheet and its progress first, Cancel stops it and organizes nothing, Organize hands on
+  the plan.
+- 68.3 Progress (`Core/Library`, `TagEditor`, `LibraryBrowser`, App): `moveToLayout` tells a
+  progress closure each file it reaches (`OrganizeProgress`: done, total, current path);
+  `TagEditing.organizing` passes it to the main thread; `LibraryStatus.organizingText` shows
+  "Organizing files: 2,328 left · Artist/Album/01 Song.flac" with its bar until
+  `finishOrganizing`, whose line becomes "Organized 2,340 files; 3 problems". Tests: the
+  progress from a rename run, the status text and fraction, the summary.
+- 68.4 A normal window: `ProblemsWindow`'s window becomes a titled `NSWindow`, not a floating
+  panel. Test: its level is normal and it isn't a panel.
+- 68.5 The table: `Problem` gains a kind, the path it's about and its detail, filled where the
+  rows are made (file issues, scan issues, the folder failures, health, organize and drops),
+  and parsed from "<path>: <detail>" lines for the rest; the window gets Kind, Track, File,
+  Folder and Detail columns, sortable, their widths kept as `problems.columns` in `AppState`
+  and wired by App. The Track column is looked up from the index by path. Tests: the columns'
+  text for each kind of row, sorting by a column, the widths reported and applied.
+- 68.6 ADR 0175, cross-linked from 0164 and 0059.
+
 ### 69. Tagger columns and the releases window
 
 Asked by the owner on 2026-11-09.
