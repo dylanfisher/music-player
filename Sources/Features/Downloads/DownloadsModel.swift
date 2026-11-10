@@ -1,4 +1,5 @@
 import Foundation
+import Library
 import Recommender
 
 /// The Downloads window's state, with no AppKit: the service's jobs as rows, and the polling
@@ -38,6 +39,9 @@ final class DownloadsModel {
     private(set) var jobs = DownloadJobs()
     private(set) var rows: [DownloadRow] = []
     private(set) var connection = Connection.waiting
+    /// The release each job's staged files were tagged as in the tagger on this Mac, by job,
+    /// which the rows name where it isn't the one the service lists (ADR 0178).
+    private(set) var tagged: [Int: TaggedRelease] = [:]
     private(set) var isWindowOpen = false
     private(set) var isStatusShown = false
     private var lastGood: Date?
@@ -207,6 +211,19 @@ final class DownloadsModel {
         changed()
     }
 
+    /// Takes the releases the coordinator recorded, rebuilding the rows when they changed.
+    func setTagged(_ tagged: [Int: TaggedRelease]) {
+        guard tagged != self.tagged else { return }
+        self.tagged = tagged
+        buildRows()
+        changed()
+    }
+
+    /// The release the job `id`'s files are tagged as, when it isn't the one the service lists.
+    func taggedAs(_ id: Int) -> Int? {
+        jobs.rows[id].flatMap { job in tagged[id]?.differs(for: job) }
+    }
+
     /// The job a row shows.
     func job(_ id: Int) -> DownloadJob? { jobs.rows[id] }
 
@@ -277,7 +294,8 @@ final class DownloadsModel {
         rows = jobs.rows.values.compactMap {
             DownloadRow(
                 $0, machine: machine, answering: answering,
-                rate: rates.isEmpty ? nil : rates.rate($0.id, at: at))
+                rate: rates.isEmpty ? nil : rates.rate($0.id, at: at),
+                taggedAs: tagged[$0.id]?.differs(for: $0))
         }.sorted(by: DownloadRow.listed)
     }
 }

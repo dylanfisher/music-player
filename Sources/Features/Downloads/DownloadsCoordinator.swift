@@ -66,6 +66,8 @@ actor DownloadsCoordinator {
     /// The reports the service refused in the sends since `deliver` last looked.
     private var refused: [(jobID: Int, name: String, why: String)] = []
     private var importing = false
+    /// `taggedAs()`, once read.
+    private var taggedReleases: [Int: TaggedRelease]?
     /// What went wrong that no call returns: reports the service refused, which the outbox
     /// dropped, and the index's failures, for the window to show.
     private(set) var problems: [String] = []
@@ -175,7 +177,8 @@ actor DownloadsCoordinator {
     }
 
     /// `job` as AutoTag and the tagger take it, with the sizes its files have had since a tag
-    /// write here; nil until the service has staged it.
+    /// write here, and the release the owner tagged them as in the tagger here, if it isn't
+    /// the one queued (ADR 0178); nil until the service has staged it.
     func stagedJob(_ job: DownloadJob) -> StagedJob? {
         guard var staged = StagedJob(job) else { return nil }
         do {
@@ -183,7 +186,23 @@ actor DownloadsCoordinator {
         } catch {
             note("job \(job.id)'s recorded file sizes couldn't be read: \(error)")
         }
+        if let release = taggedAs()[job.id]?.differs(for: job) { staged.releaseID = release }
         return staged
+    }
+
+    /// The release each job's staged files were tagged as in the tagger on this Mac, by job,
+    /// where it isn't the one queued: music-recommender has no call yet to record it, so the
+    /// index's import ledger keeps it (ADR 0178). Read from the index once, then kept.
+    func taggedAs() -> [Int: TaggedRelease] {
+        if let taggedReleases { return taggedReleases }
+        do {
+            let read = try index().taggedReleases()
+            taggedReleases = read
+            return read
+        } catch {
+            note("the releases staged jobs were tagged as couldn't be read: \(error)")
+            return [:]
+        }
     }
 
     /// Renews the lease every 3 minutes until cancelled, or until the service says another
@@ -418,11 +437,14 @@ actor DownloadsCoordinator {
 
     /// Reports the tagger's verdict for a discrepancy the owner resolved and applied, under a
     /// lease of its own, after recording the sizes its writes left the files at under
-    /// `stagingRoot`. Nil when reported, else why not.
-    func resolved(_ job: DownloadJob, _ verdict: AutoTagRun.Verdict, stagingRoot: String) async
-        -> String?
-    {
-        if let staged = StagedJob(job) { recordSizes(of: staged, under: stagingRoot, job) }
+    /// `stagingRoot` and the release they were written as. Nil when reported, else why not.
+    func resolved(
+        _ job: DownloadJob, _ verdict: AutoTagRun.Verdict, release: Int, stagingRoot: String
+    ) async -> String? {
+        if let staged = StagedJob(job) {
+            recordSizes(of: staged, under: stagingRoot, job)
+            recordRelease(release, of: staged, job)
+        }
         do {
             _ = try await effects.service.handoff(job.id, .lease)
         } catch {
@@ -432,6 +454,22 @@ actor DownloadsCoordinator {
         let sent = await flush()
         await releaseLease(job.id)
         return sent ? nil : "the report waits in the outbox until the service answers"
+    }
+
+    /// Records that `staged`'s files were written as `release`, which forgets an earlier one
+    /// when it's the release queued. A write before this one may have left them as another,
+    /// so a failure is said, not hidden.
+    private func recordRelease(_ release: Int, of staged: StagedJob, _ job: DownloadJob) {
+        do {
+            let index = try index()
+            try index.recordTaggedRelease(
+                job: job.id, queued: job.release.releaseID, folder: staged.folder,
+                release: release)
+            taggedReleases = try index.taggedReleases()
+        } catch {
+            taggedReleases = nil
+            note("job \(job.id)'s files were tagged as release \(release), not recorded: \(error)")
+        }
     }
 
     /// Records what `staged`'s files measure under `stagingRoot` now, after a tag write.

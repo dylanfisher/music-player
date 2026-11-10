@@ -70,3 +70,27 @@ private let moved = ImportStep(
     #expect(try rebuilt.importSteps(job: 42) == [moved])
     #expect(try rebuilt.importReports().map(\.seq) == [seq])
 }
+
+@Test func theLedgerKeepsTheReleaseAStagedJobWasTaggedAs() throws {
+    let (index, _) = try temporaryIndex()
+    try index.recordTaggedRelease(job: 42, queued: 4242, folder: "job-42", release: 5151)
+    try index.recordTaggedRelease(job: 7, queued: 77, folder: "job-7", release: 78)
+    try index.recordTaggedRelease(job: 42, queued: 4242, folder: "job-42", release: 6161)
+    #expect(
+        try index.taggedReleases() == [
+            42: TaggedRelease(folder: "job-42", releaseID: 6161),
+            7: TaggedRelease(folder: "job-7", releaseID: 78),
+        ])
+    // Tagged back as the queued release: nothing differs any more.
+    try index.recordTaggedRelease(job: 42, queued: 4242, folder: "job-42", release: 4242)
+    #expect(try index.taggedReleases() == [7: TaggedRelease(folder: "job-7", releaseID: 78)])
+    try index.forgetImportJob(7)
+    #expect(try index.taggedReleases().isEmpty)
+}
+
+@Test func aTaggedReleaseThatIsntANumberIsAnError() throws {
+    let (index, _) = try temporaryIndex()
+    try index.recordImportStep(
+        ImportStep(jobID: 42, releaseID: 4242, kind: .retagged, path: "job-42", destination: "x"))
+    #expect(throws: LibraryError.notAReleaseID("x")) { try index.taggedReleases() }
+}

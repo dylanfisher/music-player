@@ -286,7 +286,11 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         case .source:
             return [text(.source, row), shown.replaces].compactMap { $0 }
                 .joined(separator: ": ")
-        case .album: return DownloadRow.releaseName(shown.releaseID)
+        case .album:
+            let queued = DownloadRow.releaseName(shown.releaseID)
+            return shown.taggedAs.map {
+                "\(queued); tagged as \(DownloadRow.releaseName($0))"
+            } ?? queued
         case .tagging:
             return shown.tagging.reasons.isEmpty
                 ? nil : shown.tagging.reasons.joined(separator: "\n")

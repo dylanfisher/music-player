@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Downloads
+@testable import Library
 @testable import Recommender
 
 // The rows' rules as tables, and the polling on a fake clock against a fake service.
@@ -481,4 +482,48 @@ private final class HeldList: @unchecked Sendable {
     #expect(changes == 3)
     await downloads.poll()
     #expect(changes == 3, "the same failure again")
+}
+
+@Test func aRowTaggedAsAnotherReleaseSaysSoInItsTaggingCell() throws {
+    let clean = job(1) { $0.tagging = DownloadJob.Tagging(status: .clean, reasons: []) }
+    let row = try #require(DownloadRow(clean, machine: "Studio", taggedAs: 5151))
+    #expect(row.taggedAs == 5151 && row.releaseID == 4242)
+    #expect(row.tagging.label == "Clean, another release")
+    #expect(
+        row.tagging.reasons.first?.hasPrefix(
+            "Tagged as Discogs release 5151, not Discogs release 4242, which was queued.") == true)
+    #expect(row.canApprove == false, "Approve still needs the review claim, as for any row")
+    let plain = try #require(DownloadRow(clean, machine: "Studio"))
+    #expect(plain.tagging.label == "Clean" && plain.tagging.reasons.isEmpty)
+}
+
+/// The release recorded is named only while the job is staged in the folder it was tagged in,
+/// and the service still lists the queued one: once it records the new release, or stages
+/// the job again, the row says nothing.
+@Test func aTaggedReleaseIsNamedOnlyWhileItDiffersFromTheService() {
+    let tagged = TaggedRelease(folder: "job-1", releaseID: 5151)
+    #expect(tagged.differs(for: job(1)) == 5151)
+    #expect(tagged.differs(for: job(1) { $0.stagedPath = "job-1-again" }) == nil)
+    #expect(
+        tagged.differs(
+            for: job(1) {
+                $0.release = DownloadJob.Release(
+                    releaseID: 5151, artist: "Made-Up Artist", title: "Made-Up Album", year: 1999)
+            }) == nil)
+}
+
+@MainActor @Test func theModelsRowsNameTheReleaseTheCoordinatorRecorded() async {
+    let service = FakeService([job(1)])
+    let downloads = model(service)
+    var changes = 0
+    downloads.changed = { changes += 1 }
+    await downloads.poll()
+    #expect(downloads.rows.first?.taggedAs == nil)
+    let before = changes
+    downloads.setTagged([1: TaggedRelease(folder: "job-1", releaseID: 5151)])
+    #expect(downloads.rows.first?.taggedAs == 5151)
+    #expect(downloads.taggedAs(1) == 5151)
+    #expect(changes == before + 1)
+    downloads.setTagged([1: TaggedRelease(folder: "job-1", releaseID: 5151)])
+    #expect(changes == before + 1, "the same releases change nothing")
 }

@@ -295,3 +295,13 @@ private func rows() -> [DownloadRow] {
     other.window?.close()
     other.stop()
 }
+
+@MainActor
+@Test func theAlbumsTooltipNamesTheReleaseTheFilesAreTaggedAs() throws {
+    let window = DownloadsWindow()
+    let row = try #require(DownloadRow(job(1), machine: FakeService.machine, taggedAs: 5151))
+    window.show([row], status: "", canAdd: true)
+    #expect(window.tooltip(.album, 0) == "Discogs release 4242; tagged as Discogs release 5151")
+    #expect(window.text(.tagging, 0) == "Pending, another release")
+    window.window?.close()
+}

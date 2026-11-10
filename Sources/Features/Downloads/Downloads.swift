@@ -112,11 +112,12 @@ package final class Downloads {
     /// The selected library tracks' ids, for From Library Selection.
     package var selectedTracks: () throws -> [Int64] = { [] }
     /// Opens the Discogs tagger on a staged job, with the staging folder's path; the tagger's
-    /// Apply reports its verdict through the closure.
+    /// Apply reports its verdict through the closure, with the release it wrote.
     package var openInTagger:
-        (StagedJob, String, @escaping @Sendable (AutoTagRun.Verdict) -> Void) -> Void = {
-            _, _, _ in
-        }
+        (
+            StagedJob, String,
+            @escaping @Sendable (AutoTagRun.Verdict, _ releaseID: Int) -> Void
+        ) -> Void = { _, _, _ in }
 
     /// The window's column widths as they were left, set before it first shows, and what
     /// saves them as a column is resized.
@@ -189,8 +190,12 @@ package final class Downloads {
                 Task {
                     await coordinator.take(jobs)
                     let problems = await coordinator.problems
+                    let tagged = await coordinator.taggedAs()
+                    guard self.session === session else { return }
+                    // Changes the rows, and calls `changed`, only when it's new.
+                    model.setTagged(tagged)
                     // The poll refreshed the rows; only a new problem changes what shows.
-                    guard self.session === session, problems != session.problems else { return }
+                    guard problems != session.problems else { return }
                     session.problems = problems
                     self.refresh()
                 }
@@ -449,10 +454,10 @@ package final class Downloads {
                 } catch {
                     return alert("The staging folder wasn't found", ["\(error)"])
                 }
-                openInTagger(staged, root) { verdict in
+                openInTagger(staged, root) { verdict, release in
                     Task {
                         let problem = await coordinator.resolved(
-                            job, verdict, stagingRoot: root)
+                            job, verdict, release: release, stagingRoot: root)
                         await MainActor.run {
                             if let problem { self.alert("The tagging wasn't reported", [problem]) }
                         }
@@ -571,7 +576,8 @@ package final class Downloads {
         }
         let state = ReviewState(claimed: resuming)
         let approve = ApproveSheet(
-            job: job, album: DownloadRow.album(job.release), resuming: resuming)
+            job: job, album: DownloadRow.album(job.release), resuming: resuming,
+            taggedAs: session.model.taggedAs(id))
         approve.preparing(resuming ? ApproveSheet.findingStep : ApproveSheet.claimingStep)
         let shown = present(approve) {
             guard let approved = approve.result else {

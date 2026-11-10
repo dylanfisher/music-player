@@ -219,6 +219,10 @@ private let lossy = StagedOrigin(
     #expect(
         ApproveSheet.subtitle(plan.job)
             == "Discogs release 4242 · FLAC 16/44.1, 2 files · Replaces MP3 320 kbps")
+    #expect(
+        ApproveSheet.subtitle(plan.job, taggedAs: 5151)
+            == "Tagged as Discogs release 5151, queued as 4242 · FLAC 16/44.1, 2 files"
+            + " · Replaces MP3 320 kbps")
     let sheet = ApproveSheet(plan: plan, album: "A - B")
     #expect(
         sheet.filesTable.tableColumns.map(\.title) == [

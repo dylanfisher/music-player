@@ -84,14 +84,17 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
     let keepBothBox = NSButton(checkboxWithTitle: keepBothTitle, target: nil, action: nil)
     /// What's being prepared, until the plan comes in.
     private var step = ""
+    private let taggedAs: Int?
     /// The old files ticked to lose, by their path on the share.
     private(set) var ticked: Set<String> = []
     /// The approved import; nil for Cancel.
     private(set) var result: ApprovedImport?
 
-    /// The sheet for `job`, preparing until `show(_:)` gives it the plan.
-    init(job: DownloadJob, album: String, resuming: Bool) {
+    /// The sheet for `job`, preparing until `show(_:)` gives it the plan; `taggedAs` is the
+    /// release its files were tagged as, when it isn't the one queued.
+    init(job: DownloadJob, album: String, resuming: Bool, taggedAs: Int? = nil) {
         self.job = job
+        self.taggedAs = taggedAs
         self.album = album
         self.resuming = resuming
         approveButton = NSButton(
@@ -208,7 +211,7 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
         heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         heading.lineBreakMode = .byTruncatingTail
         views.append(heading)
-        views.append(secondary(Self.subtitle(job)))
+        views.append(secondary(Self.subtitle(job, taggedAs: taggedAs)))
         var tables: [NSScrollView] = []
         if let plan {
             files = Self.fileRows(plan, keepingBoth: keepingBoth)
@@ -309,9 +312,16 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
         return tables
     }
 
-    /// "Discogs release 4242 · FLAC 16/44.1, 12 files · Replaces MP3 320".
-    static func subtitle(_ job: DownloadJob) -> String {
-        ([DownloadRow.releaseName(job.release.releaseID), DownloadRow.format(job)]
+    /// "Discogs release 4242 · FLAC 16/44.1, 12 files · Replaces MP3 320", or for files tagged
+    /// as another release than the one queued, "Tagged as Discogs release 5151, queued as
+    /// 4242 · …" (ADR 0178).
+    static func subtitle(_ job: DownloadJob, taggedAs: Int? = nil) -> String {
+        let release =
+            taggedAs.map {
+                "Tagged as \(DownloadRow.releaseName($0)), queued as \(job.release.releaseID)"
+            } ?? DownloadRow.releaseName(job.release.releaseID)
+        return
+            ([release, DownloadRow.format(job)]
             + [DownloadRow.replaces(job)].compactMap { $0 })
             .joined(separator: " · ")
     }

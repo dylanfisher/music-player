@@ -20,6 +20,8 @@ public enum LibraryError: Error, Equatable, CustomStringConvertible {
     case nestedRoots(String, String)
     /// A path an import step names that isn't relative to its folder or leaves it.
     case notRelative(String)
+    /// A release id the import ledger holds that isn't a number.
+    case notAReleaseID(String)
     /// The owner answered the rescan question with Quit, so the index was left as it was.
     case rescanDeclined
 
@@ -42,6 +44,8 @@ public enum LibraryError: Error, Equatable, CustomStringConvertible {
         case .notRelative(let path):
             "\(path.debugDescription) isn't a path inside its folder, so the import step wasn't"
                 + " recorded"
+        case .notAReleaseID(let text):
+            "the import ledger holds \(text.debugDescription) where a release id belongs"
         case .rescanDeclined: "the library wasn't rebuilt, since the rescan was declined"
         }
     }

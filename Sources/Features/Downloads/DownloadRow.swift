@@ -37,8 +37,11 @@ struct DownloadRow: Equatable, Sendable {
     var source: DownloadJob.Source
     /// "Artist - Title (year)".
     var album: String
-    /// For the album's tooltip.
+    /// For the album's tooltip: the release the job was queued for, as the service lists it.
     var releaseID: Int
+    /// The release the owner tagged the staged files as in the tagger on this Mac, when it
+    /// isn't `releaseID` (ADR 0178).
+    var taggedAs: Int?
     /// The policy, and once a folder is chosen what it holds.
     var format: String
     /// The Soulseek folder chosen: its peer and size; empty before one is.
@@ -63,16 +66,18 @@ struct DownloadRow: Equatable, Sendable {
     /// `job`'s row on the Mac named `machine`; nil for a terminal job, which isn't listed.
     /// `answering` is false while the service doesn't answer, which dims every row; `rate` is
     /// the speed of the bytes it's moving, while the window shows one; `formatted` words the
-    /// time of the next search.
+    /// time of the next search; `taggedAs` is the release the files were tagged as, when it
+    /// isn't the job's.
     init?(
         _ job: DownloadJob, machine: String, answering: Bool = true, rate: TransferRate? = nil,
-        formatted: (Date) -> String = DownloadRow.shortTime
+        taggedAs: Int? = nil, formatted: (Date) -> String = DownloadRow.shortTime
     ) {
         guard let group = Self.group(job.state) else { return nil }
         id = job.id
         source = job.source
         album = Self.album(job.release)
         releaseID = job.release.releaseID
+        self.taggedAs = taggedAs
         format = Self.format(job)
         candidate = Self.candidate(job)
         replaces = Self.replaces(job)
@@ -80,7 +85,8 @@ struct DownloadRow: Equatable, Sendable {
         if Self.isTransferring(job.state), let rate { state += " · " + rate.text }
         stateDetail = Self.stateDetail(job)
         progress = Self.isTransferring(job.state) ? job.progress.map(Self.fraction) : nil
-        tagging = Self.tagging(job.tagging, state: job.state)
+        tagging = Self.tagging(
+            job.tagging, state: job.state, taggedAs: taggedAs, queued: job.release.releaseID)
         added = Date(timeIntervalSince1970: TimeInterval(job.createdAt))
         style = Self.style(
             job.state, failedStage: job.failedStage, tagging: job.tagging.status,
@@ -136,7 +142,11 @@ struct DownloadRow: Equatable, Sendable {
         return "Being reviewed on \(review.machine)"
     }
 
-    static func tagging(_ tagging: DownloadJob.Tagging, state: JobState) -> Tagging {
+    /// The Tagging column's cell, with "another release" after the status and why first in its
+    /// tooltip when the files are tagged as `taggedAs`, not `queued`.
+    static func tagging(
+        _ tagging: DownloadJob.Tagging, state: JobState, taggedAs: Int? = nil, queued: Int = 0
+    ) -> Tagging {
         let tagged: Bool =
             switch state {
             case .staged, .approved, .importing, .imported: true
@@ -152,8 +162,20 @@ struct DownloadRow: Equatable, Sendable {
             case .discrepancy: "Discrepancy"
             case .error: "Error"
             }
+        guard let taggedAs else {
+            return Tagging(
+                status: tagging.status, reasons: tagging.reasons, label: tagged ? label : "")
+        }
         return Tagging(
-            status: tagging.status, reasons: tagging.reasons, label: tagged ? label : "")
+            status: tagging.status,
+            reasons: [Self.taggedAsNote(taggedAs, queued: queued)] + tagging.reasons,
+            label: label + ", another release")
+    }
+
+    /// Why a row names another release than the one queued, and that only this Mac knows.
+    static func taggedAsNote(_ taggedAs: Int, queued: Int) -> String {
+        "Tagged as \(releaseName(taggedAs)), not \(releaseName(queued)), which was queued."
+            + " music-recommender can't record the new release yet, so this Mac keeps it."
     }
 
     /// "Nov 10, 4:42 PM": how a row words the time of the next search.

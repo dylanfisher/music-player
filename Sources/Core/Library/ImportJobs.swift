@@ -21,6 +21,11 @@ struct ImportStep: Equatable, Sendable {
         /// its padding runs out. Every check after the write holds the file to it, not to the
         /// size the service staged.
         case tagged
+        /// A staged job the owner tagged in the tagger as another release than the one it was
+        /// queued for (ADR 0178), with the job's folder as `path` and that release's id as
+        /// `destination`. music-recommender has no call to record it yet, so this is the one
+        /// place that says so.
+        case retagged
     }
 
     /// The service's job id, which every Mac shares.
@@ -31,7 +36,8 @@ struct ImportStep: Equatable, Sendable {
     /// relative to the library's share.
     var path: String
     /// For `moved` and `carried`, the new file's path relative to the library's share; for
-    /// `setAside`, the hidden name's; for `held`, the release id the file must carry.
+    /// `setAside`, the hidden name's; for `held`, the release id the file must carry; for
+    /// `retagged`, the release id the files were tagged as.
     var destination: String? = nil
     /// For `moved`, the size the file must have where it went; for `tagged`, the size it has
     /// since the tag write.
@@ -135,6 +141,41 @@ extension LibraryIndex {
             }
         }
         return sizes
+    }
+
+    /// Records that the staged files of `folder` were tagged as `release` in the tagger, or,
+    /// when `release` is `queued`, the job's release as the service lists it, forgets that
+    /// they were tagged as another.
+    package func recordTaggedRelease(job: Int, queued: Int, folder: String, release: Int)
+        throws
+    {
+        guard release != queued else {
+            return try statement(
+                "DELETE FROM \(importStepsTable) WHERE job_id = ? AND kind = ?"
+            ).run(job, ImportStep.Kind.retagged.rawValue)
+        }
+        try database.transaction {
+            try statement("DELETE FROM \(importStepsTable) WHERE job_id = ? AND kind = ?")
+                .run(job, ImportStep.Kind.retagged.rawValue)
+            try recordImportStep(
+                ImportStep(
+                    jobID: job, releaseID: queued, kind: .retagged, path: folder,
+                    destination: String(release)))
+        }
+    }
+
+    /// The release each job's staged files were tagged as in the tagger, by job, where it
+    /// isn't the one queued.
+    package func taggedReleases() throws -> [Int: TaggedRelease] {
+        var found: [Int: TaggedRelease] = [:]
+        try statement(
+            "SELECT job_id, path, destination FROM \(importStepsTable) WHERE kind = ?"
+        ).query(ImportStep.Kind.retagged.rawValue) { row in
+            let text = row.optionalText(2) ?? ""
+            guard let release = Int(text) else { throw LibraryError.notAReleaseID(text) }
+            found[try row.int(0)] = TaggedRelease(folder: try row.text(1), releaseID: release)
+        }
+        return found
     }
 
     /// Forgets the job `job`'s steps, once it's imported.

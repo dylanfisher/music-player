@@ -450,7 +450,7 @@ func aStagedJobIsTaggedWhenNoRunHoldsIt(
         }
     ])
     let problem = await setup.coordinator().resolved(
-        try #require(setup.service.job(1)), .clean, stagingRoot: setup.stagingRoot)
+        try #require(setup.service.job(1)), .clean, release: 4242, stagingRoot: setup.stagingRoot)
     #expect(problem == nil)
     #expect(setup.service.eventTypes == ["lease", "tagging clean", "release_lease"])
     #expect(setup.service.job(1)?.tagging == clean)
@@ -491,7 +491,7 @@ private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
     ])
     try setup.stage(1, bytes: 250)
     let problem = await setup.coordinator().resolved(
-        try #require(setup.service.job(1)), .clean, stagingRoot: setup.stagingRoot)
+        try #require(setup.service.job(1)), .clean, release: 4242, stagingRoot: setup.stagingRoot)
     #expect(problem == nil)
     #expect(
         try setup.index.stagedSizes(job: 1, folder: "job-1")
@@ -599,4 +599,34 @@ private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
     #expect(try setup.outbox().isEmpty)
     #expect(try setup.ledger(1).count == 1, "a resume still needs it")
     #expect(await coordinator.problems.count == 1)
+}
+
+/// The service can't record a job's new release yet, so the index keeps it (ADR 0178): the
+/// next tagger or tag run of the job tags with it, and tagging back as the queued release
+/// forgets it.
+@Test func aResolvedJobTaggedAsAnotherReleaseKeepsItHere() async throws {
+    let setup = try Setup([
+        job(1) {
+            $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
+        }
+    ])
+    try setup.stage(1)
+    let coordinator = setup.coordinator()
+    let listed = try #require(setup.service.job(1))
+    #expect(await coordinator.stagedJob(listed)?.releaseID == 4242)
+    let problem = await coordinator.resolved(
+        listed, .clean, release: 5151, stagingRoot: setup.stagingRoot)
+    #expect(problem == nil)
+    #expect(setup.service.eventTypes == ["lease", "tagging clean", "release_lease"])
+    #expect(await coordinator.taggedAs() == [1: TaggedRelease(folder: "job-1", releaseID: 5151)])
+    #expect(await coordinator.stagedJob(listed)?.releaseID == 5151)
+    #expect(
+        await setup.coordinator().taggedAs() == [
+            1: TaggedRelease(folder: "job-1", releaseID: 5151)
+        ],
+        "kept in the index, for the next launch")
+
+    _ = await coordinator.resolved(listed, .clean, release: 4242, stagingRoot: setup.stagingRoot)
+    #expect(await coordinator.taggedAs().isEmpty)
+    #expect(await coordinator.stagedJob(listed)?.releaseID == 4242)
 }
