@@ -1,6 +1,10 @@
 import Foundation
 import Settings
 
+/// The schema, built once: building it checks every setting's default, and the model reads its
+/// keys for each setting and each row.
+private let schema = AppSettings()
+
 /// The Settings window's rows, generated from the settings schema, so a new setting appears with
 /// no UI code: a control for its kind, its title and its summary, in a section by its key.
 /// Values go to and from the config file as JSON holds them.
@@ -101,20 +105,19 @@ public final class GeneralModel {
             case .receiver: "Receiver"
             case .downloads: "Downloads"
             case .folderChanges: "Folder Changes"
-            case .libraryFolder: AppSettings().libraryFolder.title
+            case .libraryFolder: schema.libraryFolder.title
             case .networkFolders: "Network Folders"
             case .theme: "Theme"
             case .trackTable: AppState().trackTable.title
             case .titles: "Titles"
             case .toolbarStatus: "Toolbar Status"
-            case .statusBar: AppSettings().statusBarStyle.title
+            case .statusBar: schema.statusBarStyle.title
             case .other: "Other"
             }
         }
 
         /// The key prefixes of the section's settings; the longest that matches a key wins.
         var prefixes: [String] {
-            let schema = AppSettings()
             return switch self {
             case .output: ["output."]
             case .playCounts: ["playback."]
@@ -158,7 +161,6 @@ public final class GeneralModel {
         /// The checkboxes that turn the section's other settings on; they're disabled while
         /// every one is off, so the box reads as what depends on what.
         var switchKeys: [String] {
-            let schema = AppSettings()
             return switch self {
             case .receiver: [schema.receiverEnabled.key]
             case .libraryFolder: [schema.copyAddedFiles.key, schema.keepFilesOrganized.key]
@@ -166,8 +168,7 @@ public final class GeneralModel {
             }
         }
 
-        /// Each section's prefixes, read once: building the schema checks every setting's
-        /// default, and a pane looks up the section of each of its rows.
+        /// Each section's prefixes, read once: a pane looks up the section of each of its rows.
         private static let allPrefixes = allCases.map { ($0, $0.prefixes) }
 
         init(key: String) {
@@ -222,7 +223,6 @@ public final class GeneralModel {
     /// beside it (ADR 0132). The Discogs and service tokens are secrets, kept in the file only
     /// (ADR 0137, ADR 0144).
     private static func isShown(_ key: String, searcherInstalled: Bool) -> Bool {
-        let schema = AppSettings()
         return switch key {
         case schema.networkScanReaders.key, schema.discogsDumpsFolder.key,
             schema.discogsCatalogPath.key, schema.discogsToken.key, schema.discogsMapping.key,
@@ -236,7 +236,6 @@ public final class GeneralModel {
     }
 
     private static func row(_ setting: SettingDescriptor) -> Row {
-        let schema = AppSettings()
         let control: Control =
             switch setting.kind {
             case _ where setting.key == schema.outputDeviceUID.key: .output
@@ -304,7 +303,6 @@ public final class GeneralModel {
 
     /// The output the config names, as the output device's row shows it picked.
     var output: OutputChoice {
-        let schema = AppSettings()
         return OutputChoice(
             deviceUID: choice(schema.outputDeviceUID.key),
             renderer: choice(schema.outputRenderer.key))
