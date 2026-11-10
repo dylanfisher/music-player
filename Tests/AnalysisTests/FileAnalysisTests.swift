@@ -173,3 +173,66 @@ private final class Reports: @unchecked Sendable {
     func append(_ share: Double) { lock.withLock { shares.append(share) } }
     var values: [Double] { lock.withLock { shares } }
 }
+
+/// The runs of `clippedRunSamples` or more full-scale samples a channel has, counted one
+/// sample at a time over the whole stream.
+private func clippedRuns(_ stream: [Bool], channels: Int) -> Int {
+    var total = 0
+    for channel in 0..<channels {
+        var run = 0
+        for index in stride(from: channel, to: stream.count, by: channels) {
+            if stream[index] {
+                run += 1
+            } else {
+                if run >= AnalysisRules.clippedRunSamples { total += 1 }
+                run = 0
+            }
+        }
+        if run >= AnalysisRules.clippedRunSamples { total += 1 }
+    }
+    return total
+}
+
+@Test func clippedRunsCountTheSameInHopsAsOverTheWholeStream() throws {
+    var generator = SystemRandomNumberGenerator()
+    for trial in 0..<200 {
+        let channels = trial % 2 + 1
+        let hops = Int.random(in: 1...6, using: &generator)
+        var stream: [Bool] = []
+        let integers = SampleMeasures(channels: channels, sampleRateHz: 44_100, storedBits: 16)
+        let floats = SampleMeasures(channels: channels, sampleRateHz: 44_100, storedBits: nil)
+        let full = Int32(32767) << 16
+        for _ in 0..<hops {
+            let frames = Int.random(in: 0...12, using: &generator)
+            // Mostly hops with no full-scale sample, so a run meets the fast path.
+            let clipping = Bool.random(using: &generator) ? 0.0 : 0.5
+            let clipped = (0..<frames * channels).map { _ in
+                Double.random(in: 0..<1, using: &generator) < clipping
+            }
+            stream += clipped
+            let ints = clipped.map { $0 ? full : Int32(1) << 16 }
+            let reals = clipped.map { $0 ? Float(1) : 0.25 }
+            ints.withUnsafeBufferPointer {
+                if let base = $0.baseAddress { integers.addIntegers(base, frames: frames) }
+            }
+            try reals.withUnsafeBufferPointer {
+                if let base = $0.baseAddress { try floats.addFloats(base, frames: frames) }
+            }
+        }
+        integers.finish()
+        floats.finish()
+        let expected = clippedRuns(stream, channels: channels)
+        #expect(integers.clippedRuns == expected, "integers, trial \(trial)")
+        #expect(floats.clippedRuns == expected, "floats, trial \(trial)")
+    }
+}
+
+@Test func aNonFiniteSampleInAHopWithoutClippingStillThrows() {
+    let measures = SampleMeasures(channels: 1, sampleRateHz: 44_100, storedBits: nil)
+    let samples: [Float] = [0.1, .nan, 0.2]
+    #expect(throws: AnalysisError.self) {
+        try samples.withUnsafeBufferPointer {
+            try measures.addFloats($0.baseAddress!, frames: 3)
+        }
+    }
+}

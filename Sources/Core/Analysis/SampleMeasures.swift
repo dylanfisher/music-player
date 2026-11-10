@@ -36,13 +36,25 @@ final class SampleMeasures {
         guard let fullScale = integerFullScale else {
             preconditionFailure("integer samples for a float measure")
         }
+        let count = frames * channels
         var or: UInt32 = 0
-        for index in 0..<frames * channels {
+        var most = Int32.min
+        var least = Int32.max
+        for index in 0..<count {
             let sample = samples[index]
             or |= UInt32(bitPattern: sample)
-            countClipped(sample >= fullScale || sample <= -fullScale, channel: index % channels)
+            most = max(most, sample)
+            least = min(least, sample)
         }
         orOfSamples |= or
+        if count > 0, most < fullScale, least > -fullScale {
+            endRuns()
+        } else {
+            for index in 0..<count {
+                let sample = samples[index]
+                countClipped(sample >= fullScale || sample <= -fullScale, channel: index % channels)
+            }
+        }
         if channels > 1, !channelsDiffer {
             for frame in 0..<frames where samples[frame * channels] != samples[frame * channels + 1]
             {
@@ -55,10 +67,24 @@ final class SampleMeasures {
     /// `frames` interleaved float samples, as decoded. Throws for a sample that isn't a number
     /// or is infinite, which no measure can take.
     func addFloats(_ samples: UnsafePointer<Float>, frames: Int) throws {
-        for index in 0..<frames * channels {
-            guard samples[index].isFinite else { throw AnalysisError.nonFiniteSample }
-            countClipped(
-                abs(samples[index]) >= AnalysisRules.clippedFloatLevel, channel: index % channels)
+        let count = frames * channels
+        // A sum of squares is finite only if every sample is, so a hop that is finite and under
+        // the clipped level needs no per-sample pass.
+        var squares: Float = 0
+        var most: Float = 0
+        if count > 0 {
+            vDSP_svesq(samples, 1, &squares, vDSP_Length(count))
+            vDSP_maxmgv(samples, 1, &most, vDSP_Length(count))
+        }
+        if count > 0, squares.isFinite, most < AnalysisRules.clippedFloatLevel {
+            endRuns()
+        } else {
+            for index in 0..<count {
+                guard samples[index].isFinite else { throw AnalysisError.nonFiniteSample }
+                countClipped(
+                    abs(samples[index]) >= AnalysisRules.clippedFloatLevel,
+                    channel: index % channels)
+            }
         }
         if channels > 1, !channelsDiffer {
             for frame in 0..<frames where samples[frame * channels] != samples[frame * channels + 1]
@@ -66,6 +92,15 @@ final class SampleMeasures {
                 channelsDiffer = true
                 break
             }
+        }
+    }
+
+    /// Closes the runs going at the start of a hop with no full-scale sample in it, as its
+    /// first sample of each channel would.
+    private func endRuns() {
+        for channel in 0..<channels {
+            if runLengths[channel] >= AnalysisRules.clippedRunSamples { clippedRuns += 1 }
+            runLengths[channel] = 0
         }
     }
 
