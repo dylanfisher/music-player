@@ -102,7 +102,7 @@ private func makeEditing(_ seen: Seen, confirm: Bool = true) -> TagEditing {
             alert: { _, _, _ in }, layout: { _, _ in FilesOrganized() },
             move: { plan, _, _, _ in plan }, follow: { _ in [] },
             askQuit: { _, _ in Issue.record("asked to quit") }))
-    editing.written = { report, _ in seen.written.append(report.changed) }
+    editing.written = { report, _, _ in seen.written.append(report.changed) }
     editing.playCounts = { paths in paths.map { $0 == "/none.flac" ? nil : 5 } }
     editing.setPlayCount = { seen.counts.append(($0, $1)) }
     return editing

@@ -1,12 +1,12 @@
 import AppKit
 import DisplayText
 import Foundation
-import Library
 import Testing
 
 @testable import Discogs
 @testable import DiscogsTagger
 @testable import Fixtures
+@testable import Library
 @testable import Metadata
 @testable import Settings
 @testable import TagWriter
@@ -933,7 +933,7 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     defer { controller.window?.close() }
     var report: (TagWriteProgress) -> Void = { _ in }
     var completion: (Set<String>) -> Void = { _ in }
-    controller.write = { _, progress, done in
+    controller.write = { _, progress, _, done in
         report = progress
         completion = done
     }
@@ -955,6 +955,108 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
             == "Wrote 12 tags to 3 files; Undo Tag Edit puts them back")
 }
 
+/// Once the tags are written, the write's line follows Keep Files Organized: the files moved
+/// by their count, then Undo Tag Edit's records, then the library, each once, until the write
+/// ends (ADR 0186).
+@MainActor
+@Test func theWritesLineShowsKeepFilesOrganizedsSteps() async throws {
+    let one = album(1, "Stockholm", titles: stockholm)
+    let tagger = await model(
+        Seen(), albums: [one],
+        matches: { album, _ in
+            match(album, release(10, "Stockholm", titles: stockholm), tier: .exact)
+        })
+    tagger.analyze()
+    await tagger.finished()
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    var report: (TagWriteProgress) -> Void = { _ in }
+    var organizing: (OrganizeStep) -> Void = { _ in }
+    var completion: (Set<String>) -> Void = { _ in }
+    controller.write = { _, progress, steps, done in
+        report = progress
+        organizing = steps
+        completion = done
+    }
+    let files = (0..<4_254).map { (path: "/m/1/\($0).flac", edit: TagEdit()) }
+    tagger.apply(
+        TaggerModel.ApplyPlan(albumIDs: [1], files: files, fieldCount: 4_254, problems: []))
+    var progress = TagWriteProgress(total: files.count)
+    progress.read = files.count
+    progress.written = files.count
+    report(progress)
+    #expect(
+        controller.statusLabel.stringValue
+            == "Writing 4,254 tags to 4,254 files: 4,254 of 4,254 written")
+    var redraws = 0
+    let refresh = tagger.changed
+    tagger.changed = {
+        redraws += 1
+        refresh()
+    }
+
+    organizing(.moving(OrganizeProgress(done: 0, total: 4_254, current: "/m/1/0.flac")))
+    #expect(controller.statusLabel.stringValue == "Organizing files: 0 of 4,254 moved")
+    organizing(.moving(OrganizeProgress(done: 2_127, total: 4_254, current: "/m/1/2127.flac")))
+    #expect(controller.statusLabel.stringValue == "Organizing files: 2,127 of 4,254 moved")
+    #expect(!controller.progress.isIndeterminate && controller.progress.doubleValue == 0.5)
+    organizing(.moving(OrganizeProgress(done: 4_254, total: 4_254, current: nil)))
+    #expect(controller.statusLabel.stringValue == "Organizing files: 4,254 of 4,254 moved")
+
+    organizing(.updatingUndo)
+    #expect(
+        controller.statusLabel.stringValue == "Updating Undo Tag Edit for the moved files…")
+    #expect(controller.progress.isIndeterminate && !controller.progress.isHidden)
+    organizing(.updatingLibrary)
+    #expect(controller.statusLabel.stringValue == "Updating the library…")
+    #expect(redraws == 5, "one redraw a step")
+
+    completion([])
+    #expect(controller.progress.isHidden)
+    #expect(
+        controller.statusLabel.stringValue
+            == "Wrote 4,254 tags to 4,254 files; Undo Tag Edit puts them back")
+}
+
+/// While a later write is on its tags, the line counts them, though an earlier one is in Keep
+/// Files Organized's steps; the oldest write's step shows once none is.
+@MainActor
+@Test func aWriteOnItsTagsShowsBeforeAnOlderWritesStep() async throws {
+    let albums = [album(1, "A", titles: stockholm), album(2, "B", titles: stockholm)]
+    let tagger = await model(
+        Seen(), albums: albums,
+        matches: { album, _ in
+            match(album, release(Int(album.id) * 10, album.title, titles: stockholm), tier: .exact)
+        })
+    tagger.analyze()
+    await tagger.finished()
+    var reports: [(TagWriteProgress) -> Void] = []
+    var steps: [(OrganizeStep) -> Void] = []
+    tagger.write = { _, progress, organizing, _ in
+        reports.append(progress)
+        steps.append(organizing)
+    }
+    for id: Int64 in [1, 2] {
+        tagger.apply(
+            TaggerModel.ApplyPlan(
+                albumIDs: [id], files: [(path: "/m/\(id).flac", edit: TagEdit())], fieldCount: 1,
+                problems: []))
+    }
+    var done = TagWriteProgress(total: 1)
+    done.read = 1
+    done.written = 1
+    reports[0](done)
+    steps[0](.updatingUndo)
+    #expect(tagger.writeProgress?.text == "Updating Undo Tag Edit for the moved files…")
+    var half = TagWriteProgress(total: 1)
+    half.read = 1
+    reports[1](half)
+    #expect(tagger.writeProgress?.text == "Writing 2 tags to 2 files: 1 of 2 written")
+    reports[1](done)
+    steps[1](.moving(OrganizeProgress(done: 0, total: 1, current: "/m/2.flac")))
+    #expect(tagger.writeProgress?.text == "Updating Undo Tag Edit for the moved files…")
+}
+
 /// A large write redraws the window about 200 times, not twice a file, and its last report
 /// shows: every file written.
 @MainActor
@@ -970,7 +1072,7 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     let controller = TaggerWindow(model: tagger)
     defer { controller.window?.close() }
     var report: (TagWriteProgress) -> Void = { _ in }
-    controller.write = { _, progress, _ in report = progress }
+    controller.write = { _, progress, _, _ in report = progress }
     let files = (0..<1_000).map { (path: "/m/1/\($0).flac", edit: TagEdit()) }
     tagger.apply(
         TaggerModel.ApplyPlan(albumIDs: [1], files: files, fieldCount: 1_000, problems: []))

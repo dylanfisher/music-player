@@ -134,7 +134,7 @@ private func makeEditing(
                 seen.ran("follow \(moves.map { "\($0.from)>\($0.to)" }.joined(separator: " "))")
                 return []
             }, askQuit: askQuit))
-    editing.written = { report, _ in seen.wrote(report.changed) }
+    editing.written = { report, _, _ in seen.wrote(report.changed) }
     return editing
 }
 
@@ -873,7 +873,7 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
     let seen = Seen()
     let editing = makeEditing(seen, organize: organizeA)
     var organized: [FilesOrganized?] = []
-    editing.written = { report, result in
+    editing.written = { report, result, _ in
         seen.wrote(report.changed)
         organized.append(result)
     }
@@ -894,6 +894,45 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
     #expect(seen.written.first == ["/lib/A/a.flac", "/lib/b.flac", "/elsewhere/c.flac"])
     #expect(organized.first??.moved == [TrackMove(from: "/lib/a.flac", to: "/lib/A/a.flac")])
     #expect(organized.first??.outside == [])
+}
+
+/// A Discogs write's caller hears Keep Files Organized's steps after its tags, in order: the
+/// renames, then Undo Tag Edit's records, then the library; and its completion only once the
+/// library has the moves (ADR 0186).
+@MainActor
+@Test func aDiscogsWriteHearsKeepFilesOrganizedsStepsAndEndsAfterTheLibrary() async throws {
+    let seen = Seen()
+    let editing = makeEditing(seen, organize: organizeA)
+    var libraryUpdated: (@MainActor () -> Void)?
+    editing.written = { report, _, done in
+        seen.wrote(report.changed)
+        libraryUpdated = done
+    }
+    editing.organizingFolder = { "/lib" }
+    var steps: [OrganizeStep] = []
+    var ended = false
+    editing.write(
+        [("/lib/a.flac", TagEdit(values: [.title: "A"])), ("/lib/b.flac", TagEdit())],
+        over: window, organizing: { steps.append($0) }, completion: { _ in ended = true })
+    try await eventually { libraryUpdated != nil }
+    #expect(
+        steps == [
+            .moving(OrganizeProgress(done: 0, total: 1, current: "/lib/a.flac")), .updatingUndo,
+            .updatingLibrary,
+        ])
+    #expect(!ended, "the library isn't updated yet")
+    libraryUpdated?()
+    #expect(ended)
+
+    // Nothing to move: no steps, and the write ends with its tags.
+    var quiet: [OrganizeStep] = []
+    var quietEnded = false
+    libraryUpdated = nil
+    editing.write(
+        [("/lib/b.flac", TagEdit(values: [.title: "B"]))], over: window,
+        organizing: { quiet.append($0) }, completion: { _ in quietEnded = true })
+    try await eventually { quietEnded }
+    #expect(quiet.isEmpty)
 }
 
 /// With the setting off, a write renames nothing.

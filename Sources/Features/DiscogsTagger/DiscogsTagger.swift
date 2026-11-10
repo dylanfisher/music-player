@@ -28,13 +28,13 @@ public final class DiscogsTagger {
         set { model.selectedTracks = newValue }
     }
     /// Writes the confirmed edits as one undoable batch, over the window given. The first
-    /// closure hears how far it has got, for the window to show; the completion hears the
-    /// paths that weren't written.
+    /// closure hears how far it has got, and the second each step of Keep Files Organized
+    /// after it, for the window to show; the completion hears the paths that weren't written.
     public var write:
         (
             [(path: String, edit: TagEdit)], NSWindow, @escaping (TagWriteProgress) -> Void,
-            @escaping (Set<String>) -> Void
-        ) -> Void = { _, _, _, _ in }
+            @escaping (OrganizeStep) -> Void, @escaping (Set<String>) -> Void
+        ) -> Void = { _, _, _, _, _ in }
     /// Saves the mapping chosen in the Field Mapping sheet, and the user's saved ones.
     public var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
     /// Saves the choices the window's checkboxes set.
@@ -242,9 +242,9 @@ public final class DiscogsTagger {
 
     func makeWindow() -> TaggerWindow {
         let made = TaggerWindow(model: model)
-        made.write = { [weak self, weak made] files, progress, completion in
+        made.write = { [weak self, weak made] files, progress, organizing, completion in
             guard let self, let window = made?.window else { return }
-            write(files, window, progress, completion)
+            write(files, window, progress, organizing, completion)
         }
         made.getArtwork = { [weak self, weak made] groups in
             guard let self, let window = made?.window else { return }

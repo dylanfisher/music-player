@@ -705,12 +705,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let editing = TagEditing(
             writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)),
             ledger: libraryFileURL(in: paths.dataDirectory))
-        editing.written = { [weak self] report, organized in
-            guard let organized else {
+        editing.written = { [weak self] report, organized, done in
+            guard let self, let organized else {
                 self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
-                return
+                return done()
             }
-            self?.carry(organized, then: report)
+            carry(organized, then: report, done: done)
         }
         editing.organizingFolder = { [weak self] in
             guard let settings = self?.settings, settings[\.keepFilesOrganized] else { return nil }

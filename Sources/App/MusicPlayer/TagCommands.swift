@@ -55,11 +55,15 @@ extension AppDelegate {
     /// After Keep Files Organized or Organize Selected Files renamed files, or with `organized`
     /// nil at launch: the stats, ratings and playlist entries of every renamed file the index
     /// recorded follow it through the move list, then the files the write changed are read at
-    /// their paths now (ADR 0164).
-    func carry(_ organized: FilesOrganized?, then report: TagWriteReport?) {
+    /// their paths now (ADR 0164); `done` is called once that's asked for (ADR 0186).
+    func carry(
+        _ organized: FilesOrganized?, then report: TagWriteReport?,
+        done: @escaping @MainActor () -> Void = {}
+    ) {
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
         let carrier = layoutCarrier
         Task { [weak self] in
+            defer { done() }
             let serially: @Sendable (@escaping @Sendable () -> Void) async -> Void = {
                 @MainActor [weak self] work in
                 // Without the app there are no tag writes to wait for.

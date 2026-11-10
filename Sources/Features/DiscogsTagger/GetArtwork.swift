@@ -139,7 +139,7 @@ extension DiscogsTagger {
                             : plan.problems,
                         window)
                 }
-                self.write(plan.edits, window, { _ in }) { _ in }
+                self.write(plan.edits, window, { _ in }, { _ in }) { _ in }
                 if !plan.problems.isEmpty {
                     self.artworkAlert("Some files got no cover", plan.problems, window)
                 }

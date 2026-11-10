@@ -94,7 +94,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let bottom = NSStackView()
 
     /// Writes the confirmed edits.
-    var write: TaggerModel.Write = { _, _, _ in }
+    var write: TaggerModel.Write = { _, _, _, _ in }
     /// Get Artwork over the albums given, which asks first (ADR 0172).
     var getArtwork: ([ArtworkGroup]) -> Void = { _ in }
     var mappingChosen: (DiscogsMapping, [NamedDiscogsMapping]) -> Void = { _, _ in }
@@ -132,8 +132,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         build(in: window)
         model.changed = { [weak self] in self?.refresh() }
         model.failed = { [weak self] message, details in self?.alert(message, details) }
-        model.write = { [weak self] files, progress, completion in
-            self?.write(files, progress, completion)
+        model.write = { [weak self] files, progress, organizing, completion in
+            self?.write(files, progress, organizing, completion)
         }
         refresh()
     }
@@ -532,9 +532,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     }
 
     /// The writes running, beside the status bar's line: "Writing 120 tags to 20 files: 3 of
-    /// 20 written", or a moving bar alone until a write reports, as a staged write never does.
+    /// 20 written", or a moving bar alone until a write reports, as a staged write never does;
+    /// then Keep Files Organized's steps, the renames by their count and the rest with a
+    /// moving bar.
     private func showWriting(_ writing: TaggerModel.WriteProgress) {
-        if let report = writing.progress {
+        if case .moving(let moving) = writing.step {
+            show(moving.done, of: moving.total, writing.text)
+        } else if let report = writing.progress, writing.step == nil {
             show(0, of: 0, writing.text)
             progress.doubleValue = report.fraction
         } else {

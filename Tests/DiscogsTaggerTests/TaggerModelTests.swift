@@ -164,7 +164,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     var written: [[(path: String, edit: TagEdit)]] = []
     var completion: (Set<String>) -> Void = { _ in }
     var report: (TagWriteProgress) -> Void = { _ in }
-    tagger.write = { files, progress, done in
+    tagger.write = { files, progress, _, done in
         written.append(files)
         report = progress
         completion = done

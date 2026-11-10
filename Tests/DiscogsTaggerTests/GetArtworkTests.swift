@@ -60,7 +60,7 @@ private func artworkTagger(
     let tagger = await artworkTagger()
     let window = TaggerWindow(model: tagger.model)
     defer { window.window?.close() }
-    window.write = { _, _, _ in }
+    window.write = { _, _, _, _ in }
     window.refresh()
     #expect(window.artworkButton.title == "Get Artwork for 1 Album…")
 
@@ -87,7 +87,7 @@ private func artworkTagger(
         reply(answer)
     }
     var written: [[(path: String, edit: TagEdit)]] = []
-    tagger.write = { files, _, _, _ in written.append(files) }
+    tagger.write = { files, _, _, _, _ in written.append(files) }
     var alerts: [String] = []
     tagger.artworkAlert = { message, _, _ in alerts.append(message) }
     var shown: [String?] = []
@@ -121,7 +121,7 @@ private func artworkTagger(
     let tagger = await artworkTagger()
     var written: [String] = []
     tagger.askArtwork = { _, _, reply in reply(.replace) }
-    tagger.write = { files, _, _, _ in written += files.map(\.path) }
+    tagger.write = { files, _, _, _, _ in written += files.map(\.path) }
     tagger.getArtwork(forTracks: [101, 200], over: NSWindow()) { _ in }
     try await eventually { !written.isEmpty }
     #expect(written == ["/m/101"])

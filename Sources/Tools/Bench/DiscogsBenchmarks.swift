@@ -401,7 +401,7 @@ private let taggerRun = Result { () throws -> TaggerRun in
                 importing: { _, _, _ in throw CatalogImportError.stopped })
             tagger.selectedTracks = { fileIDs }
             let written = StandInWrite()
-            tagger.write = { files, _, progress, completion in
+            tagger.write = { files, _, progress, _, completion in
                 written.start(files.count, progress: progress, completion: completion)
             }
             let opened = DispatchTime.now().uptimeNanoseconds

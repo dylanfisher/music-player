@@ -268,13 +268,13 @@ final class TaggerModel {
     /// The selected library tracks' ids, for the selection scope.
     var selectedTracks: () throws -> [Int64] = { [] }
     /// Writes the files' edits as one undoable batch; called only after the user confirmed.
-    /// The completion hears the paths that weren't written.
-    /// It tells its second argument how far it has got, and its last the paths not written.
-    var write: Write = { _, _, _ in }
+    /// It tells its second argument how far it has got, its third each step of Keep Files
+    /// Organized after it, and its last the paths not written.
+    var write: Write = { _, _, _, _ in }
     typealias Write =
         (
             [(path: String, edit: TagEdit)], @escaping (TagWriteProgress) -> Void,
-            @escaping (Set<String>) -> Void
+            @escaping (OrganizeStep) -> Void, @escaping (Set<String>) -> Void
         ) -> Void
     /// The writes handed over and not yet finished, by number, which the window shows the
     /// progress of.
@@ -282,11 +282,13 @@ final class TaggerModel {
     private var writes = 0
 
     /// A write handed over and not yet finished: how many tags and files it writes, and how
-    /// far it has got; nil before its first report, and for a staged write, which has none.
+    /// far it has got; nil before its first report, and for a staged write, which has none;
+    /// and Keep Files Organized's step once its tags are written, nil before.
     struct Writing: Equatable {
         var tags: Int
         var files: Int
         var progress: TagWriteProgress?
+        var step: OrganizeStep?
     }
 
     private var work: Task<Void, Never>?
@@ -1150,6 +1152,12 @@ final class TaggerModel {
                     let steps = progress.read + progress.written
                     if steps == 1 || isReported(steps, of: 2 * progress.total) { changed() }
                 },
+                { [weak self] step in
+                    guard let self, writing[number] != nil else { return }
+                    // The renames report about each 1%, and the steps after them once each.
+                    writing[number]?.step = step
+                    changed()
+                },
                 { [weak self] unwritten in
                     guard let self else { return }
                     status = Self.wroteText(plan)
@@ -1184,10 +1192,22 @@ final class TaggerModel {
         var files: Int
         /// The writes' progress as one; nil until one reports, and for a staged write.
         var progress: TagWriteProgress?
+        /// Keep Files Organized's step after the oldest write that has one, shown in place of
+        /// the tags' count while no write is on its tags (ADR 0186).
+        var step: OrganizeStep?
 
         /// "Writing 120 tags to 20 files: 3 of 20 written", or without the count before a
-        /// report.
+        /// report; or the organize's step: "Organizing files: 3 of 20 moved", "Updating Undo
+        /// Tag Edit for the moved files…", "Updating the library…".
         var text: String {
+            switch step {
+            case .moving(let moving):
+                return "Organizing files: \(DisplayText.number(moving.done)) of"
+                    + " \(DisplayText.number(moving.total)) moved"
+            case .updatingUndo: return "Updating Undo Tag Edit for the moved files…"
+            case .updatingLibrary: return "Updating the library…"
+            case nil: break
+            }
             let what = "Writing \(TaggerText.tagsToFiles(tags: tags, files: files))"
             guard let progress else { return what + "…" }
             return
@@ -1201,9 +1221,12 @@ final class TaggerModel {
         let values = Array(writing.values)
         let files = values.map(\.files).reduce(0, +)
         let reports = values.compactMap(\.progress)
+        let onTags = values.contains { $0.progress != nil && $0.step == nil }
+        let oldest = writing.keys.sorted().lazy.compactMap { self.writing[$0]?.step }.first
+        let step = onTags ? nil : oldest
         return WriteProgress(
             tags: values.map(\.tags).reduce(0, +), files: files,
-            progress: reports.isEmpty ? nil : .combined(reports, total: files))
+            progress: reports.isEmpty ? nil : .combined(reports, total: files), step: step)
     }
 }
 

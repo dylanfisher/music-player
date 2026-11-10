@@ -19,8 +19,11 @@ public final class TagEditing {
     /// The info windows open, in the order they opened.
     public private(set) var editors: [TagEditorWindow] = []
     /// Called on the main thread with what a write or undo changed, for the rescan, and what
-    /// Keep Files Organized moved after it, whose files the report has at their new paths.
-    public var written: (TagWriteReport, FilesOrganized?) -> Void = { _, _ in }
+    /// Keep Files Organized moved after it, whose files the report has at their new paths. The
+    /// last argument is called once the library has the moves, which a Discogs write's
+    /// completion waits for (ADR 0186).
+    public var written: (TagWriteReport, FilesOrganized?, @escaping @MainActor () -> Void) -> Void =
+        { _, _, done in done() }
     /// The library folder while Keep Files Organized is on, else nil, read as each write or
     /// undo the user asked for is queued (ADR 0164).
     public var organizingFolder: () -> String? = { nil }
@@ -155,6 +158,9 @@ public final class TagEditing {
     private var completions: [Int: (Set<String>) -> Void] = [:]
     /// What to tell a Discogs write's caller of its progress, by write number.
     private var progresses: [Int: (TagWriteProgress) -> Void] = [:]
+    /// What to tell a Discogs write's caller of Keep Files Organized's steps after it, by write
+    /// number.
+    private var organizeSteps: [Int: (OrganizeStep) -> Void] = [:]
     /// The writes queued, running and finished since the queue was last empty, by write number:
     /// how many files each writes, and its last report, nil before its first. Cleared when the
     /// queue drains, so the status bar's count never falls back.
@@ -186,7 +192,7 @@ public final class TagEditing {
             let report = writer.recoverInterrupted()
             guard !report.changed.isEmpty else { return }
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.written(report, nil) }
+                MainActor.assumeIsolated { self?.written(report, nil) {} }
             }
         }
         readCanUndo()
@@ -495,17 +501,20 @@ public final class TagEditing {
     /// with a save's progress and its alert over `window` for what failed. The caller has
     /// asked the user: the Discogs tagger's Apply, after its confirmation (ADR 0133).
     /// `progress` hears how far it has got, on the main thread, as the status bar does, so the
-    /// tagger's window can show it too; `completion` hears the paths that weren't written,
-    /// once the write has run.
+    /// tagger's window can show it too, and `organizing` each step of Keep Files Organized
+    /// after it that has files to move; `completion` hears the paths that weren't written,
+    /// once the write has run and, when files moved, the library has them (ADR 0186).
     public func write(
         _ files: [(path: String, edit: TagEdit)], over window: NSWindow,
         progress: @escaping (TagWriteProgress) -> Void = { _ in },
+        organizing: @escaping (OrganizeStep) -> Void = { _ in },
         completion: @escaping (Set<String>) -> Void = { _ in }
     ) {
         guard !files.isEmpty else { return }
         let write = effects.write
         completions[lastWrite + 1] = completion
         progresses[lastWrite + 1] = progress
+        organizeSteps[lastWrite + 1] = organizing
         enqueue("write the tags", over: window, files: files.count) {
             write(files, .discogsTagger, $0)
         }
@@ -576,12 +585,20 @@ public final class TagEditing {
                 let (plan, folder, confirmed) = target
                 var result = move(plan, folder, confirmed) { progress in
                     DispatchQueue.main.async {
-                        MainActor.assumeIsolated { self.organizing(progress) }
+                        MainActor.assumeIsolated {
+                            self.organizing(progress)
+                            if progress.total > 0 { self.organizeSteps[number]?(.moving(progress)) }
+                        }
                     }
                 }
                 // The setting is limited to the library folder: an edit of a file elsewhere
                 // isn't a problem.
                 if !confirmed { result.outside = [] }
+                if !result.moved.isEmpty {
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { self.organizeSteps[number]?(.updatingUndo) }
+                    }
+                }
                 result.problems += follow(result.moved).map {
                     "\($0.path): Undo Tag Edit can't find it at its new path: \($0.detail)"
                 }
@@ -617,11 +634,19 @@ public final class TagEditing {
         defer { writeEnded() }
         readCanUndo()
         progresses.removeValue(forKey: number)
-        completions.removeValue(forKey: number)?(
-            Set(report.failures.map(\.path) + report.notWritten))
-        guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }
+        let step = organizeSteps.removeValue(forKey: number)
+        let completion = completions.removeValue(forKey: number)
+        let unwritten = Set(report.failures.map(\.path) + report.notWritten)
+        // With files moved, the caller hears of the end once the library has them.
+        let waitsForLibrary = organized?.moved.isEmpty == false
+        if !waitsForLibrary { completion?(unwritten) }
+        guard let (action, window) = alertWindows.removeValue(forKey: number) else {
+            if waitsForLibrary { completion?(unwritten) }
+            return
+        }
         if !report.changed.isEmpty || organized != nil {
-            written(report, organized)
+            if waitsForLibrary { step?(.updatingLibrary) }
+            written(report, organized) { if waitsForLibrary { completion?(unwritten) } }
             let changed = Set(report.changed)
             for editor in editors where !changed.isDisjoint(with: editor.paths) {
                 read(into: editor, over: window)
