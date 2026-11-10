@@ -1,4 +1,5 @@
 import Foundation
+import HALOutput
 
 /// What the lossy-origin check found in one staged file (ADR 0147), for the Approve sheet. The
 /// file is analyzed with `analyzeFile(at:)` and nothing else, so no staged path reaches the
@@ -29,9 +30,12 @@ package func stagedOriginChoice<File>(_ files: [File]) -> [File] {
 
 /// Analyzes the first and last of `paths`, a staged album's files in order, each on a task of
 /// its own at utility priority, both at once: the reads block, and on the share each takes
-/// seconds. Cancelling the caller stops the files being analyzed.
-package func stagedOrigins(_ paths: [String]) async throws -> [StagedOrigin] {
-    try await stagedOrigins(paths) { try analyzeFile(at: $0) }
+/// seconds. Cancelling the caller stops the files being analyzed. `latency` slows each file's
+/// reads, for the bench's simulated NAS.
+package func stagedOrigins(_ paths: [String], latency: FileLatency? = nil) async throws
+    -> [StagedOrigin]
+{
+    try await stagedOrigins(paths) { try analyzeFile(at: $0, latency: latency) }
 }
 
 /// `stagedOrigins(_:)` with `analyze` in place of `analyzeFile(at:)`, for the tests. The

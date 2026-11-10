@@ -1,6 +1,7 @@
 import Analysis
 import Fixtures
 import Foundation
+import HALOutput
 import Library
 import Recommender
 
@@ -23,7 +24,8 @@ private struct ApproveRun {
 /// 24/96 files as the analysis rows' and the rest six seconds long, new to a library folder
 /// that holds the fixture library's artist folders, all under a scratch folder on this Mac.
 /// The service is a stand-in that accepts the job; nothing leaves the scratch folder.
-private func approveRun() throws -> ApproveRun {
+/// `latency` slows the lossy-origin check's reads as the slow simulated NAS does.
+private func approveRun(latency: FileLatency? = nil) throws -> ApproveRun {
     let fixtures = try defaultPlaybackFixturesDirectory()
     let long = try analysisFixture(.hiRes, seconds: 300, in: fixtures)
     let short = try analysisFixture(.hiRes, in: fixtures)
@@ -67,7 +69,9 @@ private func approveRun() throws -> ApproveRun {
         }
         let paths = files.map { staging + "/" + job + "/" + $0.name }
         var origins: [StagedOrigin] = []
-        let originsSeconds = try seconds { origins = try waited { try await stagedOrigins(paths) } }
+        let originsSeconds = try seconds {
+            origins = try waited { try await stagedOrigins(paths, latency: latency) }
+        }
         guard origins.count == 2, origins.allSatisfy({ !$0.blocks }) else {
             throw BenchError.expected("two staged files analyzed, both clean: \(origins)")
         }
@@ -101,6 +105,17 @@ private struct ListedFile: Encodable {
     var position: String
 }
 
+/// The notes of an Approve row.
+private func approveNotes(_ run: ApproveRun) -> [String] {
+    [
+        String(
+            format: "the sheet's moves %.0f ms, the lossy-origin check %.2f s, the import"
+                + " %.0f ms; %.0f MB staged",
+            run.destinationsSeconds * 1000, run.originsSeconds, run.importSeconds * 1000,
+            run.stagedMB)
+    ]
+}
+
 let downloadsBenchmarks = [
     Benchmark(
         name:
@@ -109,14 +124,21 @@ let downloadsBenchmarks = [
         budget: Budget(appleSilicon: 5, oldMac: 30, unit: .seconds)
     ) {
         let run = try approveRun()
+        return Measured(value: run.seconds, notes: approveNotes(run))
+    },
+    Benchmark(
+        name:
+            "downloads: Approve a staged \(stagedTrackCount)-file album, the same, its"
+            + " lossy-origin check on the slow simulated NAS",
+        budget: Budget(appleSilicon: 10, oldMac: 40, unit: .seconds)
+    ) {
+        let run = try approveRun(latency: nasFileLatency)
         return Measured(
             value: run.seconds,
-            notes: [
+            notes: approveNotes(run) + [
                 String(
-                    format: "the sheet's moves %.0f ms, the lossy-origin check %.2f s, the import"
-                        + " %.0f ms; %.0f MB staged",
-                    run.destinationsSeconds * 1000, run.originsSeconds, run.importSeconds * 1000,
-                    run.stagedMB)
+                    format: "%.0f ms to open a file, %.0f ms a 1 MB block; the moves are local",
+                    nasFileLatency.openSeconds * 1000, nasFileLatency.readSeconds * 1000)
             ])
-    }
+    },
 ]
