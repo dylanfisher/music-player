@@ -54,7 +54,9 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 4. Phases 62 to 66, the owner's feedback of 2026-11-09 (second list): 62, 63, 64 and 65 in
    parallel, each on its own branch and worktree, then 66. All five are done.
 5. Phase 67, the owner's matcher feedback of 2026-11-09, is done.
-6. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+6. Phases 68 to 72, the owner's feedback of 2026-11-09 (third list): 68, 69, 70 and 71 in
+   parallel, each on its own branch and worktree, then 72, which builds on 69's tagger.
+7. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -657,6 +659,89 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
+
+### 68. Organize's progress and the Library Problems window
+
+Asked by the owner on 2026-11-09 (ADR 0164 is Keep Files Organized).
+
+- [ ] **Organize Selected Files opens at once.** The confirmation opens as soon as the command
+      runs, counting the tracks and files to rename with live progress, and Cancel works while it
+      counts. Its buttons and summary appear when the count is done. A test with a slow counting
+      stand-in.
+- [ ] **Progress after Organize.** Once confirmed, the status area at the bottom left shows how
+      many files are left, progress, and the current file or folder, until the run ends, then a
+      one-line result ("Organized 2,340 files; 3 problems"). Library Problems opens only when
+      there were problems, as now.
+- [ ] **Library Problems is a normal window.** It no longer floats above other apps' windows or
+      the app's own; it can go behind them like any document window.
+- [ ] **Library Problems as a table.** A standard table like the tagger's album list: a column
+      for each piece (the problem's kind, the track or album, the file's path, the folder, the
+      detail), sortable by any column, with resizable columns that are remembered, and the
+      window's frame remembered (ADR 0158). The problem text is plain enough to act on.
+
+### 69. Tagger columns and the releases window
+
+Asked by the owner on 2026-11-09.
+
+- [ ] **Sort the album list by any column:** a click on Album, Files, Match or Review sorts by
+      it, a second click reverses it, and the sort is remembered.
+- [ ] **Column widths are remembered** between launches. The owner reports they aren't: find
+      why with a test that relaunches the window, then fix it.
+- [ ] **The releases window remembers itself.** The sheet or window for choosing a release
+      (Other Releases, Look Up) keeps its size, its position where it has one, and its column
+      widths and order, like every other window (ADR 0158). This includes the tagger opened from
+      Downloads (Open in Tagger).
+
+### 70. Artwork, Settings and Get Info
+
+Asked by the owner on 2026-11-09.
+
+- [ ] **The art viewer opens without layout shift.** It opens at its final size: no frame drawn
+      stretched across the screen and then shrunk, and the thumbnail strip's space is reserved
+      before the thumbnails load, from a cheap count of the album's pictures. Thumbnails fill
+      in place.
+- [ ] **⌘⌥⇧A shows the artwork viewer,** unless that chord is already taken (check
+      `KeyChord` and the menus first; if it is, say which command has it and pick none).
+- [ ] **Watched Folders is its own Settings tab again,** next to Library, so Library is shorter
+      (ADR 0168 moved it).
+- [ ] **Snapshots always show** in Settings' short table; the collapse toggle is removed.
+- [ ] **Get Info's previous and next track:** left and right arrow buttons in the bottom button
+      row move to the previous and next track of the list Get Info was opened from, with
+      unsaved edits handled as closing the window handles them (ADR 0160).
+- [ ] **Get Info warns about one title for several tracks:** a save that gives several tracks
+      the same title asks first, naming the title change, since it's usually a mistake made by
+      editing a multiple selection. Other fields shared by every track, such as the album, don't
+      ask.
+
+### 71. Choosing another release for a download
+
+Asked by the owner on 2026-11-09. The service side (stall timers, offline peers, cleanup, and
+recording a new release on a job) is a separate prompt for music-recommender.
+
+- [ ] **A staged download can take another release.** In the tagger opened from Downloads,
+      Other Releases… and Look Up… choose another release, as for a library album, instead of
+      refusing with `StagedReleaseFixed`. The write stays in the staging folder (ADR 0146) and is
+      confirmed as any tagger write is. The Downloads row says the album is tagged as another
+      release than the one queued, and Approve still works. When the service offers a call to
+      record the job's new release, the player makes it; until then the player keeps the new
+      release with the staged job and says so.
+
+### 72. Combine Albums for Tagging
+
+Asked by the owner on 2026-11-09, as proposed: "Combine Albums for Tagging", a command-palette
+command (and a track menu item) on the albums selected in the library.
+
+- [ ] **Joined for tagging:** it opens the Discogs Tagger with the selected albums joined into
+      one album, their files in disc and track order, and analyzes it, so the matcher compares
+      every file with the catalog, and a release of the whole count ranks first.
+- [ ] **Albums with different titles or artists** are allowed, and the tagger names every
+      source album on the joined one, so combining "1983" with "1983 [Expanded Reissue]" by
+      mistake is easy to see before writing.
+- [ ] **Review and write** as any tagger write: nothing writes until the owner confirms; two
+      files that would be the same track show as a conflict in the review, as now; Other
+      Releases… and Look Up… work; undo works. After the write every file carries one release
+      id, so Separate Releases shows them as one album.
+- [ ] Works with the Discogs API alone, only slower.
 
 ### 10. Web remote
 
