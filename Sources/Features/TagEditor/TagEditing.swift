@@ -278,14 +278,20 @@ public final class TagEditing {
     }
 
     /// Get Info: opens an info window on `paths` at once and reads them into it. A window
-    /// already open on the same tracks comes to the front instead.
-    public func open(_ paths: [String], over window: NSWindow) {
+    /// already open on the same tracks comes to the front instead. A window on one track
+    /// steps through `list`, the list it was opened from, with its ‹ and › buttons.
+    public func open(_ paths: [String], over window: NSWindow, list: TrackList? = nil) {
         guard !paths.isEmpty else { return }
         if let open = editors.first(where: { $0.paths == paths }) {
             present(open)
             return
         }
         let editor = TagEditorWindow(paths: paths)
+        if paths.count == 1 { editor.list = list }
+        editor.stepped = { [weak self, weak editor] in
+            guard let self, let editor else { return }
+            self.read(into: editor, over: window)
+        }
         // A button runs its command on its own window, whichever is key.
         editor.run = { [weak self, weak editor] id in
             guard let self else { return }

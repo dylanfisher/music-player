@@ -483,3 +483,26 @@ import Testing
     #expect(second.model.filter.search == title)
     #expect(second.model.trackIDs == first.model.trackIDs)
 }
+
+/// Get Info steps through the track table as it was listed when it opened: its row count, the
+/// selected row, and each row's path; none for several rows (phase 70).
+@MainActor @Test func theSelectedRowInTheListGivesGetInfoItsNeighbors() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let index = try LibraryIndex(at: databaseURL)
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL), index: index,
+        layout: AppState().trackTable.defaultValue, browserHeight: 150, groupByAlbumArtist: false,
+        thumbnails: nil)
+    await browser.load(BrowserState(source: nil))
+    let ids = browser.model.trackIDs
+    #expect(ids.count > 2)
+    browser.table.table.selectRowIndexes([1], byExtendingSelection: false)
+    let list = try #require(browser.selectedRowInList())
+    #expect(list.count == ids.count && list.row == 1)
+    let paths = try index.paths(ids: [ids[0], ids[2]])
+    #expect(try await list.path(0) == paths[ids[0]])
+    #expect(try await list.path(2) == paths[ids[2]])
+    #expect(try await list.path(ids.count) == nil)
+    browser.table.table.selectRowIndexes([0, 1], byExtendingSelection: false)
+    #expect(browser.selectedRowInList() == nil)
+}

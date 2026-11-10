@@ -1,6 +1,7 @@
 import AppKit
 import Commands
 import Library
+import TagEditor
 import TagWriter
 
 /// The tag editor's commands. Edit Tags… opens an info window on the selection at any time;
@@ -11,9 +12,13 @@ extension AppDelegate {
             .editTags,
             enabled: { [weak self] in self?.window != nil && self?.hasSelectedTracks() == true },
             run: { [weak self] in
+                // The list as it is when Get Info is chosen, which its window steps through.
+                let list = self?.browser?.selectedRowInList().map {
+                    TrackList(count: $0.count, row: $0.row, path: $0.path)
+                }
                 self?.withSelectedPaths { paths in
                     guard let self, let window = self.window?.window else { return }
-                    self.tagEditing.open(paths, over: window)
+                    self.tagEditing.open(paths, over: window, list: list)
                 }
             })
         dispatcher.handle(

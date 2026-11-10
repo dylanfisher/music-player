@@ -1640,6 +1640,27 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
+    /// The track table as listed now, for Get Info to step from the selected track to the
+    /// ones before and after it: its row count, the selected row, and a row's path, read from
+    /// the library then. Nil unless the track table has one row selected.
+    public func selectedRowInList() -> (
+        count: Int, row: Int, path: @MainActor (Int) async throws -> String?
+    )? {
+        let selected = table.table.selectedRowIndexes
+        let ids = model.trackIDs
+        guard !showsTimeline, selected.count == 1, let row = selected.first,
+            ids.indices.contains(row)
+        else { return nil }
+        let reader = reader
+        return (
+            ids.count, row,
+            { row in
+                guard ids.indices.contains(row) else { return nil }
+                return try await reader.paths(ids: [ids[row]])[ids[row]]
+            }
+        )
+    }
+
     /// The paths of the selected tracks, in table order.
     public func selectedPaths() async throws -> [String] {
         let ids = try selectedTrackIDs()

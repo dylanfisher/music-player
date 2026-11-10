@@ -21,8 +21,20 @@ import WindowPlacement
 public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDelegate,
     NSWindowDelegate
 {
-    /// The files Get Info was asked for, in the selection's order.
-    public let paths: [String]
+    /// The files Get Info was asked for, in the selection's order, or the track a step
+    /// through `list` shows.
+    public private(set) var paths: [String]
+    /// The list a window on one track was opened from, which ‹ and › step through; nil for
+    /// none, or for several tracks.
+    var list: TrackList? {
+        didSet { showStepButtons() }
+    }
+    /// Called when a step through `list` shows another track, for its files to be read.
+    var stepped: () -> Void = {}
+    let previousButton = NSButton()
+    let nextButton = NSButton()
+    /// While a step reads the next row's path, so the buttons don't step twice.
+    private var isStepping = false
     /// Nil until the files are read.
     public private(set) var model: TagEditorModel?
     public let window: NSWindow
@@ -91,14 +103,18 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private let spinner = NSProgressIndicator()
     /// One line beside the buttons: "Reading tags…", then why some files can't be saved, or why
     /// Save failed.
-    let problemLabel = NSTextField(labelWithString: "Reading tags…")
+    let problemLabel = NSTextField(labelWithString: TagEditorWindow.readingText)
     let saveButton = NSButton(title: "Save", target: nil, action: nil)
     /// Whether the line shows why Save, or adding a key to Extras, failed, in place of its note.
     private var showsSaveError = false
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
+    /// The bold line over the tabs, the file's name or how many tracks.
+    private var headingField: NSTextField?
     private var isClosed = false
 
+    /// The line's text while the files are read.
+    static let readingText = "Reading tags…"
     static let artPoints = 120.0
     static let largeArtPoints = 300.0
     /// The tab view's least height, which the tallest tab, Info, fits in. The window takes its
@@ -313,6 +329,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     private func makeContent() -> NSView {
         let heading = headingLabel()
+        headingField = heading
         setUpArtViews()
         // Each tab's fields are made when it's first shown, so the window opens on one tab's
         // worth of views.
@@ -350,7 +367,23 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         let undo = commandButton(.undoTagEdit, size: .regular)
         // The journal keeps one list of edits for every window (ADR 0020).
         undo.toolTip = "Undoes the last tag edit, wherever it was made"
-        let buttons = NSStackView(views: [undo, spinner, problemLabel, cancel, saveButton])
+        for (button, symbol, title, step) in [
+            (previousButton, "chevron.left", "Previous Track", -1),
+            (nextButton, "chevron.right", "Next Track", 1),
+        ] {
+            button.bezelStyle = .rounded
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+            button.imagePosition = .imageOnly
+            button.toolTip = title
+            button.tag = step
+            button.target = self
+            button.action = #selector(stepClicked(_:))
+        }
+        showStepButtons()
+        let steps = NSStackView(views: [previousButton, nextButton])
+        steps.spacing = 0
+        let buttons = NSStackView(
+            views: [steps, undo, spinner, problemLabel, cancel, saveButton])
 
         collapseLabel.textColor = .systemOrange
         collapseLabel.isHidden = true
@@ -1042,6 +1075,64 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         run(id)
     }
     @objc private func cancelClicked() { close() }
+
+    @objc private func stepClicked(_ sender: NSButton) { step(by: sender.tag) }
+
+    /// ‹ and › are on while there's a row that way in the list the window was opened from.
+    private func showStepButtons() {
+        previousButton.isEnabled = !isStepping && list?.canStep(by: -1) == true
+        nextButton.isEnabled = !isStepping && list?.canStep(by: 1) == true
+    }
+
+    /// Shows the track `step` rows on in the list the window was opened from, in this window,
+    /// once its path is read. What was typed is dropped, as closing the window drops it.
+    @discardableResult
+    func step(by step: Int) -> Task<Void, Never>? {
+        guard let list, list.canStep(by: step), !isStepping else { return nil }
+        isStepping = true
+        showStepButtons()
+        let row = list.row + step
+        return Task {
+            defer {
+                isStepping = false
+                showStepButtons()
+            }
+            let path: String?
+            do {
+                path = try await list.path(row)
+            } catch {
+                return showStepProblem("The next track couldn't be read: \(error)")
+            }
+            guard !isClosed else { return }
+            guard let path else {
+                return showStepProblem("That track is no longer in the library.")
+            }
+            self.list?.row = row
+            show(path)
+        }
+    }
+
+    private func showStepProblem(_ text: String) {
+        showNote(text, color: .systemRed)
+        showsSaveError = true
+        NSSound.beep()
+    }
+
+    /// Shows the track at `path` in place of the window's, as it opens: the fields as they
+    /// were until `stepped` has its file read and `load` fills them in.
+    private func show(_ path: String) {
+        paths = [path]
+        model = nil
+        window.title = heading
+        headingField?.stringValue = heading
+        showsSaveError = false
+        showNote(Self.readingText, color: .secondaryLabelColor)
+        spinner.startAnimation(nil)
+        collapseLabel.isHidden = true
+        artworkList.table.deselectAll(nil)
+        showEditable()
+        stepped()
+    }
 
     @objc private func saveClicked() {
         guard let model else { return }

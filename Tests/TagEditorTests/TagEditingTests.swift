@@ -938,3 +938,70 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
         ])
     #expect(seen.written.last == ["/lib/A/a.flac"])
 }
+
+/// ‹ and › show the previous and next track of the list Get Info was opened from in the same
+/// window, read as it opens; they're off at either end, and what was typed is dropped, as
+/// closing the window drops it (phase 70).
+@MainActor
+@Test func previousAndNextShowTheListsNeighborsInTheSameWindow() async throws {
+    let seen = Seen()
+    let editing = makeEditing(
+        seen, read: { paths, _ in (paths.map { editable($0, title: "Title of \($0)") }, []) })
+    let rows = ["/a.flac", "/b.flac", "/c.flac"]
+    let list = TrackList(count: rows.count, row: 1) { rows[$0] }
+    editing.open(["/b.flac"], over: window, list: list)
+    let opened = try #require(editor(editing, ["/b.flac"]))
+    try await eventually { opened.isLoaded }
+    #expect(opened.previousButton.isEnabled && opened.nextButton.isEnabled)
+    let title = try #require(opened.fields[.title]?.first)
+    title.stringValue = "Typed"
+    opened.controlTextDidChange(
+        Notification(name: NSControl.textDidChangeNotification, object: title))
+    #expect(opened.model?.text(.title) == "Typed")
+
+    click(opened.nextButton)
+    try await eventually { opened.paths == ["/c.flac"] && opened.isLoaded }
+    #expect(editing.editors.count == 1, "the same window")
+    #expect(opened.window.title == "c.flac")
+    #expect(opened.model?.text(.title) == "Title of /c.flac", "what was typed is dropped")
+    #expect(title.stringValue == "Title of /c.flac")
+    #expect(seen.reads == [["/b.flac"], ["/c.flac"]])
+    #expect(!opened.nextButton.isEnabled, "the last row")
+    #expect(opened.previousButton.isEnabled)
+
+    click(opened.previousButton)
+    try await eventually { opened.paths == ["/b.flac"] && opened.isLoaded }
+    click(opened.previousButton)
+    try await eventually { opened.paths == ["/a.flac"] && opened.isLoaded }
+    #expect(!opened.previousButton.isEnabled, "the first row")
+    #expect(seen.written.isEmpty, "a step writes nothing")
+    opened.saved(TagEdit(values: [.title: "New"]))
+    try await eventually { seen.written == [["/a.flac"]] }
+}
+
+/// A window on several tracks, or opened with no list, has ‹ and › off.
+@MainActor
+@Test func severalTracksOrNoListHaveNoSteps() async throws {
+    let editing = makeEditing(Seen())
+    let list = TrackList(count: 3, row: 1) { _ in "/x.flac" }
+    editing.open(["/a.flac", "/b.flac"], over: window, list: list)
+    editing.open(["/c.flac"], over: window)
+    try await eventually { editing.editors.allSatisfy(\.isLoaded) }
+    for opened in editing.editors {
+        #expect(!opened.previousButton.isEnabled && !opened.nextButton.isEnabled)
+    }
+}
+
+/// A row whose track left the library since says so on the window's line, which stays on
+/// its track.
+@MainActor
+@Test func aStepToATrackNoLongerInTheLibrarySaysSo() async throws {
+    let editing = makeEditing(Seen())
+    editing.open(["/a.flac"], over: window, list: TrackList(count: 2, row: 0) { _ in nil })
+    let opened = try #require(editor(editing, ["/a.flac"]))
+    try await eventually { opened.isLoaded }
+    await opened.step(by: 1)?.value
+    #expect(opened.paths == ["/a.flac"])
+    #expect(opened.problemLabel.stringValue == "That track is no longer in the library.")
+    #expect(opened.nextButton.isEnabled)
+}
