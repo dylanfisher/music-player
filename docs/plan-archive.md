@@ -657,3 +657,56 @@ before landing.
 once, the count moving, Cancel mid-count, then a real run with the status bar's count and
 file, and the result line; Library Problems behind Finder, a sort by Folder, a column
 resized and the window moved, both kept after a relaunch.
+
+### 69. Tagger columns and the releases window
+
+Asked by the owner on 2026-11-09.
+
+- [x] **Sort the album list by any column:** a click on Album, Files, Match or Review sorts by
+      it, a second click reverses it, and the sort is remembered.
+- [x] **Column widths are remembered** between launches. The owner reports they aren't: find
+      why with a test that relaunches the window, then fix it.
+- [x] **The releases window remembers itself.** The sheet or window for choosing a release
+      (Other Releases, Look Up) keeps its size, its position where it has one, and its column
+      widths and order, like every other window (ADR 0158). This includes the tagger opened from
+      Downloads (Open in Tagger).
+
+Plan:
+
+- 69.1 A test that shows the tagger, widens the album list's columns, and opens a second tagger
+  with what the first saved: it fails because nothing records the album list. The fix:
+  `TableLayout` in `Core/Settings` (widths, order, sort), which `TaggerSheetLayouts` holds for
+  each sheet and, with the album pane's width, for the album list; one `NSTableView` apply and
+  record in `DiscogsTagger` for both; the window records on a column's resize or move and the
+  divider's drag, and applies once its frame is placed, as Downloads does. `StateStoreTests`
+  for the new shape.
+- 69.2 The album list's sort: `TaggerModel.AlbumSort` by Album, Files, Match or Review, ties in
+  artist and title order; header clicks set it, the layout keeps it. Model and window tests.
+- 69.3 The sheets keep their column order through the same `TableLayout`; Open in Tagger's
+  tagger gets the layouts and saves them, and the two taggers share one copy. A window test of
+  the order.
+- 69.4 ADR 0176, cross-linked from 0136 and 0158.
+
+Result, phase 69: shipped all three items (ADR 0176). Why the widths went: nothing recorded the
+album list. The sheets kept their layouts (ADR 0136), the window's own table had none, and its
+divider always started at 340 points. A test that shows the tagger, drags the divider to 460
+and widens Files, then opens a second tagger with what the first saved, failed with every
+column back at its default; it passes now. The album list keeps its pane's width and its
+columns' widths, order and sort in `discogsTagger.sheets`, saved as each changes and applied
+once the frame is placed. A header click sorts by Album, Files, Match or Review and a second
+reverses it, ties and no sort in artist-then-title order. The sheets now keep their column order
+too, through the same `TableLayout`. Open in Tagger's tagger gets and saves the layouts, and the
+two taggers share one copy so neither saves over the other's. A sheet has no position of its
+own; it opens over the tagger's window, which keeps its frame. The setting's shape changed, so
+a saved one is discarded once. Tests: the relaunch, the sort in the model and through the
+header, the sheets' order, layouts reaching an open window, the setting's round trip and
+discards. Not run in the app: an owner check that the widths, the divider and a sort survive a
+relaunch, and that a sheet from Open in Tagger (View Changes now; Other Releases once phase 71
+lets a staged album choose) keeps its size. Implemented by an Opus implementer (200k tokens, 100
+tool calls, 39 min, with its review fixes). The gate's review (Sonnet, 62k tokens, 6 tool
+calls, 1 min) found a saved order naming a column twice crashing `apply`, now discarded, and
+window resizes saving over the owner's widths, now saved only on a column drag or a divider
+drag (a `DividerSplitView` whose `mouseDown` reports the drag's end, untested since a test
+can't drag); both fixed. Full `./scripts/check` passed but for `WindowGlassTests
+.theGlassHeadersAreFrosted`, whose screen capture came back empty while the Mac's screen was
+locked; it failed the same way on `main`, so it's the locked screen, not this phase.
