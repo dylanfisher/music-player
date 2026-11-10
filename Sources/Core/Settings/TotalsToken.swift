@@ -1,6 +1,6 @@
-/// What the status bar's totals show, each as `appearance.totalsFormat` and the formats for
-/// the choices a click cycles through hold it: text filled from the list's totals and the
-/// selection's (ADR 0188).
+/// Text filled from the totals of the list and of the selection: what the status bar's totals
+/// settings hold, `appearance.totalsFormat` and one for each choice a click cycles through
+/// (ADR 0188).
 public typealias TotalsTemplate = TokenTemplate<TotalsToken>
 
 extension TokenTemplate where Token == TotalsToken {

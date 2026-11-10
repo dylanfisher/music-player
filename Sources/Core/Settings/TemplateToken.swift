@@ -2,7 +2,7 @@
 public protocol TemplateToken: RawRepresentable<String>, CaseIterable, Equatable, Sendable {
     /// What it stands for, as the setting's help lists it.
     var help: String { get }
-    /// A template the problem for an empty one suggests, such as `{title} — {artist}`.
+    /// A template to suggest when one is empty, such as `{title} — {artist}`.
     static var example: String { get }
 }
 

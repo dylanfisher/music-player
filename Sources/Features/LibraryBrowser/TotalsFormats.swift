@@ -19,7 +19,8 @@ public struct TotalsFormats: Equatable, Sendable {
         self.selection = selection
     }
 
-    /// The settings' defaults, which read as the bar did before it had templates.
+    /// The settings' defaults: the list's track count, size and length, with the selection's
+    /// after them in parentheses, alone, or not at all, as the click chose.
     static let defaults = TotalsFormats(
         nothingSelected: AppSettings().totalsFormat.defaultValue,
         listAndSelection: AppSettings().totalsListAndSelectionFormat.defaultValue,
