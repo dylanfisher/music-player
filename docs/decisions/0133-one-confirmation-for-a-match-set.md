@@ -6,7 +6,9 @@
 - **See also:** [0020](0020-tag-writing.md) (tag writing), [0050](0050-remove-from-library.md)
   (the other confirmed change to music files), [0108](0108-faster-tag-writes.md) (batches),
   [0131](0131-discogs-matching.md) (the tiers), [0132](0132-discogs-field-mapping.md) (the
-  mapping and the change set)
+  mapping and the change set),
+  [0179](0179-combining-albums-for-tagging.md) (albums combined for
+  tagging, one confirmation as any)
 
 ## Context
 

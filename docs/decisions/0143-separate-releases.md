@@ -7,7 +7,9 @@
   releases by their earliest date too, those with none last.
 - **See also:** [0129](0129-custom-tag-fields.md) (the release id among the custom keys),
   [0136](0136-asking-before-a-rescan-and-undoing-a-tagger-write.md) (the rescan question),
-  [0142](0142-library-snapshots.md) (the relaunch, and restores)
+  [0142](0142-library-snapshots.md) (the relaunch, and restores),
+  [0179](0179-combining-albums-for-tagging.md) (combined albums get
+  one title and artist too, so they become one album)
 
 ## Context
 
