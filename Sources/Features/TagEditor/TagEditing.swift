@@ -475,6 +475,8 @@ public final class TagEditing {
             }
             return
         }
+        // The writable files' count, not the selection's: the window's line already says the
+        // others can't be saved and Save writes only these, so the question counts what changes.
         let question =
             edit.values[.title].flatMap {
                 $0.isEmpty ? nil : Confirmation.sameTitle($0, paths.count)

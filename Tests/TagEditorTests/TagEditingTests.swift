@@ -1025,3 +1025,27 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
         ])
     #expect(editing.isOpen, "declined, so the window stays open")
 }
+
+/// The title question counts the files the save writes: a read-only one in the selection,
+/// which the window's line names, isn't given the title, so it isn't counted (phase 70).
+@MainActor
+@Test func theTitleQuestionCountsTheFilesWritten() async throws {
+    let seen = Seen()
+    let editing = makeEditing(
+        seen,
+        read: { paths, _ in
+            (
+                paths.map { path in
+                    var track = editable(path)
+                    if path == "/c.flac" { track.readOnly = "c.flac is read only" }
+                    return track
+                }, []
+            )
+        }, confirm: false)
+    editing.open(["/a.flac", "/b.flac", "/c.flac"], over: window)
+    let opened = try #require(editing.editors.first)
+    try await eventually { opened.isLoaded }
+    #expect(opened.problemLabel.stringValue.contains("Save writes only the other 2 files."))
+    opened.saved(TagEdit(values: [.title: "Intro"]))
+    #expect(seen.confirmations == ["Give all 2 tracks the title “Intro”?"])
+}
