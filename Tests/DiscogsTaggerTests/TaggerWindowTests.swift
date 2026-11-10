@@ -1332,3 +1332,47 @@ private final class HeldSearch {
     #expect(controller.applyButton.title == "Apply to All in Exact…")
     #expect(tagger.applicable(.exact).map(\.id) == [1, 2, 3])
 }
+
+/// Incomplete has Apply too, to all its albums or to those selected, each file written as the
+/// window pairs it: a reordered album's files get the tracks they're shown on (ADR 0184).
+@MainActor
+@Test func incompleteAlbumsCanBeSelectedAndApplied() async throws {
+    let albums = [
+        album(1, "A", titles: stockholm), album(2, "B", titles: stockholm),
+        album(3, "C", titles: stockholm),
+    ]
+    let tagger = await model(
+        Seen(), albums: albums,
+        matches: { album, _ in
+            var found = match(
+                album, release(Int(album.id) * 10, album.title, titles: stockholm),
+                tier: .incomplete)
+            // The first two files are out of the release's order.
+            found.assign(album.tracks[0].fileID, to: 1)
+            found.assign(album.tracks[1].fileID, to: 0)
+            return found
+        },
+        files: { ids in
+            albums.flatMap { album in album.tracks.indices.map { file(album, $0) } }
+                .filter { ids.contains($0.id) }
+        },
+        mapping: DiscogsPreset.oneToOne.mapping)
+    tagger.analyze()
+    await tagger.finished()
+    tagger.tab = .incomplete
+    tagger.selectedID = 1
+    let controller = TaggerWindow(model: tagger)
+    defer { controller.window?.close() }
+    #expect(!controller.applyButton.isHidden)
+    #expect(controller.applyButton.title == "Apply to All in Incomplete…")
+    #expect(controller.applyButton.isEnabled)
+
+    controller.albumTable.selectRowIndexes([1], byExtendingSelection: true)
+    #expect(controller.applyButton.title == "Apply to 2 Selected…")
+    #expect(tagger.applicable(.incomplete).map(\.id) == [1, 2])
+
+    let plan = try #require(await tagger.plan(tagger.applicable(.incomplete).map(\.id)))
+    #expect(plan.albumIDs.sorted() == [1, 2])
+    let first = try #require(plan.files.first { $0.path.hasSuffix("/100.flac") })
+    #expect(first.edit.values[.title] == "Gamla Stan", "the track the file is paired with")
+}

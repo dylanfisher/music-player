@@ -429,8 +429,10 @@ final class TaggerModel {
         return tier == .likely || tier == .incomplete
     }
 
-    /// The tabs Apply to All writes: those a match set can be trusted in after a review.
-    static let appliedTabs: [TaggerTab] = [.exact, .likely, .safe, .titlesFit, .matched]
+    /// The tabs Apply writes: every one whose albums have a release (ADR 0184).
+    static let appliedTabs: [TaggerTab] = [
+        .exact, .likely, .safe, .titlesFit, .incomplete, .matched,
+    ]
 
     // MARK: - The catalog
 
