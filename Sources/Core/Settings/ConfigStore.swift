@@ -306,7 +306,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
     /// The file's bytes; nil when there is no file. Throws when there is one it can't read.
     private func currentBytes() throws -> [UInt8]? {
         do {
-            return try Data(contentsOf: fileURL).map { $0 }
+            return try [UInt8](Data(contentsOf: fileURL))
         } catch CocoaError.fileReadNoSuchFile {
             return nil
         }
