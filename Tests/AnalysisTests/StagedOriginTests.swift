@@ -43,3 +43,29 @@ private func fixture(_ fixture: AnalysisFixture) throws -> String {
     task.cancel()
     await #expect(throws: CancellationError.self) { try await task.value }
 }
+
+@Test func theTwoStagedFilesAreAnalyzedAtOnceAndReportedInOrder() async throws {
+    let paths = [try fixture(.upsampled), try fixture(.aacRoundTrip)]
+    // Each file's analysis waits for the other's to start, so one after the other would time
+    // out; the first is held back until the last is done, so the order isn't the finishing one.
+    let started = paths.map { _ in DispatchSemaphore(value: 0) }
+    let lastDone = DispatchSemaphore(value: 0)
+    let origins = try await stagedOrigins(paths) { url in
+        let index = paths.firstIndex(of: url.path)!
+        started[index].signal()
+        guard started[1 - index].wait(timeout: .now() + 10) == .success else {
+            throw CocoaError(.featureUnsupported)
+        }
+        if index == 0 {
+            guard lastDone.wait(timeout: .now() + 10) == .success else {
+                throw CocoaError(.featureUnsupported)
+            }
+        }
+        let result = try analyzeFile(at: url)
+        if index == 1 { lastDone.signal() }
+        return result
+    }
+    #expect(origins.map(\.path) == paths)
+    #expect(origins.map(\.failure) == [nil, nil])
+    #expect(origins.map { $0.verdicts.map(\.kind) } == [[.upsampled], [.lossyOrigin]])
+}
