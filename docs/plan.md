@@ -763,8 +763,9 @@ Result, phase 71: shipped the item (ADR 0178; an amended-by line in 0146, see-al
 0145 and 0147; AGENTS.md unchanged, since the tagger's write is a confirmed `TagWriter` write
 inside the staging folder). The staged tagger's Other Releases… and Look Up… choose any release
 in the local catalog; Look Up asks no API, as no staged match does. Apply reports the release it
-wrote with the verdict, and the coordinator keeps it in this Mac's import ledger as a
-`retagged` step, which the tagger and a rerun of the tag run then match. The Downloads row's
+wrote with the verdict (the plan's release, taken before the write; a partial write passes
+it on with no verdict, so it's kept all the same), and the coordinator keeps it in this Mac's
+import ledger as a `retagged` step, which the tagger and a rerun of the tag run then match. The Downloads row's
 Tagging cell says "Clean, another release" (or the verdict's own word), its tooltip and the
 album's name both releases, and the Approve sheet's subtitle says "Tagged as Discogs release N,
 queued as M". Approve is unchanged; the album it replaces is still the queued release's.
@@ -775,7 +776,8 @@ the call (likely `POST /v1/downloads/release` with `id` and `release_id`), it go
 `DownloadsCoordinator.resolved` before the tagging report; the row stops naming the release once
 the service lists it. Tests: the ledger's record, replace and forget (`ImportJobsTests`), the
 coordinator keeping and forgetting it (`DownloadsCoordinatorTests`), the row, model, window and
-sheet's words, and the staged tagger choosing, looking up and reporting the release
+sheet's words, and the staged tagger choosing, looking up and reporting the release, after a
+partial write too, and the plan's release when another is chosen during the write
 (`StagedTaggerTests`). Flakes seen in the parallel runs and passing alone: SettingsWindowTests,
 `aPollThatOverlapsTheRecoveryWaitsForItBeforeTagging`, `ImportCheckpointTests`,
 `PlayCountTests.saveStoresTheCountWithoutAWrite`.

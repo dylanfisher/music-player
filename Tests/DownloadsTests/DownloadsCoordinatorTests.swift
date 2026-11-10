@@ -630,3 +630,23 @@ private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
     #expect(await coordinator.taggedAs().isEmpty)
     #expect(await coordinator.stagedJob(listed)?.releaseID == 4242)
 }
+
+/// A tagger write that reached only some files: they carry the new release, so it's kept, with
+/// the sizes, and nothing is reported, since the owner applies the rest again.
+@Test func aPartialTaggerWriteKeepsItsReleaseAndReportsNothing() async throws {
+    let setup = try Setup([
+        job(1) {
+            $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
+        }
+    ])
+    try setup.stage(1, bytes: 250)
+    let coordinator = setup.coordinator()
+    let listed = try #require(setup.service.job(1))
+    await coordinator.wrote(listed, release: 5151, stagingRoot: setup.stagingRoot)
+    #expect(setup.service.eventTypes.isEmpty)
+    #expect(await coordinator.taggedAs() == [1: TaggedRelease(folder: "job-1", releaseID: 5151)])
+    #expect(
+        try setup.index.stagedSizes(job: 1, folder: "job-1")
+            == ["01 First Song.flac": 250, "02 Second Song.flac": 250])
+    #expect(setup.service.job(1)?.tagging.status == .discrepancy)
+}

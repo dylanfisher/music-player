@@ -75,6 +75,39 @@ private enum Writing {
     case ignores
     /// Stops before any file.
     case fails
+    /// Writes the first file, and stops before the rest.
+    case partly
+    /// Writes the edits once the gate opens.
+    case waits(WriteGate)
+}
+
+/// Holds a write until the test opens it, saying when the write has started.
+private final class WriteGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var waiting: CheckedContinuation<Void, Never>?
+    private var opened = false
+
+    var isWaiting: Bool { lock.withLock { waiting != nil } }
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let go = lock.withLock {
+                if opened { return true }
+                waiting = continuation
+                return false
+            }
+            if go { continuation.resume() }
+        }
+    }
+
+    func open() {
+        let waiter = lock.withLock {
+            opened = true
+            defer { waiting = nil }
+            return waiting
+        }
+        waiter?.resume()
+    }
 }
 
 private let staged = StagedJob(
@@ -84,7 +117,7 @@ private let staged = StagedJob(
 private func stagedTagger(
     _ files: StagedFiles, writing: Writing = .applies, choices: TaggerChoices = defaultChoices,
     catalog: TaggerModel.CatalogState = readyCatalog,
-    resolved: @escaping (AutoTagRun.Verdict, Int) -> Void
+    resolved: @escaping (AutoTagRun.Verdict?, Int) -> Void
 ) async -> TaggerModel {
     let made = TaggerModel(
         stagedJob: staged,
@@ -107,6 +140,14 @@ private func stagedTagger(
                 case .applies: return try files.write(edits)
                 case .ignores: return report(changed: edits.map(\.path))
                 case .fails: return report(notWritten: edits.map(\.path))
+                case .partly:
+                    _ = try files.write(Array(edits.prefix(1)))
+                    return report(
+                        changed: edits.prefix(1).map(\.path),
+                        notWritten: edits.dropFirst().map(\.path))
+                case .waits(let gate):
+                    await gate.wait()
+                    return try files.write(edits)
                 }
             }),
         mapping: DiscogsPreset.minimal.mapping, savedMappings: [], choices: choices,
@@ -137,7 +178,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 /// owner chooses the release they are, and Apply reports it with the verdict (ADR 0178).
 @MainActor @Test func aStagedJobCanBeTaggedAsAnotherRelease() async throws {
     let files = StagedFiles(bonusAlbum)
-    var resolved: [(AutoTagRun.Verdict, Int)] = []
+    var resolved: [(AutoTagRun.Verdict?, Int)] = []
     let tagger = await stagedTagger(files) { resolved.append(($0, $1)) }
     tagger.analyze()
     await tagger.finished()
@@ -189,7 +230,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 
 @MainActor @Test func applyWritesThroughTheStagedWriterAndReportsItClean() async throws {
     let files = StagedFiles(bonusAlbum)
-    var verdicts: [AutoTagRun.Verdict] = []
+    var verdicts: [AutoTagRun.Verdict?] = []
     let tagger = await stagedTagger(files) { verdict, _ in verdicts.append(verdict) }
     var mainWrites = 0
     tagger.write = { _, _, _ in mainWrites += 1 }
@@ -210,7 +251,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 
 @MainActor @Test func anUntickedChangeIsTheOwnersChoiceAndStillClean() async throws {
     let files = StagedFiles(bonusAlbum)
-    var verdicts: [AutoTagRun.Verdict] = []
+    var verdicts: [AutoTagRun.Verdict?] = []
     let tagger = await stagedTagger(files) { verdict, _ in verdicts.append(verdict) }
     tagger.analyze()
     await tagger.finished()
@@ -224,7 +265,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 
 @MainActor @Test func filesThatReadBackUnchangedAreStillADiscrepancy() async throws {
     let files = StagedFiles(bonusAlbum)
-    var verdicts: [AutoTagRun.Verdict] = []
+    var verdicts: [AutoTagRun.Verdict?] = []
     let tagger = await stagedTagger(files, writing: .ignores) { verdict, _ in
         verdicts.append(verdict)
     }
@@ -241,7 +282,7 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
 
 @MainActor @Test func aStagedWriteThatFailsReportsNothingAndCanBeAppliedAgain() async throws {
     let files = StagedFiles(bonusAlbum)
-    var verdicts: [AutoTagRun.Verdict] = []
+    var verdicts: [AutoTagRun.Verdict?] = []
     let tagger = await stagedTagger(files, writing: .fails) { verdict, _ in verdicts.append(verdict)
     }
     tagger.analyze()
@@ -297,4 +338,57 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
         ])
     #expect(missing.model.albums.isEmpty)
     missing.window?.close()
+}
+
+/// A write that reaches some of the files leaves them as the release chosen, so that release
+/// is passed on to be kept, with no verdict, and the rest can be applied again (ADR 0178).
+@MainActor @Test func aPartialStagedWritePassesOnItsReleaseWithNoVerdict() async throws {
+    let files = StagedFiles(bonusAlbum)
+    var resolved: [(AutoTagRun.Verdict?, Int)] = []
+    let tagger = await stagedTagger(files, writing: .partly) { resolved.append(($0, $1)) }
+    tagger.analyze()
+    await tagger.finished()
+    await tagger.choose(99, for: -1)
+    tagger.apply(try #require(await tagger.plan([-1])))
+    try await eventually { tagger.status.contains("not fully written") }
+    #expect(resolved.count == 1)
+    #expect(resolved.first?.0 == nil)
+    #expect(resolved.first?.1 == 99)
+    #expect(tagger.applicable(.exact).map(\.id) == [-1], "the rest can be applied again")
+}
+
+/// The window doesn't lock while a staged write runs, so a release chosen meanwhile isn't the
+/// one the files were written as.
+@MainActor @Test func aStagedWriteReportsTheReleaseItsPlanWasMadeWith() async throws {
+    let files = StagedFiles(bonusAlbum)
+    let gate = WriteGate()
+    var resolved: [(AutoTagRun.Verdict?, Int)] = []
+    let tagger = await stagedTagger(files, writing: .waits(gate)) { resolved.append(($0, $1)) }
+    tagger.analyze()
+    await tagger.finished()
+    await tagger.choose(99, for: -1)
+    tagger.apply(try #require(await tagger.plan([-1])))
+    try await eventually { gate.isWaiting }
+    await tagger.choose(77, for: -1)
+    #expect(tagger.albums.first?.match.releaseID == 77)
+    gate.open()
+    try await eventually { !resolved.isEmpty }
+    #expect(resolved.map(\.1) == [99])
+}
+
+@MainActor @Test func aStagedPlanWithNoMatchedAlbumWritesNothing() async throws {
+    let files = StagedFiles(bonusAlbum)
+    var resolved = 0
+    let tagger = await stagedTagger(files) { _, _ in resolved += 1 }
+    var failures: [[String]] = []
+    tagger.failed = { failures.append([$0] + $1) }
+    tagger.apply(
+        TaggerModel.ApplyPlan(
+            albumIDs: [-5], files: [(path: "/m/-1/1.flac", edit: TagEdit())], fieldCount: 1,
+            problems: []))
+    try await eventually { !failures.isEmpty }
+    #expect(
+        failures == [["The staged files weren't written", "the album has no release to write"]])
+    #expect(files.written.isEmpty)
+    #expect(resolved == 0)
 }

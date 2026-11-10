@@ -135,11 +135,11 @@ public final class DiscogsTagger {
     /// reads the job's files under `stagingRoot`, matches them with the job's release, or one
     /// the owner chooses (ADR 0178), in the catalog only, and writes through `StagedWriter`,
     /// whose journal is under `dataDirectory`. `resolved` hears the verdict once Apply has
-    /// written, with the release written.
+    /// written, with the release written, or no verdict when only some files were written.
     package convenience init(
         stagedJob job: StagedJob, stagingRoot: String, dataDirectory: URL, catalog: URL,
         mapping: DiscogsMapping, savedMappings: [NamedDiscogsMapping], choices: TaggerChoices,
-        resolved: @escaping (AutoTagRun.Verdict, _ releaseID: Int) -> Void
+        resolved: @escaping (AutoTagRun.Verdict?, _ releaseID: Int) -> Void
     ) {
         let writer = StagedWriter(stagingRoot: stagingRoot, dataDirectory: dataDirectory)
         let sizes = StagedSizes(job, stagingRoot: stagingRoot)

@@ -33,8 +33,12 @@ folder.
 
 **The player keeps the release with the staged job.** `DownloadsCoordinator.resolved` records
 it in this Mac's import ledger as a `retagged` step, the job's folder as its path and the
-release in `destination`, before it reports the verdict. A release that is the queued one
-removes the step. The step goes with the job's other steps once it's imported. From then on:
+release in `destination`, before it reports the verdict. The release is the one the plan
+was made with, taken before the write starts, since the window doesn't lock while a staged
+write runs and the owner can choose another meanwhile. A write that reaches only some of the
+files records the release and the sizes all the same, through `DownloadsCoordinator.wrote`,
+and reports no verdict; the rest are applied again. A write that reaches none records nothing.
+A release that is the queued one removes the step. The step goes with the job's other steps once it's imported. From then on:
 
 - `stagedJob(_:)` tags with the recorded release, so the tagger opened again, or a tag run
   that takes the job over, matches the files as what they were written as.

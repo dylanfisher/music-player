@@ -112,11 +112,12 @@ package final class Downloads {
     /// The selected library tracks' ids, for From Library Selection.
     package var selectedTracks: () throws -> [Int64] = { [] }
     /// Opens the Discogs tagger on a staged job, with the staging folder's path; the tagger's
-    /// Apply reports its verdict through the closure, with the release it wrote.
+    /// Apply reports its verdict through the closure, with the release it wrote; no verdict
+    /// when it wrote only some of the files, whose release is recorded all the same.
     package var openInTagger:
         (
             StagedJob, String,
-            @escaping @Sendable (AutoTagRun.Verdict, _ releaseID: Int) -> Void
+            @escaping @Sendable (AutoTagRun.Verdict?, _ releaseID: Int) -> Void
         ) -> Void = { _, _, _ in }
 
     /// The window's column widths as they were left, set before it first shows, and what
@@ -456,6 +457,11 @@ package final class Downloads {
                 }
                 openInTagger(staged, root) { verdict, release in
                     Task {
+                        guard let verdict else {
+                            // Some files were written: their release is kept, nothing reported.
+                            await coordinator.wrote(job, release: release, stagingRoot: root)
+                            return await session.model.poll()
+                        }
                         let problem = await coordinator.resolved(
                             job, verdict, release: release, stagingRoot: root)
                         await MainActor.run {

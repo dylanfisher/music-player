@@ -32,8 +32,9 @@ extension TaggerModel {
         var job: StagedJob
         var effects: StagedEffects
         /// Hears the verdict once Apply has written and the files read back, with the release
-        /// the files were written as.
-        var resolved: (AutoTagRun.Verdict, _ releaseID: Int) -> Void
+        /// the files were written as; a nil verdict when only some files were written, whose
+        /// release is still to be recorded but which has nothing to report.
+        var resolved: (AutoTagRun.Verdict?, _ releaseID: Int) -> Void
     }
 
     /// The tagger for one staged job with a discrepancy, so the owner can resolve it: it opens
@@ -44,7 +45,7 @@ extension TaggerModel {
     convenience init(
         stagedJob job: StagedJob, effects staged: StagedEffects, mapping: DiscogsMapping,
         savedMappings: [NamedDiscogsMapping], choices: TaggerChoices,
-        resolved: @escaping (AutoTagRun.Verdict, _ releaseID: Int) -> Void
+        resolved: @escaping (AutoTagRun.Verdict?, _ releaseID: Int) -> Void
     ) {
         let chosen = StagedChoice(job.releaseID)
         // A staged write is the fixed mapping's tags only, with no cover (ADR 0146).
@@ -104,12 +105,24 @@ extension TaggerModel {
 
     /// Writes the plan through the staged writer, then reads the files back: clean when the
     /// mapping would change nothing but what the owner unticked, else a discrepancy. A write
-    /// that fails reports nothing, and Apply can try again.
+    /// that fails reports nothing, and Apply can try again; one that wrote some of the files
+    /// passes on only the release they now carry.
     /// `wrote` hears that the write has finished, before the read back.
     func applyStaged(_ plan: ApplyPlan, _ staged: Staged, wrote: @escaping () -> Void) {
         let read = staged.effects.read
         let write = staged.effects.write
+        // The release the plan was made with, which the files are written as. Taken now: the
+        // window doesn't lock while the write runs, so the owner can choose another meanwhile.
+        let release = plan.albumIDs.lazy.compactMap { id in
+            self.albums.first { $0.id == id }?.match.releaseID
+        }.first
         Task {
+            guard let release else {
+                wrote()
+                reopen(plan, unwritten: Set(plan.files.map(\.path)))
+                failed("The staged files weren't written", ["the album has no release to write"])
+                return
+            }
             let report: TagWriteReport
             do {
                 report = try await write(plan.files)
@@ -122,16 +135,14 @@ extension TaggerModel {
             }
             let unwritten = Set(report.failures.map(\.path) + report.notWritten)
             guard unwritten.isEmpty else {
+                // The files written carry the release now, whatever happens to the rest.
+                if unwritten.count < plan.files.count { staged.resolved(nil, release) }
                 reopen(plan, unwritten: unwritten)
                 return
             }
-            // The release the plan's album was matched with, which its files now carry.
-            let written =
-                albums.first { plan.albumIDs.contains($0.id) }?.match.releaseID
-                ?? staged.job.releaseID
             let back = await read()
             guard back.problems.isEmpty else {
-                staged.resolved(.error(back.problems), written)
+                staged.resolved(.error(back.problems), release)
                 return
             }
             var left = 0
@@ -140,7 +151,7 @@ extension TaggerModel {
                     !album.excluded.contains($0.id)
                 }
             }
-            staged.resolved(StagedWriter.verdict(readingBack: left), written)
+            staged.resolved(StagedWriter.verdict(readingBack: left), release)
         }
     }
 }

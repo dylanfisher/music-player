@@ -192,7 +192,8 @@ actor DownloadsCoordinator {
 
     /// The release each job's staged files were tagged as in the tagger on this Mac, by job,
     /// where it isn't the one queued: music-recommender has no call yet to record it, so the
-    /// index's import ledger keeps it (ADR 0178). Read from the index once, then kept.
+    /// index's import ledger keeps it (ADR 0178). Read from the index once, then kept; none
+    /// after a read that failed, until a record reads them again.
     func taggedAs() -> [Int: TaggedRelease] {
         if let taggedReleases { return taggedReleases }
         do {
@@ -200,6 +201,8 @@ actor DownloadsCoordinator {
             taggedReleases = read
             return read
         } catch {
+            // Noted once, not at every poll; the next record reads them again.
+            taggedReleases = [:]
             note("the releases staged jobs were tagged as couldn't be read: \(error)")
             return [:]
         }
@@ -441,10 +444,7 @@ actor DownloadsCoordinator {
     func resolved(
         _ job: DownloadJob, _ verdict: AutoTagRun.Verdict, release: Int, stagingRoot: String
     ) async -> String? {
-        if let staged = StagedJob(job) {
-            recordSizes(of: staged, under: stagingRoot, job)
-            recordRelease(release, of: staged, job)
-        }
+        wrote(job, release: release, stagingRoot: stagingRoot)
         do {
             _ = try await effects.service.handoff(job.id, .lease)
         } catch {
@@ -454,6 +454,15 @@ actor DownloadsCoordinator {
         let sent = await flush()
         await releaseLease(job.id)
         return sent ? nil : "the report waits in the outbox until the service answers"
+    }
+
+    /// Records what the tagger's write left `job`'s files at under `stagingRoot`, and the
+    /// release they were written as, reporting nothing: as after a write that reached only
+    /// some of them, which the owner applies again.
+    func wrote(_ job: DownloadJob, release: Int, stagingRoot: String) {
+        guard let staged = StagedJob(job) else { return }
+        recordSizes(of: staged, under: stagingRoot, job)
+        recordRelease(release, of: staged, job)
     }
 
     /// Records that `staged`'s files were written as `release`, which forgets an earlier one
