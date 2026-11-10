@@ -67,8 +67,8 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     // resigned active can close this viewer first, which drops the read.
     viewer.show(metadata.pictures, current: front, path: url.path) { failures.append($0) }
     #expect(viewer.pictures.count == 3)
-    #expect(viewer.shown == 1)
-    #expect(viewer.placeText == "2 of 3 · Front Cover")
+    #expect(viewer.shown == 0)
+    #expect(viewer.placeText == "1 of 3 · Front Cover")
 
     let view = try #require(viewer.window.contentView)
     func press(_ characters: String, _ keyCode: UInt16) throws {
@@ -83,12 +83,14 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     let right = ("\u{F703}", UInt16(124))
     let left = ("\u{F702}", UInt16(123))
     try press(right.0, right.1)
+    #expect(viewer.placeText == "2 of 3 · Back Cover")
+    try press(right.0, right.1)
     #expect(viewer.placeText == "3 of 3 · Disc Label")
     try press(right.0, right.1)
     #expect(viewer.shown == 2, "it stops at the last")
     try press(left.0, left.1)
     try press(left.0, left.1)
-    #expect(viewer.placeText == "1 of 3 · Back Cover")
+    #expect(viewer.placeText == "1 of 3 · Front Cover")
     viewer.step(by: -1)
     #expect(viewer.shown == 0, "and at the first")
     #expect(viewer.window.isVisible)
@@ -124,14 +126,14 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     let stale = EmbeddedArt(offset: 1, byteCount: 1, mimeType: "image/png", unsynchronised: false)
     viewer.show(metadata.pictures, current: stale, path: url.path) { Issue.record("\($0)") }
     #expect(viewer.shown == 0)
-    #expect(viewer.placeText == "1 of 2 · Back Cover")
-    // The first picture is 10 pixels wide, the opening image 99 points. Another test's posting
+    #expect(viewer.placeText == "1 of 2 · Front Cover")
+    // The first picture is 20 pixels (the front cover) wide, the opening image 99 points. Another test's posting
     // that the app resigned active closes the viewer and drops the decode, so it's waited for
     // only while the viewer is open.
     try await waitFor("the first picture") {
         !viewer.window.isVisible || viewer.image?.size.width != 99
     }
-    if viewer.window.isVisible { #expect(viewer.image?.size.width == 10) }
+    if viewer.window.isVisible { #expect(viewer.image?.size.width == 20) }
 }
 
 /// A file of several pictures shows a thumbnail of each along the bottom, the art above them,
@@ -205,7 +207,7 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     #expect(viewer.window.isVisible)
     #expect(viewer.image?.size == CGSize(width: 20, height: 10), "the front cover, decoded")
     #expect(viewer.thumbnailButtons.count == 3)
-    #expect(viewer.placeText == "2 of 3 · Front Cover")
+    #expect(viewer.placeText == "1 of 3 · Front Cover")
     let opened = viewer.imageFrame
     #expect(opened.size == CGSize(width: 20, height: 10))
     try await waitFor("the thumbnails") {
@@ -245,11 +247,11 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
     // Another test's posting that the app resigned active closes the viewer, which then
     // never shows.
     guard !viewer.isClosed else { return }
-    #expect(viewer.placeText == "1 of 2 · Back Cover")
-    #expect(viewer.image?.size == CGSize(width: 10, height: 10), "the first picture, decoded")
+    #expect(viewer.placeText == "1 of 2 · Front Cover")
+    #expect(viewer.image?.size == CGSize(width: 20, height: 10), "the first picture, decoded")
     try await waitFor("the thumbnails") {
         viewer.isClosed || viewer.thumbnails.allSatisfy { $0 != nil }
     }
     guard !viewer.isClosed else { return }
-    #expect(viewer.image?.size == CGSize(width: 10, height: 10), "and it stays")
+    #expect(viewer.image?.size == CGSize(width: 20, height: 10), "and it stays")
 }

@@ -114,3 +114,15 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
         #expect(scanned.art != nil && scanned.art == viewed.art)
     }
 }
+
+@Test func frontFirstPutsTheFrontCoverFirstAndKeepsTheRestInOrder() throws {
+    let file = flac([
+        (0, streamInfo()), (6, flacPicture(type: 4, image: images[0])),
+        (6, flacPicture(type: 3, image: images[1])), (6, flacPicture(type: 6, image: images[2])),
+    ])
+    let pictures = try parse(file, pictures: true).metadata.pictures
+    #expect(pictures.frontFirst.map(\.type) == [3, 4, 6])
+    #expect(pictures.frontFirst.first?.art == pictures[1].art)
+    #expect(pictures.frontFirst.dropFirst().map(\.art) == [pictures[0].art, pictures[2].art])
+    #expect(pictures.frontFirst.frontFirst == pictures.frontFirst)
+}

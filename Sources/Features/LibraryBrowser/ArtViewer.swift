@@ -91,7 +91,7 @@ final class ArtViewer {
         var (image, pictures) = await (decoded, listed)
         var shownArt = art
         if case .success(let list) = pictures, !list.contains(where: { $0.art == art }),
-            let first = list.first
+            let first = list.frontFirst.first
         {
             shownArt = first.art
             image = await decode(first.art, path: path)
@@ -159,6 +159,7 @@ final class ArtViewer {
         _ pictures: [EmbeddedPicture], current: EmbeddedArt, path: String,
         _ failed: @escaping (String) -> Void
     ) {
+        let pictures = pictures.frontFirst
         self.pictures = pictures
         file = (path, failed)
         view.showsSteps = pictures.count > 1

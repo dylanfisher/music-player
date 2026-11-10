@@ -45,3 +45,15 @@ public struct PictureType: RawRepresentable, Hashable, Sendable, ExpressibleByIn
 func preferredPicture(_ pictures: [EmbeddedPicture]) -> EmbeddedArt? {
     (pictures.first { $0.type == .frontCover } ?? pictures.first)?.art
 }
+
+extension Array where Element == EmbeddedPicture {
+    /// The pictures with the one `preferredPicture` picks first, the rest in file order: the
+    /// order the art viewer steps through, so it opens on 1 of N with the art the rows show.
+    public var frontFirst: [EmbeddedPicture] {
+        guard let front = preferredPicture(self), let index = firstIndex(where: { $0.art == front })
+        else { return self }
+        var ordered = self
+        ordered.insert(ordered.remove(at: index), at: 0)
+        return ordered
+    }
+}
