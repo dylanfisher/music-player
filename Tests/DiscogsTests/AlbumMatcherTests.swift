@@ -976,3 +976,24 @@ private final class Heard: @unchecked Sendable {
     #expect(none.tier == .noCandidate)
     #expect(none.confidence == nil)
 }
+
+/// Two albums combined for tagging (ADR 0179), a disc set split in two, match the release of
+/// their whole count over the one of the first disc's count, which the first's title finds.
+@Test func albumsCombinedForTaggingMatchTheReleaseOfTheirWholeCount() throws {
+    let second = ["Södermalm", "Djurgården", "Kungsholmen II"]
+    let combined = album(
+        stockholmTitles + second, seconds: [285, 370, 300, 240, 250, 260],
+        title: "Stockholm (CD1)")
+    let set =
+        stockholm + [
+            track("4", "Södermalm", "4:00"), track("5", "Djurgården", "4:10"),
+            track("6", "Kungsholmen II", "4:20"),
+        ]
+    let result = try match(
+        combined,
+        releases: release(10, title: "Stockholm", tracks: stockholm)
+            + release(11, title: "Stockholm", catno: "SK 033", tracks: set))
+    #expect(result.releaseID == 11)
+    #expect(result.tier == .exact)
+    #expect(result.mapping.count == 6)
+}
