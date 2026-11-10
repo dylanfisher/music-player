@@ -819,7 +819,10 @@ package final class Downloads {
             await giveBack()
             leave(why)
         case .approved(let approved):
-            switch await coordinator.approve(approved) {
+            let outcome = await importing(DownloadRow.album(job.release)) {
+                await coordinator.approve(approved)
+            }
+            switch outcome {
             case .imported: logger.notice("job \(id) approved unasked")
             case .refused(let why):
                 await giveBack()

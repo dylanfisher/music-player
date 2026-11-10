@@ -26,6 +26,13 @@ private final class Calls: @unchecked Sendable {
     }
 }
 
+/// What the question at quit would list while the import looks for its folders.
+@MainActor
+private final class Watched {
+    weak var downloads: Downloads?
+    var work: [String]?
+}
+
 /// Approve's plan for `job` as the sheet would show it once checked, with the check's findings
 /// `origins`.
 private func plan(_ job: DownloadJob, origins: [StagedOrigin] = []) -> ApprovalPlan {
@@ -64,11 +71,16 @@ private func plan(_ job: DownloadJob, origins: [StagedOrigin] = []) -> ApprovalP
 @Test func turningItOnRunsApprovesImportForAStagedSafeJob() async throws {
     let fake = FakeService([job(1) { $0.tagging = clean }])
     let calls = Calls()
+    let during = Watched()
     let nowhere = FileManager.default.temporaryDirectory.path + "/\(UUID().uuidString)"
     let (downloads, session) = try await started(fake.service) {
-        guard calls.next() == 1 else { throw NoFolder() }
+        guard calls.next() == 1 else {
+            await MainActor.run { during.work = during.downloads?.unfinishedWork }
+            throw NoFolder()
+        }
         return ImportPlaces(stagingRoot: nowhere, libraryFolder: nowhere, shareRoot: nowhere)
     }
+    during.downloads = downloads
     downloads.checkedPlan = { job, _, _ in plan(job) }
     await eventually("the first poll") { session.model.job(1) != nil }
     downloads.approveSafe()
@@ -83,6 +95,9 @@ private func plan(_ job: DownloadJob, origins: [StagedOrigin] = []) -> ApprovalP
         session.model.leftForReview[1]?.hasPrefix("the staging or library folder wasn't found")
             == true)
     #expect(fake.eventTypes.filter { $0 == "claim" }.count == 2, "the review's, then the import's")
+    let album = DownloadRow.album(try #require(fake.job(1)).release)
+    #expect(during.work == ["Moving \(album) into the library"], "the question at quit lists it")
+    #expect(downloads.unfinishedWork.isEmpty)
     await eventually("the claim given back") { fake.job(1)?.review == nil }
     #expect(fake.job(1)?.state == .staged)
     downloads.stop()

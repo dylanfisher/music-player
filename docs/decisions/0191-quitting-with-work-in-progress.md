@@ -42,7 +42,7 @@ the tag editor's queue asked (ADR 0167); every other job stopped at ⌘Q with no
     (before Apply to All), "Importing the Discogs catalog", and Get Artwork's fetch, "Getting
     covers: 3 of 20".
   - `Downloads.unfinishedWork`: "Moving Artist - Title (2001) into the library" while
-    Approve or Resume Here runs its import.
+    Approve, Resume Here or Approve Safe Matches Automatically ([0193](0193-approving-safe-matches-unasked.md)) runs its import.
 - **`QuitQuestion` (DisplayText)** holds the wording and the rule that work the tag queue's
   question covers is asked about only beside other work. It knows only strings, so it is a
   primitive, with its alert in a file of its own.
