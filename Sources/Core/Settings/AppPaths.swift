@@ -57,6 +57,10 @@ public struct AppPaths: Sendable {
     }
     /// The art column's thumbnails.
     public var thumbnailDirectory: URL { cacheDirectory.appendingPathComponent("Thumbnails") }
+    /// The covers fetched from Discogs (ADR 0189).
+    public var discogsCoverDirectory: URL {
+        cacheDirectory.appendingPathComponent("Discogs Covers")
+    }
     /// The Spectrum window's spectrograms (phase 45).
     public var spectrogramDirectory: URL { cacheDirectory.appendingPathComponent("Spectrograms") }
 }

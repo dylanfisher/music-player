@@ -70,7 +70,8 @@ extension AppDelegate {
             return nil
         }
         let catalog = paths.discogsCatalogFile(settings[\.discogsCatalogPath])
-        let apis = DiscogsAPIs(cache: .index(reader))
+        let apis = DiscogsAPIs(
+            cache: .index(reader), covers: CoverStore(directory: paths.discogsCoverDirectory))
         let tagger = DiscogsTagger(
             reader: reader, catalog: catalog, mapping: settings[\.discogsMapping],
             savedMappings: settings[\.discogsSavedMappings], choices: taggerChoices(settings),
@@ -144,10 +145,14 @@ extension AppDelegate {
 @MainActor
 private final class DiscogsAPIs {
     private let cache: DiscogsCache
+    private let covers: CoverStore
     private let transport = DiscogsAPI.internet()
     private var made: (token: DiscogsToken?, api: DiscogsAPI)?
 
-    init(cache: DiscogsCache) { self.cache = cache }
+    init(cache: DiscogsCache, covers: CoverStore) {
+        self.cache = cache
+        self.covers = covers
+    }
 
     func api(token: DiscogsToken?) -> DiscogsAPI {
         if let made, made.token == token { return made.api }
@@ -157,7 +162,7 @@ private final class DiscogsAPIs {
             ?? "dev"
         let api = DiscogsAPI(
             token: token, userAgent: DiscogsAPI.userAgent(version: version),
-            transport: transport, cache: cache)
+            transport: transport, cache: cache, covers: covers)
         made = (token, api)
         return api
     }

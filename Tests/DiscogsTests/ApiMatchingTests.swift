@@ -187,7 +187,7 @@ private func renumbered(_ name: String, _ id: Int) -> [UInt8] {
     let fake = FakeDiscogs()
     let api = DiscogsAPI(
         token: fakeToken, userAgent: "MusicPlayer/1.0", transport: fake.transport,
-        cache: fake.cache, now: { fake.now },
+        cache: fake.cache, covers: fake.covers, now: { fake.now },
         sleep: { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) })
     fake.queue("/database/search", status: 429, headers: ["Retry-After": "120"])
     let heard = Recorded<AlbumMatchProgress>()

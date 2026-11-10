@@ -139,7 +139,8 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     // The wall clock steps back an hour once the first request is sent; the uptime doesn't.
     let api = DiscogsAPI(
         token: fakeToken, userAgent: "MusicPlayer/1.0", transport: fake.transport,
-        cache: fake.cache, now: { fake.now - (fake.requests.isEmpty ? 0 : 3_600) },
+        cache: fake.cache, covers: fake.covers,
+        now: { fake.now - (fake.requests.isEmpty ? 0 : 3_600) },
         uptime: { fake.now },
         sleep: { fake.advance($0) })
     _ = try await api.release(id: 1001)
@@ -209,7 +210,7 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     let fake = FakeDiscogs()
     let api = DiscogsAPI(
         token: fakeToken, userAgent: "MusicPlayer/1.0", transport: fake.transport,
-        cache: fake.cache, now: { fake.now },
+        cache: fake.cache, covers: fake.covers, now: { fake.now },
         sleep: { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) })
     fake.queue("/releases/1001", status: 429, headers: ["Retry-After": "120"])
     let task = Task { () async -> DiscogsAPIError? in
@@ -230,7 +231,7 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     let fake = FakeDiscogs()
     let api = DiscogsAPI(
         token: fakeToken, userAgent: "MusicPlayer/1.0", transport: fake.transport,
-        cache: fake.cache, now: { fake.now },
+        cache: fake.cache, covers: fake.covers, now: { fake.now },
         sleep: { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) })
     // The first holds the turn through a two-minute Retry-After.
     fake.queue("/releases/1001", status: 429, headers: ["Retry-After": "120"])

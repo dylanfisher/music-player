@@ -13,7 +13,10 @@ import TagWriter
 private let offlineDiscogs = DiscogsAPI(
     token: nil, userAgent: DiscogsAPI.userAgent(version: "offline"),
     transport: { _, _, _, _ throws(HTTPSError) in throw .offline },
-    cache: DiscogsCache(read: { _, _ in nil }, store: { _, _, _ in }))
+    cache: DiscogsCache(read: { _, _ in nil }, store: { _, _, _ in }),
+    covers: CoverStore(
+        directory: FileManager.default.temporaryDirectory.appendingPathComponent(
+            "bench-discogs-covers-\(UUID().uuidString)", isDirectory: true)))
 
 /// The releases in the import rows' fixture dump: about a thousandth of the 2026-11-01 dump.
 private let fixtureReleases = 20_000

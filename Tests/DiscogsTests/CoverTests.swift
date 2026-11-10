@@ -43,6 +43,30 @@ private func serving(_ bytes: [UInt8], headers: [String: String] = [:]) -> FakeD
     }
 }
 
+@Test func aCoverFetchedOnceIsKeptAndADamagedOneKeptIsFetchedAgain() async throws {
+    let bytes = try image(jpegMIMEType)
+    let fake = serving(bytes)
+    let first = try await fake.api().cover(release: 1001)
+    let images = { fake.requests.filter { $0.url.host == DiscogsAPI.imageHost }.count }
+    #expect(images() == 1)
+    // A run after a quit, through a new API: the cover comes from the store, with no request.
+    #expect(try await fake.api().cover(release: 1001) == first)
+    #expect(images() == 1)
+    // One damaged on disk is removed and fetched again.
+    let url = try #require(fake.requests.last { $0.url.host == DiscogsAPI.imageHost }).url
+    try Data(bytes.prefix(bytes.count / 2)).write(to: fake.covers.fileURL(from: url))
+    fake.queue("/front-1001.jpg", status: 200, body: bytes)
+    #expect(try await fake.api().cover(release: 1001) == first)
+    #expect(images() == 2)
+    // One that fails its check is never kept.
+    let refused = serving(Array("<html>not an image</html>".utf8))
+    await #expect(throws: CoverProblem.notAnImage) {
+        try await refused.api().cover(release: 1001)
+    }
+    let refusedURL = try #require(refused.requests.last).url
+    #expect(!FileManager.default.fileExists(atPath: refused.covers.fileURL(from: refusedURL).path))
+}
+
 /// A real PNG `width` pixels wide and one high.
 private func wide(_ width: Int) throws -> [UInt8] {
     let context = try #require(

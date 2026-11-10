@@ -131,6 +131,11 @@ final class FakeDiscogs: @unchecked Sendable {
         return HTTPSResponse(status: 404, headers: headers, body: Array(#"{"message": "x"}"#.utf8))
     }
 
+    /// The covers this fake's APIs keep, in a temp folder of their own.
+    let covers = CoverStore(
+        directory: FileManager.default.temporaryDirectory.appendingPathComponent(
+            "discogs-covers-\(UUID().uuidString)", isDirectory: true))
+
     var cache: DiscogsCache {
         DiscogsCache(
             read: { [self] kind, id in cacheEntry(kind, id) },
@@ -140,7 +145,7 @@ final class FakeDiscogs: @unchecked Sendable {
     func api(token: DiscogsToken? = fakeToken) -> DiscogsAPI {
         DiscogsAPI(
             token: token, userAgent: DiscogsAPI.userAgent(version: "1.0"), transport: transport,
-            cache: cache, now: { [self] in now }, uptime: { [self] in now },
+            cache: cache, covers: covers, now: { [self] in now }, uptime: { [self] in now },
             sleep: { [self] seconds in
                 try Task.checkCancellation()
                 lock.withLock {

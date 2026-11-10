@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amended by:** [0177](0177-art-viewer-settings-panes-get-info-steps.md): the viewer shows once its art is decoded and its
   pictures listed, at its final layout.
+- **Amended by:** [0189](0189-discogs-covers-kept-on-disk.md): each cover fetched is kept on
+  disk, so a run after a quit or a crash fetches only the ones it hadn't reached.
 - **See also:** [0020](0020-tag-writing.md) (tag writing), [0021](0021-tag-editor.md) (the
   editor), [0140](0140-discogs-cover-art.md) (Discogs covers), [0133](0133-one-confirmation-for-a-match-set.md)
   (one confirmation), [0138](0138-the-discogs-api-client.md) (the client's pacing)

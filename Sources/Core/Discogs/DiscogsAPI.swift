@@ -48,6 +48,8 @@ public actor DiscogsAPI {
     private let userAgent: String
     private let transport: HTTPSTransport
     private let cache: DiscogsCache
+    /// The covers fetched, by image URL.
+    let covers: CoverStore
     private let now: @Sendable () -> Double
     private let uptime: @Sendable () -> Double
     private let sleep: @Sendable (Double) async throws -> Void
@@ -63,7 +65,7 @@ public actor DiscogsAPI {
     /// `sleep` waits. Tests replace all three so they don't wait.
     public init(
         token: DiscogsToken?, userAgent: String, transport: @escaping HTTPSTransport,
-        cache: DiscogsCache,
+        cache: DiscogsCache, covers: CoverStore,
         now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 },
         uptime: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
         sleep: @escaping @Sendable (Double) async throws -> Void = {
@@ -74,6 +76,7 @@ public actor DiscogsAPI {
         self.userAgent = userAgent
         self.transport = transport
         self.cache = cache
+        self.covers = covers
         self.now = now
         self.uptime = uptime
         self.sleep = sleep

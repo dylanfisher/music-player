@@ -108,11 +108,11 @@ extension Cover {
 }
 
 extension DiscogsAPI {
-    /// The release's primary image as a cover: the release through the cache, then its image,
-    /// paced as every request is. Without a token nothing is asked. The image is checked and
-    /// decoded off the actor, so a large one doesn't hold up the next request's turn.
+    /// The release's primary image as a cover: the release through the cache, then its image
+    /// from `covers` or, paced as every request is, from Discogs, kept in `covers` once it
+    /// passes (ADR 0189). Without a token nothing is asked. The image is checked and decoded off
+    /// the actor, so a large one doesn't hold up the next request's turn.
     public nonisolated func cover(release id: Int) async throws(CoverProblem) -> Cover {
-
         guard hasToken else { throw .needsToken }
         let fetched: FetchedRelease
         do {
@@ -121,12 +121,16 @@ extension DiscogsAPI {
             throw .fetch(error)
         }
         guard let url = fetched.primaryImage else { throw .noImage }
+        let covers = covers
+        if let kept = await blockingFileWork({ covers.cover(from: url) }) { return kept }
         let bytes: [UInt8]
         do {
             bytes = try await image(at: url)
         } catch {
             throw .fetch(error)
         }
-        return try Cover(checking: bytes)
+        let cover = try Cover(checking: bytes)
+        await blockingFileWork { covers.store(cover, from: url) }
+        return cover
     }
 }

@@ -18,6 +18,11 @@ let package = Package(
             cSettings: strictC
         ),
         .target(
+            name: "CacheFolder",
+            path: "Sources/Primitives/CacheFolder",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "DisplayText",
             path: "Sources/Primitives/DisplayText",
             swiftSettings: strictSwift
@@ -106,7 +111,7 @@ let package = Package(
         ),
         .target(
             name: "Artwork",
-            dependencies: ["Log", "Metadata"],
+            dependencies: ["CacheFolder", "Log", "Metadata"],
             path: "Sources/Core/Artwork",
             swiftSettings: strictSwift
         ),
@@ -149,7 +154,8 @@ let package = Package(
         .target(
             name: "Analysis",
             dependencies: [
-                "DisplayText", "HALOutput", "Library", "Log", "Metadata", "Playback", "Settings",
+                "CacheFolder", "DisplayText", "HALOutput", "Library", "Log", "Metadata", "Playback",
+                "Settings",
             ],
             path: "Sources/Core/Analysis",
             swiftSettings: strictSwift
@@ -157,7 +163,8 @@ let package = Package(
         .target(
             name: "Discogs",
             dependencies: [
-                "Artwork", "DisplayText", "HTTPSClient", "Library", "Log", "Metadata",
+                "Artwork", "CacheFolder", "DisplayText", "HTTPSClient", "Library", "Log",
+                "Metadata",
                 "Recommender", "SQLite", "Settings", "TagWriter",
             ],
             path: "Sources/Core/Discogs",
@@ -451,6 +458,11 @@ let package = Package(
                 "LibraryBrowser",
                 "Metadata", "Playback", "SQLite", "Settings",
             ],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "CacheFolderTests",
+            dependencies: ["CacheFolder"],
             swiftSettings: strictSwift
         ),
         .testTarget(
