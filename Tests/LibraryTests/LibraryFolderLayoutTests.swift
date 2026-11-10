@@ -50,9 +50,18 @@ private func tags(
     #expect(
         libraryFolderPath(
             for: tags(title: "What?/Why: \"Now\"", artist: "AC/DC", album: ".hidden "),
-            of: "/x.flac") == "AC_DC/hidden/03 What__Why_ _Now_.flac")
+            of: "/x.flac") == "AC_DC/hidden/03 What__Why - _Now_.flac")
     #expect(safeName("a\u{0}b\u{1F}c\u{7F}", maxBytes: 255) == "abc")
     #expect(safeName("  .. Intro. ", maxBytes: 255) == "Intro")
+}
+
+@Test func aColonBecomesADashSoASubtitleStillReads() {
+    #expect(
+        libraryFolderPath(
+            for: tags(title: "Intro (5:40)", album: "Éthiopiques 22: More Vintage! 1972-1974"),
+            of: "/x.flac")
+            == "Artist/Éthiopiques 22 - More Vintage! 1972-1974/03 Intro (5-40).flac")
+    #expect(safeName("Live :  Paris", maxBytes: 255) == "Live - Paris")
 }
 
 @Test func aLongNameIsCutToFitWithItsExtension() {

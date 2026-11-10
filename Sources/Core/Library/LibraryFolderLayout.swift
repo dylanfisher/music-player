@@ -67,15 +67,19 @@ private func fileName(stem: String, extension ext: String) -> String {
     return (name.isEmpty ? "Untitled" : name) + suffix
 }
 
-/// `text` as one path component a Mac volume or an SMB share takes: `/`, `:` and the
-/// characters Windows and SMB servers refuse (`\ * ? " < > |`) become `_`, control characters
+/// `text` as one path component a Mac volume or an SMB share takes: a colon before a space
+/// becomes ` - ` and any other colon `-`, so a subtitle still reads as one; `/` and the other
+/// characters Windows and SMB servers refuse (`\ * ? " < > |`) become `_`; control characters
 /// go, and leading dots and spaces go, since a name starting with a dot is hidden and the
 /// scanner skips it. Trailing dots and spaces go too, which SMB servers drop or refuse. The
 /// result is cut, at a whole character, to `maxBytes` of UTF-8, and may be empty.
 func safeName(_ text: String, maxBytes: Int) -> String {
-    let unsafe = Set("/:\\*?\"<>|")
+    let unsafe = Set("/\\*?\"<>|")
+    let colons = text.precomposedStringWithCanonicalMapping
+        .replacingOccurrences(of: #"\s*:\s+"#, with: " - ", options: .regularExpression)
+        .replacingOccurrences(of: ":", with: "-")
     var name = String(
-        text.precomposedStringWithCanonicalMapping.compactMap { character -> Character? in
+        colons.compactMap { character -> Character? in
             if unsafe.contains(character) { return "_" }
             if character.unicodeScalars.allSatisfy({ $0.properties.generalCategory == .control }) {
                 return nil
