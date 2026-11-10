@@ -6,6 +6,8 @@
   [0107](0107-tags-written-in-place-within-the-padding.md) (writes in place), [0133](0133-one-confirmation-for-a-match-set.md)
   (the tagger writes through Undo Tag Edit's queue), [0131](0131-discogs-matching.md) (the tiers),
   [0170](0170-match-confidence-and-the-safe-tab.md) (the Safe tab, read from the reasons)
+- **Amended by:** [0176](0176-the-tagger-keeps-its-columns.md): the sheets keep their column
+  order too, through a `TableLayout`, and the album list's layout is kept beside theirs.
 
 ## Context
 

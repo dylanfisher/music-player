@@ -9,6 +9,8 @@
   show less than half of is centered on the main window's screen.
   [0160](0160-get-info-opens-as-it-stays.md): Get Info joins, as "Get Info
   Window", and `tagEditor.place` goes.
+  [0176](0176-the-tagger-keeps-its-columns.md): the tagger's album list keeps its pane's
+  width and its columns, applied once the frame is placed.
 
 ## Context
 
