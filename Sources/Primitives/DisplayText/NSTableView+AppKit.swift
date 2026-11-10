@@ -20,11 +20,12 @@ extension NSTableView {
     public func inListScrollView(source: some NSTableViewDataSource & NSTableViewDelegate)
         -> NSScrollView
     {
-        dataSource = source
-        delegate = source
+        // The look before the source: a change of style reloads every row the table has.
         usesAlternatingRowBackgroundColors = true
         style = .fullWidth
         columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+        dataSource = source
+        delegate = source
         let scroll = NSScrollView()
         scroll.documentView = self
         scroll.hasVerticalScroller = true
