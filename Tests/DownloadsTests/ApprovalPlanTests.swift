@@ -109,6 +109,46 @@ private let lossy = StagedOrigin(
     #expect(approved.upgrade?.acknowledged == ["library/03.mp3"], "only the unmatched count")
 }
 
+/// The import Approve Safe Matches Automatically makes, or why it leaves the job (ADR 0193).
+private func unasked(_ plan: ApprovalPlan) -> (ApprovedImport?, String?) {
+    switch plan.unasked {
+    case .approved(let approved): (approved, nil)
+    case .left(let why): (nil, why)
+    }
+}
+
+@Test func aPlanThatAsksNothingIsApprovedUnasked() throws {
+    let clean = StagedOrigin(path: "/s/job-5/01 First Song.flac", verdicts: [], failure: nil)
+    let (new, _) = unasked(plan(origins: [clean]))
+    #expect(try #require(new).upgrade == nil)
+    // An upgrade whose every old file has a new one replaces them all.
+    var upgrade = plan(upgrade: true, origins: [clean])
+    upgrade.unmatched = []
+    let (approved, why) = unasked(upgrade)
+    #expect(why == nil)
+    #expect(approved?.upgrade?.old.count == 3)
+    #expect(approved?.upgrade?.acknowledged == [])
+}
+
+@Test func aPlanThatAsksTheOwnerAnythingIsLeftForReview() {
+    var notReplaced = plan()
+    notReplaced.notReplaced = "2 albums in the library are tagged with this release"
+    let left: [(ApprovalPlan, String)] = [
+        (plan(origins: [lossy]), "Acknowledge what the lossy-origin check found."),
+        (plan(upgrade: true), "Tick the 1 old file with no new one, to lose it."),
+        (plan(movesProblem: "already in the library: x"), "already in the library: x"),
+        (plan(upgrade: true, replacesAlbum: true), "it replaces a library album"),
+        (notReplaced, "2 albums in the library"),
+        (plan(checking: true), ApproveSheet.checkingNote),
+        (plan(resuming: true), "the import has started already"),
+    ]
+    for (plan, words) in left {
+        let (approved, why) = unasked(plan)
+        #expect(approved == nil)
+        #expect(why?.hasPrefix(words) == true, "\(why ?? "approved")")
+    }
+}
+
 @MainActor
 @Test func aNewAlbumThatReplacesOneInTheLibraryIsApprovedAsAnUpgrade() throws {
     let plan = plan(upgrade: true, replacesAlbum: true)

@@ -129,6 +129,34 @@ struct ApprovalPlan: Sendable {
                 : nil)
     }
 
+    /// What Approve Safe Matches Automatically makes of a plan (ADR 0193).
+    enum Unasked: Sendable {
+        case approved(ApprovedImport)
+        /// Left for the owner to review, saying why.
+        case left(String)
+    }
+
+    /// The import Approve makes with nothing ticked, acknowledged or kept, when the plan leaves
+    /// the owner nothing to judge: a staged job's plan, checked, with no blockers that way,
+    /// which replaces no library album it wasn't queued to upgrade and says nothing of albums
+    /// it can't replace. Holding the job to its clean tagging is the caller's part.
+    var unasked: Unasked {
+        if resuming { return .left("the import has started already") }
+        if checking { return .left(ApproveSheet.checkingNote) }
+        if replaced != nil {
+            return .left(
+                "it replaces a library album it wasn't queued to upgrade, and Approve asks"
+                    + " whether to keep both")
+        }
+        if let notReplaced { return .left(notReplaced) }
+        let blockers = blockers(ticked: [], acknowledgedOrigins: false)
+        if !blockers.isEmpty { return .left(blockers.joined(separator: " ")) }
+        guard let approved = approved(ticked: [], acknowledgedOrigins: false) else {
+            return .left("the service listed the job with no staged folder")
+        }
+        return .approved(approved)
+    }
+
     /// What the index says of the job: the album it replaces and where its files go.
     private struct Found: Sendable {
         var old: [String]?

@@ -161,6 +161,33 @@ package final class Downloads {
     /// Whether the status bar is in view, which sets the polling's pace.
     private var statusBarShown = false
 
+    /// Approve Safe Matches Automatically, `import.autoApproveSafeMatches`: the owner's
+    /// standing confirmation for each staged job whose plan asks nothing (ADR 0193). Turning it
+    /// on looks at every staged job again, those left for review before too.
+    package var autoApprove = false {
+        didSet {
+            guard autoApprove != oldValue else { return }
+            if autoApprove { session?.model.forgetLeftForReview() }
+            refresh()
+            approveSafe()
+        }
+    }
+    /// Hears the window's box for it turned on or off, to save it.
+    package var autoApproveChosen: (Bool) -> Void = { _ in }
+    /// The job being approved unasked, and its task.
+    private(set) var approving: (job: Int, task: Task<Void, Never>)?
+    private var approvingCount = 0
+    /// Works out Approve's plan for a job approved unasked, checked; tests stand in for it.
+    var checkedPlan: @MainActor (DownloadJob, ImportPlaces, Session) async throws -> ApprovalPlan =
+        {
+            job, places, session in
+            let setup = session.setup
+            return try await ApprovalPlan.build(
+                job, places: places, databaseURL: setup.databaseURL,
+                catalog: session.canTag ? setup.catalog : nil
+            ).checked(places: places)
+        }
+
     package init() {
         statusItem.clicked = { [weak self] in self?.show() }
         statusItem.styleChosen = { [weak self] in self?.styleChosen($0) }
@@ -214,6 +241,7 @@ package final class Downloads {
                     guard self.session === session else { return }
                     // Changes the rows, and calls `changed`, only when it's new.
                     model.setTagged(tagged)
+                    self.approveSafe()
                     // The poll refreshed the rows; only a new problem changes what shows.
                     guard problems != session.problems else { return }
                     session.problems = problems
@@ -232,6 +260,8 @@ package final class Downloads {
     /// Stops polling, at quit or when the service's settings are cleared.
     package func stop() {
         cancelReview()
+        approving?.task.cancel()
+        approving = nil
         session?.model.stop()
         session = nil
         refresh()
@@ -371,6 +401,11 @@ package final class Downloads {
         made.act = { [weak self] action, row in self?.act(action, row) }
         made.add = { [weak self] addition in self?.add(addition) }
         made.openSlskd = { [weak self] in self?.openSlskd() }
+        made.autoApproveChanged = { [weak self] on in
+            self?.autoApproveChosen(on)
+            // The box shows the setting, which a save that failed left as it was.
+            self?.refresh()
+        }
         made.columnsResized = { [weak self] widths in
             self?.columnWidths = widths
             self?.columnWidthsChanged(widths)
@@ -402,6 +437,7 @@ package final class Downloads {
         guard let controller, opening || controller.window?.isVisible == true else { return }
         defer { offerSelection() }
         controller.showSlskd(session?.slskdPage)
+        controller.showAutoApprove(autoApprove)
         guard let session else {
             return controller.show([], status: Self.notSet, canAdd: false)
         }
@@ -417,7 +453,9 @@ package final class Downloads {
     }
 
     func applies(_ action: DownloadAction, _ row: DownloadRow) -> Bool {
-        guard let session, sheet == nil, let job = session.model.job(row.id) else { return false }
+        guard let session, sheet == nil, approving?.job != row.id,
+            let job = session.model.job(row.id)
+        else { return false }
         return DownloadAction.applies(
             action, to: job, machine: session.setup.machine,
             answering: session.model.connection == .answering, canTag: session.canTag)
@@ -686,6 +724,111 @@ package final class Downloads {
         } catch {
             approve.endSheet()
         }
+    }
+
+    // MARK: - Approving unasked
+
+    /// Whether Approve Safe Matches Automatically looks at `job`: staged, tagged clean, and
+    /// reviewed on no other Mac.
+    nonisolated static func mayApproveUnasked(_ job: DownloadJob, machine: String) -> Bool {
+        job.state == .staged && job.tagging.status == .clean
+            && (job.review == nil || job.review?.machine == machine)
+    }
+
+    /// Why a job whose files the owner tagged as another release isn't approved unasked.
+    static let taggedAsAnotherRelease =
+        "its files were tagged as another release in the tagger, which Approve shows"
+
+    /// With Approve Safe Matches Automatically on, approves the first job it may look at that
+    /// it hasn't left for review, one at a time and none during an Approve… on this Mac, then
+    /// the next.
+    func approveSafe() {
+        guard autoApprove, approving == nil, reviewing == nil, let session,
+            session.coordinator != nil, session.model.connection == .answering
+        else { return }
+        let model = session.model
+        let machine = session.setup.machine
+        guard
+            let job = model.jobs.rows.values.sorted(by: { $0.id < $1.id }).first(where: {
+                Self.mayApproveUnasked($0, machine: machine) && model.leftForReview[$0.id] == nil
+            })
+        else { return }
+        approvingCount += 1
+        let number = approvingCount
+        approving = (
+            job.id,
+            Task {
+                await approveUnasked(job, session)
+                guard approvingCount == number else { return }
+                approving = nil
+                refresh()
+                approveSafe()
+            }
+        )
+        refresh()
+    }
+
+    /// Approve's steps without its sheet (ADR 0193): takes the review claim, works out the plan
+    /// and its check, and runs the import Approve would when the plan asks nothing; else gives
+    /// the claim back and leaves the job staged, saying why in its row.
+    func approveUnasked(_ listed: DownloadJob, _ session: Session) async {
+        guard let coordinator = session.coordinator else { return }
+        let model = session.model
+        let setup = session.setup
+        let id = listed.id
+        let leave = { (why: String) in model.leave(id, why) }
+        if model.taggedAs(id) != nil { return leave(Self.taggedAsAnotherRelease) }
+        let giveBack = { @MainActor @Sendable in
+            do throws(RecommenderError) {
+                model.took(try await coordinator.releaseReview(id))
+            } catch {
+                logger.info("job \(id)'s review claim not given up: \(error)")
+            }
+        }
+        // From a task of its own once this one is cancelled, whose requests are cancelled too.
+        let giveBackApart = { _ = Task { await giveBack() } }
+        let job: DownloadJob
+        do throws(RecommenderError) {
+            job = try await coordinator.claimReview(id)
+        } catch {
+            return leave("the review claim wasn't taken: \(error)")
+        }
+        model.took(job)
+        guard !Task.isCancelled else { return giveBackApart() }
+        guard DownloadRow(job, machine: setup.machine)?.canApprove == true else {
+            await giveBack()
+            return leave("it's \(job.state.rawValue), tagged \(job.tagging.status.rawValue)")
+        }
+        let places: ImportPlaces
+        do {
+            places = try await setup.places()
+        } catch {
+            await giveBack()
+            return leave("the staging or library folder wasn't found: \(error)")
+        }
+        let plan: ApprovalPlan
+        do {
+            // Throws only when cancelled.
+            plan = try await checkedPlan(job, places, session)
+        } catch {
+            return giveBackApart()
+        }
+        guard !Task.isCancelled else { return giveBackApart() }
+        switch plan.unasked {
+        case .left(let why):
+            await giveBack()
+            leave(why)
+        case .approved(let approved):
+            switch await coordinator.approve(approved) {
+            case .imported: logger.notice("job \(id) approved unasked")
+            case .refused(let why):
+                await giveBack()
+                leave(why)
+            case .failed(let stage, let why):
+                leave("the import stopped at \(stage.rawValue): \(why)")
+            }
+        }
+        await model.poll()
     }
 
     private func retry(_ job: DownloadJob, _ row: DownloadRow, _ session: Session) {

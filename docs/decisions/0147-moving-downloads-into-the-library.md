@@ -11,6 +11,8 @@
   `RENAME_EXCL` reserves the name with an exclusive create.
   [0169](0169-approve-at-once-and-manual-upgrades.md): an old file is held to the release id it
   carried when the sheet found it, kept in the ledger when it isn't the job's.
+  [0193](0193-approving-safe-matches-unasked.md): with Approve Safe Matches Automatically on,
+  a staged job tagged clean whose plan asks nothing runs Approve's import without the sheet.
 - **See also:** [0026](0026-sync-identity-is-the-relative-path.md) (the move list that
   carries stats),
   [0028](0028-network-folders-by-share.md) (paths by share),

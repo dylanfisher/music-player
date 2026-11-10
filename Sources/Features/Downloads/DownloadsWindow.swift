@@ -53,6 +53,14 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     let slskdButton = NSButton(title: "Open slskd", target: nil, action: nil)
     static let slskdHelp = "Open slskd's web page, where the searches and transfers run."
     static let noSlskdHelp = "music-recommender hasn't said where slskd's web page is."
+    /// Approve Safe Matches Automatically (ADR 0193).
+    let autoApproveBox = NSButton(
+        checkboxWithTitle: AppSettings().autoApproveSafeMatches.title, target: nil, action: nil)
+    static let autoApproveHelp =
+        "Approve each staged album tagged clean whose Approve sheet would ask nothing: no"
+        + " lossy-origin finding, no old file without a new one, and no library album it"
+        + " wasn't queued to replace. Upgrades replace the old files as Approve does. The rest"
+        + " stay staged for review."
     private(set) var buttons: [DownloadAction: NSButton] = [:]
     /// The rows shown, in the window's order.
     private(set) var rows: [DownloadRow] = []
@@ -65,6 +73,8 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     var act: (DownloadAction, DownloadRow) -> Void = { _, _ in }
     var add: (DownloadAddition) -> Void = { _ in }
     var openSlskd: () -> Void = {}
+    /// Hears Approve Safe Matches Automatically turned on or off.
+    var autoApproveChanged: (Bool) -> Void = { _ in }
     /// Hears the window open and close, for the polling's pace.
     var visibilityChanged: (Bool) -> Void = { _ in }
     /// Hears the columns' widths after one changes, once `keepWidths` has set them.
@@ -119,6 +129,9 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         }
         addButton.autoenablesItems = false
         bar.addArrangedSubview(addButton)
+        autoApproveBox.target = self
+        autoApproveBox.action = #selector(autoApproveClicked)
+        autoApproveBox.toolTip = Self.autoApproveHelp
 
         for column in DownloadColumn.allCases {
             table.addColumn(
@@ -135,7 +148,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         empty.textColor = .secondaryLabelColor
-        let page = NSStackView(views: [bar, scroll, empty, statusLabel])
+        let page = NSStackView(views: [autoApproveBox, bar, scroll, empty, statusLabel])
         page.orientation = .vertical
         page.alignment = .leading
         page.spacing = 10
@@ -177,6 +190,13 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     }
 
     @objc private func slskdClicked() { openSlskd() }
+
+    /// Ticks Approve Safe Matches Automatically as the setting is.
+    func showAutoApprove(_ on: Bool) {
+        autoApproveBox.state = on ? .on : .off
+    }
+
+    @objc private func autoApproveClicked() { autoApproveChanged(autoApproveBox.state == .on) }
 
     var selectedRow: DownloadRow? {
         let row = table.selectedRow

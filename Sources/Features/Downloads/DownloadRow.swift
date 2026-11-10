@@ -69,10 +69,11 @@ struct DownloadRow: Equatable, Sendable {
     /// `answering` is false while the service doesn't answer, which dims every row; `rate` is
     /// the speed of the bytes it's moving, while the window shows one; `formatted` words the
     /// time of the next search; `taggedAs` is the release the files were tagged as, when it
-    /// isn't the job's.
+    /// isn't the job's; `leftForReview` is why Approve Safe Matches Automatically left it.
     init?(
         _ job: DownloadJob, machine: String, answering: Bool = true, rate: TransferRate? = nil,
-        taggedAs: Int? = nil, formatted: (Date) -> String = DownloadRow.shortTime
+        taggedAs: Int? = nil, leftForReview: String? = nil,
+        formatted: (Date) -> String = DownloadRow.shortTime
     ) {
         guard let group = Self.group(job.state) else { return nil }
         id = job.id
@@ -86,7 +87,7 @@ struct DownloadRow: Equatable, Sendable {
         replaces = Self.replaces(job)
         state = Self.state(job, formatted: formatted)
         if Self.isTransferring(job.state), let rate { state += " · " + rate.text }
-        stateDetail = Self.stateDetail(job)
+        stateDetail = Self.stateDetail(job, leftForReview: leftForReview)
         progress = Self.isTransferring(job.state) ? job.progress.map(Self.fraction) : nil
         tagging = Self.tagging(
             job.tagging, state: job.state, taggedAs: taggedAs, queued: job.release.releaseID)
@@ -268,9 +269,13 @@ struct DownloadRow: Equatable, Sendable {
     }
 
     /// The running query and, from the second search on, the attempt, for the state's
-    /// tooltip; nil when there's neither.
-    static func stateDetail(_ job: DownloadJob) -> String? {
+    /// tooltip, and while it's staged why Approve Safe Matches Automatically left it; nil when
+    /// there's none of them.
+    static func stateDetail(_ job: DownloadJob, leftForReview: String? = nil) -> String? {
         var lines: [String] = []
+        if job.state == .staged, let leftForReview {
+            lines.append("Not approved automatically: \(leftForReview)")
+        }
         if job.state == .searching, let search = job.search {
             lines.append("Searching Soulseek for \"\(search.query)\"")
         }

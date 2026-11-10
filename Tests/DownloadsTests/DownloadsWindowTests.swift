@@ -306,3 +306,26 @@ private func rows() -> [DownloadRow] {
     #expect(window.text(.tagging, 0) == "Pending, another release")
     window.window?.close()
 }
+
+/// Approve Safe Matches Automatically is a box above the toolbar that shows the setting and
+/// reports a click, and the façade saves it (ADR 0193).
+@MainActor
+@Test func theAutoApproveBoxShowsTheSettingAndReportsAClick() throws {
+    let downloads = Downloads()
+    var chosen: [Bool] = []
+    downloads.autoApproveChosen = { on in
+        chosen.append(on)
+        downloads.autoApprove = on
+    }
+    downloads.show()
+    let window = try #require(downloads.controller)
+    let box = window.autoApproveBox
+    #expect(box.state == .off)
+    #expect(box.title == AppSettings().autoApproveSafeMatches.title)
+    click(box)
+    #expect(chosen == [true])
+    #expect(box.state == .on)
+    downloads.autoApprove = false
+    #expect(box.state == .off)
+    window.window?.close()
+}

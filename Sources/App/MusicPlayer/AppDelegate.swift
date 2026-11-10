@@ -418,6 +418,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.fail("Couldn't change how the downloads show", error)
             }
         }
+        downloads.autoApprove = settings[\.autoApproveSafeMatches]
+        downloads.autoApproveChosen = { [weak self] on in
+            do {
+                try settings.set(\.autoApproveSafeMatches, to: on)
+            } catch {
+                self?.fail("Couldn't change whether safe matches are approved", error)
+            }
+        }
         browser.statusTotals = layout.statusTotals
         browser.totalsFormats = layout.totalsFormats
         browser.statusTotalsChanged = { saver.set(\.statusTotals, $0) }

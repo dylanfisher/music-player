@@ -42,6 +42,9 @@ final class DownloadsModel {
     /// The release each job's staged files were tagged as in the tagger on this Mac, by job,
     /// which the rows name where it isn't the one the service lists (ADR 0178).
     private(set) var tagged: [Int: TaggedRelease] = [:]
+    /// Why Approve Safe Matches Automatically left each job it looked at for the owner, by job
+    /// (ADR 0193).
+    private(set) var leftForReview: [Int: String] = [:]
     private(set) var isWindowOpen = false
     private(set) var isStatusShown = false
     private var lastGood: Date?
@@ -219,6 +222,22 @@ final class DownloadsModel {
         changed()
     }
 
+    /// Records why the job `id` was left for review, or with nil, that it may be looked at again.
+    func leave(_ id: Int, _ why: String?) {
+        guard leftForReview[id] != why else { return }
+        leftForReview[id] = why
+        buildRows()
+        changed()
+    }
+
+    /// Lets every job left for review be looked at again.
+    func forgetLeftForReview() {
+        guard !leftForReview.isEmpty else { return }
+        leftForReview = [:]
+        buildRows()
+        changed()
+    }
+
     /// The release the job `id`'s files are tagged as, when it isn't the one the service lists.
     func taggedAs(_ id: Int) -> Int? {
         jobs.rows[id].flatMap { job in tagged[id]?.differs(for: job) }
@@ -295,7 +314,7 @@ final class DownloadsModel {
             DownloadRow(
                 $0, machine: machine, answering: answering,
                 rate: rates.isEmpty ? nil : rates.rate($0.id, at: at),
-                taggedAs: tagged[$0.id]?.differs(for: $0))
+                taggedAs: tagged[$0.id]?.differs(for: $0), leftForReview: leftForReview[$0.id])
         }.sorted(by: DownloadRow.listed)
     }
 }

@@ -95,6 +95,10 @@ public struct AppSettings: SettingsSchema {
     public let stagingFolder = Setting<StagingFolder?>(
         "import.stagingFolder", title: "Staging Folder", default: nil,
         "Where music-recommender puts downloads for review, outside your music folders.")
+    public let autoApproveSafeMatches = Setting(
+        "import.autoApproveSafeMatches", title: "Approve Safe Matches Automatically",
+        default: false,
+        "Approve clean downloads that leave nothing to review.")
     public let discogsArtwork = Setting(
         "discogs.artwork", title: "Discogs Artwork", default: DiscogsArtworkMode.off,
         "The Discogs tagger writes the release's cover: never, where none, or always.")

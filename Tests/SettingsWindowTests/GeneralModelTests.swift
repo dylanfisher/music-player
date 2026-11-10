@@ -1221,6 +1221,7 @@ private func visibleLabels(in view: NSView) -> [String] {
     #expect(
         model.sections.first { $0.section == .downloads }?.rows.map(\.key) == [
             schema.recommenderAddress.key, schema.recommenderPort.key, schema.stagingFolder.key,
+            schema.autoApproveSafeMatches.key,
         ])
     #expect(!model.rows.contains { $0.key == schema.recommenderToken.key })
     #expect(model.rows.first { $0.key == schema.stagingFolder.key }?.control == .stagingFolder)
