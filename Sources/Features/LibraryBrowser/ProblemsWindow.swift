@@ -10,16 +10,18 @@ final class ProblemsWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate
     /// clicked, or every row for Dismiss All.
     var act: (ProblemAction, [Problem]) -> Void = { _, _ in }
 
-    let window: NSPanel
+    let window: NSWindow
     let table = CopyingTableView()
     private(set) var rows: [Problem] = []
     private(set) var buttons: [ProblemAction: NSButton] = [:]
     private let empty = NSTextField(labelWithString: "No problems.")
 
     override init() {
-        window = NSPanel(
+        // A document window, not a panel: it goes behind the app's other windows and other
+        // apps' while the owner works through the list (ADR 0175).
+        window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 420),
-            styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered,
+            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
             defer: true)
         super.init()
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("problemLine"))
@@ -55,8 +57,6 @@ final class ProblemsWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate
         window.title = "Library Problems"
         window.contentView = stack
         window.isReleasedWhenClosed = false
-        // A panel hides with the app by default; the list stays up while the owner checks Finder.
-        window.hidesOnDeactivate = false
     }
 
     /// Lists `problems` and brings the window forward.

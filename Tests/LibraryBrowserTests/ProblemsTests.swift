@@ -95,6 +95,18 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
     #expect(window.selected == [rows[1]])
 }
 
+/// Library Problems is a document window: it doesn't float over other windows or hide with
+/// the app.
+@MainActor @Test func theProblemsWindowIsANormalWindow() {
+    let window = ProblemsWindow()
+    window.show([Problem("plain")])
+    defer { window.window.close() }
+    #expect(!(window.window is NSPanel))
+    #expect(window.window.level == .normal)
+    #expect(!window.window.hidesOnDeactivate)
+    #expect(window.window.styleMask.contains(.miniaturizable))
+}
+
 /// Dismiss All acts on every row, whether none, some or all are selected, and only while the
 /// window lists any.
 @MainActor @Test func dismissAllActsOnEveryRowSelectedOrNot() throws {
