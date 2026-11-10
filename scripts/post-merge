@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Git post-merge hook: after a merge that leaves this checkout at the commit another worktree
+# has checked out, such as a phase branch fast-forwarded onto main, copies that worktree's test
+# stamp here, so ./scripts/test doesn't rerun what already passed there. The stamp hashes every
+# test input, so a copied one still reruns whatever differs here. Installed by ./scripts/setup.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+head=$(git rev-parse HEAD)
+here=$(pwd -P)
+stamp=.build/test-pass
+
+git worktree list --porcelain | awk '/^worktree /{path = substr($0, 10)} /^HEAD /{print $2 " " path}' |
+  while read -r sha path; do
+    if [ "$sha" != "$head" ] || [ "$(cd "$path" && pwd -P)" = "$here" ] || [ ! -e "$path/$stamp" ]; then
+      continue
+    fi
+    mkdir -p .build
+    cp "$path/$stamp" "$stamp"
+    echo "post-merge: took the test stamp from $path"
+    break
+  done

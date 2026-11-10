@@ -5,26 +5,79 @@
 # Every step runs even if an earlier one fails, so one invocation reports every
 # problem. Fixing four failures should cost one run, not four.
 #
-#   ./scripts/check [step...]
-# With no steps, runs them all. Named steps run alone, so a diff runs only the steps that can
-# fail on it (AGENTS.md). What each one reads:
-#   agents.md                     AGENTS.md
-#   map                           docs/map.md and the paths it names
-#   links                         every .md file
-#   residue                       nothing, while docs/scaffold.md is gone
-#   format                        Package.swift, Sources, Tests, the scripts/*.swift it lists
-#   typecheck, arch               Package.swift, Sources (typecheck also Tests)
-#   dupes, surface                Sources and their scripts/*-allow.txt
-#   <name>-test                   scripts/<name>* (signature-test: scripts/check-signature*)
-#   test                          what `swift scripts/affected.swift --inputs` lists; it reruns
-#                                 only the test targets an edit since its last pass can affect
-# Nothing reads .claude/ or docs/ apart from the .md checks and the test step's docs/plan.md.
+#   ./scripts/check                 every step: the full gate
+#   ./scripts/check --changed [ref] the steps that read the files changed since ref (default
+#                                   HEAD), uncommitted and untracked files included, and
+#                                   `./scripts/test --changed ref` as the test step (AGENTS.md)
+#   ./scripts/check <step>...       the named steps alone, such as the ones that just failed
+#   ./scripts/check --which         the steps for the paths on standard input, for check-test
+# `steps` below says which step reads which path. scripts/affected.swift says which tests do.
 set -uo pipefail
 cd "$(dirname "$0")/.."
+
+# The scripts the format step lints beside Package.swift, Sources and Tests.
+format_scripts=(scripts/affected.swift scripts/arch.swift scripts/dupes.swift scripts/surface.swift
+  scripts/icon-mask.swift scripts/smb-copy-probe.swift)
+# The files the residue step searches for scaffolding text.
+residue_files=(README.md CLAUDE.md AGENTS.md scripts/setup scripts/dev scripts/test docs/map.md
+  docs/principles.md docs/scaffold.md .github/workflows/check.yml .claude/commands/scaffold.md)
+
+# steps — the steps that read the paths on standard input, one per line, or `all` for a path
+# every step depends on. A deleted path also picks map and links, which check that the paths
+# they name exist. The test step isn't picked: --changed always runs it, and it skips itself
+# when no test reads what changed.
+steps() {
+  local p s
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ -e "$p" ] || printf '%s\n' map links
+    case "$p" in
+      scripts/check | .xcode-version) echo all ;;
+      AGENTS.md) echo agents.md ;;
+      docs/map.md) echo map ;;
+      Package.swift) printf '%s\n' format typecheck arch ;;
+      Package.resolved) echo typecheck ;;
+      .swift-format) echo format ;;
+      Sources/*) printf '%s\n' typecheck arch dupes surface ;;
+      Tests/*) echo typecheck ;;
+      scripts/arch.swift | scripts/dupes.swift | scripts/surface.swift)
+        s=${p#scripts/}
+        printf '%s\n' "${s%.swift}" "${s%.swift}-test"
+        ;;
+      scripts/dupes-allow.txt | scripts/surface-allow.txt) s=${p#scripts/} && echo "${s%-allow.txt}" ;;
+      scripts/arch-test | scripts/dupes-test | scripts/surface-test | scripts/affected-test | scripts/check-test | scripts/post-merge-test)
+        echo "${p#scripts/}"
+        ;;
+      scripts/affected.swift) echo affected-test ;;
+      scripts/post-merge) echo post-merge-test ;;
+      scripts/check-signature*) echo signature-test ;;
+    esac
+    case "$p" in *.md) echo links ;; Sources/*.swift | Tests/*.swift) echo format ;; esac
+    for s in "${format_scripts[@]}"; do if [ "$p" = "$s" ]; then echo format; fi; done
+    for s in "${residue_files[@]}"; do if [ "$p" = "$s" ]; then echo residue; fi; done
+  done | LC_ALL=C sort -u
+}
 
 failures=()
 chosen=("$@")
 ran=()
+test_step=(./scripts/test)
+case "${1-}" in
+  --which) steps; exit ;;
+  --changed)
+    if [ $# -gt 2 ]; then echo "usage: ./scripts/check --changed [ref]" >&2; exit 2; fi
+    ref="${2:-HEAD}"
+    changed=$(git diff --no-renames --name-only "$ref") || exit 2
+    picked=$( { printf '%s\n' "$changed"; git ls-files --others --exclude-standard; } | steps)
+    test_step=(./scripts/test --changed "$ref")
+    if grep -qx all <<<"$picked"; then
+      chosen=()
+    else
+      # shellcheck disable=SC2206 # step names have no spaces
+      chosen=($picked test)
+    fi
+    ;;
+esac
 
 # run <name> <command...> — print a header, run it, record the failure, continue. With steps
 # named on the command line, any other step is skipped.
@@ -100,7 +153,7 @@ run links bash -c '
 run residue bash -c '
   if [ -e docs/scaffold.md ]; then echo "not scaffolded yet — skipped"; exit 0; fi
   bad=""
-  for f in README.md CLAUDE.md AGENTS.md scripts/setup scripts/dev scripts/test docs/map.md docs/principles.md; do
+  for f in "$@"; do
     [ -e "$f" ] || continue
     grep -qi "scaffold" "$f" && bad="$bad $f"
   done
@@ -115,10 +168,10 @@ run residue bash -c '
     echo "scaffolding leftovers — see step 9 of the checklist:$bad" >&2; exit 1
   fi
   echo "no leftovers"
-'
+' residue "${residue_files[@]}"
 
 # swift-format checks layout and its lint rules (.swift-format) in one pass.
-run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests scripts/affected.swift scripts/arch.swift scripts/dupes.swift scripts/surface.swift scripts/icon-mask.swift scripts/smb-copy-probe.swift
+run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests "${format_scripts[@]}"
 # Strict concurrency and warnings-as-errors are set in Package.swift, so a clean build is the typecheck.
 run typecheck swift build --build-tests
 run arch      swift scripts/arch.swift
@@ -134,7 +187,10 @@ run surface-test ./scripts/surface-test
 run signature-test ./scripts/check-signature-test
 # The test step's own picker, on paths whose test targets are known.
 run affected-test ./scripts/affected-test
-run test      ./scripts/test
+# The --changed picker, on paths whose steps are known; and the hook that carries the test stamp.
+run check-test ./scripts/check-test
+run post-merge-test ./scripts/post-merge-test
+run test      "${test_step[@]}"
 
 for name in ${chosen[@]+"${chosen[@]}"}; do
   if [[ " ${ran[*]-} " != *" $name "* ]]; then failures+=("$name (no such step)"); fi

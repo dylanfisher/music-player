@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Runs scripts/post-merge in a scratch repository with a worktree: a fast-forward to the
+# worktree's commit takes its test stamp, and a merge that lands anywhere else keeps the stamp
+# the checkout had.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+hook="$(pwd)/scripts/post-merge"
+
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+problems=0
+
+# fail <message> — record a problem.
+fail() {
+  printf 'post-merge-test: %s\n' "$1" >&2
+  problems=$((problems + 1))
+}
+
+git init -q -b main "$scratch/main"
+cd "$scratch/main"
+git -c user.name=t -c user.email=t@t commit -q --allow-empty -m one
+git worktree add -q -b phase "$scratch/wt"
+git -C "$scratch/wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m two
+mkdir -p .build "$scratch/wt/.build"
+echo main >.build/test-pass
+echo worktree >"$scratch/wt/.build/test-pass"
+
+"$hook" >/dev/null
+[ "$(cat .build/test-pass)" = main ] || fail "a checkout at a commit no other worktree has replaced its stamp"
+
+git merge -q --ff-only phase
+out=$("$hook")
+[ "$(cat .build/test-pass)" = worktree ] || fail "a fast-forward to the worktree's commit kept the old stamp"
+grep -q "took the test stamp from" <<<"$out" || fail "the hook didn't say it took the stamp: $out"
+
+[ "$problems" = 0 ] && echo "post-merge takes a worktree's stamp only for its commit"
+exit "$problems"

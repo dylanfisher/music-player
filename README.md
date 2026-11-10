@@ -86,6 +86,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Fuzz a parser or the tag writer, or every target at once, with coverage (not in `check`) | `./scripts/fuzz <target>\|all <seconds> [--seed N]` |
 | Run the tests under ASan, TSan and UBSan with 1,000 property cases (not in `check`) | `./scripts/sanitize [--thread-runs N] [address] [thread] [undefined]` |
 | Mutate the core state machines and list the mutants the tests miss (not in `check`) | `./scripts/mutate [--jobs N] [<part of a path>]` |
+| Run only the checks and tests that read the files changed since a commit (default HEAD) | `./scripts/check --changed [ref]` |
 | Everything CI runs | `./scripts/check` |
 
 `./scripts/check` runs every step even after one fails, so one run lists every problem.

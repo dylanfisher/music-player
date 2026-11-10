@@ -13,6 +13,7 @@ if ! xcodebuild -version >/dev/null 2>&1; then
 fi
 
 ln -sf ../../scripts/commit-msg .git/hooks/commit-msg
+ln -sf ../../scripts/post-merge .git/hooks/post-merge
 
 swift package resolve
 

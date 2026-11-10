@@ -18,10 +18,10 @@ Instructions for AI coding agents working in this repo. Humans: see [README.md](
 | Install / bootstrap | `./scripts/setup` |
 | Run locally | `./scripts/dev` |
 | Run tests | `./scripts/test` (only what changed since its last pass) |
-| Run the tests for what you changed | `./scripts/test --changed [ref]` |
+| **Check what you changed** (each commit) | `./scripts/check --changed [ref]` |
 | **Full gate** (see Definition of done) | `./scripts/check` |
 
-Iterate with `./scripts/test --changed`; its pass also counts for the gate's test step. **Run a check only when it can fail on your diff:** name the steps that read what you changed (the list heads `scripts/check`) and run only those, `./scripts/check <step>…` (for a change to Sources: `format typecheck arch dupes surface test`); if none does, skip it and say so. After a failure, rerun only the steps that failed. The full gate, no steps named, runs once before a branch lands on main, and for a change to the scripts or when asked.
+**Iterate and commit with `./scripts/check --changed [ref]`** (ref defaults to HEAD; a branch uses `main`): it runs only the steps that read the files changed since ref, and only the test targets they affect. Run it in the foreground with a 10-minute timeout, never backgrounded with a polling loop. After a failure, rerun only the steps that failed, `./scripts/check <step>…`. The full gate, no arguments, runs once, by whoever lands a branch on main, just before it lands, and when asked.
 
 ## Principles
 
@@ -47,7 +47,7 @@ Non-negotiable, regardless of stack. Rationale: [docs/principles.md](docs/princi
 
 ## Definition of done
 
-- `./scripts/check` passes clean, when the change touches anything it reads.
+- `./scripts/check --changed` passes for each commit, and the full gate once before landing.
 - New behavior has a test that fails without the change.
 - No new dependencies, no new files outside the agreed layout, no TODOs left behind.
 - If a decision was non-obvious, record it in `docs/decisions/`.

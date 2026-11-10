@@ -21,12 +21,14 @@ a workflow to run phases N–M of docs/plan.md". For each phase, the orchestrati
    search first (map.md recipes), so it extends existing code instead of writing a second copy.
    Earlier phases' plans in the archive are the pattern to follow.
 2. **Implements** on a branch `phase/<n>-<slug>` with an Opus subagent (per the owner's
-   CLAUDE.md), in small commits. Each commit passes the `./scripts/check` steps that read
-   what it changed (AGENTS.md); the implementer iterates with `./scripts/test --changed`.
+   CLAUDE.md), in small commits. Each commit passes `./scripts/check --changed main`
+   (AGENTS.md), which the implementer also iterates with.
 3. **Runs the phase gate.** The reviewers and auditors are Sonnet subagents running in parallel.
-   It fixes every confirmed finding, then reruns only the checks those fixes can fail. A full
-   `./scripts/check` runs once, before step 4, and its test step reruns only the test targets
-   edited since its last pass.
+   It fixes every confirmed finding, checking each fix with `./scripts/check --changed main`.
+   No subagent runs the full gate: the orchestrator runs `./scripts/check` once, in the branch's
+   worktree just before step 4, and its test step reruns only the test targets edited since
+   their last pass. Fast-forwarding main to the branch then carries that pass's test stamp into
+   main's checkout (`scripts/post-merge`).
 4. **Records.** It ticks the phase's boxes, adds a "Result" line with measured numbers and what
    the phase cost (each subagent's tokens, tool calls and wall time), commits, and fast-forwards
    `main` to the branch. It never pushes.
@@ -183,7 +185,8 @@ that phase's Result line, and delete its line here.
 
 Run after every phase, before ticking it off.
 
-- [ ] **Gate:** `./scripts/check` passes. In an agent session `theGlassHeadersAreFrosted` fails
+- [ ] **Gate:** the full `./scripts/check` passes, run once by the orchestrator just before
+      landing (step 3). In an agent session `theGlassHeadersAreFrosted` fails
       on main too (the screen reads back as 0), so it alone doesn't fail the gate.
 - [ ] **Code review:** `/code-review high` on the phase branch. Fix confirmed findings in
       their own commits, then rerun the review until it finds nothing new above low severity.

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Runs `./scripts/check --which` on changed-path lists and checks the steps it picks: none for a
+# script no step reads, the doc checks for Markdown, the build and source checks for Sources and
+# Tests, a checker and its own test for a checker, map and links for a deleted path, and the
+# whole gate for scripts/check itself.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+problems=0
+
+# expect <paths, one per line> <expected steps, space-separated, sorted>
+expect() {
+  local out
+  out=$(printf '%s\n' "$1" | ./scripts/check --which | paste -sd' ' -)
+  if [ "$out" != "$2" ]; then
+    printf 'check-test: %s picked "%s", expected "%s"\n' "$1" "$out" "$2" >&2
+    problems=$((problems + 1))
+  fi
+}
+
+expect 'scripts/install' ''
+expect 'docs/writing.md' 'links'
+expect 'AGENTS.md' 'agents.md links residue'
+expect 'Sources/Core/Analysis/AnalysisRules.swift' 'arch dupes format surface typecheck'
+expect 'Sources/Primitives/RingBuffer/RingBuffer.c' 'arch dupes surface typecheck'
+expect 'Tests/LogTests/ModuleLoggerTests.swift' 'format typecheck'
+expect 'Sources/Core/NoSuchModule/Gone.swift' 'arch dupes format links map surface typecheck'
+expect 'scripts/dupes.swift' 'dupes dupes-test format'
+expect 'scripts/surface-allow.txt' 'surface'
+expect 'scripts/check-signature' 'signature-test'
+expect $'README.md\nscripts/check' 'all links residue'
+
+[ "$problems" = 0 ] && echo "check picks each planted case's steps"
+exit "$problems"
