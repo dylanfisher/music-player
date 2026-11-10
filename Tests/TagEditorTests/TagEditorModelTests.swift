@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Metadata
 @testable import TagEditor
 @testable import TagWriter
@@ -97,16 +98,27 @@ private final class ReadCount: @unchecked Sendable {
     private var running = 0
     private(set) var most = 0
     private(set) var reads = 0
+    /// When the readers stop waiting for each other: `waitLimit` after the first read.
+    private var deadline: Date?
+    /// How many reads wait for each other to start.
+    private let together: Int
+
+    init(together: Int) { self.together = together }
 
     func read(_ path: String) throws -> EditableTrack {
-        lock.withLock {
+        let deadline = lock.withLock {
             reads += 1
             running += 1
             most = max(most, running)
+            if deadline == nil { deadline = Date().addingTimeInterval(waitLimit) }
+            return deadline!
         }
         defer { lock.withLock { running -= 1 } }
-        // Long enough for every reader to start, as each waits on the NAS.
-        Thread.sleep(forTimeInterval: 0.05)
+        // Each read holds on, as each waits on the NAS, until `together` have started. A fixed
+        // pause let one finish before the last started on a loaded Mac.
+        while lock.withLock({ most < together }), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.001)
+        }
         guard !path.hasSuffix("bad") else { throw MetadataError(unreadable: path, detail: "bad") }
         return track(path, album: nil, number: nil)
     }
@@ -116,7 +128,7 @@ private final class ReadCount: @unchecked Sendable {
 @Test(.enabled(if: ProcessInfo.processInfo.activeProcessorCount > 1))
 func filesAreReadAFewAtOnceAndKeepTheirOrder() {
     let paths = (0..<(filesReadAtOnce * 3)).map { $0 == 4 ? "\($0) bad" : "\($0)" }
-    let count = ReadCount()
+    let count = ReadCount(together: filesReadAtOnce)
     let (tracks, problems) = readEditableTracks(paths, read: { try count.read($0) })
     #expect(count.most == min(filesReadAtOnce, paths.count))
     #expect(tracks.map(\.tags.title) == paths.filter { !$0.hasSuffix("bad") })
@@ -125,7 +137,7 @@ func filesAreReadAFewAtOnceAndKeepTheirOrder() {
 
 @Test func fewerFilesThanTheLimitAreEachReadOnce() {
     let paths = ["a", "b bad"]
-    let count = ReadCount()
+    let count = ReadCount(together: paths.count)
     let (tracks, problems) = readEditableTracks(paths, read: { try count.read($0) })
     #expect(count.most <= paths.count)
     #expect(count.reads == paths.count)
@@ -134,7 +146,7 @@ func filesAreReadAFewAtOnceAndKeepTheirOrder() {
 }
 
 @Test func noFilesReadNothing() {
-    let count = ReadCount()
+    let count = ReadCount(together: 0)
     let (tracks, problems) = readEditableTracks([], read: { try count.read($0) })
     #expect(count.reads == 0)
     #expect(tracks.isEmpty && problems.isEmpty)

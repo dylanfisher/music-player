@@ -1,9 +1,9 @@
 import AppKit
 import Commands
-import Fixtures
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Settings
 @testable import SettingsWindow
 
@@ -82,7 +82,7 @@ private func settingsPane(
 
     click(try #require(pane.backUpButton))
     #expect(pane.backUpButton?.isEnabled == false)
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while pane.backUpButton?.isEnabled != true, Date() < deadline {
         try await Task.sleep(nanoseconds: 20_000_000)
     }

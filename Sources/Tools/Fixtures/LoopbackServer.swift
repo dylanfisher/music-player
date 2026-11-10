@@ -118,8 +118,9 @@ final class LoopbackConnection: @unchecked Sendable {
     }
 
     /// Waits up to `seconds` for `take` to say how many of the bytes so far it wants, then
-    /// takes those. Fails with what it saw.
-    func receive(seconds: Double = 2, take: @escaping ([UInt8], Bool) -> Int?)
+    /// takes those. Fails with what it saw. A test that expects nothing to come passes its own
+    /// `seconds`; the default only guards against a hang.
+    func receive(seconds: Double = waitLimit, take: @escaping ([UInt8], Bool) -> Int?)
         async throws -> [UInt8]
     {
         let deadline = Date().addingTimeInterval(seconds)
@@ -139,19 +140,19 @@ final class LoopbackConnection: @unchecked Sendable {
     }
 
     /// Everything up to the other end's close.
-    func receiveAll(seconds: Double = 2) async throws -> [UInt8] {
+    func receiveAll(seconds: Double = waitLimit) async throws -> [UInt8] {
         try await receive(seconds: seconds) { bytes, closed in closed ? bytes.count : nil }
     }
 
     /// Bytes up to and including the first `marker`; the rest stay buffered.
-    func receive(through marker: [UInt8], seconds: Double = 2) async throws -> [UInt8] {
+    func receive(through marker: [UInt8], seconds: Double = waitLimit) async throws -> [UInt8] {
         try await receive(seconds: seconds) { bytes, _ in
             bytes.firstRange(of: marker).map { $0.upperBound }
         }
     }
 
     /// Exactly `count` bytes.
-    func receive(count: Int, seconds: Double = 2) async throws -> [UInt8] {
+    func receive(count: Int, seconds: Double = waitLimit) async throws -> [UInt8] {
         try await receive(seconds: seconds) { bytes, _ in bytes.count >= count ? count : nil }
     }
 

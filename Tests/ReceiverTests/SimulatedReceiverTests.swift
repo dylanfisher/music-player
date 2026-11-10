@@ -25,7 +25,7 @@ private final class SimulatedReceiver: @unchecked Sendable {
 
     /// The `index`th connection, once it comes.
     func peer(_ index: Int = 0) async throws -> LoopbackConnection {
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(waitLimit)
         while Date() < deadline {
             if let peer = peers.peer(index) { return peer }
             try await Task.sleep(nanoseconds: 2_000_000)
@@ -116,12 +116,12 @@ private func control(
     return (control, log)
 }
 
-/// Waits up to two seconds for `condition`, failing with what the control shows.
+/// Waits up to `waitLimit` for `condition`, failing with what the control shows.
 @MainActor
 private func wait(
     _ control: ReceiverControl, _ log: ProblemLog, _ what: String, _ condition: () -> Bool
 ) async throws {
-    let deadline = Date().addingTimeInterval(2)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while !condition() {
         guard Date() < deadline else {
             Issue.record("\(what) never held: \(control.status), \(control.state), \(log.all)")

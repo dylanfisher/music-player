@@ -64,9 +64,10 @@ private let clean = FileMeasures(
     identicalChannels: false, peakDBFS: -1, truePeakDBTP: -0.9, clippedRuns: 0,
     dynamicRange: 10)
 
-/// Waits up to 10 s for `condition`.
+/// Waits up to `waitLimit` for `condition`.
 private func eventually(_ condition: () -> Bool) async throws {
-    for _ in 0..<1000 where !condition() { try await Task.sleep(nanoseconds: 10_000_000) }
+    let deadline = Date().addingTimeInterval(waitLimit)
+    while !condition(), Date() < deadline { try await Task.sleep(nanoseconds: 10_000_000) }
     #expect(condition())
 }
 
@@ -143,7 +144,8 @@ private func eventually(_ condition: () -> Bool) async throws {
     #expect(!standing.everyFileTried)
     let ended = await relaunched.start().value
     #expect(ended.stage == .finished && ended.analyzed == 3 && ended.total == 3)
-    #expect(heard.paths.dropFirst(2) == library.paths.dropFirst())
+    // Read several at once, in either order.
+    #expect(heard.paths.dropFirst(2).sorted() == library.paths.dropFirst().sorted())
     #expect(try await relaunched.standing() == .init(paused: nil, everyFileTried: true))
 }
 

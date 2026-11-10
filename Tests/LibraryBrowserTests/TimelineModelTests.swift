@@ -295,7 +295,7 @@ private func pick(_ title: String, in menu: NSMenu, of delegate: any NSMenuDeleg
     #expect(browser.timeline.layout == layout)
 }
 
-/// Waits up to 10 seconds for `condition`.
+/// Waits up to `waitLimit` for `condition`.
 @MainActor
 private func waitUntil(_ condition: () -> Bool) async throws {
     let deadline = Date().addingTimeInterval(waitLimit)

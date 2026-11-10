@@ -5,6 +5,7 @@ import Settings
 import Testing
 
 @testable import Discogs
+@testable import Fixtures
 
 /// An album with a file per title, numbered from 1.
 private func album(
@@ -193,10 +194,14 @@ private func renumbered(_ name: String, _ id: Int) -> [UInt8] {
     let task = Task {
         try await run([tiered[0]], .api, catalog: folder.catalog, api: api, heard: heard)
     }
-    try await Task.sleep(nanoseconds: 200_000_000)
+    // Cancelled once the run says it waits, which a fixed pause missed on a loaded Mac.
+    let deadline = Date().addingTimeInterval(waitLimit)
+    while !heard.all.contains(where: { $0.waitingSeconds == 120 }), Date() < deadline {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    #expect(heard.all.contains { $0.waitingSeconds == 120 })
     task.cancel()
     await #expect(throws: CancellationError.self) { try await task.value }
-    #expect(heard.all.contains { $0.waitingSeconds == 120 })
 }
 
 @Test func bothCountsTheAPIsAlbumsApartAndReportsAWait() async throws {

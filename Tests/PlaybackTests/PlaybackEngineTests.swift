@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Playback
 
 private let urls = (0..<3).map { URL(fileURLWithPath: "/music/\($0).flac") }
@@ -1121,9 +1122,9 @@ private struct Unplayable: PlaybackFailure {
     #expect(await engine.position() == 30)
 }
 
-/// Waits up to two seconds for `check` to hold, and fails saying what it was waiting for.
+/// Waits up to `waitLimit` for `check` to hold, and fails saying what it was waiting for.
 private func eventually(_ what: String, _ check: @escaping @Sendable () async -> Bool) async {
-    let deadline = Date().addingTimeInterval(2)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while Date() < deadline {
         if await check() { return }
         try? await Task.sleep(nanoseconds: 2_000_000)
@@ -1396,9 +1397,10 @@ private final class Updates: @unchecked Sendable {
     var events: [PlaybackEvent] { lock.withLock { seen } }
 }
 
-/// Waits, bounded, until `condition` holds.
+/// Waits up to `waitLimit` until `condition` holds.
 private func eventually(_ condition: () -> Bool) async -> Bool {
-    for _ in 0..<200 {
+    let deadline = Date().addingTimeInterval(waitLimit)
+    while Date() < deadline {
         if condition() { return true }
         try? await Task.sleep(nanoseconds: 10_000_000)
     }

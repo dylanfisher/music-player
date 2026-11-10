@@ -138,10 +138,11 @@ private func makeEditing(
     return editing
 }
 
-/// Waits up to two seconds for `condition`, letting the main actor's tasks run.
+/// Waits up to `waitLimit` for `condition`, letting the main actor's tasks run.
 @MainActor
 private func eventually(_ condition: () -> Bool) async throws {
-    for _ in 0..<200 where !condition() { try await Task.sleep(nanoseconds: 10_000_000) }
+    let deadline = Date().addingTimeInterval(waitLimit)
+    while !condition(), Date() < deadline { try await Task.sleep(nanoseconds: 10_000_000) }
     #expect(condition())
 }
 

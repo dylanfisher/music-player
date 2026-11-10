@@ -4,6 +4,7 @@ import Library
 import Settings
 import Testing
 
+@testable import Fixtures
 @testable import LibraryBrowser
 @testable import MusicPlayer
 
@@ -37,7 +38,7 @@ import Testing
         backing: .buffered, defer: true)
     window.contentView = browser.content.view
     await browser.load(BrowserState(source: .timeline))
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while browser.rowID(at: 0) == nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }

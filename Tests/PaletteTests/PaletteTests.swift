@@ -3,6 +3,7 @@ import KeyChord
 import Settings
 import Testing
 
+@testable import Fixtures
 @testable import Palette
 
 private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> PaletteItem {
@@ -91,7 +92,7 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     // `async let` children may start in either order under load, so the first query is begun
     // and seen to be ranking (it sets `query` before its first suspension) before the second.
     let first = Task { @MainActor in await model.setQuery("a") }
-    let deadline = Date().addingTimeInterval(10)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while model.query != "a" {
         guard Date() < deadline else {
             Issue.record("the first query never began: query is \"\(model.query)\"")
@@ -312,7 +313,7 @@ private func type(_ text: String, into palette: PaletteController) throws {
 /// Waits a few seconds for `condition`, yielding to the ranking task meanwhile.
 @MainActor
 private func waitFor(_ condition: () -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(5)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while !condition() {
         try #require(Date() < deadline, "timed out")
         try await Task.sleep(for: .milliseconds(5))

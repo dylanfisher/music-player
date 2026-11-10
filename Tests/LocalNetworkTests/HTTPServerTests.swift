@@ -356,9 +356,9 @@ private func refuses(host: String, port: UInt16) async -> Bool {
     }
 }
 
-/// Waits up to two seconds for `condition`.
+/// Waits up to `waitLimit` for `condition`.
 func waitFor(_ condition: @escaping () -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(2)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while !condition() {
         guard Date() < deadline else {
             Issue.record("the condition never held")

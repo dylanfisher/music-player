@@ -74,7 +74,7 @@ private struct IndexedHome {
     {
         let watcher = startedWatcher(settings, databaseURL: databaseURL, events: events.append)
         guard watcher != nil else { return nil }
-        let deadline = Date().addingTimeInterval(30)
+        let deadline = Date().addingTimeInterval(waitLimit)
         while !events.launchEnded, Date() < deadline {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
@@ -94,7 +94,7 @@ private struct IndexedHome {
             backing: .buffered, defer: true)
         window.contentView = browser.content.view
         await browser.load(BrowserState(source: nil))
-        let deadline = Date().addingTimeInterval(10)
+        let deadline = Date().addingTimeInterval(waitLimit)
         while browser.rowID(at: 0) == nil, Date() < deadline {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
@@ -178,7 +178,7 @@ func aConfigWithAProblemNeverEmptiesTheLibrary(_ which: Int) async throws {
     }
     try stopWatching(library.folder, settings) { watcher }
     #expect(settings[\.watchedFolders].isEmpty)
-    let deadline = Date().addingTimeInterval(20)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while try library.index.trackCount() > 0, Date() < deadline {
         try await Task.sleep(nanoseconds: 50_000_000)
     }

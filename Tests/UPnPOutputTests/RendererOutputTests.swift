@@ -130,7 +130,7 @@ private final class EventLog: @unchecked Sendable {
 
     /// Waits up to `seconds` for `events` to have been emitted, in order, and fails with what
     /// came instead.
-    func wait(for expected: [String], seconds: Double = 5) async {
+    func wait(for expected: [String], seconds: Double = waitLimit) async {
         let deadline = Date().addingTimeInterval(seconds)
         while Date() < deadline {
             if all.count >= expected.count, Array(all.prefix(expected.count)) == expected { return }
@@ -142,7 +142,7 @@ private final class EventLog: @unchecked Sendable {
 
 /// Waits up to five seconds for `check`, and fails with `what` otherwise.
 private func eventually(_ what: String, _ check: () -> Bool) async {
-    let deadline = Date().addingTimeInterval(5)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while Date() < deadline {
         if check() { return }
         try? await Task.sleep(nanoseconds: 5_000_000)
@@ -1031,11 +1031,11 @@ private func get(_ path: String, port: Int) async throws -> String {
     return String(decoding: try await connection.receiveAll(), as: UTF8.self)
 }
 
-/// Whether the server that was at `port` has stopped serving `path`, within a second: the
+/// Whether the server that was at `port` stops serving `path` within `waitLimit`: the
 /// connection is refused, or another process's server took the freed port and answers
 /// something else.
 private func stoppedServing(_ path: String, port: Int) async -> Bool {
-    let deadline = Date().addingTimeInterval(1)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while Date() < deadline {
         guard let reply = try? await get(path, port: port) else { return true }
         if !reply.hasPrefix("HTTP/1.1 200") { return true }

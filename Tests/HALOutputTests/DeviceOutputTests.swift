@@ -688,9 +688,9 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
     try await waitUntil { !interval.isOpen }
 }
 
-/// Polls `condition` every 5 ms for up to 5 s.
+/// Polls `condition` every 5 ms for up to `waitLimit`.
 func waitUntil(_ condition: () -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(5)
+    let deadline = Date().addingTimeInterval(waitLimit)
     while !condition() {
         guard Date() < deadline else { throw TimedOut(seen: "the condition never held") }
         try await Task.sleep(nanoseconds: 5_000_000)

@@ -495,7 +495,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PaletteTests",
-            dependencies: ["FuzzyMatch", "KeyChord", "Palette", "Settings"],
+            dependencies: ["Fixtures", "FuzzyMatch", "KeyChord", "Palette", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(
