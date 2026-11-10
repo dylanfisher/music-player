@@ -57,35 +57,36 @@ let selectionBenchmarks = [
 private let typedSelections = "abcdefghijklmnopqrstuvwxyz".map(String.init) + ["qx", "zq"]
 
 /// Type-to-select over every fixture track sorted by title, a key at a time, from the key to
-/// the row found, as the track table finds it: the list's names, read once per list, then the
-/// first that starts with the query, ignoring case and accents. The match is the browser's
-/// (`TypeSelect.firstIndex`), copied here until it's reachable from the bench.
+/// the row found, as the track table finds it: the list's texts, folded once per list and kept,
+/// then the first that starts with the query. The fold is timed apart, once.
 let typeSelectBenchmarks = [
     Benchmark(
         name: "selection: type-to-select a key over every fixture title, sorted by title (p95)",
         budget: Budget(appleSilicon: 20, oldMac: 80, unit: .milliseconds)
     ) {
         let databaseURL = try scannedLibrary.get().databaseURL
-        let samples = try onMainActor {
+        let (foldMs, samples) = try onMainActor {
             let model = try await loadedModel(databaseURL)
             await model.setSort(.title, ascending: true)
             _ = try await model.trackNames()
+            let folding = DispatchTime.now().uptimeNanoseconds
+            _ = try await model.typeSelectTexts()
+            let foldMs = Double(DispatchTime.now().uptimeNanoseconds - folding) / 1e6
             var samples: [Double] = []
             for query in typedSelections {
                 let start = DispatchTime.now().uptimeNanoseconds
-                let names = try await model.trackNames()
-                let folded = query.folding(
-                    options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
-                _ = names.firstIndex {
-                    $0.title.folding(
-                        options: [.caseInsensitive, .diacriticInsensitive], locale: nil
-                    ).hasPrefix(folded)
-                }
+                let texts = try await model.typeSelectTexts()
+                _ = TypeSelect.firstIndex(startingWith: query, inFolded: texts)
                 samples.append(Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6)
             }
-            return samples
+            return (foldMs, samples)
         }
-        return Measured(value: p95(samples), notes: [slowestNote(samples)])
+        return Measured(
+            value: p95(samples),
+            notes: [
+                slowestNote(samples),
+                String(format: "the list's texts folded once first, %.1f ms", foldMs),
+            ])
     }
 ]
 

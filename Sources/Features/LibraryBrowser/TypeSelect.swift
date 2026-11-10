@@ -5,7 +5,7 @@ import Foundation
 /// list. A repeated letter doesn't cycle: "rr" looks for "rr". A class, so a key command run
 /// while a key is routed can reset it from the list's selection change without overlapping an
 /// access to the list's own copy.
-final class TypeSelect {
+package final class TypeSelect {
     static let resetSeconds = 1.0
 
     private(set) var query = ""
@@ -42,7 +42,9 @@ final class TypeSelect {
 
     /// `firstIndex(startingWith:in:)` over texts already passed through `fold`, so a list folded
     /// once serves every key typed into it.
-    static func firstIndex(startingWith query: String, inFolded texts: some Sequence<String>)
+    package static func firstIndex(
+        startingWith query: String, inFolded texts: some Sequence<String>
+    )
         -> Int?
     {
         let folded = fold(query)

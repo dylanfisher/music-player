@@ -729,7 +729,7 @@ public final class BrowserModel {
     /// The shown tracks' type-to-select texts in table order, through `TypeSelect.fold`: folded
     /// once per change of the list, off the main actor, since folding 43k titles takes longer
     /// than a key's wait should. A list that changed while they were folded is read again.
-    func typeSelectTexts() async throws -> [String] {
+    package func typeSelectTexts() async throws -> [String] {
         for _ in 0..<Self.nameReads {
             if let foldedNames, foldedNames.applied == applied { return foldedNames.texts }
             let mine = applied
