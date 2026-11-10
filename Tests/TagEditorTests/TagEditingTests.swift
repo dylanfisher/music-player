@@ -1005,3 +1005,23 @@ private let organizeA: @Sendable ([String], String) -> FilesOrganized = { paths,
     #expect(opened.problemLabel.stringValue == "That track is no longer in the library.")
     #expect(opened.nextButton.isEnabled)
 }
+
+/// A save that gives several tracks one title asks first, naming it; one that gives them an
+/// album, or clears their titles, asks as any batch does (phase 70).
+@MainActor
+@Test func oneTitleForSeveralTracksAsksNamingIt() async throws {
+    let seen = Seen()
+    let editing = makeEditing(seen, confirm: false)
+    editing.open(["/a.flac", "/b.flac"], over: window)
+    let opened = try #require(editor(editing, ["/a.flac", "/b.flac"]))
+    try await eventually { opened.isLoaded }
+    opened.saved(TagEdit(values: [.title: "Intro", .album: "Both"]))
+    opened.saved(TagEdit(values: [.album: "Both"]))
+    opened.saved(TagEdit(values: [.title: ""]))
+    #expect(
+        seen.confirmations == [
+            "Give all 2 tracks the title “Intro”?", "Change the tags of 2 files?",
+            "Change the tags of 2 files?",
+        ])
+    #expect(editing.isOpen, "declined, so the window stays open")
+}

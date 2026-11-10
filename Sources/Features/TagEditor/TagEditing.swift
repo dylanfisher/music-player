@@ -116,6 +116,17 @@ public final class TagEditing {
                 button: "Change Tags")
         }
 
+        /// Asked in place of `writing` when the batch gives every file the title `title`,
+        /// usually a mistake made by editing a multiple selection.
+        static func sameTitle(_ title: String, _ count: Int) -> Confirmation {
+            Confirmation(
+                message: "Give all \(count) tracks the title “\(title)”?",
+                detail:
+                    "Every track gets the same title, which is usually a slip made while editing"
+                    + " several tracks at once. Undo Tag Edit puts them all back.",
+                button: "Use One Title")
+        }
+
         /// Asked when the newest edit, which Undo Tag Edit undoes, was made in another window.
         static func undoing(_ origin: TagEditOrigin, _ count: Int) -> Confirmation {
             let made =
@@ -440,10 +451,10 @@ public final class TagEditing {
         }
     }
 
-    /// Writes one file at once; a batch asks first, in a sheet on the info window, which stays
-    /// open with what was typed if the answer is no. The window closes once the write is
-    /// queued, and a play count typed is stored then, with no question of its own: it's the
-    /// index's, not the files'. Only the files whose tags can be written are written or
+    /// Writes one file at once; a batch asks first, in a sheet on the info window, naming the
+    /// title when it gives them all one; the window stays open with what was typed if the
+    /// answer is no. The window closes once the write is queued, and a play count typed is
+    /// stored then, with no question of its own: it's the index's, not the files'. Only the files whose tags can be written are written or
     /// counted; the window said which can't.
     private func save(_ edit: TagEdit, from editor: TagEditorWindow, over window: NSWindow) {
         guard let model = editor.model else { return }
@@ -464,7 +475,12 @@ public final class TagEditing {
             }
             return
         }
-        effects.confirm(.writing(paths.count), editor.window) { [weak self] yes in
+        let question =
+            edit.values[.title].flatMap {
+                $0.isEmpty ? nil : Confirmation.sameTitle($0, paths.count)
+            }
+            ?? .writing(paths.count)
+        effects.confirm(question, editor.window) { [weak self] yes in
             guard yes, let self else { return }
             close()
             self.enqueue("write the tags", over: window, files: files.count) {
