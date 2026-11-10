@@ -681,6 +681,51 @@ Asked by the owner on 2026-11-09.
       editing a multiple selection. Other fields shared by every track, such as the album, don't
       ask.
 
+Implementation plan, phase 70 (ADR 0177):
+
+What exists, found by search (map.md recipes): `TrackTableController.openArt` makes an
+`ArtViewer`, shows it at once with the hover's small image drawn enlarged to the screen, then
+starts the decode at the screen's pixels and the pictures read; the decode, never enlarged,
+shrinks the art, and the read adds the strip, which shrinks it again. `readMetadata(pictures:)`
+lists a file's pictures without reading their bytes. ⌘⌥⇧A is `track.showInAllMusic`'s
+(`AppCommands`, Show in All Music, in the track and View menus). Settings' Library pane is
+`LibraryPane`, the folders table over a `GeneralPane` of the `Pane.library` sections; the
+Snapshots list is a fallback row under a disclosure in `GeneralPane.addSnapshotRows`. Get Info
+is a `TagEditorWindow` on fixed `paths`, opened by `TagEditing.open(_:over:)` from the
+browser's `selectedPaths()`; closing it, by Cancel or its close button, drops what was typed.
+A save of several files asks `Confirmation.writing`.
+
+- 70.1 Art viewer (fix, `Features/LibraryBrowser`): `ArtViewer.open(_:path:failed:)` reads
+  the pictures and decodes the art together, off the main thread, then lays out the strip with
+  a button for each picture and the decoded art, and only then orders the window front;
+  thumbnails fill their buttons as they decode. `openArt` calls it; a close before it's ready
+  drops it. A decode that fails still opens, on the opening image.
+- 70.2 ⌘⌥⇧A: taken by Show in All Music, so nothing changes; reported.
+- 70.3 Rename (refactor): `LibraryPane` becomes `FoldersPane`, the file with it, as before
+  phase 63.
+- 70.4 Watched Folders pane (feat): `Pane.folders`, titled Watched Folders, symbol `folder`,
+  after Library: the folders table, Folder Changes and Network Folders. Library is a
+  `GeneralPane` of Library Folder, Browsing and Database. The palette's folder settings and
+  Watched Folders… open the new pane; `--snapshot-of folders` draws it. README's pane names.
+- 70.5 Snapshots (feat): the list's row always shows, with no disclosure.
+- 70.6 Previous and next track (feat, `Features/TagEditor`, `Features/LibraryBrowser`, app):
+  the browser hands Get Info the list it was opened from, as `TrackList` (the track table's
+  ids then, the selected row, and a path read for a row); `TagEditorWindow` gets ‹ and ›
+  buttons at the left of its button row, on for a one-track window with a row before or after,
+  and a step shows that track in the same window, as `TagEditing` reads it, dropping what was
+  typed, as a close does.
+- 70.7 One title for several tracks (feat): a save whose edit sets a non-empty title on more
+  than one file asks `Confirmation.sameTitle` in place of `.writing`, naming the title.
+- 70.8 ADR 0177; 0168, 0042 and 0160 amended-by lines.
+
+Tests: the viewer is visible only once laid out, with every thumbnail button and the decoded
+art's frame at once, the art's frame unchanged once the thumbnails load; the existing viewer
+tests wait for the open. The Watched Folders pane holds the table and the folders' boxes and
+Library the rest; the palette opens each. The Snapshots list shows with no disclosure; the
+gap test uses another disclosure. Get Info's › and ‹ show the next and previous track in the
+same window, off at the ends, off for several tracks, and drop what was typed. A title saved
+over two tracks asks, naming it; an album doesn't.
+
 ### 72. Combine Albums for Tagging
 
 Asked by the owner on 2026-11-09, as proposed: "Combine Albums for Tagging", a command-palette
