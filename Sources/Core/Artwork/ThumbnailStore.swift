@@ -58,7 +58,8 @@ public final class ThumbnailStore: @unchecked Sendable {
             return nil
         }
         guard let source = CGImageSourceCreateWithData(bytes as CFData, nil),
-            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            let image = CGImageSourceCreateImageAtIndex(
+                source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
         else {
             fail("the stored thumbnail \(url.path) doesn't decode; removing it")
             remove(url)
