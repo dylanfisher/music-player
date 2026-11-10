@@ -487,6 +487,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         split.setPosition(CGFloat(height), ofDividerAt: 0)
         split.layoutSubtreeIfNeeded()
         placedHeight = Int(panelSlot.frame.height.rounded())
+        // The divider drew at its old place, which the rows now cover; on glass the rows are
+        // translucent, so the old line would show through them, fixed as they scroll.
+        split.needsDisplay = true
     }
 
     /// The slot's height for what it holds: the Stats panel's own, or the columns', which the

@@ -595,3 +595,20 @@ func statsKeepsItsHeightAcrossSources(browserVisible: Bool) async throws {
     // Just short of three columns, two share 3 × 300 + 2 × 10 points less a spacing.
     #expect(widest > 450 && widest < 455, "\(widest)")
 }
+
+/// Moving the divider back from Stats' height redraws the split, so the line it drew there
+/// doesn't show through the translucent rows now over its old place.
+@MainActor @Test func leavingStatsRedrawsTheSplitsOldDivider() async throws {
+    let (browser, window, split, _) = try await playedBrowser()
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+    browser.statsHeight = 300
+    browser.showStats(.all)
+    try await waitFor("Stats") { browser.shownPanel === browser.statsPanel }
+    window.layoutIfNeeded()
+    split.displayIfNeeded()
+    try #require(!split.needsDisplay)
+    browser.show(nil)
+    try await waitFor("the library") { browser.shownPanel == nil || split.needsDisplay }
+    #expect(split.needsDisplay)
+}
