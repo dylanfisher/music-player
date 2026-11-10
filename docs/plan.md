@@ -182,6 +182,9 @@ that phase's Result line, and delete its line here.
 - **75** ([phase](plan-archive.md#75-closing-the-reset-layout-banner)): the owner checks under
   its Result line, and whether its wording will do.
 
+- **74** ([phase](plan-archive.md#74-tagger-scrolling-keeping-your-place-and-the-writes-last-steps)):
+  the owner checks and two questions under its Result line.
+
 ### Answers
 
 - **38.11 Tag-write error** ([phase](plan-archive.md#38b-table-navigation-and-palette-adr-0088)):
@@ -681,71 +684,6 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
-
-### 74. Tagger: scrolling, keeping your place, and the write's last steps
-
-Asked by the owner on 2026-11-10.
-
-- [ ] **The two columns scroll as one:** in the tagger's review, scrolling Your Files moves
-      Discogs Release with it in the same frame, with no lag either way, even though they are
-      separate tables (one scroll view holding both, for example). A test that a scroll of
-      either leaves both at the same offset.
-- [ ] **The album list keeps its place:** the album selected in the left column stays selected
-      after Other Releases… is opened and closed, and after one of its releases is chosen, even
-      when the choice moves the album to another tab. The list scrolls to keep it in view. No
-      action leaves the list with nothing selected while it has albums. A test for each path.
-- [ ] **The write's last steps show in its line:** after the last tag is written, the tagger's
-      write line (`TaggerModel.WriteProgress`, fed from
-      `TagEditing.write(_:over:progress:completion:)` and enqueue) no longer stays on "4,254 of
-      4,254 written" while Keep Files Organized runs. It shows "Organizing files: N of M moved",
-      then "Updating Undo Tag Edit for the moved files…", then "Updating the library…", from the
-      same `OrganizeProgress` the main window's status bar already gets. A test for each line.
-- [ ] **Several albums selected** was asked again; it landed in 0.22.0
-      ([ADR 0183](decisions/0183-several-albums-selected-in-the-tagger.md)): Shift or Command
-      extends the selection, Reject acts on all of it, and Apply reads "Apply to N Selected…".
-      Owner check: confirm it in the current build; any gap found becomes an item here.
-
-Implementation plan, phase 74 (ADR 0186):
-
-What exists, found by search (map.md recipes): the tracklists are two `inListScrollView` lists
-side by side, the files' scroller hidden, kept together by `tracklistScrolled`, which follows
-one clip view's bounds notification with the other's `setBoundsOrigin`; with responsive
-scrolling the moved list is drawn before the main thread hears of it, so the other lags a
-frame. `TaggerWindow.refresh` reloads the album list and selects `model.selectedID`'s row
-without scrolling to it, and a model album not listed in the tab, as after Analyze moved it,
-leaves the list with nothing selected; a click below the rows empties it too. A rematch moves
-the tab to the album's new tier (`rematch`). `TagEditing.enqueue` runs the write, then Keep
-Files Organized's `move` (whose `OrganizeProgress` goes to the status bar), then the journal's
-`follow`, then on the main thread calls the tagger's completion and then `written`, whose
-`carry` updates the library; the tagger's line stays on its last tag count through all of it.
-
-- 74.1 The album list keeps its place (fix, `Features/DiscogsTagger`): `refresh` selects the
-  tab's first album when the selected one isn't listed in it, and scrolls the list to the
-  selected album whenever its tab, album or row differs from what the list last showed, so
-  a refresh that leaves it in place doesn't move the list; the list can't be emptied by a
-  click (`allowsEmptySelection`). Tests in `TaggerPlaceTests`: Other Releases… closed, a
-  release chosen that keeps the album in its tab, one that moves it to Likely, and an album
-  selected outside the tab.
-- 74.2 The two tracklists scroll as one (fix): `SideBySideTables`, an `NSScrollView` whose
-  document holds both tables, each in a clip view of its own so it fits its columns to its
-  half, with both headers in a row above that doesn't scroll; one scroller, at the release's
-  side. The tables forward a scroll to a row and a drag's autoscroll to the shared document.
-  `tracklistScrolled` goes. Tests: one scroll view encloses both, a scroll leaves both at the
-  same visible offset, a row scrolled to in either shows in both, both headers show over
-  their columns.
-- 74.3 The write's last steps (feat, `Core/Library`, `Features/TagEditor`, `DiscogsTagger`,
-  App): `OrganizeStep`, beside `OrganizeProgress`: moving (with it), updating Undo Tag Edit,
-  updating the library. `TagEditing.write` takes an `organizing` closure told each step of
-  that write's Keep Files Organized: the renames' reports, then before `follow`, then, when
-  files moved, before `written`, whose new last argument the app calls once `carry` has run;
-  the write's completion waits for it. `TaggerModel.Write` passes it on; `WriteProgress.text`
-  shows "Organizing files: N of M moved", "Updating Undo Tag Edit for the moved files…",
-  "Updating the library…" for the oldest write in a step while no write is on its tags; a
-  step redraws once, the renames' reports already come about each 1%, so the tag reports'
-  throttle stays as it is. Tests in `TagEditingTests` (the steps in order, the completion
-  after the library's update) and `TaggerModelTests`/`TaggerWindowTests` (each line).
-- 74.4 Several albums selected: owner check only.
-- 74.5 ADR 0186: one scroll view for the tracklists, and the write's steps.
 
 ### 76. A layout editor for the status bar's totals
 
