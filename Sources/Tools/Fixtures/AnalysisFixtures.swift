@@ -51,6 +51,8 @@ public func analysisFixture(
     let bits = fixture.bitsPerSample
     let name = "analysis-\(fixture.rawValue)-\(rate)-\(bits)-\(seconds)s"
     let url = directory.appendingPathComponent(name + (fixture == .aac ? ".m4a" : ".flac"))
+    // Before the noise, which takes longer to make than a test takes to read the file.
+    if FileManager.default.fileExists(atPath: url.path) { return url }
     let noise = (0..<2).map { channel in
         bandLimitedNoise(
             rateHz: rate, cutoffHz: fixture.cutoffHz,
