@@ -158,12 +158,37 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     defer { tall.window?.close() }
     tall.window?.setContentSize(NSSize(width: 1000, height: 480))
     tall.window?.contentView?.layoutSubtreeIfNeeded()
-    let moved = try #require(tall.releaseTable.enclosingScrollView?.contentView)
-    moved.scroll(to: NSPoint(x: 0, y: 120))
-    #expect(moved.bounds.origin.y == 120)
-    #expect(tall.fileTable.enclosingScrollView?.contentView.bounds.origin.y == 120)
-    tall.fileTable.enclosingScrollView?.contentView.scroll(to: NSPoint(x: 0, y: 40))
-    #expect(moved.bounds.origin.y == 40, "and back")
+    // One scroll view holds both, so a scroll moves both in the same frame (ADR 0186).
+    let (files2, tracks2) = (tall.fileTable, tall.releaseTable)
+    let scroll = try #require(tracks2.enclosingScrollView)
+    #expect(files2.enclosingScrollView === scroll)
+    scroll.contentView.scroll(to: NSPoint(x: 0, y: 120))
+    scroll.reflectScrolledClipView(scroll.contentView)
+    #expect(files2.visibleRect.minY == 120 && tracks2.visibleRect.minY == 120)
+    #expect(files2.rows(in: files2.visibleRect) == tracks2.rows(in: tracks2.visibleRect))
+    // A row scrolled to in either, as the arrow keys do, shows in both.
+    files2.scrollRowToVisible(59)
+    #expect(tracks2.visibleRect.contains(tracks2.rect(ofRow: 59)))
+    #expect(files2.visibleRect.contains(files2.rect(ofRow: 59)))
+    tracks2.scrollRowToVisible(0)
+    #expect(files2.visibleRect.minY == 0, "and back")
+    // Each table fits its columns to its half, under its header, which stays as the rows
+    // scroll.
+    for table in [files2, tracks2] {
+        let header = try #require(table.headerView)
+        let width = table.tableColumns.map { $0.width + table.intercellSpacing.width }
+            .reduce(0, +)
+        #expect(abs(width - table.frame.width) < 10, "the columns fill the half")
+        #expect(header.window != nil && header.frame.width == table.frame.width)
+        let headerX = header.convert(header.bounds, to: nil).minX
+        #expect(headerX == table.convert(table.bounds, to: nil).minX)
+        #expect(
+            header.convert(header.bounds, to: nil).minY
+                >= scroll.contentView.convert(scroll.contentView.bounds, to: nil).maxY)
+    }
+    #expect(files2.frame.maxX < tracks2.convert(tracks2.bounds, to: files2.superview).minX + 2)
+    let scrollerX = scroll.verticalScroller?.frame.maxX ?? 0
+    #expect(scrollerX > tracks2.convert(tracks2.bounds, to: scroll).maxX - 20, "at the release's")
 }
 
 /// `view` and every view under it.

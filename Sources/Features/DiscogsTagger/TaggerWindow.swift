@@ -56,13 +56,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// is saved.
     private var keepsAlbumList = false
     /// The album's files, and beside them the release's tracks they're on: two tables of the
-    /// same rows, scrolled and selected together, so each column's source is plain.
-    let fileTable = NSTableView()
-    let releaseTable = NSTableView()
+    /// same rows, in one scroll view and selected together, so each column's source is plain.
+    let fileTable: NSTableView = SideBySideTables.Table()
+    let releaseTable: NSTableView = SideBySideTables.Table()
     /// The selected album's files left out, which its rows list last, greyed.
     private(set) var leftOut: Set<Int64> = []
-    /// Set while one tracklist follows the other's scroll or selection, so the other doesn't
-    /// follow it back.
+    /// Set while one tracklist follows the other's selection, so the other doesn't follow it
+    /// back.
     private var following = false
     /// Set while `refresh` selects the model's albums in the list, so the list's notifications
     /// of it aren't taken for the user's.
@@ -324,8 +324,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         NSTextField(labelWithString: text)
     }
 
-    /// The files' table and the release's side by side, each under its heading. Only the
-    /// release's shows a scroller; the files' scrolls with it.
+    /// The files' table and the release's side by side in one scroll view, each under its
+    /// heading.
     private func tracklists() -> NSStackView {
         let files = taggerTable(
             fileTable, [(.include, 24), (.number, 24), (.fileTitle, 170), (.fileTime, 48)],
@@ -336,54 +336,30 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             releaseTable,
             [(.position, 56), (.releaseTitle, 170), (.releaseTime, 48), (.state, 84)],
             source: self)
-        files.hasVerticalScroller = false
         for table in [fileTable, releaseTable] {
             table.registerForDraggedTypes([Self.fileRowType])
             table.allowsMultipleSelection = false
         }
         fileTable.setDraggingSourceOperationMask(.move, forLocal: true)
-        for scroll in [files, release] {
-            scroll.contentView.postsBoundsChangedNotifications = true
-            NotificationCenter.default.addObserver(
-                self, selector: #selector(tracklistScrolled),
-                name: NSView.boundsDidChangeNotification, object: scroll.contentView)
-        }
-        let sides = [(TaggerText.filesHeading, files), (TaggerText.releaseHeading, release)].map {
-            heading, scroll in
-            let title = NSTextField(labelWithString: heading)
-            title.font = .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
-            title.textColor = .secondaryLabelColor
-            let side = NSStackView(views: [title, scroll])
-            side.orientation = .vertical
-            side.alignment = .leading
-            side.spacing = 4
-            scroll.widthAnchor.constraint(equalTo: side.widthAnchor).isActive = true
-            scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
-            scroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-            return side
-        }
-        let both = NSStackView(views: sides)
-        both.orientation = .horizontal
-        both.distribution = .fillEqually
-        both.alignment = .top
-        both.spacing = 6
-        for side in sides {
-            side.heightAnchor.constraint(equalTo: both.heightAnchor).isActive = true
+        let scroll = SideBySideTables(files, release)
+        scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
+        scroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        let headings = NSStackView(
+            views: [TaggerText.filesHeading, TaggerText.releaseHeading].map { heading in
+                let title = NSTextField(labelWithString: heading)
+                title.font = .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
+                title.textColor = .secondaryLabelColor
+                return title
+            })
+        headings.distribution = .fillEqually
+        let both = NSStackView(views: [headings, scroll])
+        both.orientation = .vertical
+        both.alignment = .leading
+        both.spacing = 4
+        for view in [headings, scroll] {
+            view.widthAnchor.constraint(equalTo: both.widthAnchor).isActive = true
         }
         return both
-    }
-
-    /// Scrolls the other tracklist to where the one that moved is.
-    @objc private func tracklistScrolled(_ notification: Notification) {
-        guard !following, let moved = notification.object as? NSClipView else { return }
-        let other =
-            (moved === fileTable.enclosingScrollView?.contentView
-            ? releaseTable : fileTable).enclosingScrollView?.contentView
-        guard let other, other.bounds.origin.y != moved.bounds.origin.y else { return }
-        following = true
-        other.setBoundsOrigin(NSPoint(x: other.bounds.origin.x, y: moved.bounds.origin.y))
-        other.enclosingScrollView?.reflectScrolledClipView(other)
-        following = false
     }
 
     // MARK: - Showing the model
