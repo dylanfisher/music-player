@@ -38,6 +38,9 @@ extension AppDelegate {
                     [weak browser] in browser?.showSaving($0)
                 }
             })
+        dispatcher.handle(
+            .combineForTagging, enabled: hasSelectedTracks,
+            run: { [weak self] in self?.discogsTaggerController()?.combineSelection() })
     }
 
     /// The tagger's layouts as last chosen: those of a tagger made already, which hears every

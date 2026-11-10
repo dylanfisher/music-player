@@ -205,6 +205,17 @@ public final class DiscogsTagger {
     /// staged job's tagger analyzes its one album when it first opens, so it opens on the
     /// album's tier, or says why it can't.
     public func show() {
+        show(combining: false)
+    }
+
+    /// Combine Albums for Tagging: shows the window with the selection's albums joined into
+    /// one and analyzes it at once from the source chosen, the API too, since the command is
+    /// the click (ADR 0179). It says why when it can't.
+    public func combineSelection() {
+        show(combining: true)
+    }
+
+    private func show(combining: Bool) {
         let opening = controller == nil
         if let controller {
             controller.showWindow(nil)
@@ -214,15 +225,17 @@ public final class DiscogsTagger {
             made.keepAlbumList()
             made.showWindow(nil)
         }
-        let scoped = model.isStaged ? opening : model.scopeToSelection()
+        let scoped = model.isStaged ? opening : model.scopeToSelection(combining: combining)
         guard opening || scoped else { return }
         Task {
             if opening { await model.checkCatalog() }
-            guard scoped, model.source == .catalog else { return }
+            guard scoped, model.source == .catalog || combining else { return }
             if model.canAnalyze {
                 model.analyze()
             } else if model.isStaged {
                 model.failed("The staged album wasn't analyzed", [model.catalogProblem])
+            } else if combining {
+                model.failed("The combined album wasn't analyzed", [model.catalogProblem])
             }
         }
     }

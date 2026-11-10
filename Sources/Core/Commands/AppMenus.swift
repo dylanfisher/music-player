@@ -68,7 +68,8 @@ public enum AppMenus {
     public static let trackMenu: [MenuEntry] = [
         .command(.playNext), .command(.addToQueue), .command(.playSelection), .separator,
         .command(.showAlbum), .command(.showArtist), .command(.showInAllMusic),
-        .command(.openDiscogsRelease), .command(.getDiscogsArtwork), .separator,
+        .command(.openDiscogsRelease), .command(.getDiscogsArtwork),
+        .command(.combineForTagging), .separator,
         .command(.toggleLoved), .command(.toggleDisliked), .separator,
         .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
         .separator, .command(.editTags), .command(.showSpectrum), .command(.revealInFinder),
@@ -124,7 +125,7 @@ public enum AppMenus {
                     .command(.showInPlaylist), .command(.showAlbum), .command(.showArtist),
                     .separator, .command(.editTags), .command(.showSpectrum),
                     .command(.replaceArtwork), .command(.removeArtwork),
-                    .command(.getDiscogsArtwork),
+                    .command(.getDiscogsArtwork), .command(.combineForTagging),
                     .submenu(
                         ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
                     .command(.toggleLoved), .command(.toggleDisliked), .separator,

@@ -191,3 +191,60 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(controller.text(controller.albumTable, .album, 0) == "Persuader – 1983")
     controller.window?.close()
 }
+
+/// Combine Albums for Tagging opens the tagger on the selection joined and analyzes it from
+/// whichever source is chosen, the API too: the command is the click.
+@MainActor
+@Test func combineSelectionOpensOnTheAlbumsJoinedAndAnalyzesFromAnySource() async throws {
+    for source in DiscogsSource.allCases {
+        let seen = Seen()
+        let tagger = DiscogsTagger(
+            model: await model(
+                seen, albums: [original, reissue], matches: matches, source: source))
+        tagger.selectedTracks = { [100, 200] }
+        tagger.combineSelection()
+        #expect(tagger.model.scope == .combined)
+        try await eventually { seen.matched.count == 1 }
+        await tagger.model.finished()
+        #expect(seen.sources == [source], "\(source)")
+        #expect(tagger.model.albums.map(\.id) == [-1])
+        tagger.window?.close()
+    }
+}
+
+@MainActor
+@Test func combineSelectionSaysWhyItCant() async throws {
+    let gate = Gate()
+    let seen = Seen()
+    let tagger = DiscogsTagger(
+        model: await model(seen, albums: [original, reissue], matches: matches, gate: gate))
+    tagger.selectedTracks = { [100, 200] }
+    tagger.show()
+    try await eventually { tagger.model.isBusy }
+    var failures: [String] = []
+    tagger.model.failed = { message, _ in failures.append(message) }
+    tagger.combineSelection()
+    #expect(failures == ["The albums weren't combined"])
+    #expect(tagger.model.scope == .selection)
+    gate.open()
+    gate.open()
+    await tagger.model.finished()
+
+    tagger.selectedTracks = { [] }
+    tagger.combineSelection()
+    #expect(failures.last == "No tracks are selected")
+
+    let missing = DiscogsTagger(
+        model: await model(
+            Seen(), albums: [original, reissue], matches: matches, catalog: .missing))
+    missing.selectedTracks = { [100, 200] }
+    var missed: [(String, [String])] = []
+    missing.combineSelection()
+    // Set once the window is made, which sets its own; the analysis waits for the check.
+    missing.model.failed = { missed.append(($0, $1)) }
+    try await eventually { !missed.isEmpty }
+    #expect(missed.first?.0 == "The combined album wasn't analyzed")
+    #expect(missed.first?.1 == ["there's no Discogs catalog on this Mac"])
+    tagger.window?.close()
+    missing.window?.close()
+}
