@@ -739,7 +739,10 @@ one (`AlbumMatcherTests`). Check steps `format typecheck arch dupes surface link
 `./scripts/test --changed main` passed but for `WindowGlassTests.theGlassHeadersAreFrosted`,
 which fails on `main` too while the screen is locked. Not measured: no bench row covers
 these paths, and the matcher's work for one combined album is that of one album of its count.
-Deferred: nothing. Not run in the app: an owner check on a real split album.
+Deferred: nothing. Not run in the app: an owner check on a real split album. The gate's
+review found the scope reusable from the pop-up on a later selection, the search artist taken
+from the first album only, and left-out files carried into another combination with the same
+first album; all fixed with tests, and a real combined write and its undo tested too.
 
 **Owner checks:** select "1983" and "1983 [Expanded Reissue]" and run Combine Albums for
 Tagging…: the joined album in the list, the line naming both, a conflict for the repeated
