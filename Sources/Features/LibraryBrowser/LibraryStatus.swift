@@ -100,34 +100,49 @@ struct LibraryStatus: Equatable, Sendable {
     var hasProblems: Bool { fileIssueCount > 0 || !problems.isEmpty }
 
     /// "1,204 tracks, 5.1 GiB, 3 days 2 hours · 2 tracks not in the library": what the list shown
-    /// holds, with the totals of `selection` as `shown` asks. `missingCount` is how many of a
-    /// playlist's tracks aren't in the library. `playCount` is set on the timeline, which counts
-    /// plays instead of tracks, and `playSpan` when it lists only a span's.
+    /// holds, with the totals of `selection` as `shown` asks, written by `formats`.
+    /// `missingCount` is how many of a playlist's tracks aren't in the library, appended unless
+    /// the template places it. `playCount` is set on the timeline, which counts plays instead
+    /// of tracks, and `playSpan` when it lists only a span's.
     func summary(
-        list: TrackTotals, selection: TrackTotals, shown: StatusTotals, missingCount: Int = 0,
-        playCount: Int? = nil, playSpan: PlaySpan? = nil
+        list: TrackTotals, selection: TrackTotals, shown: StatusTotals,
+        formats: TotalsFormats = .defaults, missingCount: Int = 0, playCount: Int? = nil,
+        playSpan: PlaySpan? = nil
     ) -> String {
+        let template = formats.template(shown, selected: selection.count > 0)
         var parts = [
             playCount.map { plays($0) + (playSpan.map { ", " + $0.title() } ?? "") }
-                ?? totals(list, selection, shown)
+                ?? totals(template, list, selection, missingCount: missingCount)
         ]
-        if missingCount > 0 { parts.append(tracks(missingCount) + " not in the library") }
+        let placed = playCount == nil && template.parts.contains(.token(.missing))
+        if missingCount > 0, !placed {
+            parts.append(tracks(missingCount) + " not in the library")
+        }
         if healthOtherCount > 0 {
             parts.append(count(healthOtherCount, "more item") + " with no track to list")
         }
-        return parts.joined(separator: " · ")
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
-    /// The list's totals, the selection's, or both, falling back to the list's while nothing is
-    /// selected.
-    private func totals(_ list: TrackTotals, _ selection: TrackTotals, _ shown: StatusTotals)
-        -> String
-    {
-        guard selection.count > 0 else { return list.text() }
-        return switch shown {
-        case .listAndSelection: "\(list.text()) (\(selection.text(selected: true)))"
-        case .list: list.text()
-        case .selection: selection.text(selected: true)
+    /// `template` filled with the list's totals and the selection's, which are empty while
+    /// nothing is selected.
+    private func totals(
+        _ template: TotalsTemplate, _ list: TrackTotals, _ selection: TrackTotals,
+        missingCount: Int
+    ) -> String {
+        let selected = selection.count > 0 ? selection : nil
+        return template.fill { token in
+            switch token {
+            case .tracks: tracks(list.count)
+            case .size: binarySize(list.sizeBytes)
+            case .duration: spokenDuration(list.durationSeconds)
+            case .albums: albums(list.albumCount)
+            case .selectedTracks: selected.map { tracks($0.count) }
+            case .selectedSize: selected.map { binarySize($0.sizeBytes) }
+            case .selectedDuration: selected.map { spokenDuration($0.durationSeconds) }
+            case .selectedAlbums: selected.map { albums($0.albumCount) }
+            case .missing: missingCount > 0 ? tracks(missingCount) : nil
+            }
         }
     }
 

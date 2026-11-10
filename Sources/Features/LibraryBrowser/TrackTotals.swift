@@ -1,17 +1,5 @@
 import DisplayText
 import Foundation
-import Library
-
-extension TrackTotals {
-    /// "43,400 tracks, 1048.1 GiB, 185 days 17 hours 29 minutes 26 seconds", as Swinsian puts it,
-    /// or "1 track selected, …" for a selection.
-    func text(selected: Bool = false) -> String {
-        [
-            tracks(count) + (selected ? " selected" : ""), binarySize(sizeBytes),
-            spokenDuration(durationSeconds),
-        ].joined(separator: ", ")
-    }
-}
 
 /// "512 bytes", "303.5 MiB", "1048.1 GiB": binary units to one decimal, up to GiB, as Swinsian
 /// shows them.

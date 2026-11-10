@@ -24,6 +24,7 @@ struct WindowSettings {
     var groupByAlbumArtist: Bool
     var tableAppearance: TableAppearance
     var statusBar: StatusBarLayout
+    var totalsFormats: TotalsFormats
     var headerStatus: BarLayout<HeaderPart>
     var customStatuses: [ToolbarItem: BarLayout<HeaderPart>]
     var windowTitle: TitleTemplate
@@ -57,6 +58,7 @@ struct WindowSettings {
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)
         statusBar = StatusBarLayout(settings)
+        totalsFormats = TotalsFormats(settings)
         headerStatus = settings[\.headerStatusLayout]
         customStatuses = Dictionary(
             uniqueKeysWithValues: ToolbarItem.customStatuses.compactMap { item in
@@ -73,6 +75,21 @@ extension StatusBarLayout {
 
     @MainActor init(_ settings: ConfigStore<AppSettings>) {
         self.init(columns: settings[\.statusBarLayout], style: settings[\.statusBarStyle])
+    }
+}
+
+extension TotalsFormats {
+    /// The settings' keys, whose change writes the totals again.
+    static let keys = [
+        AppSettings().totalsFormat.key, AppSettings().totalsListAndSelectionFormat.key,
+        AppSettings().totalsListFormat.key, AppSettings().totalsSelectionFormat.key,
+    ]
+
+    @MainActor init(_ settings: ConfigStore<AppSettings>) {
+        self.init(
+            nothingSelected: settings[\.totalsFormat],
+            listAndSelection: settings[\.totalsListAndSelectionFormat],
+            list: settings[\.totalsListFormat], selection: settings[\.totalsSelectionFormat])
     }
 }
 

@@ -18,31 +18,45 @@ extension LibraryIndex {
     /// What the rows listing `ids` add up to, an ID listed twice counting twice. An ID with no
     /// track is left out.
     ///
-    /// Every track's size and length is read once and kept, until a connection changes the
+    /// Every track's size, length and album is read once and kept, until a connection changes the
     /// index, so a list of the whole library adds up without a second pass over its rows.
     public func trackTotals(ids: [Int64]) throws -> TrackTotals {
         let stamp = try changeStamp()
         if stamp != trackSizesStamp {
             let select = try statement(
                 """
-                SELECT t.file_id, f.size_bytes, \(TrackColumn.duration.expression) FROM tracks t
-                JOIN files f ON f.id = t.file_id
+                SELECT t.file_id, f.size_bytes, \(TrackColumn.duration.expression), t.album_id
+                FROM tracks t JOIN files f ON f.id = t.file_id
                 """)
+            var albums: [Int: Int32] = [:]
             trackSizes = Dictionary(
                 uniqueKeysWithValues: try select.map { row in
-                    (
+                    var album: Int32 = -1
+                    if let id = row.optionalInt(3) {
+                        album = albums[id] ?? Int32(albums.count)
+                        albums[id] = album
+                    }
+                    return (
                         try row.int64(0),
-                        TrackSize(bytes: try row.int(1), seconds: row.optionalDouble(2) ?? 0)
+                        TrackSize(
+                            bytes: try row.int(1), seconds: row.optionalDouble(2) ?? 0,
+                            album: album)
                     )
                 })
+            trackSizesAlbums = albums.count
             trackSizesStamp = stamp
         }
         var totals = TrackTotals()
+        var counted = [Bool](repeating: false, count: trackSizesAlbums)
         for id in ids {
             guard let size = trackSizes[id] else { continue }
             totals.count += 1
             totals.sizeBytes += size.bytes
             totals.durationSeconds += size.seconds
+            if size.album >= 0, !counted[Int(size.album)] {
+                counted[Int(size.album)] = true
+                totals.albumCount += 1
+            }
         }
         return totals
     }

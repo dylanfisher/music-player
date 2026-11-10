@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import DisplayText
 import Foundation
 import KeyChord
 import Settings
@@ -368,13 +369,17 @@ import Testing
         browser.listTotals.count == browser.model.trackIDs.count
     }
     #expect(browser.listTotals.sizeBytes > 0)
-    let list = browser.listTotals.text()
+    let totals = browser.listTotals
+    let list = [
+        tracks(totals.count), binarySize(totals.sizeBytes), spokenDuration(totals.durationSeconds),
+    ]
+    .joined(separator: ", ")
     #expect(browser.statusText == list)
 
     browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
     let first = try await browser.reader.trackTotals(ids: [browser.model.trackIDs[0]])
-    let one = first.text(selected: true)
-    #expect(one.hasPrefix("1 track selected, "))
+    let one =
+        "1 track selected, \(binarySize(first.sizeBytes)), \(spokenDuration(first.durationSeconds))"
     try await waitFor("the selection's totals") { browser.statusText == "\(list) (\(one))" }
     browser.showNextTotals()
     #expect(browser.statusText == list)
@@ -384,6 +389,9 @@ import Testing
     #expect(browser.statusText == list)
     browser.showNextTotals()
     #expect(reported == [.list, .selection, .listAndSelection])
+    // A template set from the settings writes the totals at once.
+    browser.totalsFormats.nothingSelected = TotalsTemplate("{tracks} on {albums}")
+    #expect(browser.statusText == "\(tracks(totals.count)) on \(albums(totals.albumCount))")
 }
 
 @MainActor @Test func theStatusBarMatchesTheTableHeaderAndHidesWithIt() throws {

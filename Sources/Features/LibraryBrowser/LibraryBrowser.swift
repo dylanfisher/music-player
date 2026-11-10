@@ -62,6 +62,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         didSet { showStatus() }
     }
     public var statusTotalsChanged: (StatusTotals) -> Void = { _ in }
+    /// How the status bar writes its totals, a template for each choice and one for while
+    /// nothing is selected.
+    public var totalsFormats = TotalsFormats.defaults {
+        didSet { showStatus() }
+    }
     /// What the list's rows and the selected rows add up to, each read again after it changes.
     private(set) var listTotals = TrackTotals()
     private(set) var selectionTotals = TrackTotals()
@@ -964,7 +969,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         status.healthOtherCount = found?.otherCount ?? 0
         statusLabel.stringValue = status.summary(
             list: listTotals, selection: selectionTotals,
-            shown: statusTotals, missingCount: model.missingTracks,
+            shown: statusTotals, formats: totalsFormats, missingCount: model.missingTracks,
             playCount: showsTimeline ? timelineModel.playCount : nil,
             playSpan: showsTimeline ? timelineModel.span : nil)
         statusLabel.toolTip = nil

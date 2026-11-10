@@ -169,6 +169,9 @@ extension AppDelegate {
         if !keys.isDisjoint(with: StatusBarLayout.keys) {
             applyStatusBar(StatusBarLayout(settings))
         }
+        if !keys.isDisjoint(with: TotalsFormats.keys) {
+            browser?.totalsFormats = TotalsFormats(settings)
+        }
         if keys.contains(schema.headerStatusLayout.key) {
             applyHeaderStatus(settings[\.headerStatusLayout])
         }

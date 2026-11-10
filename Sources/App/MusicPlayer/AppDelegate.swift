@@ -418,6 +418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         browser.statusTotals = layout.statusTotals
+        browser.totalsFormats = layout.totalsFormats
         browser.statusTotalsChanged = { saver.set(\.statusTotals, $0) }
         if !layout.browserVisible { browser.toggleBrowser() }
 

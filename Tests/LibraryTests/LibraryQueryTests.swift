@@ -119,6 +119,24 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     #expect(try index.trackTotals(ids: []) == TrackTotals())
 }
 
+/// The albums are counted once each, however many of their tracks the list holds; a track with
+/// no album adds none.
+@Test func trackTotalsCountEachAlbumOnce() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let ids = try index.trackIDs(sortedBy: .title)
+    let rows = try index.rows(ids: ids)
+    let albums = Set(rows.compactMap(\.albumID))
+    #expect(albums.count > 1)
+    #expect(try index.trackTotals(ids: ids + ids).albumCount == albums.count)
+    let first = try #require(rows.first { $0.albumID != nil }?.albumID)
+    let tracks = rows.filter { $0.albumID == first }.map(\.id)
+    #expect(tracks.count > 1)
+    #expect(try index.trackTotals(ids: tracks).albumCount == 1)
+    #expect(try index.trackTotals(ids: []).albumCount == 0)
+}
+
 @Test func trackTotalsFollowAChangeByAnyConnection() throws {
     let library = try TestLibrary()
     _ = try library.scan()
@@ -140,7 +158,7 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     let path = try #require(try index.paths(ids: [ids[0]])[ids[0]])
     _ = try index.trackTotals(ids: ids)
     // A size no file has, which only the kept sizes give.
-    index.trackSizes[ids[0]] = TrackSize(bytes: -1, seconds: 0)
+    index.trackSizes[ids[0]] = TrackSize(bytes: -1, seconds: 0, album: -1)
     try index.recordPlay(path, at: 1000)
     try index.recordSkip(path)
     try index.setRating(3, trackIDs: [ids[0]])
