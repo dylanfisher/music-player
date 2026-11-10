@@ -67,6 +67,14 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     /// Set while `refresh` selects the model's albums in the list, so the list's notifications
     /// of it aren't taken for the user's.
     private var selectingAlbums = false
+    /// What the tracklists were last loaded with: their rows, the files left out, and
+    /// whether a file's box can be clicked.
+    private var tracklistsShown: TracklistsShown?
+    private struct TracklistsShown: Equatable {
+        var rows: [TrackComparison]
+        var leftOut: Set<Int64>
+        var canLeaveOut: Bool
+    }
     /// Where the album list last showed the selected album, which it scrolls to when that
     /// changes.
     private var listedPlace: ListedPlace?
@@ -581,8 +589,15 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         combinedLine.isHidden = sources.isEmpty
         leftOut = album?.leftOut ?? []
         rows = album.map { $0.match.comparison(of: $0.album, leftOut: $0.leftOut) } ?? []
-        fileTable.reloadData()
-        releaseTable.reloadData()
+        // Each table makes a view for every row (ADR 0186), and an Analyze or a write
+        // refreshes about 200 times, so the tracklists reload only when what they show changes.
+        let tracklists = TracklistsShown(
+            rows: rows, leftOut: leftOut, canLeaveOut: model.canLeaveOut)
+        if tracklists != tracklistsShown {
+            tracklistsShown = tracklists
+            fileTable.reloadData()
+            releaseTable.reloadData()
+        }
         let reviewing = album != nil && !model.isBusy && model.rematchingID == nil
         let others = album?.match.candidates.count ?? 0
         otherReleasesButton.title = Self.otherReleasesTitle(others)

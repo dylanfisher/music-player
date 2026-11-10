@@ -191,6 +191,32 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     #expect(scrollerX > tracks2.convert(tracks2.bounds, to: scroll).maxX - 20, "at the release's")
 }
 
+/// A refresh that leaves the selected album's tracklists as they were doesn't reload them, as
+/// the refreshes of an Analyze or a write would; a change of their rows does.
+@MainActor
+@Test func theTracklistsReloadOnlyWhenTheirRowsChange() async throws {
+    let tagger = await analyzed()
+    tagger.tab = .likely
+    tagger.selectedID = 2
+    let controller = TaggerWindow(model: tagger)
+    let window = try #require(controller.window)
+    defer { window.close() }
+    let cell = { () -> NSView? in
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        return controller.releaseTable.view(atColumn: 1, row: 0, makeIfNecessary: false)
+    }
+    let first = try #require(cell())
+    controller.refresh()
+    #expect(cell() === first, "nothing changed, nothing reloaded")
+
+    controller.setIncluded(false, row: 0)
+    try await eventually { controller.leftOut == [200] && tagger.rematchingID == nil }
+    #expect(cell() !== first, "the rows changed")
+    #expect(
+        controller.text(controller.releaseTable, .state, controller.rows.count - 1) == "Left out")
+}
+
 /// `view` and every view under it.
 @MainActor
 private func allViews(_ view: NSView) -> [NSView] {
