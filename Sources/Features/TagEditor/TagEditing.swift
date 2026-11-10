@@ -587,6 +587,8 @@ public final class TagEditing {
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated {
                             self.organizing(progress)
+                            // A layout with nothing to move still reports once, 0 of 0, which
+                            // would flash "Organizing files: 0 of 0 moved" in the tagger.
                             if progress.total > 0 { self.organizeSteps[number]?(.moving(progress)) }
                         }
                     }
