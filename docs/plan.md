@@ -55,7 +55,8 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
    parallel, each on its own branch and worktree, then 66. All five are done.
 5. Phase 67, the owner's matcher feedback of 2026-11-09, is done.
 6. Phases 68 to 72, the owner's feedback of 2026-11-09 (third list): 68, 69, 70 and 71 in
-   parallel, each on its own branch and worktree, then 72, which builds on 69's tagger.
+   parallel, each on its own branch and worktree, then 72, which builds on 69's tagger. All five
+   are done.
 7. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
@@ -659,95 +660,6 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
-
-### 72. Combine Albums for Tagging
-
-Asked by the owner on 2026-11-09, as proposed: "Combine Albums for Tagging", a command-palette
-command (and a track menu item) on the albums selected in the library.
-
-- [x] **Joined for tagging:** it opens the Discogs Tagger with the selected albums joined into
-      one album, their files in disc and track order, and analyzes it, so the matcher compares
-      every file with the catalog, and a release of the whole count ranks first.
-- [x] **Albums with different titles or artists** are allowed, and the tagger names every
-      source album on the joined one, so combining "1983" with "1983 [Expanded Reissue]" by
-      mistake is easy to see before writing.
-- [x] **Review and write** as any tagger write: nothing writes until the owner confirms; two
-      files that would be the same track show as a conflict in the review, as now; Other
-      Releases… and Look Up… work; undo works. After the write every file carries one release
-      id, so Separate Releases shows them as one album.
-- [x] Works with the Discogs API alone, only slower.
-
-Implementation plan, phase 72 (ADR 0179):
-
-What exists, found by search (map.md recipes): the tagger's Analyze scopes to the library's
-selection (`TaggerModel.Scope.selection`) and matches each of its albums, a `DiscogsAlbum` from
-the index (`discogsAlbums`, one per album id, tracks in disc and track order). The matcher
-compares the files in that order with each candidate's tracklist and ranks a release of the
-album's count first; a file two files would share is left on no track, which the review shows
-as Missing and keeps the album out of Exact. Reviews are saved on the files and read back by
-album id. `DiscogsTagger.show()` scopes to the selection and analyzes with the catalog only.
-Separate Releases makes an album of title, artist and release id (ADR 0143), so the files
-become one album only when those three agree; the Minimal mapping doesn't write the title.
-
-- 72.1 The mapping (`Core/Settings`): `DiscogsMapping.combining(titles:artists:)`, the mapping
-  with the album title, or the album artist, replacing its tag, whatever its mode and the
-  Keep existing values choice say, and writing the tag the index groups by. Tests in
-  `DiscogsMappingTests`.
-- 72.2 The model (`Features/DiscogsTagger`): a `Scope.combined`, "Selected Albums as One";
-  Analyze in it joins the selection's albums (`CombinedAlbum.swift`): albums by their first
-  disc, then title, each in its own disc and track order; the first's title, artist and
-  details for the search; an id of its own (the first source's, negated), so a session's
-  left-out files and counts don't mix with a source's. `Album.sources` names them; it takes
-  a review only when every source has the same one. Fewer than two albums is an alert. Its
-  changes come from `combining`, for the title when the sources' titles differ and the
-  album artist when their artists do. Tests in `TaggerCombineTests`: the join and its order,
-  the match seeing one album, the review, the forced title, fewer than two.
-- 72.3 Naming the sources: the album list's cell ("Persuader – 1983 + Persuader – 1983
-  [Expanded Reissue]"), a line over the tracklists ("Combined from 2 albums: … (10 files) ·
-  … (14 files)"), the album list's tooltip, and Apply's confirmation. Window and
-  confirmation tests.
-- 72.4 The command (`Core/Commands`, App): `track.combineForTagging`, "Combine Albums for
-  Tagging…", in the track menu after Get Discogs Artwork… and in the File menu beside it,
-  enabled with tracks selected; it calls `DiscogsTagger.combineSelection()`, which shows the
-  window in the combined scope and analyzes at once from whichever source is chosen, the
-  API too, since the command is the click. Busy, it says so. Tests: the menus, and the
-  tagger opened by it with each source.
-- 72.5 ADR 0179, see-also lines in 0133, 0139 and 0143.
-
-Result, phase 72: shipped all four items (ADR 0179; see-also lines in 0133, 0139 and 0143;
-AGENTS.md unchanged, since the write is a confirmed `TagWriter` edit through the tag editor's
-queue). Combine Albums for Tagging… is in the palette, the track menu after Get Discogs
-Artwork… and the File menu beside it. It opens the tagger in a new scope, Selected Albums as
-One, and analyzes at once from the chosen source, the API too; a busy tagger, no selection, a
-missing catalog or a single album is an alert. The albums go by first disc, then title, each in
-its own order, so an album and its reissue aren't interleaved; the search takes the first's
-title and artist; the combination's id is the first's negated, so left-out files and counts
-don't mix with a source's. It takes a review only when every source has the same one. Where
-the sources' titles differ, the files get the release's album title, and where their artists
-differ, its album artist, whatever the mapping or Keep existing values say
-(`DiscogsMapping.combining`), since Separate Releases makes an album of title, artist and
-release id together and the Minimal mapping writes no title. The album list names every source
-("Persuader – 1983 + Persuader – 1983 [Expanded Reissue]"), a line over the tracklists and the
-row's tooltip list each with its file count, and Apply's question says which albums the files
-come from. Two files on one track, Other Releases…, Look Up…, the write and Undo Tag Edit are
-the existing paths, on the combined album as on any. Tests: the mapping's override
-(`DiscogsMappingTests`), the order, id, details and names (`TaggerCombineTests`), the match
-seeing one album, the review rule, one album refused, the forced title and the question, the
-window's names, the command's tagger with each source and its three alerts, the track menu,
-and a real-catalog match of a split set ranking the six-track release over the three-track
-one (`AlbumMatcherTests`). Check steps `format typecheck arch dupes surface links` passed and
-`./scripts/test --changed main` passed but for `WindowGlassTests.theGlassHeadersAreFrosted`,
-which fails on `main` too while the screen is locked. Not measured: no bench row covers
-these paths, and the matcher's work for one combined album is that of one album of its count.
-Deferred: nothing. Not run in the app: an owner check on a real split album. The gate's
-review found the scope reusable from the pop-up on a later selection, the search artist taken
-from the first album only, and left-out files carried into another combination with the same
-first album; all fixed with tests, and a real combined write and its undo tested too.
-
-**Owner checks:** select "1983" and "1983 [Expanded Reissue]" and run Combine Albums for
-Tagging…: the joined album in the list, the line naming both, a conflict for the repeated
-tracks, then a write and Undo Tag Edit; and a two-CD set split by disc, written with Separate
-Releases on, showing as one album after the rescan.
 
 ### 10. Web remote
 
