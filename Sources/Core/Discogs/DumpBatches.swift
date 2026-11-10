@@ -128,9 +128,15 @@ struct DumpBatches {
 
     /// Drops the buffer's first `count` bytes, counting the lines they end.
     private mutating func consume(_ count: Int) {
-        line += buffer.withUnsafeBufferPointer { bytes in
+        // memchr rather than a loop over each byte: this runs over every byte of the dump.
+        line += buffer.withUnsafeBytes { bytes in
+            guard count > 0, var cursor = bytes.baseAddress else { return 0 }
+            let end = cursor + count
             var lines = 0
-            for index in 0..<count where bytes[index] == UInt8(ascii: "\n") { lines += 1 }
+            while let newline = memchr(cursor, Int32(UInt8(ascii: "\n")), end - cursor) {
+                lines += 1
+                cursor = UnsafeRawPointer(newline) + 1
+            }
             return lines
         }
         buffer.removeFirst(count)
