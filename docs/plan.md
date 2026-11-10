@@ -719,6 +719,36 @@ and the stale key stays in the file until something else saves state.
 - [ ] Tests: closing the banner hides it and leaves a `state.json` that reads back with no
       discard reason; a failed write still shows the error.
 
+Implementation plan, phase 75 (ADR 0187):
+
+What exists, found by search (map.md recipes): `StateStore` (`Core/Settings`) parses
+`state.json` key by key (ADR 0166) and keeps `discardReason`, a `SettingsError` printed whole
+("…/state.json: \"discogsTagger.sheets\": …"), set once at launch. The app passes it to
+`ConfigBanner.show(stateDiscarded:)`, which prefixes "the saved window layout was reset: ";
+the close button shows only for config problems that don't block. `LayoutSaver` (App) writes
+state changes and reports a failed write as `failure`, which the banner shows as "couldn't
+save the window layout: …". Each setting already has its name, `Setting.title` ("Discogs
+Tagger Sheets"), declared beside its key in `AppState`.
+
+- 75.1 Lines per setting (`Core/Settings`): `StateStore.discarded`, one line for each key
+  dropped, named by its title: "the saved Discogs Tagger Sheets setting was reset: …"; a key
+  this build lacks, by its key; a file that isn't a JSON object, as "the saved window layout
+  was reset: …". `discardReason` stays as those lines joined, for the fuzzer, the failure
+  drill and the existing tests. Tests in `StateStoreTests`.
+- 75.2 Forgetting the discard (`Core/Settings`): `StateStore.forgetDiscarded()` writes the
+  file from the values in effect, which drops the stale keys, then clears `discarded`; a
+  failed write throws and keeps it. Tests: the file reads back with no discard reason; an
+  unwritable folder throws and the lines stay.
+- 75.3 The saver (App): `LayoutSaver.forgetDiscarded()` queues that write as a pending one
+  and flushes, so a failure is reported as `failure`, the usual banner line, and retried with
+  the next save, as any failed layout write. Tests in `LayoutSaverTests`.
+- 75.4 The banner (`Features/SettingsWindow`): `show(stateDiscarded:)` takes the lines; the
+  close button also shows while there are any, and closing calls `closeStateDiscard`, besides
+  hiding the config problems it can. The app wires it to the saver and redraws the banner.
+  Tests in `ConfigBannerTests`: the button shows for a discard alone and with a blocking
+  problem, which stays; closing calls the closure; a failed write's line shows.
+- 75.5 ADR 0187, a see-also line in 0166.
+
 ### 76. A layout editor for the status bar's totals
 
 Asked by the owner on 2026-11-10: the status bar's totals, "1,204 tracks, 5.1 GiB, 3 days 2
