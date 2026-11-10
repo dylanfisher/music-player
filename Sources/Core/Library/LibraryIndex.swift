@@ -670,6 +670,13 @@ public final class LibraryIndex {
         albumIDs = nil
     }
 
+    /// How many pages of write-ahead log a commit on this connection leaves before it folds
+    /// them into the database file. SQLite's default, 1,000 pages (4 MB), made a first scan
+    /// copy the same hot index pages into the file again every few batches.
+    func setAutoCheckpointPages(_ pages: Int) throws {
+        try database.execute("PRAGMA wal_autocheckpoint = \(pages)")
+    }
+
     /// Folds the write-ahead log into the database file, so its size is the library's size.
     package func checkpoint() throws {
         try database.execute("PRAGMA wal_checkpoint(TRUNCATE)")

@@ -100,6 +100,8 @@ public struct LibraryScanner: Sendable {
         }
 
         let index = try LibraryIndex(at: databaseURL)
+        // About 64 MB of log, which the checkpoint at the end of a finished scan truncates.
+        try index.setAutoCheckpointPages(16384)
         let started = Date()
         if subtrees.isEmpty { try index.setFinishedWholeScan(of: root, startedAt: nil) }
         let filter = FolderFilter(include: folder.include, exclude: folder.exclude)
