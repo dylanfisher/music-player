@@ -313,9 +313,9 @@ package struct ImportRun {
 
     /// Gives the old files still there to `trash`, a set-aside one from its hidden name, which
     /// moves each to its volume's Trash or, on a share with no Trash, deletes it (ADR 0199). A
-    /// file counts as gone when it's no longer at its path (ADR 0125). Each one not set aside must still be a track in the index
-    /// carrying the release id it's held to; a set-aside one was checked before it was. Nil
-    /// when they're all gone.
+    /// file counts as gone when it's no longer at its path (ADR 0125). Each one not set aside
+    /// must still be a track in the index carrying the release id it's held to; a set-aside one
+    /// was checked before it was. Nil when they're all gone.
     private func delete(_ old: OldFiles, _ job: ApprovedImport) async -> String? {
         let atPaths = old.steps.filter { old.asides[$0.path] == nil }.map(\.path)
             .filter { pathExists(move.shareRoot + "/" + $0) }
