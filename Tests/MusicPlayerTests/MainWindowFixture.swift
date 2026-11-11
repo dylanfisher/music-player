@@ -93,6 +93,7 @@ struct MainWindowFixture {
         nowPlaying = NowPlayingBar(
             model: NowPlayingModel(lookup: lookup),
             artwork: ArtworkLoader(maxPixelSize: 8, capacity: 1))
+        connectRatings(browser, nowPlaying) {}
         let dispatcher = CommandDispatcher(
             bindings: try KeyBindings(
                 AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App")))
