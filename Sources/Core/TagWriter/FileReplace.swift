@@ -194,7 +194,6 @@ func writeTemp(
     }
 
     var hasher = payload.map(FileHasher.init(payload:))
-    var hashed = false
     var cloned = false
     if inPlace {
         faults.called(.clone(bytes: identity.size))
@@ -231,6 +230,7 @@ func writeTemp(
                 if case .original(let range) = segment { range } else { nil }
             }
             let inOrder = zip(kept, kept.dropFirst()).allSatisfy { $0.upperBound <= $1.lowerBound }
+            // Hashed from the blocks the copy reads; it goes on from where they end, below.
             var copying = inOrder ? hasher : nil
             for (offset, segment) in placed {
                 switch segment {
@@ -244,15 +244,10 @@ func writeTemp(
                         hashing: &copying)
                 }
             }
-            if copying != nil {
-                try copying?.hash(source, upTo: identity.size, original, faults: faults)
-                hasher = copying
-                hashed = true
-            }
+            if inOrder { hasher = copying }
         }
-        if !hashed {
-            try hasher?.hash(source, upTo: identity.size, original, faults: faults)
-        }
+        // The bytes after the last kept range, or the whole file when the copy hashed none.
+        try hasher?.hash(source, upTo: identity.size, original, faults: faults)
         // The attributes go first, so the flush covers them too before the rename.
         try copyAttributes(from: source, info, to: destination, original, faults)
         faults.called(.flushDrive)
