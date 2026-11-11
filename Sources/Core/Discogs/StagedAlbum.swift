@@ -34,12 +34,15 @@ extension StagedJob {
         return sizes
     }
 
-    /// `job` as AutoTag takes it; nil until the service has staged it in a folder.
+    /// `job` as AutoTag takes it; nil until the service has staged it in a folder, and when it
+    /// names the folder or a file outside the staging folder.
     package init?(_ job: DownloadJob) {
-        guard let folder = job.stagedFolder, let format = job.candidate?.format else { return nil }
+        guard let folder = job.stagedFolder, let files = job.stagedFiles,
+            let format = job.candidate?.format
+        else { return nil }
         self.init(
             releaseID: job.release.releaseID, artist: job.release.artist, folder: folder,
-            format: format, files: job.files)
+            format: format, files: files)
     }
 }
 
@@ -244,18 +247,10 @@ private func trackNumberPrefix(_ stem: String) -> (length: Int, key: [Int])? {
     return (end, [side, number(at + 1, count)])
 }
 
-/// Whether `path` is relative and stays inside its folder: not empty, no leading slash, and no
-/// empty, `.` or `..` part.
-private func isRelativeInside(_ path: String) -> Bool {
-    !path.isEmpty
-        && path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy {
-            !$0.isEmpty && $0 != "." && $0 != ".."
-        }
-}
-
 /// A staged job whose files the staged tagger writes more than once: after each write the
 /// files are measured again, and `job` holds them to those sizes, since a tag write can grow a
-/// file and the service's sizes were taken before it.
+/// file and the service's sizes were taken before it. `current` is read and written only
+/// under `lock`, and the rest is set once.
 package final class StagedSizes: @unchecked Sendable {
     private let lock = NSLock()
     private var current: StagedJob

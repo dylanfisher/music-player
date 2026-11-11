@@ -298,6 +298,27 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
         "the service's staged folder \(path.debugDescription) isn't one folder name in the"
             + " staging folder"
     }
+
+    /// `files` once the job is staged, when every name is a path inside `stagedFolder`, as the
+    /// contract promises; nil before the job is staged, and when the service names its folder
+    /// or a file outside it. Whatever reads or moves staged files takes them from here, so a
+    /// name is checked in this one place.
+    package var stagedFiles: [File]? {
+        guard stagedPath != nil, stagedProblem == nil else { return nil }
+        return files
+    }
+
+    /// Why a staged job's files can't be read where the service says: its folder isn't one
+    /// folder name, or a file's name isn't a relative path inside it. Nil when they can, and
+    /// before the job is staged.
+    package var stagedProblem: String? {
+        guard let path = stagedPath else { return nil }
+        guard stagedFolder != nil else { return Self.notOneFolder(path) }
+        return files.first { !isRelativeInside($0.name) }.map {
+            "the service's staged file \($0.name.debugDescription) isn't a path inside the"
+                + " job's folder"
+        }
+    }
     package var tagging: Tagging
     package var lease: Hold?
     package var review: Hold?
@@ -362,4 +383,14 @@ package struct JobReply: Decodable {
         let container = try strictContainer(decoder, CodingKeys.self)
         job = try container.decode(DownloadJob.self, forKey: .job)
     }
+}
+
+/// Whether `path` is relative and stays inside its folder: not empty, no leading slash, and no
+/// empty, `.` or `..` part. Every path the service names, and every path the import's ledger
+/// records, is held to it.
+package func isRelativeInside(_ path: String) -> Bool {
+    !path.isEmpty
+        && path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy {
+            !$0.isEmpty && $0 != "." && $0 != ".."
+        }
 }

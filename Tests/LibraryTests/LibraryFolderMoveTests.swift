@@ -213,6 +213,23 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     #expect(!exists(folders.destinations[0]))
 }
 
+/// A name with `..` parts that reaches out of the staging folder is refused with nothing
+/// moved, though a file is there to move (ADR 0025, row 67).
+@Test func aStagedNameThatClimbsOutOfStagingIsRefused() throws {
+    let folders = try MoveFolders()
+    let outside = folders.share + "/elsewhere.flac"
+    try FileManager.default.copyItem(atPath: folders.staging + "/job-7/02.flac", toPath: outside)
+    var files = try folders.files()
+    files[1].name = "../../elsewhere.flac"
+    #expect(throws: MoveRefusal.outsideStaging(folders.staging + "/job-7/../../elsewhere.flac")) {
+        try folders.moveIn(files: files)
+    }
+    #expect(exists(outside))
+    #expect(try folders.staged() == ["01.flac", "02.flac"])
+    #expect(!exists(folders.destinations[0]))
+    #expect(try folders.index.importSteps(job: 7).isEmpty)
+}
+
 @Test func aDestinationLinkedOutTheLibraryIsRefused() throws {
     let folders = try MoveFolders()
     let outside = folders.share + "/elsewhere"

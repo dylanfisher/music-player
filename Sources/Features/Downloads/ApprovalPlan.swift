@@ -97,7 +97,7 @@ struct ApprovalPlan: Sendable {
         var found: [String] = []
         let movesProblem = keepingBoth ? keepBoth?.problem : movesProblem
         // A resume goes on whatever the moves found, but not from a folder it can't name.
-        if !resuming || job.stagedFolder == nil, let movesProblem { found.append(movesProblem) }
+        if !resuming || job.stagedFiles == nil, let movesProblem { found.append(movesProblem) }
         if !keepingBoth {
             if !resuming, let upgradeProblem { found.append(upgradeProblem) }
             let unticked = unmatched.filter { !ticked.contains($0.sharePath) }
@@ -117,7 +117,7 @@ struct ApprovalPlan: Sendable {
 
     /// The import the owner approved, with the old files `ticked`, or as a new album when
     /// `keepingBoth`; nil until `blockers` is empty, or for a job the service listed with no
-    /// staged folder.
+    /// staged folder, or with a folder or a file outside the staging folder.
     func approved(ticked: Set<String>, acknowledgedOrigins: Bool, keepingBoth: Bool = false)
         -> ApprovedImport?
     {
@@ -125,11 +125,11 @@ struct ApprovalPlan: Sendable {
             blockers(
                 ticked: ticked, acknowledgedOrigins: acknowledgedOrigins, keepingBoth: keepingBoth
             ).isEmpty,
-            let folder = job.stagedFolder
+            let folder = job.stagedFolder, let files = job.stagedFiles
         else { return nil }
         return ApprovedImport(
             jobID: job.id, releaseID: job.release.releaseID, state: job.state, folder: folder,
-            files: job.files,
+            files: files,
             upgrade: isUpgrade && !(keepingBoth && keepBoth != nil)
                 ? ApprovedImport.Upgrade(
                     old: old,
@@ -213,20 +213,21 @@ struct ApprovalPlan: Sendable {
             job: job, resuming: resuming, moves: [], movesProblem: nil, old: [], unmatched: [],
             upgradeProblem: nil, origins: [], originsProblem: nil,
             libraryFolder: places.libraryFolder)
-        guard let folder = job.stagedFolder else {
+        guard let folder = job.stagedFolder, let files = job.stagedFiles else {
             plan.movesProblem =
-                job.stagedPath.map(DownloadJob.notOneFolder)
-                ?? "the service listed the job with no staged folder"
+                job.stagedProblem ?? "the service listed the job with no staged folder"
             return plan
         }
         var oldPaths = job.upgrade?.oldPaths
         if !resuming {
             let found = await blockingFileWork {
-                Result { () throws -> Found in try find(job, folder, places, databaseURL) }
+                Result { () throws -> Found in
+                    try find(job, folder, files, places, databaseURL)
+                }
             }
             switch found {
             case .success(let found):
-                let names = job.files.map(\.name)
+                let names = files.map(\.name)
                 switch found.moves {
                 case .success(let destinations):
                     plan.moves = zip(names, destinations).map { ($0, $1) }
@@ -260,7 +261,7 @@ struct ApprovalPlan: Sendable {
                     databaseURL: databaseURL, catalog: catalog)
                 plan.old = old
                 let mapping = UpgradeMapping(
-                    old: old, new: job.files.map { ($0.name, $0.position) })
+                    old: old, new: files.map { ($0.name, $0.position) })
                 plan.unmatched = mapping.unmatched
                 if !plan.moves.isEmpty {
                     do {
@@ -285,8 +286,8 @@ struct ApprovalPlan: Sendable {
     func checked(places: ImportPlaces) async throws -> ApprovalPlan {
         var plan = self
         plan.checking = false
-        guard let folder = job.stagedFolder else { return plan }
-        let paths = job.files.map { places.stagingRoot + "/" + folder + "/" + $0.name }
+        guard let folder = job.stagedFolder, let files = job.stagedFiles else { return plan }
+        let paths = files.map { places.stagingRoot + "/" + folder + "/" + $0.name }
         do {
             plan.origins = try await stagedOrigins(paths)
         } catch is CancellationError {
@@ -298,13 +299,14 @@ struct ApprovalPlan: Sendable {
     }
 
     /// For a job queued as a new album, the library album of its release, when there's one,
-    /// and where the files go: replacing that album's, and for Keep Both beside them.
+    /// and where its staged `files` go: replacing that album's, and for Keep Both beside them.
     private static func find(
-        _ job: DownloadJob, _ folder: String, _ places: ImportPlaces, _ databaseURL: URL
+        _ job: DownloadJob, _ folder: String, _ files: [DownloadJob.File],
+        _ places: ImportPlaces, _ databaseURL: URL
     ) throws -> Found {
         let index = try LibraryIndex(at: databaseURL)
         // The files are held to their sizes since the player's tag write.
-        let files = try index.sizedAfterTagging(job.files, job: job.id, folder: folder)
+        let files = try index.sizedAfterTagging(files, job: job.id, folder: folder)
             .map { ($0.name, $0.sizeBytes) }
         var found = Found(old: job.upgrade?.oldPaths, moves: .success([]))
         if job.upgrade == nil {

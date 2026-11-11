@@ -1,3 +1,5 @@
+import Recommender
+
 /// An import step this Mac took for one of music-recommender's jobs (ADR 0147): a hint for
 /// resuming, which the files themselves confirm.
 struct ImportStep: Equatable, Sendable {
@@ -182,13 +184,4 @@ extension LibraryIndex {
     package func forgetImportJob(_ job: Int) throws {
         try statement("DELETE FROM \(importStepsTable) WHERE job_id = ?").run(job)
     }
-}
-
-/// Whether `path` is relative and stays inside its folder: not empty, no leading slash, and no
-/// empty, `.` or `..` part.
-private func isRelativeInside(_ path: String) -> Bool {
-    !path.isEmpty
-        && path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy {
-            !$0.isEmpty && $0 != "." && $0 != ".."
-        }
 }

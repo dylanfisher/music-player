@@ -102,6 +102,47 @@ private let lossy = StagedOrigin(
     #expect(StagedJob(tagged) == nil, "nor tagged")
 }
 
+/// A staged file the service names outside the job's folder, by `..` or a leading `/`, is
+/// never read, moved or approved (ADR 0025, row 67).
+@Test(arguments: ["../x.flac", "/etc/x"])
+func aStagedFileNamedOutsideItsFolderIsNeverApproved(_ name: String) async throws {
+    for resuming in [false, true] {
+        let outside = job(5, resuming ? .importing : .staged) {
+            $0.tagging.status = .clean
+            $0.files[1].name = name
+        }
+        let built = await ApprovalPlan.build(
+            outside,
+            places: ImportPlaces(stagingRoot: "/s", libraryFolder: "/l", shareRoot: "/"),
+            databaseURL: URL(fileURLWithPath: "/nowhere.sqlite", isDirectory: false),
+            catalog: nil)
+        #expect(built.movesProblem == outside.stagedProblem)
+        #expect(built.movesProblem?.contains(name.debugDescription) == true)
+        #expect(built.moves.isEmpty)
+        #expect(!built.blockers(ticked: [], acknowledgedOrigins: true).isEmpty)
+        #expect(built.approved(ticked: [], acknowledgedOrigins: true) == nil)
+    }
+    #expect(StagedJob(job(5) { $0.files[0].name = name }) == nil, "nor tagged")
+}
+
+/// The lossy-origin check reads no staged file when one is named outside the job's folder,
+/// though a file is there to read.
+@Test func theCheckReadsNothingNamedOutsideTheStagingFolder() async throws {
+    let (places, _, sizes) = try stagedShare()
+    let outside = (places.stagingRoot as NSString).deletingLastPathComponent + "/x.flac"
+    try FileManager.default.copyItem(
+        atPath: places.stagingRoot + "/job-5/01 First Song.flac", toPath: outside)
+    var staged = stagedJob(sizes)
+    staged.files[0].name = "../../x.flac"
+    let plan = ApprovalPlan(
+        job: staged, resuming: false, moves: [], movesProblem: nil, old: [], unmatched: [],
+        upgradeProblem: nil, origins: [], originsProblem: nil, checking: true)
+    let checked = try await plan.checked(places: places)
+    #expect(!checked.checking)
+    #expect(checked.origins.isEmpty)
+    #expect(checked.originsProblem == nil)
+}
+
 @Test func anUpgradeWaitsForEachUnmatchedOldFileToBeTicked() throws {
     let plan = plan(upgrade: true)
     #expect(plan.unmatched.map(\.sharePath) == ["library/03.mp3"])
