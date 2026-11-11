@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Runs scripts/trycomment.swift on two fixture trees under .build/trycomment-test and checks what
+# it reports: one tree it must pass, and one with each kind of uncommented try? and bad
+# allowlist entry, which it must fail at each.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+base=.build/trycomment-test
+rm -rf "$base"
+problems=0
+
+# write <path> — the file's text comes from standard input.
+write() {
+  mkdir -p "$(dirname "$1")"
+  cat > "$1"
+}
+
+# expect <tree> <exit status> <line>... — runs the script on <tree>, then checks the status and
+# that each <line> is a whole line of its output.
+expect() {
+  local tree="$1" status="$2"; shift 2
+  local output actual
+  output=$(swift scripts/trycomment.swift --root "$tree" 2>&1)
+  actual=$?
+  if [ "$actual" != "$status" ]; then
+    printf 'trycomment-test: %s exited %s, expected %s:\n%s\n' "$tree" "$actual" "$status" "$output" >&2
+    problems=$((problems + 1))
+  fi
+  for line in "$@"; do
+    if ! printf '%s\n' "$output" | grep -qxF -- "$line"; then
+      printf 'trycomment-test: %s is missing the line\n  %s\nin:\n%s\n' "$tree" "$line" "$output" >&2
+      problems=$((problems + 1))
+    fi
+  done
+}
+
+# Passes: a comment above, on the line, a doc comment, the run above a multi-line guard or an
+# assignment, a try? in a string or a comment, `Entry?`, and allowlisted files at or under
+# their counts.
+clean="$base/clean"
+write "$clean/Sources/Core/A/One.swift" <<'EOF'
+// A missing file is the first run's case.
+let a = try? remove()
+let b = try? remove()  // Nothing to remove the first time.
+/// A doc comment says why as well.
+let c = try? remove()
+func d() {
+    // The run above a guard covers each of its conditions.
+    guard let x = y,
+        let z = try? parse(x)
+    else { return }
+    // And above an assignment that goes on to the next line.
+    let e =
+        (try? parse(z))
+        ?? 0
+}
+let f = "try? in a string"
+// try? in a comment
+let g: Entry? = nil
+EOF
+write "$clean/Sources/Core/B/Listed.swift" <<'EOF'
+let a = try? remove()
+let b = try? remove()
+EOF
+write "$clean/Sources/Core/B/Shrunk.swift" <<'EOF'
+let a = try? remove()
+EOF
+write "$clean/scripts/try-allow.txt" <<'EOF'
+# A comment line.
+Sources/Core/B/Listed.swift | 2 | reviewed
+Sources/Core/B/Shrunk.swift | 3 | two said why since
+EOF
+expect "$clean" 0 \
+  "scripts/try-allow.txt:3: Sources/Core/B/Shrunk.swift has 1 uncommented try?: lower its count to 1" \
+  "8 try?, each commented or allowlisted (2 entries)"
+
+# Fails: no comment, a blank line between, a comment above another statement, an empty comment,
+# a file over its count, an entry for a file with none, a repeat and malformed entries.
+planted="$base/planted"
+write "$planted/Sources/Core/A/One.swift" <<'EOF'
+let a = try? remove()
+// A blank line ends the run.
+
+let b = try? remove()
+// About the line below only.
+let c = 1
+let d = try? remove()
+let e = try? remove()  //
+EOF
+write "$planted/Sources/Core/B/Grown.swift" <<'EOF'
+let a = try? remove()
+let b = try? remove()
+EOF
+write "$planted/Sources/Core/B/Clean.swift" <<'EOF'
+let a = try? remove()  // Said why.
+EOF
+write "$planted/scripts/try-allow.txt" <<'EOF'
+Sources/Core/B/Grown.swift | 1 | grew
+Sources/Core/B/Clean.swift | 1 | said why since
+Sources/Core/B/Grown.swift | 2 | again
+Sources/Core/B/Grown.swift | two | not a count
+Sources/Core/B/Grown.swift | 0 | not a count
+Sources/Core/B/Grown.swift | 2 |
+EOF
+expect "$planted" 1 \
+  "Sources/Core/A/One.swift:1: try? with no comment saying why its failure doesn't matter" \
+  "Sources/Core/A/One.swift:4: try? with no comment saying why its failure doesn't matter" \
+  "Sources/Core/A/One.swift:7: try? with no comment saying why its failure doesn't matter" \
+  "Sources/Core/A/One.swift:8: try? with no comment saying why its failure doesn't matter" \
+  "scripts/try-allow.txt:1: Sources/Core/B/Grown.swift has 2 uncommented try?, over its 1: say why at each new one; they're at lines 1, 2" \
+  "scripts/try-allow.txt:2: Sources/Core/B/Clean.swift has no uncommented try?, delete the entry" \
+  "scripts/try-allow.txt:3: repeats line 1" \
+  'scripts/try-allow.txt:4: expected `<file> | <count> | <reason>`' \
+  'scripts/try-allow.txt:5: expected `<file> | <count> | <reason>`' \
+  'scripts/try-allow.txt:6: expected `<file> | <count> | <reason>`'
+
+# A flag without its value fails loudly instead of checking the current folder.
+output=$(swift scripts/trycomment.swift --root 2>&1)
+status=$?
+if [ "$status" != 2 ] || [ "$output" != "trycomment: --root needs a directory" ]; then
+  printf 'trycomment-test: --root without a value exited %s:\n%s\n' "$status" "$output" >&2
+  problems=$((problems + 1))
+fi
+
+if [ "$problems" -gt 0 ]; then
+  echo "trycomment-test: $problems problems" >&2
+  exit 1
+fi
+echo "trycomment passes the clean tree and fails each uncommented try? and bad entry"

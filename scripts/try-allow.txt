@@ -1,0 +1,9 @@
+# Files with a `try?` that has no comment saying why its failure doesn't matter, each with how
+# many, `<file> | <count> | <reason>` (scripts/trycomment.swift, ADR 0201). A count only goes
+# down: say why at a site, or read its error, then lower the count, and delete the entry at none.
+Sources/Core/Library/SmartRules.swift | 1 | the dupes lane's strict decoder, phase 84 (84.14)
+Sources/Core/Settings/BarColumn.swift | 1 | the dupes lane's strict decoder, phase 84 (84.14)
+Sources/Core/Settings/DiscogsTarget.swift | 1 | the dupes lane's strict decoder, phase 84 (84.14)
+Sources/Core/Settings/PerTagFormat.swift | 1 | the dupes lane's strict decoder, phase 84 (84.14)
+Sources/Core/Snapshot/GzipFile.swift | 2 | the security lane checks the close, phase 84 (84.23)
+Sources/Features/Downloads/DownloadsCoordinator.swift | 1 | the security lane reports it, phase 84 (84.24)

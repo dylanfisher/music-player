@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 
 # The scripts the format step lints beside Package.swift, Sources and Tests.
 format_scripts=(scripts/affected.swift scripts/arch.swift scripts/dupes.swift scripts/surface.swift
-  scripts/size.swift scripts/icon-mask.swift scripts/smb-copy-probe.swift)
+  scripts/size.swift scripts/trycomment.swift scripts/icon-mask.swift scripts/smb-copy-probe.swift)
 # The files the residue step searches for scaffolding text.
 residue_files=(README.md CLAUDE.md AGENTS.md scripts/setup scripts/dev scripts/test docs/map.md
   docs/principles.md docs/scaffold.md .github/workflows/check.yml .claude/commands/scaffold.md)
@@ -40,12 +40,15 @@ steps() {
       .swift-format) echo format ;;
       Sources/*) printf '%s\n' typecheck arch dupes surface ;;
       Tests/*) echo typecheck ;;
-      scripts/arch.swift | scripts/dupes.swift | scripts/surface.swift | scripts/size.swift)
+      scripts/arch.swift | scripts/dupes.swift | scripts/surface.swift | scripts/size.swift \
+        | scripts/trycomment.swift)
         s=${p#scripts/}
         printf '%s\n' "${s%.swift}" "${s%.swift}-test"
         ;;
       scripts/dupes-allow.txt | scripts/surface-allow.txt | scripts/size-allow.txt) s=${p#scripts/} && echo "${s%-allow.txt}" ;;
-      scripts/arch-test | scripts/dupes-test | scripts/surface-test | scripts/size-test | scripts/affected-test | scripts/check-test | scripts/post-merge-test)
+      scripts/try-allow.txt) echo trycomment ;;
+      scripts/arch-test | scripts/dupes-test | scripts/surface-test | scripts/size-test | scripts/trycomment-test \
+        | scripts/affected-test | scripts/check-test | scripts/post-merge-test)
         echo "${p#scripts/}"
         ;;
       scripts/affected.swift) echo affected-test ;;
@@ -53,7 +56,7 @@ steps() {
       scripts/check-signature*) echo signature-test ;;
     esac
     case "$p" in *.md) echo links ;; Sources/*.swift | Tests/*.swift) echo format ;; esac
-    case "$p" in Sources/*.swift) echo size ;; esac
+    case "$p" in Sources/*.swift) printf '%s\n' size trycomment ;; esac
     for s in "${format_scripts[@]}"; do if [ "$p" = "$s" ]; then echo format; fi; done
     for s in "${residue_files[@]}"; do if [ "$p" = "$s" ]; then echo residue; fi; done
   done | LC_ALL=C sort -u
@@ -188,6 +191,10 @@ run surface-test ./scripts/surface-test
 # (ADR 0201); the test plants each finding.
 run size      swift scripts/size.swift
 run size-test ./scripts/size-test
+# Each try? says why its failure doesn't matter, on its line or just above (principle 5, ADR
+# 0201); the test plants each finding.
+run trycomment swift scripts/trycomment.swift
+run trycomment-test ./scripts/trycomment-test
 # The release signature check refuses what it should (ADR 0025), on stand-in bundles.
 run signature-test ./scripts/check-signature-test
 # The test step's own picker, on paths whose test targets are known.
