@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Runs scripts/size.swift on two fixture trees under .build/size-test and checks what it reports:
+# one tree it must pass, and one with a long file outside the allowlist and each kind of bad
+# entry, which it must fail at each.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+base=.build/size-test
+rm -rf "$base"
+problems=0
+
+# lines <path> <count> — writes a Swift file of <count> lines.
+lines() {
+  mkdir -p "$(dirname "$1")"
+  awk -v n="$2" 'BEGIN { for (i = 1; i <= n; i++) print "let a" i " = " i }' > "$1"
+}
+
+# expect <tree> <exit status> <line>... — runs the script on <tree>, then checks the status and
+# that each <line> is a whole line of its output.
+expect() {
+  local tree="$1" status="$2"; shift 2
+  local output actual
+  output=$(swift scripts/size.swift --root "$tree" 2>&1)
+  actual=$?
+  if [ "$actual" != "$status" ]; then
+    printf 'size-test: %s exited %s, expected %s:\n%s\n' "$tree" "$actual" "$status" "$output" >&2
+    problems=$((problems + 1))
+  fi
+  for line in "$@"; do
+    if ! printf '%s\n' "$output" | grep -qxF -- "$line"; then
+      printf 'size-test: %s is missing the line\n  %s\nin:\n%s\n' "$tree" "$line" "$output" >&2
+      problems=$((problems + 1))
+    fi
+  done
+}
+
+# Passes: a file at the limit, one listed at its ceiling, and one under its ceiling, which only
+# gets a note.
+clean="$base/clean"
+lines "$clean/Sources/Core/A/AtLimit.swift" 1000
+lines "$clean/Sources/Core/A/Long.swift" 1200
+lines "$clean/Sources/Core/A/Shrunk.swift" 1100
+mkdir -p "$clean/scripts"
+cat > "$clean/scripts/size-allow.txt" <<'EOF'
+# A comment line.
+Sources/Core/A/Long.swift 1200 | listed
+Sources/Core/A/Shrunk.swift 1150 | cut since
+EOF
+expect "$clean" 0 \
+  "scripts/size-allow.txt:3: Sources/Core/A/Shrunk.swift is 1100 lines: lower its ceiling to 1100" \
+  "3 files, none over 1000 lines outside the allowlist (2 entries)"
+
+# Fails: a long file not listed, one over its ceiling, an entry for a file at the limit, one for
+# a file that's gone, a repeat and malformed entries.
+planted="$base/planted"
+lines "$planted/Sources/Core/A/Unlisted.swift" 1001
+lines "$planted/Sources/Core/A/Grown.swift" 1300
+lines "$planted/Sources/Core/A/Short.swift" 1000
+mkdir -p "$planted/scripts"
+cat > "$planted/scripts/size-allow.txt" <<'EOF'
+Sources/Core/A/Grown.swift 1250 | grew
+Sources/Core/A/Short.swift 1100 | was split
+Sources/Core/A/Gone.swift 1100 | was deleted
+Sources/Core/A/Grown.swift 1300 | again
+Sources/Core/A/Grown.swift | no ceiling
+Sources/Core/A/Grown.swift 1300 |
+EOF
+expect "$planted" 1 \
+  "Sources/Core/A/Unlisted.swift: 1001 lines, over 1000: split it along a seam it has" \
+  "scripts/size-allow.txt:1: Sources/Core/A/Grown.swift is 1300 lines, over its ceiling of 1250: split it or cut it" \
+  "scripts/size-allow.txt:2: Sources/Core/A/Short.swift is 1000 lines, at or under 1000: delete the entry" \
+  "scripts/size-allow.txt:3: Sources/Core/A/Gone.swift doesn't exist, delete the entry" \
+  "scripts/size-allow.txt:4: repeats line 1" \
+  'scripts/size-allow.txt:5: expected `<path> <ceiling> | <reason>`' \
+  'scripts/size-allow.txt:6: expected `<path> <ceiling> | <reason>`'
+
+# A flag without its value fails loudly instead of checking the current folder.
+output=$(swift scripts/size.swift --root 2>&1)
+status=$?
+if [ "$status" != 2 ] || [ "$output" != "size: --root needs a directory" ]; then
+  printf 'size-test: --root without a value exited %s:\n%s\n' "$status" "$output" >&2
+  problems=$((problems + 1))
+fi
+
+if [ "$problems" -gt 0 ]; then
+  echo "size-test: $problems problems" >&2
+  exit 1
+fi
+echo "size passes the clean tree and fails each long file and bad entry"
