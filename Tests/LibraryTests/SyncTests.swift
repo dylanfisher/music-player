@@ -499,6 +499,17 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try machine.index.existingPathID(machine.path("gone.flac")) == nil)
 }
 
+/// Get Info's stars rate by path; a path with no track in the index is left out.
+@Test func theReaderSetsARatingByPath() async throws {
+    let nas = try SimulatedNAS()
+    let machine = try machines(1, nas)[0]
+    try machine.scanned("x.flac")
+    let reader = try LibraryReader(databaseURL: machine.databaseURL)
+    try await reader.setRating(4, paths: [machine.path("x.flac"), machine.path("gone.flac")])
+    #expect(try machine.track("x.flac")?.rating == 4)
+    #expect(try machine.index.existingPathID(machine.path("gone.flac")) == nil)
+}
+
 @Test func aRebuildKeepsOrTakesOutTheOffsets() throws {
     let nas = try SimulatedNAS()
     var machine = try machines(1, nas)[0]
