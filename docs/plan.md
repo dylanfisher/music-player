@@ -5,7 +5,7 @@ Agents work through it phase by phase, mostly unattended, and stop only at **har
 checkpoints**, where the owner has to try something on the DAC Mac, the Denon, a phone, or the
 2015 MacBook Pro.
 
-Finished phases, 1 to 79 apart from 10 and 13, and 81 and 82, are in
+Finished phases, 1 to 79 apart from 10 and 13, and 81 to 83, are in
 [plan-archive.md](plan-archive.md), with their implementation plans, Result lines and the full
 text of each checkpoint.
 
@@ -187,6 +187,8 @@ that phase's Result line, and delete its line here.
   its Result line, files a minute on the NAS for a large art or tag change.
 - **79** ([phase](plan-archive.md#79-rating-the-menus-mark-get-infos-stars-shortcuts-and-a-message)):
   the owner check under its Result line, rating the playing track with ⌘⌥⇧4 and from Get Info.
+- **83** ([phase](plan-archive.md#83-automatic-lossless-upgrades)): the owner check under its
+  Result line, three upgrades in flight, the best first, and a fourth as one lands.
 - **Window benchmarks** ([51h's Result](plan-archive.md#51h-the-tagger-second-pass)): the 11
   window rows of `./scripts/bench` hang in an agent session; run them on this Mac.
 
@@ -204,7 +206,10 @@ Run after every phase, before ticking it off.
 
 - [ ] **Gate:** the full `./scripts/check` passes, run once by the orchestrator just before
       landing (step 3). In an agent session `theGlassHeadersAreFrosted` fails
-      on main too (the screen reads back as 0), so it alone doesn't fail the gate.
+      on main too (the screen reads back as 0), so it alone doesn't fail the gate. A test
+      target that fails on timing while other phases run (`RendererOutputTests`, a search
+      during a refresh) is rerun with `./scripts/check test`, which runs only the targets that
+      failed, before the failure is called the branch's.
 - [ ] **Code review:** `/code-review high` on the phase branch. Fix confirmed findings in
       their own commits, then rerun the review until it finds nothing new above low severity.
 - [ ] **Simplify:** `/simplify` on the same branch. Look especially for duplication across modules
@@ -380,165 +385,6 @@ Asked by the owner on 2026-11-10, with phase 79, which it follows.
       on a rating set while playing.
 - [ ] **Owner check:** add Rating to the status bar and to Custom Status 1, and rate the
       playing track with a shortcut: both follow.
-
-### 83. Automatic lossless upgrades
-
-Asked by the owner on 2026-11-10. Builds on Upgrades… (`upgradeCandidates`, phase 64) and
-Approve Safe Matches Automatically (ADRs 0193 and 0195). While it's on and the app is open, it
-keeps a few FLAC upgrades in flight on music-recommender, most-played and lowest quality first,
-and lands the clean ones.
-
-The owner's answers, 2026-11-10: the candidates are Upgrades…'s; the priority is plays times
-quality gap, with a boost for a loved or highly rated album; FLAC only, 24-bit and 16/44.1 both
-fine, no lossy-to-better-lossy; 3 in flight, no daily cap; a miss is retried after 1, 7 and 30
-days, then set aside with a Not Found list to queue again from; it runs only while the app is
-open; approving follows Approve Safe Matches Automatically, and a download that isn't clean is
-rejected and searched again from another peer; albums can be marked Never Upgrade.
-
-- [ ] **The setting.** Upgrade to FLAC Automatically, a checkbox in the Downloads window beside
-      Approve Safe Matches Automatically, and `downloads.autoUpgradesInFlight` (default 3). It
-      runs only while the app is open and can tag (staging on the library's share, as Upgrades…
-      needs), and stops queuing the moment it's turned off; jobs already queued carry on.
-- [ ] **Candidates.** The rule of `upgradeCandidates`: lossy albums whose every track carries one
-      Discogs release id. Not an album marked Never Upgrade, one set aside as not found, or one
-      with a job already on the service from either Mac, so two Macs never queue the same
-      release; the service's job list is the source of truth for that.
-- [ ] **Priority.** One score, written once in Core: the album's plays (summed over its tracks)
-      times its quality gap, lower bit rates scoring higher (128 kbps well above 320), with a
-      boost for a loved album or one rated 4 stars or more. The plan gives the formula and a
-      table of worked examples in the ADR.
-- [ ] **In flight.** At most N of its own jobs at once, counted from the service's jobs with
-      source `upgrade` that it queued (the plan says how they're told apart from Upgrades…'s).
-      When one lands, is rejected or set aside, the next candidate is queued. Format policy
-      `flac` only; 24-bit and 16/44.1 are both accepted.
-- [ ] **Not found.** A job the service finds nothing for is retried after 1 day, then 7, then
-      30; after the third miss the album is set aside. A Not Found list, from the Downloads
-      window, shows those albums with their misses, and Queue Again clears the count.
-- [ ] **Not clean.** Approving follows Approve Safe Matches Automatically as today. A job of its
-      own that lands left for review because it isn't clean (the tagger's verdict or the
-      plan's lossy-origin check, not a failure of the share or the service) is rejected, its
-      staged folder deleted by the service, and searched again from a different peer. That needs
-      the service to skip peers a job already tried: a change in music-recommender, planned
-      there first (a job's tried peers kept and left out of `rank`), then used here. A release
-      with no clean copy from any peer counts as a miss.
-- [ ] **Never Upgrade.** A mark per album, from the track table's context menu and the Upgrades
-      sheet, kept in the index by release id. The plan says whether it goes in the sync log, as
-      ratings do; it should, so both Macs honor it.
-- [ ] **Tests.** The score's order for the worked examples; candidates leave out marked, set
-      aside and already-queued albums; never more than N in flight; the 1, 7, 30 day backoff
-      and setting aside; an unclean job is rejected and searched again excluding its peer;
-      turning it off queues nothing more. Through the stand-in transport, never the real
-      service.
-- [ ] **ADR 0200**, amending ADRs 0193 and 0195: what the app queues unasked, its priority, the
-      in-flight limit, and rejecting an unclean download unasked.
-- [ ] **Owner check:** turn it on with a handful of candidates; three jobs queue, the
-      most-played lowest-quality first, clean ones land, and a fourth queues as one finishes.
-
-Implementation plan, phase 83 (ADR 0200, amending 0193 and 0195):
-
-**The service's side** is built, on mbp2021's music-recommender main at `2d448e6` (the feature
-in `15c0c95`, `76cc19d` and `9b23237`, its decision ADR 0023, its contract docs/api.md's
-`requeue` and `peers`). Each job keeps the peers a download started from (`tried_peer`), across
-retries and requeues, and every search leaves them out. `POST /v1/downloads/requeue`, `{"id":
-42}`, from `staged` only and only while no one holds a live review claim or tagging lease,
-sends the job back to `queued` with the same `attempt`, release and policy, clears its
-candidate, files, `staged_path` and tagging, and deletes the staged folder (`cleanup_pending`)
-before it searches again. With no untried peer accepted the job goes `not_found`, its reason
-"only peers already tried have it: …". It answers the whole job, like `retry`; refusals are
-`no_such_job`, `illegal_transition` and `claimed`. `POST /v1/downloads/peers` answers the tried
-peers; this phase doesn't need it, since the service leaves them out itself. No new field is in
-the job, so the player's strict decoder is unchanged. The service still retries a `not_found`
-job on its own schedule (6 h, 1 d, 3 d, then weekly), which the owner's 1, 7 and 30 days
-replace for these jobs: see Not found.
-
-What exists, found by search: `upgradeCandidates(onShare:)` (`Core/Library/UpgradeCandidate`),
-which Upgrades… lists through `QueueChoice.upgrades` and `QueueSheet`; Approve Safe Matches
-Automatically in `Downloads.approveSafe`/`approveUnasked`, run after each poll from
-`model.took`, with `ApprovalPlan.unasked` deciding; the calls in `DownloadsService`, stood in
-for by `FakeService` in the tests; `RecommenderClient`'s routes in `DownloadRoutes`, tested
-through `StubService`; sync events latest-wins by `SyncField` and `sync_items`
-(`LibrarySyncWrites`, `LibrarySyncMerge`); schema parts by their SQL (`LibrarySchema`); the
-track menu in `AppMenus.trackMenu`, its commands in `AppCommands`, handled in the app.
-
-Answers to the phase's questions:
-
-- **Telling its jobs from Upgrades…'s.** The service's job has no field for who queued it, and
-  a new one would break the shipped decoder. The index keeps the jobs it queued, by the
-  service's epoch and job id with the release (`auto_upgrade_jobs`), written when `create`
-  answers. A job counts as its own while that row is there and the job is listed in the same
-  epoch; a new epoch, or a job purged from the list, forgets the row.
-- **The score**, `UpgradeCandidate.priority` in `Core/Library`: (plays + 1) × 320 / kbps, × 2
-  when boosted. Plays are the album's tracks' play counts summed, as the table shows them; the
-  + 1 keeps an unplayed album ordered by its quality. kbps is the album's average, as
-  Upgrades… shows it, held to at least 32, so 128 kbps scores 2.5 a play and 320 scores 1. An
-  album is boosted when half or more of its tracks are liked, or its rated tracks average 4
-  stars or more. Ties go to the lower album id. The ADR's table of worked examples is the
-  test's.
-- **A miss** is a job of its own that goes `not_found`, or `failed` at `search` or `download`,
-  or that ends `rejected` or `cancelled` by anyone: the upgrader cancels the job if it isn't
-  ended, so it doesn't hold a slot or search on the service's schedule, and records the miss
-  in the index by release (`upgrade_misses`): the first miss waits 1 day, the second 7, the
-  third 30, and the fourth sets the album aside. So "after the third miss" is read as after
-  the third retry's: four searches in all, as the owner's "retried after 1, 7 and 30 days,
-  then set aside" says. The new job after a wait starts with no tried peers, since `create`
-  takes none; the ADR says so.
-- **Not clean.** A job of its own staged and tagged `discrepancy`, with no lease, or one
-  Approve Safe Matches Automatically finds a lossy-origin finding in (a new
-  `ApprovalPlan.Unasked.notClean`, before the other blockers; a check that couldn't read a
-  file is still `left`), is requeued: the upgrader gives up this Mac's review claim, sends
-  `requeue`, forgets the job's import ledger (its recorded staged sizes and tagged release,
-  which a new copy in the same `job-<id>` folder would otherwise be held to) and its
-  left-for-review note. A tagging `error`, a `claimed` refusal, or a failed import stays for
-  the owner. With the box off, a clean job's lossy-origin finding isn't checked unasked, so
-  it waits for the owner's review.
-- **Never Upgrade goes in the sync log**, as ratings do: a `neverUpgrade` event by release
-  id, latest wins (`SyncField.neverUpgrade`, keyed by the release id), so both Macs honor it.
-  The misses and the Mac's own jobs aren't synced: each Mac counts its own jobs and its own
-  misses, and the service's job list keeps two Macs from queuing the same release.
-
-Steps, each its own commit with its tests:
-
-- 83.1 `requeue` (`Core/Recommender`): `RecommenderClient.requeue(_:)` posts `{"id"}` to
-  `/v1/downloads/requeue` and answers the job; `DownloadsService.requeue`, stood in for by
-  `FakeService` (staged with no hold → queued, files cleared; else `claimed` or
-  `illegal_transition`). `DownloadJobs.epoch` readable from the feature. Tests: the body and
-  path in `ClientTests` through `StubService`; a refusal decodes.
-- 83.2 The score and the candidates' facts (`Core/Library`): `upgradeCandidates` also reads
-  each album's plays, liked tracks and ratings (`kbps`, `plays`, `boosted` on
-  `UpgradeCandidate`), and `UpgradePriority.swift` gives the score. Tests in
-  `UpgradeCandidatesTests`: the worked examples' order, and plays, likes and ratings read from
-  the index.
-- 83.3 The index's records (`Core/Library`, schema parts `neverUpgrade` and `autoUpgrades`,
-  keyed by release id and job id, never by album or path id, so an index rebuild keeps them):
-  `setNeverUpgrade(_:releases:)` with its sync event and merge, `neverUpgradeReleases()`,
-  `recordUpgradeMiss(release:at:)`, `upgradeMisses()`, `clearUpgradeMisses(releases:)`,
-  `recordAutoUpgradeJob`, `autoUpgradeJobs()`, `forgetAutoUpgradeJob`, and
-  `neverUpgradeReleases(ofTracks:)` for the menu. Tests: the backoff (1, 7, 30 days, then set
-  aside), Queue Again clearing it, the mark's round trip through a second index's sync, and the
-  latest mark winning.
-- 83.4 Settings (`Core/Settings`): `downloads.autoUpgrade`, Upgrade to FLAC Automatically,
-  off; `downloads.autoUpgradesInFlight`, 3, 1 to 10. `downloads.` joins the General pane's
-  Downloads section prefixes.
-- 83.5 The upgrader (`Features/Downloads/AutoUpgrades.swift`, no AppKit): `reconcile` sorts
-  its jobs into landed, ended (a miss), unfound (cancel, then a miss), not clean (requeue) and
-  in flight; `next` picks the candidates for the free slots: not marked, not set aside or
-  waiting, no job on the service for the release in a state that isn't terminal, highest
-  score first. `Downloads.upgradeAutomatically()` runs one pass at a time after each poll and
-  when the box is turned on, only with a session that can tag, a share, and the service
-  answering; it builds each snapshot as Upgrades… does (`ReleaseSnapshot.queueable`) and
-  queues `.upgrade(…, .flac)`. Turning the box off stops a pass before its next call; a
-  release whose snapshot can't be built is logged and skipped until the next launch.
-  Tests through `FakeService`: never more than N in flight, the order, marked, set aside and
-  already-queued albums left out, an unfound job cancelled and counted, an unclean job
-  requeued (and not one of Upgrades…'s), a lossy-origin finding requeued, turning it off
-  queuing nothing more.
-- 83.6 The window and the menu: the box beside Approve Safe Matches Automatically, wired
-  through `AppDelegate` and `SettingsChanges` as that box is; Add > Not Found…, a
-  `QueueSheet` of the set-aside albums with their misses whose button is Queue Again; the
-  Upgrades sheet's Never Upgrade button for the ticked albums, and its detail naming a marked
-  album; Never Upgrade (`track.toggleNeverUpgrade`) in the track menu, which marks the
-  selected tracks' releases, or clears them when every one is marked already.
-- 83.7 ADR 0200, and AGENTS.md's Approve sentence naming the upgrader's unasked requeue.
 
 ### 84. A codebase agents can keep changing safely
 

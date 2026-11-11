@@ -4,6 +4,36 @@ Where the time and tokens went over the last few phases, and what changed becaus
 newest entry is first. [plan.md](plan.md#retrospective) says when to write one and what goes in
 it.
 
+## 2026-11-11: phases 77, 79 and 83
+
+| Phase | Implementation | Reviews and bench | Fix rounds |
+|---|---|---|---|
+| 77 | 60 tool calls, 95 min | not recorded | 1 above low and 6 low, then 0 above low (4 low) |
+| 79 | 95 calls, 75 min | simplify 12 calls | 2 above low and 7 low, then 0 above low (8 low) |
+| 83 | 105 calls, 95 min | fix round 62 calls, simplify 8, bench 14 calls and 25 min | round 1 fixed in seven commits, then 0 above low (3 low) |
+
+All three ran beside other phases in their own worktrees, 80 still running as 83 landed. The
+workflow now passes the fix, simplify and bench stages' tool calls, so for 83 a part of the
+gate's cost can be read: the fix round took 62 tool calls, more than half the implementation's
+105, and simplify and the bench were small. The reviews and the architecture audit still
+report nothing, and no stage reports tokens. Implementation is still the largest part, 75 to
+95 minutes each; 83 was the biggest change of the run (44 files, about 1,850 lines), and its
+first review found seven real faults in the upgrader's bookkeeping, a slot held, a release
+queued twice, a miss counted before its job ended, epochs mixed, before the second found nothing
+above low. Load again cost reruns rather than fixes: in 77, 79 and 83 timing tests
+(`RendererOutputTests`, `aSearchTypedDuringARefreshDoesNotWaitForItsQueries`) failed and passed
+rerun, 83's full gate failed only on `UPnPOutputTests` and passed with `./scripts/check test`,
+which reruns just the failed targets, and bench rows missed under load (parse 43000 files,
+rescan, Stats period change, a slow-NAS scan that errored) and passed alone.
+
+Changes: the phase gate's Gate item now says a test target that fails on timing while other
+phases run is rerun with `./scripts/check test` before the failure is called the branch's, as
+the bench rows already are. The workflow should still pass the review and architecture stages'
+costs and every stage's tokens; that's the workflow script's change, outside this repo.
+Cleanup: 77's and 79's worktrees were removed as they landed, and 83's goes with this landing;
+`../music-player-p80` belongs to phase 80, still running, and stays; `../music-player-51gate`
+is still a leftover folder, not a worktree, for the owner to delete.
+
 ## 2026-11-10: phases 78, 81 and 82
 
 | Phase | Implementation | Reviews and bench | Fix rounds |
