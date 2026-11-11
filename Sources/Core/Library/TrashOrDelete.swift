@@ -35,7 +35,7 @@ package func trashOrDelete(
 
 /// Whether `trashItem` threw because the file's volume has no Trash: Cocoa's
 /// `featureUnsupported`, or POSIX `ENOTSUP`, given as is or as the error underlying another.
-func hasNoTrash(_ error: any Error) -> Bool {
+private func hasNoTrash(_ error: any Error) -> Bool {
     let error = error as NSError
     if error.domain == NSCocoaErrorDomain && error.code == CocoaError.featureUnsupported.rawValue {
         return true
