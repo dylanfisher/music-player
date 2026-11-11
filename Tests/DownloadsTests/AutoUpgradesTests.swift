@@ -391,3 +391,80 @@ private final class Reads: @unchecked Sendable {
     downloads.stop()
     #expect(downloads.notClean.isEmpty && downloads.unqueueable.isEmpty, "a session's own")
 }
+
+@MainActor
+@Test func aJobImportedBeforeItsCancelIsForgottenWithNoMiss() async throws {
+    let fake = FakeService()
+    let (downloads, session) = try await upgrading(fake, Library([candidate(1)]), inFlight: 1)
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    // Imported on the other Mac since the poll that listed it unfound.
+    fake.put(listed(1, release: 1, .imported))
+    session.model.took(listed(1, release: 1, .notFound))
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    let index = try LibraryIndex(at: session.setup.databaseURL)
+    #expect(try index.upgradeMisses().isEmpty)
+    #expect(try index.autoUpgradeJobs().isEmpty, "forgotten as any job landed")
+    downloads.stop()
+}
+
+/// A job whose cancel didn't end it holds one slot, so the rest are queued into the others.
+@MainActor
+@Test func aJobItCouldntCancelHoldsOneSlot() async throws {
+    let fake = FakeService()
+    let library = Library([candidate(1, plays: 9), candidate(2, plays: 5), candidate(3)])
+    let (downloads, session) = try await upgrading(fake, library, inFlight: 2)
+    downloads.autoUpgrade = true
+    await eventually("two queued") { fake.created.count == 2 }
+    await settled(downloads)
+    library.upgraded(2)
+    session.model.took(listed(2, release: 2, .imported))
+    // Approved on the other Mac since the poll that listed it unfound.
+    fake.put(listed(1, release: 1, .approved))
+    session.model.took(listed(1, release: 1, .notFound))
+    downloads.upgradeAutomatically()
+    await eventually("the third queued") { fake.created.count == 3 }
+    #expect(fake.created.last?.release == 3)
+    await settled(downloads)
+    downloads.stop()
+}
+
+/// With Approve Safe Matches Automatically on, a clean copy holds its slot until it's approved,
+/// unless it was left for the owner to review.
+@MainActor
+@Test func aCleanCopyLeftForReviewHoldsNoSlotThoughApproveSafeIsOn() async throws {
+    let fake = FakeService()
+    let (downloads, session) = try await upgrading(
+        fake, Library([candidate(1, plays: 9), candidate(2)]), inFlight: 1)
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    downloads.autoApprove = true
+    session.model.leave(1, "it needs a look")
+    fake.put(listed(1, release: 1, .staged) { $0.tagging = clean })
+    await session.model.poll()
+    await eventually("the next queued") { fake.created.count == 2 }
+    #expect(fake.created.last?.release == 2)
+    downloads.stop()
+}
+
+@MainActor
+@Test func aRequeuedCopyForgetsTheReleaseItsFilesWereTaggedAs() async throws {
+    let discrepancy = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
+    let fake = FakeService()
+    let (downloads, session) = try await upgrading(fake, Library([candidate(1)]), inFlight: 1)
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    let index = try LibraryIndex(at: session.setup.databaseURL)
+    try index.recordTaggedRelease(job: 1, queued: 1, folder: "job-1", release: 7)
+    #expect(try index.taggedReleases()[1] != nil)
+    fake.put(listed(1, release: 1, .staged) { $0.tagging = discrepancy })
+    await session.model.poll()
+    await eventually("requeued") { fake.requeued == [1] }
+    await settled(downloads)
+    #expect(try index.taggedReleases()[1] == nil)
+    downloads.stop()
+}
