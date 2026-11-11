@@ -94,7 +94,3 @@ Things move between tiers deliberately, never by accident:
 - **Primitive grows a settings read or a domain type** → it was never a primitive; move it up.
 
 A promotion is its own commit, separate from whatever work revealed it (principle 4).
-
-<!-- paths: Sources/Primitives Sources/Core Sources/Features Sources/App Sources/Tools -->
-<!-- ↑ scripts/check verifies every path above exists. Keep it in sync with the Tiers table;
-     a rename that misses this line fails the gate, which is the point. -->

@@ -79,5 +79,65 @@ if printf '%s\n' "$out" | grep -q "Bad.swift:1: "; then
   problems=$((problems + 1))
 fi
 
+# The map rule, on a package of its own: a map that matches the tree passes; one with a stale
+# backticked path, an unknown tier row, a missing row, a tier folder with no row and a module
+# folder no target names fails at each, and a map with no Tiers rows fails.
+map_tree() {
+  mkdir -p "$1/docs" "$1/Sources/Core/Library" "$1/Sources/Primitives/Ring" "$1/scripts"
+  printf 'let a = 1\n' > "$1/Sources/Core/Library/A.swift"
+  printf 'let b = 1\n' > "$1/Sources/Primitives/Ring/B.swift"
+  cat > "$1/Package.swift" <<'SWIFT'
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "MapTest",
+    targets: [
+        .target(name: "Ring", path: "Sources/Primitives/Ring"),
+        .target(name: "Library", dependencies: ["Ring"], path: "Sources/Core/Library"),
+    ]
+)
+SWIFT
+}
+# map_rows <tiers…> — a Tiers table with a row for each tier.
+map_rows() {
+  printf '## Tiers\n\n| Tier | Path | What | Imports |\n|---|---|---|---|\n'
+  for tier in "$@"; do printf '| **%s** | `Sources/%s` | x | y |\n' "$tier" "$tier"; done
+  printf '\n## Naming\n'
+}
+map_tree "$base/map-good"
+{
+  printf '# Map\n\nSee `Sources/Core/Library`, `scripts/` and `Sources/<Tier>/<Name>`.\n\n'
+  map_rows Primitives Core Features App Tools
+} > "$base/map-good/docs/map.md"
+mkdir -p "$base/map-good/Sources/Features" "$base/map-good/Sources/App" "$base/map-good/Sources/Tools"
+if ! out=$(swift scripts/arch.swift --map-only "$base/map-good" 2>&1); then
+  printf 'arch-test: the good map failed:\n%s\n' "$out" >&2
+  problems=$((problems + 1))
+fi
+map_tree "$base/map-bad"
+mkdir -p "$base/map-bad/Sources/Core/Unlisted" "$base/map-bad/Sources/Extra"
+{
+  printf '# Map\n\nSee `Sources/Core/Gone.swift` and `docs/missing.md`.\n\n'
+  map_rows Primitives Core Features App Widgets
+} > "$base/map-bad/docs/map.md"
+out=$(swift scripts/arch.swift --map-only "$base/map-bad" 2>&1)
+status=$?
+[ "$status" = 1 ] || { printf 'arch-test: the bad map exited %s, expected 1\n' "$status" >&2; problems=$((problems + 1)); }
+for finding in \
+  'docs/map.md:3: `Sources/Core/Gone.swift` does not exist' \
+  'docs/map.md:3: `docs/missing.md` does not exist' \
+  "docs/map.md:13: tier Widgets isn't a key of allowed in scripts/arch.swift" \
+  'docs/map.md: no Tiers row for Tools, which scripts/arch.swift allows' \
+  'Sources/Extra: a tier folder with no row in the Tiers table of docs/map.md' \
+  'Sources/Core/Unlisted: a module folder that no target in Package.swift has as its path'; do
+  printf '%s\n' "$out" | grep -qxF -- "$finding" ||
+    { printf 'arch-test: the bad map has no line\n  %s\nin:\n%s\n' "$finding" "$out" >&2; problems=$((problems + 1)); }
+done
+printf '# Map\n\nNo table.\n' > "$base/map-bad/docs/map.md"
+out=$(swift scripts/arch.swift --map-only "$base/map-bad" 2>&1)
+printf '%s\n' "$out" | grep -qxF 'docs/map.md: no rows found in the Tiers table under ## Tiers' ||
+  { printf 'arch-test: a map with no rows passed:\n%s\n' "$out" >&2; problems=$((problems + 1)); }
+
 [ "$problems" = 0 ] && echo "arch rule catches each planted call"
 exit "$problems"

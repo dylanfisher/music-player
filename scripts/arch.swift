@@ -13,7 +13,25 @@
 //
 // And it fails a log interpolation that marks a path or URL `privacy: .public` (ADR 0118).
 // `--log-paths-only <root>` runs just that rule, for scripts/arch-test.
+//
+// `--map-only <root>` checks <root>/docs/map.md against the tree, for the map step of
+// ./scripts/check: each backticked path under `mapPathRoots` exists (one with `<`, `>`, `*` or
+// `{` is a placeholder), the Tiers table's rows are the keys of `allowed` and the folders under
+// Sources, and each `Sources/<Tier>/<Name>` folder is a target's path in the package.
 import Foundation
+
+// Tier -> tiers it may depend on. The Tiers table in docs/map.md has a row
+// for each, which `--map-only` checks.
+let allowed: [String: Set<String>] = [
+    "Primitives": [],
+    "Core": ["Primitives", "Core"],
+    "Features": ["Primitives", "Core"],
+    "App": ["Primitives", "Core", "Features"],
+    "Tools": ["Primitives", "Core", "Features", "Tools"],
+]
+
+/// The roots a backticked path in docs/map.md is checked under.
+let mapPathRoots = ["Sources/", "Tests/", "scripts/", "docs/", "Support/"]
 
 /// The Core modules that may import AppKit.
 let appKitCore: Set<String> = ["BarView"]
@@ -152,6 +170,104 @@ func logPathProblems(root: String) -> [String] {
     return problems
 }
 
+/// The non-test targets' names, paths and dependencies, from `swift package dump-package` run in `root`.
+func targetPaths(root: String) -> [(name: String, path: String, dependencies: [String])] {
+    let dump = Process()
+    dump.executableURL = URL(fileURLWithPath: "/usr/bin/env", isDirectory: false)
+    dump.arguments = ["swift", "package", "dump-package"]
+    dump.currentDirectoryURL = URL(fileURLWithPath: root, isDirectory: true)
+    let pipe = Pipe()
+    dump.standardOutput = pipe
+    do { try dump.run() } catch { fatalError("can't run swift package dump-package: \(error)") }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    dump.waitUntilExit()
+    guard dump.terminationStatus == 0,
+        let package = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let targets = package["targets"] as? [[String: Any]]
+    else { fatalError("swift package dump-package failed in \(root)") }
+    return targets.filter { $0["type"] as? String != "test" }.map { target in
+        let dependencies = (target["dependencies"] as? [[String: Any]] ?? []).compactMap {
+            // byName and target dependencies are [name, condition]; products are external.
+            (($0["byName"] ?? $0["target"]) as? [Any])?.first as? String
+        }
+        return (target["name"] as! String, target["path"] as? String ?? "", dependencies)
+    }
+}
+
+/// What docs/map.md under `root` gets wrong about the tree: a backticked path under one of
+/// `mapPathRoots` that doesn't exist, a Tiers row whose tier `allowed` doesn't have, a tier of
+/// `allowed` or a folder under Sources with no row, and a module folder that no target's path
+/// names. The map lists no modules (it holds conventions, not an inventory), so the package is
+/// what a module folder is checked against.
+func mapProblems(root: String, targets: [String]) -> [String] {
+    let file = "docs/map.md"
+    guard let text = try? String(contentsOfFile: root + "/" + file, encoding: .utf8) else {
+        return ["\(file): unreadable"]
+    }
+    var problems: [String] = []
+    let lines = text.components(separatedBy: "\n")
+    let token = try! NSRegularExpression(pattern: "`([^`]+)`")
+    for (index, line) in lines.enumerated() {
+        let range = NSRange(line.startIndex..., in: line)
+        for match in token.matches(in: line, range: range) {
+            let path = String(line[Range(match.range(at: 1), in: line)!])
+            guard mapPathRoots.contains(where: { path.hasPrefix($0) }),
+                !path.contains(where: { "<>*{".contains($0) })
+            else { continue }
+            if !FileManager.default.fileExists(atPath: root + "/" + path) {
+                problems.append("\(file):\(index + 1): `\(path)` does not exist")
+            }
+        }
+    }
+    // The Tiers table's rows: `| **<tier>** | `Sources/<Tier>` | … |`, under `## Tiers`.
+    var rows: [String: Int] = [:]
+    var inTiers = false
+    for (index, line) in lines.enumerated() {
+        if line.hasPrefix("## ") { inTiers = line == "## Tiers" }
+        guard inTiers, line.hasPrefix("| **") else { continue }
+        let cells = line.components(separatedBy: " | ")
+        guard cells.count > 2, cells[1].hasPrefix("`Sources/"), cells[1].hasSuffix("`") else {
+            problems.append("\(file):\(index + 1): a Tiers row's path isn't `Sources/<Tier>`")
+            continue
+        }
+        let tier = String(cells[1].dropFirst("`Sources/".count).dropLast())
+        rows[tier] = index + 1
+        if allowed[tier] == nil {
+            problems.append(
+                "\(file):\(index + 1): tier \(tier) isn't a key of allowed in scripts/arch.swift")
+        }
+    }
+    if rows.isEmpty {
+        return problems + ["\(file): no rows found in the Tiers table under ## Tiers"]
+    }
+    for tier in allowed.keys.sorted() where rows[tier] == nil {
+        problems.append("\(file): no Tiers row for \(tier), which scripts/arch.swift allows")
+    }
+    let sources = root + "/Sources"
+    let folders = { (path: String) -> [String] in
+        ((try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []).filter { name in
+            var isFolder: ObjCBool = false
+            return !name.hasPrefix(".")
+                && FileManager.default.fileExists(atPath: path + "/" + name, isDirectory: &isFolder)
+                && isFolder.boolValue
+        }.sorted()
+    }
+    let named = Set(targets)
+    for tier in folders(sources) {
+        if rows[tier] == nil {
+            problems.append(
+                "Sources/\(tier): a tier folder with no row in the Tiers table of \(file)")
+        }
+        for module in folders(sources + "/" + tier)
+        where !named.contains("Sources/\(tier)/\(module)") {
+            problems.append(
+                "Sources/\(tier)/\(module): a module folder that no target in Package.swift has as"
+                    + " its path")
+        }
+    }
+    return problems
+}
+
 func finish(_ problems: [String], _ success: String) -> Never {
     if problems.isEmpty {
         print(success)
@@ -172,53 +288,33 @@ if arguments.count == 3, arguments[1] == "--appkit-only" {
 if arguments.count == 3, arguments[1] == "--log-paths-only" {
     finish(logPathProblems(root: arguments[2]), "no path is logged public")
 }
+if arguments.count == 3, arguments[1] == "--map-only" {
+    let root = arguments[2]
+    finish(
+        mapProblems(root: root, targets: targetPaths(root: root).map(\.path)),
+        "docs/map.md's paths exist, and its tiers match allowed, Sources and Package.swift")
+}
 
-// Tier -> tiers it may depend on. Must match the Tiers table in docs/map.md.
-let allowed: [String: Set<String>] = [
-    "Primitives": [],
-    "Core": ["Primitives", "Core"],
-    "Features": ["Primitives", "Core"],
-    "App": ["Primitives", "Core", "Features"],
-    "Tools": ["Primitives", "Core", "Features", "Tools"],
-]
-
-let dump = Process()
-dump.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-dump.arguments = ["swift", "package", "dump-package"]
-let pipe = Pipe()
-dump.standardOutput = pipe
-try dump.run()
-let data = pipe.fileHandleForReading.readDataToEndOfFile()
-dump.waitUntilExit()
-guard dump.terminationStatus == 0 else { fatalError("swift package dump-package failed") }
-
-let package = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-let targets = package["targets"] as! [[String: Any]]
-
+let targets = targetPaths(root: ".")
 var tierOf: [String: String] = [:]
 var problems: [String] = []
-for target in targets where target["type"] as? String != "test" {
-    let name = target["name"] as! String
-    let parts = (target["path"] as? String ?? "").split(separator: "/").map(String.init)
-    if parts.count == 3, parts[0] == "Sources", allowed[parts[1]] != nil, parts[2] == name {
-        tierOf[name] = parts[1]
+for target in targets {
+    let parts = target.path.split(separator: "/").map(String.init)
+    if parts.count == 3, parts[0] == "Sources", allowed[parts[1]] != nil, parts[2] == target.name {
+        tierOf[target.name] = parts[1]
     } else {
         problems.append(
-            "\(name): path must be Sources/<\(allowed.keys.sorted().joined(separator: "|"))>/\(name)"
-        )
+            "\(target.name): path must be"
+                + " Sources/<\(allowed.keys.sorted().joined(separator: "|"))>/\(target.name)")
     }
 }
 
-for target in targets where target["type"] as? String != "test" {
-    let name = target["name"] as! String
-    guard let tier = tierOf[name] else { continue }
-    for dependency in target["dependencies"] as? [[String: Any]] ?? [] {
-        // byName and target dependencies are [name, condition]; products are external packages.
-        guard let entry = (dependency["byName"] ?? dependency["target"]) as? [Any],
-            let other = entry.first as? String, let otherTier = tierOf[other]
-        else { continue }
+for target in targets {
+    guard let tier = tierOf[target.name] else { continue }
+    for other in target.dependencies {
+        guard let otherTier = tierOf[other] else { continue }
         if !allowed[tier]!.contains(otherTier) {
-            problems.append("\(name) (\(tier)) may not depend on \(other) (\(otherTier))")
+            problems.append("\(target.name) (\(tier)) may not depend on \(other) (\(otherTier))")
         }
     }
 }

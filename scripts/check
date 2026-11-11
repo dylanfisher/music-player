@@ -10,7 +10,7 @@
 #                                   HEAD), uncommitted and untracked files included, and
 #                                   `./scripts/test --changed ref` as the test step (AGENTS.md)
 #   ./scripts/check <step>...       the named steps alone, such as the ones that just failed
-#   ./scripts/check --which         the steps for the paths on standard input, for check-test
+#   ./scripts/check --which [ref]   the steps for the paths on standard input, for check-test
 # `steps` below says which step reads which path. scripts/affected.swift says which tests do.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -25,23 +25,32 @@ residue_files=(README.md CLAUDE.md AGENTS.md scripts/setup scripts/dev scripts/t
 
 # steps — the steps that read the paths on standard input, one per line, or `all` for a path
 # every step depends on. A deleted path also picks map and links, which check that the paths
-# they name exist. The test step isn't picked: --changed always runs it, and it skips itself
-# when no test reads what changed.
+# they name exist, and a path in a module folder that `ref` (default HEAD) doesn't have picks
+# map, which checks module folders against the package. The test step isn't picked: --changed
+# always runs it, and it skips itself when no test reads what changed.
 steps() {
-  local p s
+  local p s module modules
+  modules=$(git ls-tree -rd --name-only "${ref:-HEAD}" Sources | awk -F/ 'NF == 3')
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     [ -e "$p" ] || printf '%s\n' map links
     case "$p" in
+      Sources/*/*/*)
+        module=$(cut -d/ -f1-3 <<<"$p")
+        grep -qxF "$module" <<<"$modules" || echo map
+        ;;
+    esac
+    case "$p" in
       scripts/check | .xcode-version) echo all ;;
       AGENTS.md) echo agents.md ;;
       docs/map.md) echo map ;;
-      Package.swift) printf '%s\n' format typecheck arch ;;
+      Package.swift) printf '%s\n' format typecheck arch map ;;
       Package.resolved) echo typecheck ;;
       .swift-format) echo format ;;
       Sources/*) printf '%s\n' typecheck arch dupes surface ;;
       Tests/*) echo typecheck ;;
-      scripts/arch.swift | scripts/dupes.swift | scripts/surface.swift | scripts/size.swift \
+      scripts/arch.swift) printf '%s\n' arch arch-test map ;;
+      scripts/dupes.swift | scripts/surface.swift | scripts/size.swift \
         | scripts/trycomment.swift | scripts/unchecked.swift)
         s=${p#scripts/}
         printf '%s\n' "${s%.swift}" "${s%.swift}-test"
@@ -72,7 +81,7 @@ chosen=("$@")
 ran=()
 test_step=(./scripts/test)
 case "${1-}" in
-  --which) steps; exit ;;
+  --which) ref="${2:-HEAD}" && steps; exit ;;
   --changed)
     if [ $# -gt 2 ]; then echo "usage: ./scripts/check --changed [ref]" >&2; exit 2; fi
     ref="${2:-HEAD}"
@@ -112,20 +121,13 @@ run agents.md bash -c '
 
 # The code map claims where things live. Verify the claim — a rename that misses
 # docs/map.md turns it into confident misdirection, which is worse than no map.
+# arch.swift checks its backticked paths, and its Tiers table against `allowed`, the folders
+# under Sources and the package's targets (ADR 0201).
 run map bash -c '
   if grep -q "{{" docs/map.md; then
     echo "docs/map.md has unfilled {{PLACEHOLDER}}s." >&2; exit 1
   fi
-  paths=$(grep "^<!-- paths:" docs/map.md | sed "s/^<!-- paths: //; s/ -->//")
-  if [ -z "$paths" ]; then
-    echo "docs/map.md is missing its <!-- paths: ... --> line." >&2; exit 1
-  fi
-  missing=""
-  for p in $paths; do [ -e "$p" ] || missing="$missing $p"; done
-  if [ -n "$missing" ]; then
-    echo "docs/map.md names paths that do not exist:$missing" >&2; exit 1
-  fi
-  echo "tiers exist: $paths"
+  swift scripts/arch.swift --map-only .
 '
 
 # AGENTS.md stays small by linking instead of restating, so a dead link is not a

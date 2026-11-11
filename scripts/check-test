@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Runs `./scripts/check --which` on changed-path lists and checks the steps it picks: none for a
 # script no step reads, the doc checks for Markdown, the build and source checks for Sources and
-# Tests, a checker and its own test for a checker, map and links for a deleted path, and the
-# whole gate for scripts/check itself.
+# Tests, a checker and its own test for a checker, map and links for a deleted path, map for a
+# new module folder and for Package.swift, and the whole gate for scripts/check itself.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 problems=0
 
-# expect <paths, one per line> <expected steps, space-separated, sorted>
+# expect <paths, one per line> <expected steps, space-separated, sorted> [ref]
 expect() {
   local out
-  out=$(printf '%s\n' "$1" | ./scripts/check --which | paste -sd' ' -)
+  out=$(printf '%s\n' "$1" | ./scripts/check --which "${3:-HEAD}" | paste -sd' ' -)
   if [ "$out" != "$2" ]; then
     printf 'check-test: %s picked "%s", expected "%s"\n' "$1" "$out" "$2" >&2
     problems=$((problems + 1))
@@ -34,6 +34,13 @@ expect 'scripts/trycomment-test' 'trycomment-test'
 expect 'scripts/unchecked.swift' 'format unchecked unchecked-test'
 expect 'scripts/unchecked-allow.txt' 'unchecked'
 expect 'scripts/check-signature' 'signature-test'
+expect 'docs/map.md' 'links map residue'
+expect 'Package.swift' 'arch format map typecheck'
+expect 'scripts/arch.swift' 'arch arch-test format map'
+# A module folder the first commit didn't have is a new one, which map checks against the package.
+first=$(git rev-list --max-parents=0 HEAD | tail -1)
+expect 'Sources/Core/Snapshot/GzipFile.swift' \
+  'arch dupes format map size surface trycomment typecheck unchecked' "$first"
 expect $'README.md\nscripts/check' 'all links residue'
 
 [ "$problems" = 0 ] && echo "check picks each planted case's steps"
