@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Log
 import Metadata
@@ -8,7 +9,9 @@ private let logger = moduleLogger()
 /// volume's Trash with `trashItem`, `FileManager.trashItem` but for tests, and one on a volume
 /// with no Trash, such as the NAS's share, deleted at once, which is logged. Unlike `moveToTrash`
 /// it goes through no Finder, so nothing asks before the delete; the Approve sheet, or the box
-/// that approves unasked, was the confirmation. Each file not removed with why, nil when all were.
+/// that approves unasked, was the confirmation. Only a regular file goes, as `lstat` says, so a
+/// folder or a link swapped in for an old file is left with its contents or its target. Each
+/// file not removed with why, nil when all were.
 package func trashOrDelete(
     _ urls: [URL],
     trashItem: @escaping @Sendable (URL) throws -> Void = {
@@ -17,6 +20,9 @@ package func trashOrDelete(
 ) async -> String? {
     await blockingFileWork {
         let failures = urls.compactMap { url -> String? in
+            guard isRegularFile(url.path) else {
+                return "\(url.path): it isn't a regular file, so it wasn't removed"
+            }
             do {
                 do {
                     try trashItem(url)
@@ -42,4 +48,10 @@ private func hasNoTrash(_ error: any Error) -> Bool {
     }
     guard let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError else { return false }
     return hasNoTrash(underlying)
+}
+
+/// Whether `path` names a regular file itself, not a link to one.
+func isRegularFile(_ path: String) -> Bool {
+    var info = stat()
+    return lstat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
 }

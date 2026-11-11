@@ -284,7 +284,7 @@ package struct ImportRun {
         var asides: [String: String] = [:]
         for (offset, file) in inPlace.enumerated() {
             asides[file.sharePath] =
-                parentOf(file.path) + "/.upgrade-\(job.jobID)-\(offset)"
+                parentOf(file.path) + "/" + setAsidePrefix(job: job.jobID) + String(offset)
         }
         try index.database.transaction {
             for step in steps {
@@ -318,7 +318,9 @@ package struct ImportRun {
     /// moves each to its volume's Trash or, on a share with no Trash, deletes it (ADR 0199). A
     /// file counts as gone when it's no longer at its path (ADR 0125). Each one not set aside
     /// must still be a track in the index carrying the release id it's held to; a set-aside one
-    /// was checked before it was. Nil when they're all gone.
+    /// was checked before it was. Each must be a regular file, and a set-aside one the import's
+    /// own hidden name in the library folder, or none is given (ADR 0025, row 71). Nil when
+    /// they're all gone.
     private func delete(_ old: OldFiles, _ job: ApprovedImport) async -> String? {
         let atPaths = old.steps.filter { old.asides[$0.path] == nil }.map(\.path)
             .filter { pathExists(move.shareRoot + "/" + $0) }
@@ -332,11 +334,37 @@ package struct ImportRun {
         } catch {
             return "\(error)"
         }
+        if let problem = notRemovable(left, asides: Set(old.asides.values), job: job.jobID) {
+            return problem
+        }
         let failure = await trash(left.map { URL(fileURLWithPath: $0, isDirectory: false) })
         let refused = left.filter(pathExists)
         guard refused.isEmpty else {
             return "these weren't removed: " + refused.joined(separator: ", ")
                 + (failure.map { ": \($0)" } ?? "")
+        }
+        return nil
+    }
+
+    /// Why the files `paths` mustn't go to the Trash: one isn't a regular file, as `lstat`
+    /// says, such as a folder or a link swapped in for an old file; or one of `asides` isn't
+    /// named `.upgrade-<job>-<n>`, the name the import set it aside under, in a folder of the
+    /// library folder. Nil when they may all go.
+    private func notRemovable(_ paths: [String], asides: Set<String>, job: Int) -> String? {
+        guard let library = resolved(move.libraryFolder) else {
+            return MoveRefusal.notFound(move.libraryFolder).description
+        }
+        for path in paths {
+            guard isRegularFile(path) else {
+                return "\(path) isn't a regular file, so none of the old files were removed"
+            }
+            guard asides.contains(path) else { continue }
+            guard isSetAsideName((path as NSString).lastPathComponent, job: job),
+                isFolder(parentOf(path), in: library)
+            else {
+                return "\(path) isn't a name the import set an old file aside under in the"
+                    + " library folder, so none of the old files were removed"
+            }
         }
         return nil
     }
@@ -419,3 +447,15 @@ package struct ImportRun {
 }
 
 private func parentOf(_ path: String) -> String { (path as NSString).deletingLastPathComponent }
+
+/// The start of the hidden names the old files of the job `job` replaced at their own paths
+/// are set aside under, `.upgrade-<job>-<n>`, which scans skip.
+private func setAsidePrefix(job: Int) -> String { ".upgrade-\(job)-" }
+
+/// Whether `name` is `.upgrade-<job>-<n>`, a name the job `job` sets an old file aside under.
+private func isSetAsideName(_ name: String, job: Int) -> Bool {
+    let prefix = setAsidePrefix(job: job)
+    let offset = name.dropFirst(prefix.count)
+    return name.hasPrefix(prefix) && !offset.isEmpty
+        && offset.allSatisfy { $0.isASCII && $0.isNumber }
+}

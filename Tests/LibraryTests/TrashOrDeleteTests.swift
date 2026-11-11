@@ -76,3 +76,24 @@ func notSupportedFromTheTrashDeletesNothing(_ error: NSError) async throws {
     #expect(failure?.hasPrefix(folder.file.path + ": ") == true)
     #expect(FileManager.default.fileExists(atPath: folder.file.path))
 }
+
+/// A folder or a link in place of a file is never given to the Trash nor deleted, so neither
+/// what's in the folder nor the link's target goes (ADR 0025, row 71).
+@Test func onlyARegularFileIsRemoved() async throws {
+    let folder = try Folder()
+    let inner = folder.url.appendingPathComponent("folder.flac", isDirectory: true)
+    try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: false)
+    let kept = inner.appendingPathComponent("kept.flac", isDirectory: false)
+    #expect(FileManager.default.createFile(atPath: kept.path, contents: Data("flac".utf8)))
+    let link = folder.url.appendingPathComponent("link.flac", isDirectory: false)
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: folder.file)
+    let failure = await trashOrDelete([inner, link]) { url in
+        Issue.record("\(url.path) was given to the Trash")
+    }
+    #expect(failure?.contains(inner.path + ": it isn't a regular file") == true)
+    #expect(failure?.contains(link.path + ": it isn't a regular file") == true)
+    #expect(FileManager.default.fileExists(atPath: kept.path))
+    #expect(FileManager.default.fileExists(atPath: folder.file.path))
+    #expect(
+        try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == folder.file.path)
+}

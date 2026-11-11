@@ -358,6 +358,57 @@ func anOldFileNamedOutsideTheShareIsRefusedUntouched(_ sharePath: String) async 
     #expect(oldFilesThere(setup))
 }
 
+/// An old file swapped for a folder after the approval fails the delete with nothing given to
+/// the Trash, and the folder and what's in it stay (ADR 0025, row 71).
+@Test func anOldFileSwappedForAFolderIsNeverTrashed() async throws {
+    let setup = try ImportFolders()
+    let swapped = setup.oldPath("02 Second.mp3")
+    try FileManager.default.removeItem(atPath: swapped)
+    try FileManager.default.createDirectory(atPath: swapped, withIntermediateDirectories: false)
+    #expect(FileManager.default.createFile(atPath: swapped + "/keep.txt", contents: Data("k".utf8)))
+    let offered = OfferedToTrash()
+    let outcome = await setup.run(trash: { urls in
+        for url in urls { offered.add(url.path) }
+        return nil
+    }).run(try setup.job(upgrade: true))
+    guard case .failed(.delete, let reason) = outcome else {
+        Issue.record("\(outcome)")
+        return
+    }
+    #expect(reason.hasPrefix("\(swapped) isn't a regular file"))
+    #expect(offered.all.isEmpty)
+    #expect(FileManager.default.fileExists(atPath: swapped + "/keep.txt"))
+    #expect(FileManager.default.fileExists(atPath: setup.oldPath("01 First.mp3")))
+}
+
+/// A set-aside name in the ledger that isn't one the import gives, here the new file's own
+/// path, is never given to the Trash on the resume.
+@Test func aSetAsideNameThatIsntTheImportsIsNeverTrashed() async throws {
+    let setup = try ImportFolders(names: samePathNames)
+    let job = try setup.job(upgrade: true)
+    guard case .failed(.delete, _) = await setup.run(trash: { _ in "refused" }).run(job) else {
+        Issue.record("the delete didn't fail")
+        return
+    }
+    let set = try setup.index.importSteps(job: 7).filter { $0.kind == .setAside }
+    #expect(set.count == 2)
+    var forged = set[0]
+    forged.destination = "library/Artist/Album/01 First.flac"
+    try setup.index.recordImportStep(forged)
+    let offered = OfferedToTrash()
+    let outcome = await setup.run(trash: { urls in
+        for url in urls { offered.add(url.path) }
+        return nil
+    }).run(job)
+    guard case .failed(.delete, let reason) = outcome else {
+        Issue.record("\(outcome)")
+        return
+    }
+    #expect(reason.contains("isn't a name the import set an old file aside under"))
+    #expect(offered.all.isEmpty)
+    #expect(setup.folders.destinations.allSatisfy { FileManager.default.fileExists(atPath: $0) })
+}
+
 @Test func aDeleteRefusesAnOldFileNoLongerOfTheRelease() async throws {
     let setup = try ImportFolders()
     try setup.index.store([
