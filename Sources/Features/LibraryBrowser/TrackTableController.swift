@@ -801,7 +801,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             let track = trackRow(row)
         else { return }
         let cell = table.frameOfCell(atColumn: column, row: row)
-        let starWidth = (stars(1) as NSString).size(withAttributes: [.font: font]).width
+        let starWidth = font.starWidth
         let x = point.x - cell.minX - TextCell.inset
         ratingClicks += 1
         let click = ratingClicks

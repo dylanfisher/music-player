@@ -24,9 +24,8 @@ final class RatingStars: NSView {
     /// The stars the pointer fills while it's over them.
     private(set) var hovered: Int?
     private let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-    private var starWidth: CGFloat {
-        (stars(1) as NSString).size(withAttributes: [.font: font]).width
-    }
+    /// Measured once, since the font doesn't change.
+    private lazy var starWidth = font.starWidth
 
     init() {
         super.init(frame: .zero)
