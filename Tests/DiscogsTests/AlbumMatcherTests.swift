@@ -1145,6 +1145,31 @@ private final class Heard: @unchecked Sendable {
     #expect(heard.all.map(\.albumsDone) == [1])
 }
 
+/// With the API alone, each album done is heard, and a cancel stops the run before the next.
+@Test func anAPIRunReportsEachAlbumAndStopsBetweenAlbumsWhenCancelled() async throws {
+    let folder = try DumpFolder()
+    let albums = (0..<3).map { _ in album(stockholmTitles, barcode: "7 350001 000123") }
+    let heard = Heard()
+    let matches = try await matchAlbums(
+        albums, catalogAt: folder.catalog, source: .api, api: FakeDiscogs().api(), choosing: [:],
+        skippingVideo: false
+    ) { heard.add($0) }
+    #expect(matches.count == 3)
+    #expect(heard.all.filter { $0.waitingSeconds == nil }.map(\.albumsDone) == [1, 2, 3])
+
+    let cancelled = Heard()
+    await #expect(throws: CancellationError.self) {
+        try await matchAlbums(
+            albums, catalogAt: folder.catalog, source: .api, api: FakeDiscogs().api(),
+            choosing: [:], skippingVideo: false
+        ) {
+            cancelled.add($0)
+            withUnsafeCurrentTask { $0?.cancel() }
+        }
+    }
+    #expect(cancelled.all.filter { $0.waitingSeconds == nil }.map(\.albumsDone) == [1])
+}
+
 /// A run the API stops gives the waits back to whoever heard them before it.
 @Test func aRunTheAPIStopsGivesTheWaitsBack() async throws {
     let folder = try DumpFolder()
