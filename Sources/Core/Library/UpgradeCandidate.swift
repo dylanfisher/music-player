@@ -14,7 +14,7 @@ package struct UpgradeCandidate: Equatable, Sendable {
 }
 
 /// Codecs whose files an upgrade replaces, as `tracks.codec` stores them.
-private let lossyCodecs: Set<String> = ["aac", "mp3"]
+let lossyCodecs: Set<String> = ["aac", "mp3"]
 
 extension LibraryIndex {
     /// The albums whose every file is lossy, carries one `DISCOGS_RELEASE_ID` that's a number,
@@ -59,19 +59,30 @@ extension LibraryIndex {
                     .first
             }
             guard paths.count == tracks.count else { continue }
-            let seconds = tracks.map(\.seconds).reduce(0, +)
-            let bits = Double(tracks.map(\.audioBytes).reduce(0, +)) * 8
-            let kbps = seconds > 0 ? Int((bits / seconds / 1000).rounded()) : 0
-            let codecs = Set(tracks.map(\.codec)).sorted().map { $0.uppercased() }
+            let kbps = averageKbps(
+                audioBytes: tracks.map(\.audioBytes).reduce(0, +),
+                seconds: tracks.map(\.seconds).reduce(0, +))
             candidates.append(
                 UpgradeCandidate(
                     albumID: album, title: tracks[tracks.startIndex].title,
                     artist: tracks[tracks.startIndex].artist, releaseID: release,
                     sharePaths: paths,
-                    quality: codecs.joined(separator: "/") + " \(kbps) kbps"))
+                    quality: formatName(tracks.map(\.codec)) + " \(kbps) kbps"))
         }
         return candidates
     }
+}
+
+/// An album's average bit rate, in kilobits a second, from its tracks' audio bytes, without
+/// their art, and their length; 0 for no length.
+func averageKbps(audioBytes: Int, seconds: Double) -> Int {
+    seconds > 0 ? Int((Double(audioBytes) * 8 / seconds / 1000).rounded()) : 0
+}
+
+/// "MP3", or "AAC/MP3" for an album of both: `codecs`, as `tracks.codec` stores them, once
+/// each.
+func formatName(_ codecs: [String]) -> String {
+    Set(codecs).sorted().map { $0.uppercased() }.joined(separator: "/")
 }
 
 /// `path` relative to the share, when it's under `root`, the folder `inner` of the share.

@@ -202,7 +202,8 @@ struct AudioFacts: Hashable {
     }
 }
 
-private let losslessCodecs = Set(
+/// Lossless codecs, as `tracks.codec` stores them.
+let losslessCodecs = Set(
     [TrackAudio.Codec.flac, .alac, .pcm].map(\.rawValue))
 
 /// A gone path or a stat-less track as move matching sees it.

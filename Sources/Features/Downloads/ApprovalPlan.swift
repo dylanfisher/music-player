@@ -37,6 +37,8 @@ struct ApprovalPlan: Sendable {
         /// Found by its album artist and title, not its tracks' release id.
         var byName: Bool
         var files: Int
+        /// Its quality, from the index; nil when it isn't known.
+        var quality: AudioQuality? = nil
     }
 
     /// The moves for Keep Both: the job imported as a new album beside the one it replaces.
@@ -76,6 +78,12 @@ struct ApprovalPlan: Sendable {
     var checking = false
 
     var isUpgrade: Bool { job.upgrade != nil || replaced != nil }
+
+    /// The staged files' quality: the service's candidate, held to what the lossy-origin check
+    /// read of them; nil when it isn't known.
+    var stagedQuality: AudioQuality? {
+        AudioQuality.staged(job.candidate, measured: origins.compactMap(\.measures))
+    }
 
     /// Whether the lossy-origin check asks the owner to acknowledge what it found.
     var originsBlock: Bool { originsProblem != nil || origins.contains(where: \.blocks) }
@@ -138,15 +146,15 @@ struct ApprovalPlan: Sendable {
 
     /// The import Approve makes with nothing ticked, acknowledged or kept, when the plan leaves
     /// the owner nothing to judge: a staged job's plan, checked, with no blockers that way,
-    /// which replaces no library album it wasn't queued to upgrade and says nothing of albums
-    /// it can't replace. Holding the job to its clean tagging is the caller's part.
+    /// which says nothing of albums it can't replace. A library album it wasn't queued to
+    /// upgrade it replaces, as Approve does with Keep Both off, only when it was found by its
+    /// release id and the staged files are clearly higher quality (ADR 0195). Holding the job
+    /// to its clean tagging is the caller's part.
     var unasked: Unasked {
         if resuming { return .left("the import has started already") }
         if checking { return .left(ApproveSheet.checkingNote) }
-        if replaced != nil {
-            return .left(
-                "it replaces a library album it wasn't queued to upgrade, and Approve asks"
-                    + " whether to keep both")
+        if let replaced, let why = Self.notReplacedUnasked(replaced, by: stagedQuality) {
+            return .left(why)
         }
         if let notReplaced { return .left(notReplaced) }
         let blockers = blockers(ticked: [], acknowledgedOrigins: false)
@@ -157,10 +165,30 @@ struct ApprovalPlan: Sendable {
         return .approved(approved)
     }
 
+    /// Why a job isn't approved unasked to replace `replaced`, which it wasn't queued to
+    /// upgrade, with staged files of quality `staged`; nil when it may be.
+    private static func notReplacedUnasked(_ replaced: Replaced, by staged: AudioQuality?)
+        -> String?
+    {
+        if replaced.byName {
+            return "it replaces the library album with its artist and title, which isn't tagged"
+                + " with its release, and Approve asks whether to keep both"
+        }
+        guard let old = replaced.quality, let new = staged else {
+            let old = replaced.quality.map(\.description) ?? "unknown quality"
+            let new = staged.map(\.description) ?? "files of unknown quality"
+            return "it replaces a library album of \(old) with \(new), which can't be compared"
+        }
+        guard new.isClearlyHigher(than: old) else {
+            return "it isn't higher quality than the library's \(old) (\(new) isn't better)"
+        }
+        return nil
+    }
+
     /// What the index says of the job: the album it replaces and where its files go.
     private struct Found: Sendable {
         var old: [String]?
-        var replaced: (album: DiscogsAlbum, byName: Bool)?
+        var replaced: (album: DiscogsAlbum, byName: Bool, quality: AudioQuality?)?
         var notReplaced: String?
         var moves: Result<[String], any Error>
         var keepBoth: Result<[String], any Error>?
@@ -199,7 +227,7 @@ struct ApprovalPlan: Sendable {
                 if let replaced = found.replaced, let old = found.old {
                     plan.replaced = Replaced(
                         artist: replaced.album.artist, title: replaced.album.title,
-                        byName: replaced.byName, files: old.count)
+                        byName: replaced.byName, files: old.count, quality: replaced.quality)
                     switch found.keepBoth {
                     case .success(let destinations):
                         plan.keepBoth = KeepBoth(
@@ -286,7 +314,7 @@ struct ApprovalPlan: Sendable {
             case .album(let album, let byName):
                 if let paths = try index.albumFiles(album.id, shareRoot: places.shareRoot) {
                     found.old = paths
-                    found.replaced = (album, byName)
+                    found.replaced = (album, byName, try index.albumQuality(album.id))
                 } else {
                     found.notReplaced =
                         "The library's \(album.title) isn't all on the share the staging folder"

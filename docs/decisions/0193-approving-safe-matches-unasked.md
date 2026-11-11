@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0147](0147-moving-downloads-into-the-library.md) (Approve is the owner's
   confirmation for each job)
+- **Amended by:** [0195](0195-approving-a-clearly-better-replacement-unasked.md): a job that
+  replaces a library album of its release id is approved when it's clearly higher quality.
 - **See also:** [0146](0146-staged-tag-writes.md) (a clean run),
   [0169](0169-approve-at-once-and-manual-upgrades.md) (the sheet's plan, Keep Both),
   [0156](0156-replacing-an-album-at-its-own-paths.md) (an upgrade at its own paths)
@@ -35,7 +37,8 @@ Each Mac has its own `config.json`, so each Mac's box is its own.
   acknowledged: no moves problem, no upgrade problem, no old file without a new one, and no
   lossy-origin finding, or a file the check couldn't read;
 - no library album it replaces without being queued as an upgrade (`replaced`), since the
-  sheet then offers Keep Both and the download may be a lesser copy, and no note that the
+  sheet then offers Keep Both and the download may be a lesser copy, unless it was found by
+  its release id and the download is clearly higher quality (ADR 0195), and no note that the
   library holds albums of its release it can't replace (`notReplaced`)
   (`ApprovalPlan.unasked`).
 

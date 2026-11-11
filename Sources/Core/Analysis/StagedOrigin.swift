@@ -1,5 +1,6 @@
 import Foundation
 import HALOutput
+import Library
 
 /// What the lossy-origin check found in one staged file (ADR 0147), for the Approve sheet. The
 /// file is analyzed with `analyzeFile(at:)` and nothing else, so no staged path reaches the
@@ -10,6 +11,8 @@ package struct StagedOrigin: Equatable, Sendable {
     package var verdicts: [Verdict]
     /// Why it couldn't be analyzed, which the sheet asks about as it does a verdict.
     package var failure: String?
+    /// What the analysis measured, for its bit depth and sample rate; nil when it failed.
+    package var measures: FileMeasures? = nil
 
     /// Whether Approve waits for the owner to acknowledge this file.
     package var blocks: Bool { !verdicts.isEmpty || failure != nil }
@@ -62,7 +65,7 @@ private func origin(
         return StagedOrigin(
             path: path,
             verdicts: verdicts(result.measures).filter { originKinds.contains($0.kind) },
-            failure: nil)
+            failure: nil, measures: result.measures)
     } catch is CancellationError {
         throw CancellationError()
     } catch {

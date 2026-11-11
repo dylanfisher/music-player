@@ -20,7 +20,8 @@ private func oldFile(_ name: String, _ position: String?, stats: Bool = false) -
 
 private func plan(
     upgrade: Bool = false, resuming: Bool = false, movesProblem: String? = nil,
-    origins: [StagedOrigin] = [], replacesAlbum: Bool = false, checking: Bool = false
+    origins: [StagedOrigin] = [], replacesAlbum: Bool = false, checking: Bool = false,
+    replacedQuality: AudioQuality? = nil, byName: Bool = false
 ) -> ApprovalPlan {
     let old = [oldFile("01.mp3", "1"), oldFile("02.mp3", "2"), oldFile("03.mp3", nil, stats: true)]
     let staged = job(5, resuming ? .importing : .staged) {
@@ -40,7 +41,9 @@ private func plan(
             : [],
         upgradeProblem: nil, origins: origins, originsProblem: nil,
         replaced: replacesAlbum
-            ? ApprovalPlan.Replaced(artist: "A", title: "B", byName: false, files: old.count) : nil,
+            ? ApprovalPlan.Replaced(
+                artist: "A", title: "B", byName: byName, files: old.count,
+                quality: replacedQuality) : nil,
         keepBoth: replacesAlbum
             ? ApprovalPlan.KeepBoth(
                 moves: staged.files.map { ($0.name, "/Volumes/music/library/A (2)/\($0.name)") },
@@ -160,10 +163,82 @@ private func unasked(_ plan: ApprovalPlan) -> (ApprovedImport?, String?) {
     let sheet = ApproveSheet(plan: plan, album: "A - B")
     let page = try #require(sheet.window?.contentView as? NSStackView)
     let texts = page.arrangedSubviews.compactMap { ($0 as? NSTextField)?.stringValue }
-    let note = ApproveSheet.replacesNote(try #require(plan.replaced))
+    let note = ApproveSheet.replacesNote(try #require(plan.replaced), staged: plan.stagedQuality)
     #expect(note.hasPrefix("Replaces 3 files in the library"))
     #expect(texts.contains(note))
+    #expect(!note.contains("FLAC 16/44.1"), "the library album's quality isn't known")
+    let known = ApproveSheet.replacesNote(
+        ApprovalPlan.Replaced(artist: "A", title: "B", byName: false, files: 3, quality: mp3320),
+        staged: plan.stagedQuality)
+    #expect(known.contains(" Replaces MP3 320 kbps with FLAC 16/44.1. "))
     #expect(texts.contains(ApproveSheet.deleteWarning))
+}
+
+private let mp3320 = AudioQuality.lossy(format: "MP3", kbps: 320)
+
+/// A job queued as a new album that replaces a library album of its release, found by its
+/// release id, is approved unasked as the sheet's Approve would with Keep Both off, when the
+/// download is clearly higher quality (ADR 0195).
+@Test func aClearlyBetterNewAlbumReplacesTheLibrarysUnasked() throws {
+    let clean = StagedOrigin(path: "/s/job-5/01 First Song.flac", verdicts: [], failure: nil)
+    var plan = plan(
+        upgrade: true, origins: [clean], replacesAlbum: true, replacedQuality: mp3320)
+    #expect(plan.stagedQuality?.description == "FLAC 16/44.1")
+    // Approve asks about an old file with no new one first.
+    #expect(unasked(plan).1 == "Tick the 1 old file with no new one, to lose it.")
+    plan.unmatched = []
+    let (approved, why) = unasked(plan)
+    #expect(why == nil)
+    let sheets = try #require(plan.approved(ticked: [], acknowledgedOrigins: false))
+    #expect(approved?.upgrade?.old == sheets.upgrade?.old)
+    #expect(approved?.upgrade?.old.count == 3)
+    #expect(approved?.upgrade?.acknowledged == [])
+    #expect(approved?.folder == sheets.folder)
+}
+
+@Test func aNewAlbumThatIsntClearlyBetterThanTheOneItReplacesIsLeftSayingBoth() {
+    let clean = StagedOrigin(path: "/s/job-5/01 First Song.flac", verdicts: [], failure: nil)
+    let left = { (plan: ApprovalPlan) -> String? in
+        var plan = plan
+        plan.unmatched = []
+        return unasked(plan).1
+    }
+    let cd = AudioQuality.lossless(format: "FLAC", bitDepth: 16, sampleRateHz: 44_100)
+    #expect(
+        left(plan(upgrade: true, origins: [clean], replacesAlbum: true, replacedQuality: cd))
+            == "it isn't higher quality than the library's FLAC 16/44.1 (FLAC 16/44.1 isn't better)"
+    )
+    // The check read 16/44.1, whatever the peer said.
+    var claimed = plan(upgrade: true, origins: [clean], replacesAlbum: true, replacedQuality: cd)
+    claimed.job.candidate?.bitDepth = 24
+    claimed.job.candidate?.sampleRateHz = 96_000
+    #expect(left(claimed) == nil, "24/96 by the peer's word")
+    var read = clean
+    read.measures = FileMeasures(
+        formatID: "flac", sampleRateHz: 44_100, storedBits: 16, channels: 2, isFloat: false,
+        durationSeconds: 200, cutoffHz: nil, cutoffSteepnessDBPerKHz: nil, effectiveBits: 16,
+        identicalChannels: false, peakDBFS: -1, truePeakDBTP: -1, clippedRuns: 0,
+        dynamicRange: 10)
+    claimed.origins = [read]
+    #expect(left(claimed)?.hasPrefix("it isn't higher quality") == true)
+    // Lossy over lossless.
+    var lossy = plan(upgrade: true, origins: [clean], replacesAlbum: true, replacedQuality: cd)
+    lossy.job.candidate?.format = .mp3
+    lossy.job.candidate?.bitrateKbps = 320
+    #expect(
+        left(lossy)
+            == "it isn't higher quality than the library's FLAC 16/44.1 (MP3 320 kbps isn't better)"
+    )
+    #expect(
+        left(plan(upgrade: true, origins: [clean], replacesAlbum: true))
+            == "it replaces a library album of unknown quality with FLAC 16/44.1, which can't be"
+            + " compared")
+    // Found by artist and title only, it's left however much better.
+    #expect(
+        left(
+            plan(
+                upgrade: true, origins: [clean], replacesAlbum: true, replacedQuality: mp3320,
+                byName: true))?.contains("artist and title") == true)
 }
 
 /// Keep Both imports the job as a new album beside the one it would replace: no old files,
@@ -351,8 +426,9 @@ private func libraryAlbum(
             let audio = TrackAudio(
                 codec: .mp3, sampleRateHz: 44100, bitsPerSample: 16, channels: 2,
                 lengthFrames: 44100 * 200)
+            // 320 kbps for its 200 seconds.
             return ScannedFile(
-                path: path, sizeBytes: 1, modifiedSeconds: 1, known: nil,
+                path: path, sizeBytes: 8_000_000, modifiedSeconds: 1, known: nil,
                 outcome: .success(
                     ParsedFile(
                         metadata: TrackMetadata(tags: tagged, audio: audio, art: nil),
@@ -387,7 +463,7 @@ func aJobQueuedByHandReplacesTheLibrarysAlbumOfItsRelease(_ byName: Bool) async 
         plan.replaced
             == ApprovalPlan.Replaced(
                 artist: "Made-Up Artist", title: byName ? "Made-Up Album" : "Something Else",
-                byName: byName, files: 2))
+                byName: byName, files: 2, quality: .lossy(format: "MP3", kbps: 320)))
     #expect(plan.isUpgrade)
     #expect(plan.checking)
     #expect(plan.movesProblem == nil)

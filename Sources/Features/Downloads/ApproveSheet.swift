@@ -26,17 +26,19 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
     static let findingStep = "Finding the staging and library folders…"
     static let planningStep = "Planning the moves…"
 
-    /// For a job queued as a new album that replaces one in the library: how many files, and
-    /// which album it found.
-    static func replacesNote(_ replaced: ApprovalPlan.Replaced) -> String {
+    /// For a job queued as a new album that replaces one in the library: how many files, which
+    /// album it found, and, where both are known, its quality and the staged files', `staged`.
+    static func replacesNote(_ replaced: ApprovalPlan.Replaced, staged: AudioQuality?) -> String {
         let files = "\(replaced.files) file\(replaced.files == 1 ? "" : "s")"
         let album =
             replaced.byName
             ? "the album with this artist and title, "
                 + "\"\([replaced.artist, replaced.title].compactMap { $0 }.joined(separator: " - "))\""
             : "the album tagged with this release"
-        return "Replaces \(files) in the library: \(album). Approve replaces it as an upgrade"
-            + " does, and keeps its tracks' plays, ratings, loves and playlist entries."
+        let qualities =
+            replaced.quality.flatMap { old in staged.map { " Replaces \(old) with \($0)." } } ?? ""
+        return "Replaces \(files) in the library: \(album).\(qualities) Approve replaces it as an"
+            + " upgrade does, and keeps its tracks' plays, ratings, loves and playlist entries."
     }
 
     /// A staged file: its name, where it goes, and what the check found of it.
@@ -255,7 +257,7 @@ final class ApproveSheet: NSWindowController, NSTableViewDataSource, NSTableView
     private func planViews(_ plan: ApprovalPlan, into views: inout [NSView]) -> [NSScrollView] {
         if plan.resuming { views.append(note(Self.resumeNote)) }
         if let replaced = plan.replaced {
-            views.append(note(Self.replacesNote(replaced)))
+            views.append(note(Self.replacesNote(replaced, staged: plan.stagedQuality)))
             views.append(keepBothBox)
         }
         if let notReplaced = plan.notReplaced { views.append(note(notReplaced)) }

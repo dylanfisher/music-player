@@ -59,8 +59,9 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     static let autoApproveHelp =
         "Approve each staged album tagged clean whose Approve sheet would ask nothing: no"
         + " lossy-origin finding, no old file without a new one, and no library album it"
-        + " wasn't queued to replace. Upgrades replace the old files as Approve does. The rest"
-        + " stay staged for review."
+        + " wasn't queued to replace, unless that album is tagged with its release and the"
+        + " download is clearly higher quality. Upgrades replace the old files as Approve does."
+        + " The rest stay staged for review."
     private(set) var buttons: [DownloadAction: NSButton] = [:]
     /// The rows shown, in the window's order.
     private(set) var rows: [DownloadRow] = []

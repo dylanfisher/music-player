@@ -13,6 +13,9 @@ private func fixture(_ fixture: AnalysisFixture) throws -> String {
     let origins = try await stagedOrigins([try fixture(.fullBand), try fixture(.padded)])
     #expect(origins.map(\.verdicts) == [[], []])
     #expect(!origins.contains { $0.blocks })
+    // What the check read, which Approve Safe Matches compares with the library (ADR 0195).
+    #expect(origins.map { $0.measures?.storedBits } == [16, 24])
+    #expect(origins.map { $0.measures?.sampleRateHz } == [44_100, 44_100])
 }
 
 @Test func anUpsampledOrLossyOriginStagedFileBlocksApprove() async throws {
