@@ -108,6 +108,8 @@ private func newTempName(for path: String) -> String {
 struct TempFile {
     var path: String
     var identity: FileIdentity
+    /// The original's hashes, when the write was asked for them.
+    var originalHashes: FileHashes?
 }
 
 /// Fails unless the file and its folder can be written and the file isn't locked. A rename
@@ -146,9 +148,14 @@ private let copyBytes = 4 * 1024 * 1024
 /// (SMB), it's written whole. Then it takes the original's mode, flags, ACL, extended
 /// attributes (Finder tags among them) and creation date; its mtime is new. The caller removes
 /// the temp files an earlier write left, a batch at a time (`removeLeftoverTemps`).
+///
+/// Given `hashing`, the original's audio ranges, it also hashes the original and its audio
+/// from the descriptor it copies from, whose identity it checked (ADR 0196): from the blocks it
+/// copies and the bytes between them, when the kept ranges are in the original's order, as
+/// every rewrite's are; in a read of its own, when the temp file is a clone or they aren't.
 func writeTemp(
     _ segments: [Segment], from original: String, identity: FileIdentity,
-    faults: WriteFaults = WriteFaults()
+    hashing payload: [Range<Int>]? = nil, faults: WriteFaults = WriteFaults()
 ) throws(TagWriteError) -> TempFile {
     // Not through a link, and the file that opened must be the one that was read: someone who
     // can write the folder could have swapped another in.
@@ -186,6 +193,8 @@ func writeTemp(
         return true
     }
 
+    var hasher = payload.map(FileHasher.init(payload:))
+    var hashed = false
     var cloned = false
     if inPlace {
         faults.called(.clone(bytes: identity.size))
@@ -218,14 +227,31 @@ func writeTemp(
                 }
             }
         } else {
+            let kept = segments.compactMap { segment -> Range<Int>? in
+                if case .original(let range) = segment { range } else { nil }
+            }
+            let inOrder = zip(kept, kept.dropFirst()).allSatisfy { $0.upperBound <= $1.lowerBound }
+            var copying = inOrder ? hasher : nil
             for (offset, segment) in placed {
                 switch segment {
                 case .bytes(let bytes):
                     try writeAll(bytes, to: destination, at: offset, original, faults)
                 case .original(let range):
-                    try copy(range, from: source, to: destination, at: offset, original, faults)
+                    // The original's bytes this file drops, hashed but not copied.
+                    try copying?.hash(source, upTo: range.lowerBound, original, faults: faults)
+                    try copy(
+                        range, from: source, to: destination, at: offset, original, faults,
+                        hashing: &copying)
                 }
             }
+            if copying != nil {
+                try copying?.hash(source, upTo: identity.size, original, faults: faults)
+                hasher = copying
+                hashed = true
+            }
+        }
+        if !hashed {
+            try hasher?.hash(source, upTo: identity.size, original, faults: faults)
         }
         // The attributes go first, so the flush covers them too before the rename.
         try copyAttributes(from: source, info, to: destination, original, faults)
@@ -261,7 +287,8 @@ func writeTemp(
         else {
             throw TagWriteError(path: original, kind: .changedDuringWrite, detail: tempSwapDetail)
         }
-        return TempFile(path: temp, identity: FileIdentity(closed))
+        return TempFile(
+            path: temp, identity: FileIdentity(closed), originalHashes: hasher?.finish())
     } catch {
         unlinkat(folder, name, 0)
         throw error
@@ -364,9 +391,10 @@ private func writeAll(
     }
 }
 
+/// Copies `range` of the original, giving each block read to `hasher`, if any.
 private func copy(
     _ range: Range<Int>, from source: Int32, to destination: Int32, at offset: Int,
-    _ path: String, _ faults: WriteFaults
+    _ path: String, _ faults: WriteFaults, hashing hasher: inout FileHasher?
 ) throws(TagWriteError) {
     var buffer = [UInt8](repeating: 0, count: min(copyBytes, range.count))
     var done = 0
@@ -381,9 +409,9 @@ private func copy(
             throw systemError(path, .unreadable, FileFailure.read)
         }
         guard count > 0 else {
-            throw TagWriteError(
-                path: path, kind: .changedDuringWrite, detail: "the file got shorter while copying")
+            throw TagWriteError(path: path, kind: .changedDuringWrite, detail: shorterDetail)
         }
+        buffer.withUnsafeBytes { hasher?.update(UnsafeRawBufferPointer(rebasing: $0[0..<count])) }
         try writeAll(Array(buffer[0..<count]), to: destination, at: offset + done, path, faults)
         done += count
     }

@@ -327,10 +327,13 @@ public struct TagWriter: Sendable {
                 InPlaceJob(
                     path: path, plan: plan, before: before, original: file, expected: expected))
         }
-        let hashes = try fileHashes(path, payload: file.payload, faults: faults)
         let (restore, oldBytes) = try restoreSegments(
             segments, from: source, path: path, size: before.size)
-        let temp = try writeTemp(segments, from: path, identity: before, faults: faults)
+        let temp = try writeTemp(
+            segments, from: path, identity: before, hashing: file.payload, faults: faults)
+        guard let hashes = temp.originalHashes else {
+            preconditionFailure("a temp file asked for the hashes has them")
+        }
         var handle: TagUndoJournal.Handle?
         var record: TagUndoJournal.FileRecord
         let parsed: ParsedFile
