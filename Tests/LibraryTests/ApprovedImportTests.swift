@@ -180,17 +180,26 @@ private let newAlbumReports = ["approved", "importing", "imported"]
 /// nothing, as the app wires it (ADR 0199).
 @Test func anUpgradeOnAShareWithNoTrashDeletesTheOldFiles() async throws {
     let setup = try ImportFolders()
-    let asked = Rescans()
+    let offered = OfferedToTrash()
     let noTrash = setup.run(trash: { urls in
         await trashOrDelete(urls) { url in
-            asked.add([url.lastPathComponent])
+            offered.add(url.lastPathComponent)
             throw CocoaError(.featureUnsupported)
         }
     })
     let outcome = await noTrash.run(try setup.job(upgrade: true))
     #expect(outcome == .imported(setup.folders.destinations))
     try setup.expectUpgraded()
-    #expect(asked.all == ImportFolders.oldNames.map { [$0] }, "each offered to the Trash first")
+    #expect(offered.all.sorted() == ImportFolders.oldNames, "each offered to the Trash first")
+}
+
+/// The names of the files given to a stand-in Trash.
+private final class OfferedToTrash: @unchecked Sendable {
+    private let lock = NSLock()
+    private var names: [String] = []
+
+    func add(_ name: String) { lock.withLock { names.append(name) } }
+    var all: [String] { lock.withLock { names } }
 }
 
 /// On a volume with a Trash the old files go to it.
