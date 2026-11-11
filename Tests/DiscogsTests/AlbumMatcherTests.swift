@@ -1,5 +1,6 @@
 import Foundation
 import Library
+import SQLite
 import Testing
 
 @testable import Discogs
@@ -996,4 +997,169 @@ private final class Heard: @unchecked Sendable {
     #expect(result.releaseID == 11)
     #expect(result.tier == .exact)
     #expect(result.mapping.count == 6)
+}
+
+/// Releases still tied are other albums only when they're of more than one master and more than
+/// one title, as a compilation of the same tracks is; such a tie is never Safe.
+@Test func aTieIsAcrossAlbumsOnlyWithTwoMastersAndTwoTitles() throws {
+    func tie(_ second: (master: Int?, title: String), firstMaster: Int? = 100) throws -> AlbumMatch
+    {
+        try match(
+            album(stockholmTitles, label: "Svek", catalogNumber: "SK 032"),
+            releases: release(10, master: firstMaster, tracks: stockholm)
+                + release(11, title: second.title, master: second.master, tracks: stockholm))
+    }
+    let across = try tie((200, "Holm"))
+    #expect(across.reasons == [.tiedAfterTieBreak])
+    #expect(across.safety == nil)
+    #expect(
+        try tie((nil, "Holm"), firstMaster: nil).safety == nil,
+        "a release with no master is its own")
+    let oneMaster = try tie((100, "Holm"))
+    #expect(oneMaster.reasons == [.tiedAfterTieBreak])
+    #expect(oneMaster.safety == .safe)
+    #expect(oneMaster.confidence == (across.confidence ?? 0) + 5)
+    #expect(try tie((200, "Stockholm")).safety == .safe, "one title")
+}
+
+/// The artist's releases a master-less search scores: the master's other releases only when its
+/// main release's titles pair with the album's, and at most `artistOnlyScored` in all.
+@Test func anArtistOnlySearchScoresAMastersReleasesOnlyThroughItsMainAndStopsAtItsCap() throws {
+    let unfound = album(stockholmTitles, title: "Untitled Rip 2004")
+    let partly = [
+        track("1", "Östermalm", "4:45"), track("2", "Nowhere", "1:00"),
+        track("3", "Elsewhere", "1:00"),
+    ]
+    let unlike = [track("1", "Nothing")]
+    func siblings(_ ids: ClosedRange<Int>, fitting: Int?) -> String {
+        ids.map { release($0, master: 100, tracks: $0 == fitting ? stockholm : unlike) }.joined()
+    }
+    let main = master(100, main: 1)
+    let gated = try match(
+        unfound, masters: master(100, main: 1),
+        releases: release(1, master: 100, main: true, tracks: unlike) + siblings(2...3, fitting: 3))
+    #expect(gated.tier == .noCandidate, "a main release that doesn't pair hides the rest")
+    let opened = try match(
+        unfound, masters: main,
+        releases: release(1, master: 100, main: true, tracks: partly) + siblings(2...3, fitting: 3))
+    #expect(opened.releaseID == 3)
+    #expect(opened.foundBy == .artist)
+
+    // The main release and 599 others are 600 scored.
+    let atCap = try match(
+        unfound, masters: main,
+        releases: release(1, master: 100, main: true, tracks: partly)
+            + siblings(2...artistOnlyScored + 1, fitting: artistOnlyScored))
+    #expect(atCap.releaseID == artistOnlyScored)
+    let pastCap = try match(
+        unfound, masters: main,
+        releases: release(1, master: 100, main: true, tracks: partly)
+            + siblings(2...artistOnlyScored + 1, fitting: artistOnlyScored + 1))
+    #expect(pastCap.tier == .noCandidate)
+    let masterless = try match(
+        unfound, masters: main,
+        releases: release(1, master: 100, main: true, tracks: partly)
+            + siblings(2...artistOnlyScored, fitting: nil) + release(5_000, tracks: stockholm))
+    #expect(masterless.tier == .noCandidate, "a release with no master after the cap")
+}
+
+/// An artist-only search reads each release once a run: the next album of the artist scores
+/// it from the cache, so a release gone from the catalog since is still found.
+@Test func anArtistOnlySearchReadsEachReleaseOnceARun() throws {
+    let folder = try DumpFolder()
+    try folder.write("20261101", releases: release(10, tracks: stockholm))
+    let matcher = AlbumMatcher(try folder.importedCatalog(), skippingVideo: false)
+    let unfound = album(stockholmTitles, title: "Untitled Rip 2004")
+    #expect(try matcher.match(unfound).releaseID == 10)
+    try Database(at: folder.catalog).execute("DELETE FROM releases WHERE id = 10")
+    #expect(try matcher.match(unfound).releaseID == 10)
+    #expect(
+        try AlbumMatcher(Catalog(at: folder.catalog), skippingVideo: false).match(unfound).tier
+            == .noCandidate)
+}
+
+/// Choosing a release again keeps how the match found it; choosing another takes how the search
+/// found that one. The tier is Matched only for the release the tracks carry.
+@Test func choosingAReleaseKeepsHowItWasFoundAndIsMatchedOnlyForTheTaggedRelease() throws {
+    let folder = try DumpFolder()
+    try folder.write(
+        "20261101",
+        releases: release(10, catno: "XX 1", tracks: stockholm)
+            + release(11, title: "Holm", catno: "SK 032", tracks: stockholm))
+    let catalog = try folder.importedCatalog()
+    let matcher = AlbumMatcher(catalog, skippingVideo: false)
+    let tagged = album(stockholmTitles, label: "Svek", catalogNumber: "SK 032")
+    let previous = try matcher.match(tagged)
+    #expect(previous.releaseID == 11)
+    #expect(previous.foundBy == .labelAndCatalogNumber)
+    #expect(previous.candidates.map(\.foundBy) == [.title])
+    let ten = try #require(try catalog.release(id: 10))
+    let eleven = try #require(try catalog.release(id: 11))
+    let other = AlbumMatcher.choosing(ten, origin: .catalog, for: tagged, after: previous)
+    #expect(other.foundBy == .title)
+    let again = AlbumMatcher.choosing(eleven, origin: .catalog, for: tagged, after: previous)
+    #expect(again.foundBy == .labelAndCatalogNumber)
+
+    let carrying = album(stockholmTitles, releaseIDs: ["10", "10", "10"])
+    let matched = try matcher.match(carrying)
+    #expect(
+        AlbumMatcher.choosing(ten, origin: .catalog, for: carrying, after: matched).tier == .matched
+    )
+    #expect(
+        AlbumMatcher.choosing(eleven, origin: .catalog, for: carrying, after: matched).tier
+            == .exact)
+}
+
+/// The other candidates are listed best first, and those that score the same in the order found.
+@Test func otherCandidatesAreBestFirstAndEqualOnesInTheOrderFound() throws {
+    let one = [
+        track("1", "Östermalm", "4:45"), track("2", "Foo", "6:10"), track("3", "Bar", "5:00"),
+    ]
+    let two = [
+        track("1", "Östermalm", "4:45"), track("2", "Gamla Stan", "6:10"),
+        track("3", "Bar", "5:00"),
+    ]
+    let result = try match(
+        album(stockholmTitles),
+        releases: release(10, tracks: stockholm) + release(11, catno: "A 1", tracks: one)
+            + release(12, catno: "A 2", tracks: two) + release(13, catno: "A 3", tracks: one))
+    #expect(result.releaseID == 10)
+    #expect(result.candidates.map(\.releaseID) == [12, 11, 13])
+}
+
+@Test func matchingStopsBetweenAlbumsWhenCancelled() async throws {
+    let folder = try DumpFolder()
+    try folder.write("20261101", releases: release(10, tracks: stockholm))
+    try folder.importCatalog()
+    let heard = Heard()
+    await #expect(throws: CancellationError.self) {
+        try await matchAlbums(
+            (0..<3).map { _ in album(stockholmTitles) }, catalogAt: folder.catalog, choosing: [:],
+            skippingVideo: false
+        ) {
+            heard.add($0)
+            // Progress is heard on the run's own task.
+            withUnsafeCurrentTask { $0?.cancel() }
+        }
+    }
+    #expect(heard.all.map(\.albumsDone) == [1])
+}
+
+/// A run the API stops gives the waits back to whoever heard them before it.
+@Test func aRunTheAPIStopsGivesTheWaitsBack() async throws {
+    let folder = try DumpFolder()
+    let fake = FakeDiscogs()
+    let api = fake.api()
+    let outer = Recorded<Int?>()
+    await api.setWaiting { outer.add($0) }
+    fake.queue("/database/search", .failure(.offline))
+    await #expect(throws: APIStoppedMatching.self) {
+        try await matchAlbums(
+            [album(stockholmTitles, barcode: "7 350001 000123")], catalogAt: folder.catalog,
+            source: .api, api: api, choosing: [:], skippingVideo: false
+        ) { _ in }
+    }
+    fake.queue("/releases/1002", status: 429, headers: ["Retry-After": "40"])
+    _ = try await api.release(id: 1002)
+    #expect(outer.all == [40, nil])
 }

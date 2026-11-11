@@ -18,3 +18,4 @@ Sources/Core/TagWriter/TagWriter.swift 199-303 TagWriterTests
 Sources/Core/TagWriter/TagWriter.swift 386-413 TagWriterTests
 # The Discogs tagger's choice among releases that fit equally, and the matcher around it.
 Sources/Core/Discogs/TieBreak.swift all DiscogsTests
+Sources/Core/Discogs/AlbumMatcher.swift all DiscogsTests
