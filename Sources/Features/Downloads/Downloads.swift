@@ -207,10 +207,10 @@ package final class Downloads {
     /// The pass running, and whether a poll or a change came during it, which runs another.
     var upgrading: Task<Void, Never>?
     var upgradeAgain = false
-    /// The jobs Approve Safe Matches Automatically found a lossy-origin finding in, which the
-    /// upgrader requeues when they're its own.
-    var notClean: Set<Int> = []
-    /// The releases whose snapshot couldn't be built, left until the next launch.
+    /// The jobs Approve Safe Matches Automatically found a lossy-origin finding in, by epoch,
+    /// which the upgrader requeues when they're its own; each pass keeps only its own.
+    var notClean: Set<AutoUpgradeJob> = []
+    /// The releases whose snapshot couldn't be built, left until the session stops.
     var unqueueable: Set<Int> = []
     /// The clock the misses are dated by; tests stand in for it.
     var now: () -> Date = Date.init
@@ -307,6 +307,8 @@ package final class Downloads {
         approving = nil
         upgrading?.cancel()
         upgrading = nil
+        notClean = []
+        unqueueable = []
         session?.model.stop()
         session = nil
         refresh()
@@ -872,7 +874,10 @@ package final class Downloads {
         case .notClean(let why):
             await giveBack()
             leave(why)
-            notClean.insert(id)
+            if let epoch = model.jobs.epoch {
+                notClean.insert(
+                    AutoUpgradeJob(epoch: epoch, jobID: id, releaseID: job.release.releaseID))
+            }
             upgradeAutomatically()
         case .approved(let approved):
             let outcome = await importing(DownloadRow.album(job.release)) {

@@ -60,7 +60,7 @@ private func listed(
         ] + (12...15).map { mine($0, release: 10 + $0) }
     let (steps, inFlight) = AutoUpgrades.steps(
         own: own, jobs: Dictionary(uniqueKeysWithValues: jobs.map { ($0.id, $0) }),
-        epoch: "e1", notClean: [9], approvable: [12])
+        epoch: "e1", notClean: [own[8], mine(15, release: 25, epoch: "e0")], approvable: [12])
     #expect(
         steps == [
             .forget(own[0]), .miss(own[1]), .miss(own[2]), .cancelThenMiss(own[3]),
@@ -319,7 +319,10 @@ private final class Once: @unchecked Sendable {
     await session.model.poll()
     await eventually("requeued") { fake.requeued == [1] }
     await eventually("a new copy is looked at again") {
-        session.model.leftForReview[1] == nil && !downloads.notClean.contains(1)
+        session.model.leftForReview[1] == nil && downloads.notClean.isEmpty
     }
+    downloads.unqueueable = [5]
+    downloads.notClean = [mine(1, release: 1)]
     downloads.stop()
+    #expect(downloads.notClean.isEmpty && downloads.unqueueable.isEmpty, "a session's own")
 }

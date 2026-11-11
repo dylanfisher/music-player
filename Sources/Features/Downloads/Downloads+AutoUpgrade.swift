@@ -62,6 +62,7 @@ extension Downloads {
         // Read with the rows, after the index: a reset during the read changes both.
         guard let epoch = model.jobs.epoch else { return }
         let rows = model.jobs.rows
+        notClean.formIntersection(own)
         let machine = session.setup.machine
         let approvable =
             autoApprove
@@ -154,7 +155,7 @@ extension Downloads {
                 return false
             }
             logger.notice("job \(id) requeued unasked: its copy wasn't clean")
-            notClean.remove(id)
+            notClean.remove(job)
             session.model.leave(id, nil)
             // A new copy is staged in the same folder; the old one's sizes and release go.
             await record("job \(id)'s import ledger couldn't be forgotten") {

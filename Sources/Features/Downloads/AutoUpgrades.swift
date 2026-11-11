@@ -28,7 +28,8 @@ enum AutoUpgrades {
     /// lease, which the run gives up after its report. A job left for the owner, failed past
     /// its download or staged for review, holds no slot.
     static func steps(
-        own: [AutoUpgradeJob], jobs: [Int: DownloadJob], epoch: String, notClean: Set<Int>,
+        own: [AutoUpgradeJob], jobs: [Int: DownloadJob], epoch: String,
+        notClean: Set<AutoUpgradeJob>,
         approvable: Set<Int>
     ) -> (steps: [Step], inFlight: Int) {
         var steps: [Step] = []
@@ -49,7 +50,7 @@ enum AutoUpgrades {
             case .failed: break
             case .staged
             where (job.tagging.status == .discrepancy && job.lease == nil)
-                || notClean.contains(job.id):
+                || notClean.contains(mine):
                 steps.append(.requeue(mine))
                 inFlight += 1
             case .staged where !isMoving(job, approvable: approvable): break
