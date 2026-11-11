@@ -238,6 +238,43 @@ private func settled(_ downloads: Downloads) async {
     downloads.stop()
 }
 
+/// True the first time only.
+private final class Once: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+
+    func first() -> Bool {
+        lock.withLock {
+            defer { done = true }
+            return !done
+        }
+    }
+}
+
+@MainActor
+@Test func aResetDuringAPassQueuesUnderTheNewEpoch() async throws {
+    let fake = FakeService()
+    let library = Library([candidate(1)])
+    let (downloads, session) = try await upgrading(fake, library, inFlight: 1)
+    let once = Once()
+    downloads.upgradeCandidates = { _, _ in
+        if once.first() {
+            fake.rebuild([])
+            await session.model.poll()
+        }
+        return library.candidates
+    }
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    await session.model.poll()
+    await settled(downloads)
+    let own = try LibraryIndex(at: session.setup.databaseURL).autoUpgradeJobs()
+    #expect(own == [mine(1, release: 1, epoch: "e1'")])
+    #expect(fake.created.count == 1)
+    downloads.stop()
+}
+
 @MainActor
 @Test func aCopyTaggedWithADiscrepancyIsRequeuedButNotAnUpgradeQueuedByHand() async throws {
     let discrepancy = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])

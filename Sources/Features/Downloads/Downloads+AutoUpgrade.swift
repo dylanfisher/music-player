@@ -17,7 +17,7 @@ extension Downloads {
     func upgradeAutomatically() {
         guard autoUpgrade, let session, session.canTag, session.coordinator != nil,
             let share = session.setup.share, session.model.connection == .answering,
-            let epoch = session.model.jobs.epoch
+            session.model.jobs.epoch != nil
         else { return }
         guard upgrading == nil else {
             upgradeAgain = true
@@ -25,19 +25,21 @@ extension Downloads {
         }
         upgradeAgain = false
         upgrading = Task {
-            await upgradePass(session, share: share, epoch: epoch)
+            await upgradePass(session, share: share)
             guard self.session === session else { return }
             upgrading = nil
             if upgradeAgain { upgradeAutomatically() }
         }
     }
 
-    /// Whether a pass may make its next call: the box still on and the session the same.
-    private func goesOn(_ session: Session) -> Bool {
-        autoUpgrade && self.session === session && !Task.isCancelled
+    /// Whether a pass may make its next call: the box still on, and the session and the
+    /// service's epoch, which its jobs' ids belong to, the same.
+    private func goesOn(_ session: Session, _ epoch: String) -> Bool {
+        autoUpgrade && self.session === session && session.model.jobs.epoch == epoch
+            && !Task.isCancelled
     }
 
-    private func upgradePass(_ session: Session, share: String, epoch: String) async {
+    private func upgradePass(_ session: Session, share: String) async {
         let database = session.setup.databaseURL
         let read = await blockingFileWork {
             Result { () throws -> ([AutoUpgradeJob], [Int: UpgradeMiss], Set<Int>) in
@@ -57,23 +59,26 @@ extension Downloads {
             return logger.error("the automatic upgrades couldn't be read: \(error)")
         }
         let model = session.model
+        // Read with the rows, after the index: a reset during the read changes both.
+        guard let epoch = model.jobs.epoch else { return }
+        let rows = model.jobs.rows
         let machine = session.setup.machine
         let approvable =
             autoApprove
             ? Set(
-                model.jobs.rows.values.filter {
+                rows.values.filter {
                     Self.mayApproveUnasked($0, machine: machine)
                         && model.leftForReview[$0.id] == nil
                 }.map(\.id)) : []
         let settled = AutoUpgrades.steps(
-            own: own, jobs: model.jobs.rows, epoch: epoch, notClean: notClean,
+            own: own, jobs: rows, epoch: epoch, notClean: notClean,
             approvable: approvable)
         var inFlight = settled.inFlight
         for step in settled.steps {
-            guard goesOn(session) else { return }
+            guard goesOn(session, epoch) else { return }
             if await take(step, session) { inFlight += 1 }
         }
-        guard goesOn(session), inFlight < autoUpgradesInFlight else { return }
+        guard goesOn(session, epoch), inFlight < autoUpgradesInFlight else { return }
         let candidates: [UpgradeCandidate]
         let missed: [Int: UpgradeMiss]
         do {
@@ -88,11 +93,12 @@ extension Downloads {
         } catch {
             return logger.error("the upgrade candidates couldn't be read: \(error)")
         }
+        guard goesOn(session, epoch) else { return }
         let chosen = AutoUpgrades.next(
             candidates, jobs: session.model.jobs.rows.values, never: never, misses: missed,
             skipped: unqueueable, now: now(), room: autoUpgradesInFlight - inFlight)
         for candidate in chosen {
-            guard goesOn(session) else { return }
+            guard goesOn(session, epoch) else { return }
             guard await queue(candidate, session, epoch: epoch) else { return }
         }
     }
@@ -197,7 +203,7 @@ extension Downloads {
             unqueueable.insert(release)
             return true
         }
-        guard goesOn(session) else { return false }
+        guard goesOn(session, epoch) else { return false }
         let order = JobOrder.upgrade(
             DownloadJob.Upgrade(
                 currentQuality: candidate.quality, oldPaths: candidate.sharePaths), .flac)
