@@ -73,3 +73,35 @@ private func tags(
     #expect(name.hasSuffix("é.flac"))
     #expect(name.hasPrefix("03 é"))
 }
+
+/// Tags and a source's name that name a path give three components inside the library folder,
+/// none `.` or `..`, and no leading `/` (ADR 0025, row 73).
+@Test(arguments: ["../..", "..", "/etc/passwd", ".", "../../../etc", "a/../../b"])
+func aTagThatNamesAPathStaysOneComponent(_ hostile: String) {
+    for path in [
+        libraryFolderPath(for: tags(artist: hostile), of: "/in/x.flac"),
+        libraryFolderPath(for: tags(albumArtist: hostile), of: "/in/x.flac"),
+        libraryFolderPath(for: tags(album: hostile), of: "/in/x.flac"),
+        libraryFolderPath(for: tags(title: hostile, track: nil), of: "/in/x.flac"),
+        libraryFolderPath(for: tags(title: nil, track: nil), of: "/in/\(hostile).flac"),
+    ] {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        #expect(parts.count == 3, "\(path)")
+        #expect(!path.hasPrefix("/"), "\(path)")
+        #expect(parts.allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }, "\(path)")
+    }
+}
+
+/// The extension a source's name gives is held to the same rule, and dropped when nothing of
+/// it is left.
+@Test func theExtensionGoesThroughTheSafeNameRule() {
+    #expect(libraryFolderPath(for: tags(), of: "/in/x.fl:ac") == "Artist/Album/03 Song.fl-ac")
+    #expect(libraryFolderPath(for: tags(), of: "/in/x. ") == "Artist/Album/03 Song")
+    #expect(libraryFolderPath(for: tags(), of: "/in/x.\u{1}") == "Artist/Album/03 Song")
+    let long = libraryFolderPath(
+        for: tags(title: String(repeating: "t", count: 300)),
+        of: "/in/x." + String(repeating: "e", count: 300))
+    let name = String(long.split(separator: "/")[2])
+    #expect(name.utf8.count <= 255)
+    #expect(name.hasSuffix("." + String(repeating: "e", count: 16)))
+}

@@ -6,7 +6,8 @@ import Metadata
 /// its library folder. The track number has two digits, after the disc number and a hyphen when
 /// the album has more than one disc. A file with no track number is named by its title alone,
 /// one with no title by its own file name, and a missing artist or album is "Unknown Artist" or
-/// "Unknown Album".
+/// "Unknown Album". Every part, the extension too, goes through `safeName`, so tags and a
+/// staged file's name give three components inside the library folder, none `.` or `..`.
 func libraryFolderPath(for tags: TrackTags, of source: String) -> String {
     let artist = folderName(tags.albumArtist ?? tags.artist, else: "Unknown Artist")
     let album = folderName(tags.album, else: "Unknown Album")
@@ -16,7 +17,7 @@ func libraryFolderPath(for tags: TrackTags, of source: String) -> String {
         let multiDisc = (tags.discTotal ?? 0) > 1 || (tags.discNumber ?? 1) > 1
         return multiDisc ? "\(tags.discNumber ?? 1)-\(digits) " : "\(digits) "
     }
-    let ext = (source as NSString).pathExtension
+    let ext = safeName((source as NSString).pathExtension, maxBytes: maxExtensionBytes)
     return artist + "/" + album + "/" + fileName(stem: (number ?? "") + title, extension: ext)
 }
 
@@ -49,6 +50,9 @@ func layoutDestination(of source: String, in listings: LibraryFolderListings)
 
 /// The most bytes a name may have: APFS and HFS+ take 255 in UTF-8.
 private let maxNameBytes = 255
+/// The most bytes an extension keeps, so a name its source gave a long one still has room for
+/// its stem. Audio files' extensions have four or five.
+private let maxExtensionBytes = 16
 
 private func nonEmpty(_ text: String) -> String? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -60,7 +64,8 @@ private func folderName(_ tag: String?, else fallback: String) -> String {
     return name.isEmpty ? fallback : name
 }
 
-/// `stem.extension`, the stem cut short so the whole name fits.
+/// `stem.extension`, the stem cut short so the whole name fits; `stem` alone when the extension
+/// is empty.
 private func fileName(stem: String, extension ext: String) -> String {
     let suffix = ext.isEmpty ? "" : "." + ext
     let name = safeName(stem, maxBytes: maxNameBytes - suffix.utf8.count)

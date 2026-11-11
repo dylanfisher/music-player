@@ -243,6 +243,27 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
     #expect(try FileManager.default.contentsOfDirectory(atPath: outside).isEmpty)
 }
 
+/// Tags that name a path put the file inside the library folder all the same (ADR 0025,
+/// row 73).
+@Test func tagsThatNameAPathMoveTheFileInsideTheLibrary() throws {
+    let folders = try MoveFolders()
+    try taggedFLAC(tags: [
+        "TITLE": "..", "ARTIST": "../..", "ALBUM": "/etc/passwd", "TRACKNUMBER": "1",
+    ]).write(to: URL(fileURLWithPath: folders.staging + "/job-7/01.flac", isDirectory: false))
+    let moved = try folders.moveIn()
+    #expect(moved[0] == folders.library + "/_/_etc_passwd/01.flac")
+    for path in moved {
+        #expect(path.hasPrefix(folders.library + "/"), "\(path)")
+        let inside = path.dropFirst(folders.library.count + 1)
+            .split(separator: "/", omittingEmptySubsequences: false)
+        #expect(inside.count == 3 && inside.allSatisfy { $0 != ".." && $0 != "." }, "\(path)")
+    }
+    #expect(
+        try FileManager.default.contentsOfDirectory(atPath: folders.share).sorted() == [
+            "library", "staging",
+        ])
+}
+
 @Test func aStagingFolderInsideTheLibraryFolderIsRefused() throws {
     let folders = try MoveFolders()
     let move = LibraryFolderMove(
