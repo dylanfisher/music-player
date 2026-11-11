@@ -134,6 +134,19 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     #expect(try index.ratings(ids: []) == [])
 }
 
+@Test func tracksAtPathsReadEachPathsRowInOrder() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let ids = Array(try index.trackIDs(sortedBy: .title).prefix(2))
+    let paths = try index.paths(ids: ids)
+    let asked = [
+        try #require(paths[ids[1]]), "/not/in/the/index.flac", try #require(paths[ids[0]]),
+    ]
+    #expect(try index.tracks(atPaths: asked).map { $0?.id } == [ids[1], nil, ids[0]])
+    #expect(try index.tracks(atPaths: []).isEmpty)
+}
+
 /// The albums are counted once each, however many of their tracks the list holds; a track with
 /// no album adds none.
 @Test func trackTotalsCountEachAlbumOnce() throws {

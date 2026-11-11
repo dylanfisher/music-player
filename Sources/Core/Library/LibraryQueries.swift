@@ -289,6 +289,15 @@ extension LibraryIndex {
         try statement(rowSelect + " WHERE f.path = ?").map(path, row: trackRow).first
     }
 
+    /// The row for each of `paths`, nil where the index has no track for it, read together,
+    /// for the info windows' play counts and ratings over a large selection.
+    public func tracks(atPaths paths: [String]) throws -> [TrackRow?] {
+        let ids = try trackIDs(atPaths: paths)
+        let found = try rows(ids: ids.compactMap { $0 })
+        let byID = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return ids.map { $0.flatMap { byID[$0] } }
+    }
+
     /// The album ID of each of `ids` that has one, as `TrackRow.albumID` reads it.
     public func albumIDs(ids: [Int64]) throws -> [Int64: Int64] {
         let found = try inChunks(

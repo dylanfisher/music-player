@@ -71,6 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var goToTracks: LibraryListing<[PaletteItem]>?
     /// Looks a track up by path, for counting plays toward frecency.
     private(set) var trackLookup: ((String) throws -> TrackRow?)?
+    /// Looks tracks up by path together, for an info window's play counts and ratings.
+    private var tracksLookup: (([String]) throws -> [TrackRow?])?
     private(set) var saver: LayoutSaver?
     /// The play state saved at quit, read at launch, and what saves it once that's put back
     /// (ADR 0095).
@@ -315,6 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let timelineTable = layout.timelineTable { browser.showTimelineColumns(timelineTable) }
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
+        tracksLookup = { try index.tracks(atPaths: $0) }
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
         nowPlaying.header.apply(layout.headerStatus)
         for (item, header) in zip(ToolbarItem.customStatuses, nowPlaying.customStatuses) {
@@ -777,17 +780,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// What the index has for each of `paths`, by `fact` of its track, for an info window; nil
-    /// for a path it has no track for, or one it couldn't read, which is logged.
+    /// for a path it has no track for, or all nil when it couldn't read them, which is logged.
     private func indexed<Fact>(
         _ paths: [String], _ fact: KeyPath<TrackRow, Fact>, _ name: String
     ) -> [Fact?] {
-        paths.map { path in
-            do {
-                return try trackLookup?(path)?[keyPath: fact]
-            } catch {
-                logger.error("couldn't read the \(name) of \(path): \(error)")
-                return nil
-            }
+        do {
+            guard let tracksLookup else { return paths.map { _ in nil } }
+            return try tracksLookup(paths).map { $0?[keyPath: fact] }
+        } catch {
+            logger.error("couldn't read the \(name) of \(tracks(paths.count)): \(error)")
+            return paths.map { _ in nil }
         }
     }
 
