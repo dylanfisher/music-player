@@ -47,21 +47,46 @@ private func listed(
             $0.lease = DownloadJob.Hold(machine: "Kitchen", expiresAt: 0)
         },
         listed(9, release: 19, .staged), listed(10, release: 20, .downloading),
+        listed(12, release: 22, .staged) { $0.tagging = clean },
+        listed(13, release: 23, .staged) { $0.tagging = clean },
+        listed(14, release: 24, .staged) {
+            $0.tagging = DownloadJob.Tagging(status: .error, reasons: ["unreadable"])
+        },
+        listed(15, release: 25, .staged),
     ]
     let own =
         (1...10).map { mine($0, release: 10 + $0) } + [
             mine(11, release: 21), mine(1, release: 11, epoch: "e0"),
-        ]
+        ] + (12...15).map { mine($0, release: 10 + $0) }
     let (steps, inFlight) = AutoUpgrades.steps(
         own: own, jobs: Dictionary(uniqueKeysWithValues: jobs.map { ($0.id, $0) }),
-        epoch: "e1", notClean: [9])
+        epoch: "e1", notClean: [9], approvable: [12])
     #expect(
         steps == [
             .forget(own[0]), .miss(own[1]), .miss(own[2]), .cancelThenMiss(own[3]),
             .cancelThenMiss(own[4]), .requeue(own[6]), .requeue(own[8]), .forget(own[10]),
             .forget(own[11]),
         ])
-    #expect(inFlight == 5, "failed at move, both staged, held, and downloading")
+    // Both requeued, held, downloading, clean for Approve Safe and untagged; not failed at
+    // move, left for review or a tagging error.
+    #expect(inFlight == 6)
+}
+
+private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
+
+@MainActor
+@Test func aCopyLeftForTheOwnerHoldsNoSlot() async throws {
+    let fake = FakeService()
+    let (downloads, session) = try await upgrading(
+        fake, Library([candidate(1, plays: 9), candidate(2)]), inFlight: 1)
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    fake.put(listed(1, release: 1, .staged) { $0.tagging = clean })
+    await session.model.poll()
+    await eventually("the next queued") { fake.created.count == 2 }
+    #expect(fake.created.last?.release == 2, "Approve Safe is off: the copy waits for review")
+    downloads.stop()
 }
 
 @Test func theCandidatesLeaveOutMarkedSetAsideWaitingAndQueuedAlbums() {

@@ -56,8 +56,18 @@ extension Downloads {
         } catch {
             return logger.error("the automatic upgrades couldn't be read: \(error)")
         }
+        let model = session.model
+        let machine = session.setup.machine
+        let approvable =
+            autoApprove
+            ? Set(
+                model.jobs.rows.values.filter {
+                    Self.mayApproveUnasked($0, machine: machine)
+                        && model.leftForReview[$0.id] == nil
+                }.map(\.id)) : []
         let settled = AutoUpgrades.steps(
-            own: own, jobs: session.model.jobs.rows, epoch: epoch, notClean: notClean)
+            own: own, jobs: model.jobs.rows, epoch: epoch, notClean: notClean,
+            approvable: approvable)
         var inFlight = settled.inFlight
         for step in settled.steps {
             guard goesOn(session) else { return }

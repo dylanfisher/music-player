@@ -41,7 +41,10 @@ service's job list is the truth for that, and `create` refuses a second one anyw
 
 **Its own jobs** are the ones the index records it queued, by the service's epoch, job id and
 release (`auto_upgrade_jobs`). In flight is every one of them listed in the current epoch that
-hasn't ended. A new epoch, a job gone from the list, or an imported one is forgotten.
+is still on its way without the owner: searching, downloading, being tagged, staged clean for
+Approve Safe Matches Automatically to look at, or importing. One left for the owner, failed
+past its download, tagged with an error, or staged clean for review, is kept but holds no
+slot. A new epoch, a job gone from the list, or an imported one is forgotten.
 
 **The priority**, `UpgradeCandidate.priority`: (plays + 1) × 320 / kbps, doubled for a boosted
 album, and a tie to the lower album id. Plays are its tracks' play counts summed; kbps its

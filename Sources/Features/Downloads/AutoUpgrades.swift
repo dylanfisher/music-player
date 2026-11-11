@@ -23,11 +23,13 @@ enum AutoUpgrades {
 
     /// The steps for `own`, the jobs it queued, from `jobs`, the service's as listed in
     /// `epoch`, and how many stay in flight. `notClean` holds the jobs Approve Safe Matches
-    /// Automatically found a lossy-origin finding in. A job tagged `discrepancy` is
-    /// requeued only once no Mac holds its tagging lease, which the run gives up after its
-    /// report.
+    /// Automatically found a lossy-origin finding in, and `approvable` the staged ones it will
+    /// look at. A job tagged `discrepancy` is requeued only once no Mac holds its tagging
+    /// lease, which the run gives up after its report. A job left for the owner, failed past
+    /// its download or staged for review, holds no slot.
     static func steps(
-        own: [AutoUpgradeJob], jobs: [Int: DownloadJob], epoch: String, notClean: Set<Int>
+        own: [AutoUpgradeJob], jobs: [Int: DownloadJob], epoch: String, notClean: Set<Int>,
+        approvable: Set<Int>
     ) -> (steps: [Step], inFlight: Int) {
         var steps: [Step] = []
         var inFlight = 0
@@ -44,15 +46,27 @@ enum AutoUpgrades {
             case .notFound: steps.append(.cancelThenMiss(mine))
             case .failed where job.failedStage == .search || job.failedStage == .download:
                 steps.append(.cancelThenMiss(mine))
+            case .failed: break
             case .staged
             where (job.tagging.status == .discrepancy && job.lease == nil)
                 || notClean.contains(job.id):
                 steps.append(.requeue(mine))
                 inFlight += 1
+            case .staged where !isMoving(job, approvable: approvable): break
             default: inFlight += 1
             }
         }
         return (steps, inFlight)
+    }
+
+    /// Whether a staged job is still on its way without the owner: being tagged, or tagged
+    /// clean for Approve Safe Matches Automatically to look at.
+    private static func isMoving(_ job: DownloadJob, approvable: Set<Int>) -> Bool {
+        switch job.tagging.status {
+        case .none, .running, .discrepancy: true
+        case .clean: approvable.contains(job.id)
+        case .error: false
+        }
     }
 
     /// Up to `room` of `candidates` to queue, highest score first: none marked Never Upgrade
