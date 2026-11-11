@@ -66,6 +66,15 @@ private func track(_ path: String, rating: Int?) -> EditableTrack {
     #expect(stars.rating == 1)
 }
 
+/// A rating out of range draws no more than five stars and no fewer than none.
+@MainActor @Test func theStarsKeepARatingOutOfRangeToFive() {
+    let stars = RatingStars(fontPoints: 11)
+    stars.rating = 7
+    #expect(stars.filled == 5 && stars.text == "★★★★★")
+    stars.rating = -1
+    #expect(stars.filled == 0 && stars.text == "☆☆☆☆☆")
+}
+
 /// Tracks the index doesn't have can't be rated.
 @MainActor @Test func theStarsAreOffWithNoTrackInTheIndex() {
     let editor = TagEditorWindow(paths: ["/a.flac"])

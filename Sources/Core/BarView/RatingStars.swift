@@ -56,8 +56,8 @@ public final class RatingStars: NSView {
     /// A click in a window that isn't active rates too, as one on the seek bar seeks.
     override public func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// How many stars show filled now.
-    var filled: Int { hovered ?? rating ?? 0 }
+    /// How many stars show filled now, at most five, whatever the index has.
+    var filled: Int { min(max(hovered ?? rating ?? 0, 0), SmartField.maxRating) }
 
     /// The stars as they show: "★★★☆☆" for three.
     var text: String {
