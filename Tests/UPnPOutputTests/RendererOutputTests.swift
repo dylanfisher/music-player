@@ -1019,12 +1019,17 @@ private final class ShiftedClock: @unchecked Sendable {
     output.load(item(1), startSeconds: 0, playing: true)
     await log.wait(for: ["started 1"])
     await eventually("the assertion") { sleep.held == 1 }
-    fake.vanish()
-    await log.wait(for: ["started 1", "lost 1"])
+    fake.stall("GetTransportInfo")
+    await log.wait(for: ["started 1", "lost 1"], seconds: 10)
     await eventually("the release") { sleep.held == 0 }
-    // Watching for it to come back takes none.
-    try await Task.sleep(nanoseconds: 1_000_000_000)
+    // Watching for it to come back takes none: a probe it doesn't answer, then one it does.
+    let asked = fake.actions.filter { $0 == "GetTransportInfo" }.count
+    await eventually("a probe") { fake.actions.filter { $0 == "GetTransportInfo" }.count > asked }
     #expect(sleep.created.count == 1)
+    fake.answersAgain()
+    await log.wait(for: ["started 1", "lost 1", "returned"], seconds: 10)
+    #expect(sleep.created.count == 1)
+    #expect(sleep.held == 0)
     #expect(sleep.badReleases == 0)
 }
 
@@ -1043,16 +1048,19 @@ private final class ShiftedClock: @unchecked Sendable {
 
 @Test func closingReleasesTheSleepAssertionAtOnceAndForGood() async throws {
     let fake = try await FakeRenderer.denon()
-    fake.stall("Stop")
+    // The first poll hangs, so its run is still going when the output closes, and ends, with
+    // the track still playing, only once the poll times out.
+    fake.stall("GetPositionInfo")
     let sleep = FakeSleepAssertions()
-    let (output, log) = try await output(fake, sleep: sleep)
+    let (output, log) = try await output(fake, timeout: 0.5, sleep: sleep)
     output.load(item(1), startSeconds: 0, playing: true)
     await log.wait(for: ["started 1"])
     await eventually("the assertion") { sleep.held == 1 }
-    output.play()
+    await eventually("a poll under way") { fake.actions.contains("GetPositionInfo") }
     output.close()
     #expect(sleep.held == 0)
-    try await Task.sleep(nanoseconds: 500_000_000)
+    // Past the poll's timeout, its run has ended and settled what it wants.
+    try await Task.sleep(nanoseconds: 1_500_000_000)
     #expect(sleep.held == 0)
     #expect(sleep.created.count == 1)
     #expect(sleep.badReleases == 0)
