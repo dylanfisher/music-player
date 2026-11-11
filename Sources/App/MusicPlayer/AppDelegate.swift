@@ -345,6 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings: layout, banner: banner.view, browser: browser, toolbar: toolbar,
             signalPath: signalPath, queue: queue, saver: saver)
         self.browser = browser
+        browser.ratingsChanged = { [weak self] in self?.tagEditing.ratingsChanged() }
         self.nowPlaying = nowPlaying
         nowPlaying.follow(window.window)
         nowPlaying.problemOpened = { [weak self] in self?.showProblem($0) }
@@ -765,7 +766,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editing.setRating = { [weak self] stars, paths in
             self?.browser?.setRating(stars, paths: paths)
         }
-        browser?.ratingsChanged = { [weak editing] in editing?.ratingsChanged() }
         // The local catalog only: the tab is what an import of the dumps holds.
         editing.release = { [weak self] id in
             guard let self, let settings else { throw NoSettings() }
