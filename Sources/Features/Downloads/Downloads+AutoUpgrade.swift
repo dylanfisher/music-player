@@ -41,6 +41,12 @@ extension Downloads {
 
     private func upgradePass(_ session: Session, share: String) async {
         let database = session.setup.databaseURL
+        for job in unrecorded {
+            let recorded = await record("job \(job.jobID) still isn't recorded as automatic") {
+                try LibraryIndex(at: database).recordAutoUpgradeJob(job)
+            }
+            if recorded { unrecorded.remove(job) }
+        }
         let read = await blockingFileWork {
             Result { () throws -> ([AutoUpgradeJob], [Int: UpgradeMiss], Set<Int>) in
                 let index = try LibraryIndex(at: database)
@@ -50,14 +56,15 @@ extension Downloads {
                 )
             }
         }
-        let own: [AutoUpgradeJob]
+        let recorded: [AutoUpgradeJob]
         let misses: [Int: UpgradeMiss]
         let never: Set<Int>
         do {
-            (own, misses, never) = try read.get()
+            (recorded, misses, never) = try read.get()
         } catch {
             return logger.error("the automatic upgrades couldn't be read: \(error)")
         }
+        let own = recorded + unrecorded.subtracting(recorded).sorted { $0.jobID < $1.jobID }
         let model = session.model
         // Read with the rows, after the index: a reset during the read changes both.
         guard let epoch = model.jobs.epoch else { return }
@@ -110,6 +117,7 @@ extension Downloads {
         let database = session.setup.databaseURL
         switch step {
         case .forget(let job):
+            unrecorded.remove(job)
             await record("job \(job.jobID) couldn't be forgotten") {
                 try LibraryIndex(at: database).forgetAutoUpgradeJob(job)
             }
@@ -166,6 +174,7 @@ extension Downloads {
     }
 
     private func miss(_ job: AutoUpgradeJob, _ database: URL) async {
+        unrecorded.remove(job)
         let at = now().timeIntervalSince1970
         await record("job \(job.jobID)'s miss couldn't be counted") {
             let miss = try LibraryIndex(at: database).recordUpgradeMiss(job, at: at)
@@ -191,7 +200,8 @@ extension Downloads {
     }
 
     /// Queues `candidate` as a FLAC upgrade and records it as this Mac's; false when the
-    /// service didn't answer, which ends the pass.
+    /// service didn't answer, or the index didn't record it, which ends the pass. A job the
+    /// index didn't record is kept as this Mac's, to record at the next pass.
     private func queue(_ candidate: UpgradeCandidate, _ session: Session, epoch: String) async
         -> Bool
     {
@@ -223,9 +233,11 @@ extension Downloads {
         session.model.took(job)
         logger.notice("release \(release) queued as an automatic upgrade, job \(job.id)")
         let database = session.setup.databaseURL
-        return await record("job \(job.id) was queued but not recorded as automatic") {
-            try LibraryIndex(at: database).recordAutoUpgradeJob(
-                AutoUpgradeJob(epoch: epoch, jobID: job.id, releaseID: release))
+        let mine = AutoUpgradeJob(epoch: epoch, jobID: job.id, releaseID: release)
+        let recorded = await record("job \(job.id) was queued but not recorded as automatic") {
+            try LibraryIndex(at: database).recordAutoUpgradeJob(mine)
         }
+        if !recorded { unrecorded.insert(mine) }
+        return recorded
     }
 }

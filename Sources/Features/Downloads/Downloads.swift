@@ -210,6 +210,8 @@ package final class Downloads {
     /// The jobs Approve Safe Matches Automatically found a lossy-origin finding in, by epoch,
     /// which the upgrader requeues when they're its own; each pass keeps only its own.
     var notClean: Set<AutoUpgradeJob> = []
+    /// The jobs it queued that the index didn't record, recorded again at each pass.
+    var unrecorded: Set<AutoUpgradeJob> = []
     /// The releases whose snapshot couldn't be built, left until the session stops.
     var unqueueable: Set<Int> = []
     /// The clock the misses are dated by; tests stand in for it.
@@ -308,6 +310,7 @@ package final class Downloads {
         upgrading?.cancel()
         upgrading = nil
         notClean = []
+        unrecorded = []
         unqueueable = []
         session?.model.stop()
         session = nil

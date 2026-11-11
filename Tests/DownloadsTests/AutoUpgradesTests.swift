@@ -276,6 +276,35 @@ private final class Once: @unchecked Sendable {
 }
 
 @MainActor
+@Test func aJobTheIndexDidNotRecordIsKeptAndRecordedAtTheNextPass() async throws {
+    let fake = FakeService()
+    let library = Library([candidate(1), candidate(2)])
+    let (downloads, session) = try await upgrading(fake, library, inFlight: 1)
+    let database = session.setup.databaseURL
+    let snapshot = downloads.releaseSnapshot
+    downloads.releaseSnapshot = { release, catalog in
+        // The index refuses the record from now until the trigger is dropped.
+        try LibraryIndex(at: database).database.execute(
+            "CREATE TRIGGER refused BEFORE INSERT ON auto_upgrade_jobs"
+                + " BEGIN SELECT RAISE(ABORT, 'refused'); END")
+        return try await snapshot(release, catalog)
+    }
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    #expect(downloads.unrecorded == [mine(1, release: 1)])
+    try LibraryIndex(at: database).database.execute("DROP TRIGGER refused")
+    downloads.releaseSnapshot = snapshot
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    #expect(downloads.unrecorded.isEmpty)
+    let own = try LibraryIndex(at: session.setup.databaseURL).autoUpgradeJobs()
+    #expect(own == [mine(1, release: 1)])
+    #expect(fake.created.count == 1, "its slot is held")
+    downloads.stop()
+}
+
+@MainActor
 @Test func aCopyTaggedWithADiscrepancyIsRequeuedButNotAnUpgradeQueuedByHand() async throws {
     let discrepancy = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
     let byHand = listed(1, release: 99, .staged) { $0.tagging = discrepancy }
