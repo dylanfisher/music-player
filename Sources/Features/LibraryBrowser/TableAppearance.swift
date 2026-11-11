@@ -55,12 +55,15 @@ extension NSColor {
     }
 }
 
-/// The track table's rows in Focus Mode: text of `fontSize` points, in rows half as tall again,
-/// as Regular's 12-point text has 18-point rows.
+/// The track table's rows in Focus Mode: text of `fontSize` points, in rows as much taller than
+/// it as Regular's are than its text.
 struct FocusRows {
     let fontSize: Int
 
-    var points: CGFloat { (CGFloat(fontSize) * 1.5).rounded() }
+    var points: CGFloat {
+        let regular = RowHeight.regular
+        return (CGFloat(fontSize) * regular.points / regular.font.pointSize).rounded()
+    }
     var font: NSFont { .systemFont(ofSize: CGFloat(fontSize)) }
 }
 
