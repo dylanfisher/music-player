@@ -453,9 +453,11 @@ public final class BrowserModel {
         await refreshEdited()
     }
 
-    func setRating(_ stars: Int, paths: [String]) async throws {
-        try await reader.setRating(stars, paths: paths)
+    /// Rates the tracks at `paths`, returning the ids of those the index has.
+    func setRating(_ stars: Int, paths: [String]) async throws -> [Int64] {
+        let rated = try await reader.setRating(stars, paths: paths)
         await refreshEdited()
+        return rated
     }
 
     func toggle(_ opinion: TrackOpinion, _ trackIDs: [Int64]) async throws {

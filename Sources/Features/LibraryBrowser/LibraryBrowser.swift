@@ -285,7 +285,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         table.rateClicked = { id, stars in
             owner?.edit("couldn't rate the track") {
                 try await model.rate([id], stars: stars)
-                owner?.ratingsChanged(RatedTracks(stars: stars, trackIDs: [id], paths: []))
+                owner?.ratingsChanged(RatedTracks(stars: stars, trackIDs: [id]))
             }
         }
         let timelineModel = TimelineModel(reader: reader) { ids in try index.playedTracks(ids: ids)
@@ -2074,7 +2074,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let title = ids.count == 1 ? selectedTitle(ids[0]) : nil
         edit("couldn't rate the tracks") {
             try await self.model.rate(ids, stars: stars)
-            self.ratingsChanged(RatedTracks(stars: stars, trackIDs: ids, paths: []))
+            self.ratingsChanged(RatedTracks(stars: stars, trackIDs: ids))
             self.showRatingMessage(ratingMessage(stars: stars, count: ids.count, title: title))
         }
     }
@@ -2176,14 +2176,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func setRating(_ stars: Int, paths: [String]) {
         edit("couldn't rate the tracks") {
             // Get Info and the bars show the click's rating already, so a failed write tells
-            // them too, to show the index's again.
+            // them too, to show the index's again. Only the tracks the index has are rated.
+            let rated: [Int64]
             do {
-                try await self.model.setRating(stars, paths: paths)
+                rated = try await self.model.setRating(stars, paths: paths)
             } catch {
                 self.ratingsChanged(nil)
                 throw error
             }
-            self.ratingsChanged(RatedTracks(stars: stars, trackIDs: [], paths: paths))
+            self.ratingsChanged(RatedTracks(stars: stars, trackIDs: rated))
         }
     }
 

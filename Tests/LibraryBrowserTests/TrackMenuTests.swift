@@ -371,7 +371,7 @@ private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
 }
 
 /// Get Info rates by path; every rating the browser sets tells the info windows and the bars
-/// which tracks it rated, and how.
+/// which tracks it rated, and how, leaving out a path the index doesn't have.
 @MainActor @Test func ratingByPathRatesTheTracksAndSaysTheRatingsChanged() async throws {
     let (browser, index) = try await browser(selecting: [2])
     var changes: [RatedTracks?] = []
@@ -385,10 +385,12 @@ private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
     browser.rateSelection(1)
     try await waitFor("the second rating") { changes.count == 2 }
     #expect(try index.rows(ids: [id]).first?.rating == 1)
+    browser.setRating(5, paths: ["/not/in/the/index.flac"])
+    try await waitFor("the rating of nothing") { changes.count == 3 }
     #expect(
         changes == [
-            RatedTracks(stars: 3, trackIDs: [], paths: paths),
-            RatedTracks(stars: 1, trackIDs: [id], paths: []),
+            RatedTracks(stars: 3, trackIDs: [id]), RatedTracks(stars: 1, trackIDs: [id]),
+            RatedTracks(stars: 5, trackIDs: []),
         ])
 }
 

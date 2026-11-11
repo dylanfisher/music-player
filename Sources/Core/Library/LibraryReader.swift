@@ -234,10 +234,13 @@ public actor LibraryReader {
         try index.setRating(stars, trackIDs: trackIDs)
     }
 
-    /// Rates the tracks at `paths`, as Get Info's stars do; a path the index has no track for
-    /// is left out.
-    public func setRating(_ stars: Int, paths: [String]) throws {
-        try index.setRating(stars, trackIDs: try index.trackIDs(atPaths: paths).compactMap { $0 })
+    /// Rates the tracks at `paths`, as Get Info's stars do, returning their ids; a path the
+    /// index has no track for is left out.
+    @discardableResult
+    public func setRating(_ stars: Int, paths: [String]) throws -> [Int64] {
+        let ids = try index.trackIDs(atPaths: paths).compactMap { $0 }
+        try index.setRating(stars, trackIDs: ids)
+        return ids
     }
 
     /// Sets the play count of the tracks at `paths` by hand; a path the index has no track
