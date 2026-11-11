@@ -443,17 +443,17 @@ Asked by the owner on 2026-11-10, with phase 79, which it follows.
 
 Asked by the owner on 2026-11-10.
 
-- [ ] **The view.** A command, Enter Focus Mode, in the View menu and the palette, shows the
+- [x] **The view.** A command, Enter Focus Mode, in the View menu and the palette, shows the
       track table full screen with only Title, Artist and Album, in a much larger font and
       always dark (`NSAppearance.darkAqua`, whatever the app's appearance). Otherwise it is the
       track table: the same rows, sort, selection, playing row, double-click to play and
       keyboard. No sidebar, browser, toolbar or status bar. Escape or the command again leaves
       it, back to the window as it was.
-- [ ] **Its font size** is a setting, `appearance.focusFontSize`, with a default the plan picks
+- [x] **Its font size** is a setting, `appearance.focusFontSize`, with a default the plan picks
       (about 2.5 times the table's), and row heights follow it.
-- [ ] **Which tracks.** The plan says whether it shows the current playlist or view, or what's
+- [x] **Which tracks.** The plan says whether it shows the current playlist or view, or what's
       playing's source, and asks the owner if neither is clearly right.
-- [ ] **Tests.** Its columns, appearance and row height from the setting; leaving restores the
+- [x] **Tests.** Its columns, appearance and row height from the setting; leaving restores the
       window's layout and selection.
 - [ ] **Owner check:** enter focus mode while playing, play another row from it, and leave.
 
