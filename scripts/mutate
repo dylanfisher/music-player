@@ -86,7 +86,7 @@ if [ ! -e "$clear" ] || [ scripts/clear-windows.m -nt "$clear" ]; then
 fi
 
 # run_tests <bin> <log> <comma-separated test targets> — runs each target's bundle, as
-# scripts/test does, under a time limit stock macOS has (an alarm outlives exec), and prints
+# scripts/test does, under a time limit of 4 minutes that stock macOS can set, and prints
 # `passed`, `failed` (a run printed a failing summary), `crashed` (a run started and never
 # printed one), `timed out`, or `didn't run` (no run started: the tests never ran, so a
 # failure says nothing about the mutant).
@@ -96,13 +96,19 @@ run_tests() {
   for target in ${3//,/ }; do
     executable=$bin/$target.xctest/Contents/MacOS/$target
     status=0
-    # Perl sets the DYLD_ variables itself: /usr/bin/perl is protected by SIP, which drops them
-    # from its environment.
+    # Perl runs the bundle in a child and kills it at the time limit: the test helper doesn't
+    # die of an alarm of its own. It sets the DYLD_ variables itself, since /usr/bin/perl is
+    # protected by SIP, which drops them from its environment.
     NO_COLOR=1 perl -e '
       @ENV{qw(DYLD_INSERT_LIBRARIES DYLD_FRAMEWORK_PATH DYLD_LIBRARY_PATH)} = splice @ARGV, 0, 3;
+      my $pid = fork // die "fork: $!";
+      if (!$pid) { exec @ARGV or die "exec: $!" }
+      $SIG{ALRM} = sub { kill "KILL", $pid; waitpid $pid, 0; exit 142 };
       alarm 240;
-      exec @ARGV or die "exec: $!"' -- \
-      "$clear" "$platform/Library/Frameworks" "$platform/usr/lib" "$helper" --test-bundle-path "$executable" "$executable" --testing-library swift-testing \
+      waitpid $pid, 0;
+      exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' -- \
+      "$clear" "$platform/Library/Frameworks" "$platform/usr/lib" \
+      "$helper" --test-bundle-path "$executable" "$executable" --testing-library swift-testing \
       > "$runlog" 2>&1 || status=$?
     cat "$runlog" >> "$log"
     [ "$status" -ne 0 ] || continue
