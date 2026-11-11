@@ -1264,7 +1264,7 @@ private func hoveredRescanTable() async throws -> (
     let table = controller.table
     let rating = table.column(withIdentifier: NSUserInterfaceItemIdentifier("rating"))
     let cell = table.frameOfCell(atColumn: rating, row: 2)
-    let star = (stars(1) as NSString).size(withAttributes: [.font: RowHeight.regular.font]).width
+    let star = RowHeight.regular.font.starWidth
     // The middle of the fourth star.
     let fourth = NSPoint(x: cell.minX + TextCell.inset + 3.5 * star, y: cell.midY)
     controller.rate(at: fourth)
