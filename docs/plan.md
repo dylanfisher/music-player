@@ -455,8 +455,8 @@ Order, each step its own commit:
   `hovered(at:starWidth:)`, the star under the pointer, 0 left of the first, and `stars` takes
   an optional current rating, nil for mixed, which no click clears.
 - 79.6 Get Info's stars (`Features/TagEditor`): `EditableTrack.rating` (nil when the index has
-  no track), read with the play count: `TagEditing.playCounts` becomes `indexRows`, one
-  `TrackRow?` per path, so the two come from one lookup. `TagEditorModel` gains the shown
+  no track), read beside the play count through `TagEditing.ratings`, which the app answers
+  from the same `trackLookup` as `playCounts`, through one helper. `TagEditorModel` gains the shown
   rating (nil when mixed), `ratedPaths`, and `setRating`, which isn't an edit: Save stays as
   it was. A `RatingStars` view at the right of the Info tab's title row (a `TagEditorRow` case
   for the title with the stars) draws ☆/★ in the field's font, fills to `hovered` under the

@@ -453,6 +453,11 @@ public final class BrowserModel {
         await refreshEdited()
     }
 
+    func setRating(_ stars: Int, paths: [String]) async throws {
+        try await reader.setRating(stars, paths: paths)
+        await refreshEdited()
+    }
+
     func toggle(_ opinion: TrackOpinion, _ trackIDs: [Int64]) async throws {
         try await reader.toggle(opinion, trackIDs: trackIDs)
         await refreshEdited()

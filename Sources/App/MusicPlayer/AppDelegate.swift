@@ -754,18 +754,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editing.saving = { [weak self] progress in self?.browser?.showSaving(progress) }
         editing.organizing = { [weak self] progress in self?.browser?.showOrganizing(progress) }
         editing.playCounts = { [weak self] paths in
-            paths.map { path in
-                do {
-                    return try self?.trackLookup?(path)?.playCount
-                } catch {
-                    logger.error("couldn't read the play count of \(path): \(error)")
-                    return nil
-                }
-            }
+            self?.indexed(paths, \.playCount, "play count") ?? paths.map { _ in nil }
         }
         editing.setPlayCount = { [weak self] count, paths in
             self?.browser?.setPlayCount(count, paths: paths)
         }
+        editing.ratings = { [weak self] paths in
+            self?.indexed(paths, \.rating, "star rating") ?? paths.map { _ in nil }
+        }
+        editing.setRating = { [weak self] stars, paths in
+            self?.browser?.setRating(stars, paths: paths)
+        }
+        browser?.ratingsChanged = { [weak editing] in editing?.ratingsChanged() }
         // The local catalog only: the tab is what an import of the dumps holds.
         editing.release = { [weak self] id in
             guard let self, let settings else { throw NoSettings() }
@@ -774,6 +774,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         madeTagEditing = editing
         return editing
+    }
+
+    /// What the index has for each of `paths`, by `fact` of its track, for an info window; nil
+    /// for a path it has no track for, or one it couldn't read, which is logged.
+    private func indexed<Fact>(
+        _ paths: [String], _ fact: KeyPath<TrackRow, Fact>, _ name: String
+    ) -> [Fact?] {
+        paths.map { path in
+            do {
+                return try trackLookup?(path)?[keyPath: fact]
+            } catch {
+                logger.error("couldn't read the \(name) of \(path): \(error)")
+                return nil
+            }
+        }
     }
 
     private func makeMediaControls(

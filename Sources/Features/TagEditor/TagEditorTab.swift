@@ -31,7 +31,7 @@ enum TagEditorTab: String, CaseIterable {
         switch self {
         case .info:
             [
-                .wide(.title), .pair(.artist, .date),
+                .rated(.title), .pair(.artist, .date),
                 .numbers(.albumArtist, .trackNumber, .trackTotal),
                 .numbers(.album, .discNumber, .discTotal), .pair(.grouping, .bpm),
                 .wide(.composer), .wide(.genre), .commentAndArt, .flag(.compilation),
@@ -69,6 +69,8 @@ enum TagEditorTab: String, CaseIterable {
 enum TagEditorRow: Equatable {
     /// A label and a field across the row.
     case wide(TagEditField)
+    /// A wide field with the tracks' rating at the right, as the title has on Info.
+    case rated(TagEditField)
     /// A field, then a short one at the right, such as the artist and the date.
     case pair(TagEditField, TagEditField)
     /// A field, then a number "of" a total at the right, such as the album and its disc.
@@ -83,7 +85,7 @@ enum TagEditorRow: Equatable {
 
     var fields: [TagEditField] {
         switch self {
-        case .wide(let field), .area(let field), .flag(let field): [field]
+        case .wide(let field), .rated(let field), .area(let field), .flag(let field): [field]
         case .pair(let a, let b): [a, b]
         case .numbers(let a, let b, let c): [a, b, c]
         case .commentAndArt: [.comment]

@@ -79,6 +79,9 @@ private func track(_ path: String, plays: Int?, readOnly: String? = nil) -> Edit
 private final class Seen {
     var written: [[String]] = []
     var counts: [(Int, [String])] = []
+    var ratings: [(Int, [String])] = []
+    /// What the index has, by path, as the stand-in for it answers.
+    var indexRatings: [String: Int] = ["/a.flac": 2]
     var confirmations = 0
 }
 
@@ -105,6 +108,8 @@ private func makeEditing(_ seen: Seen, confirm: Bool = true) -> TagEditing {
     editing.written = { report, _, _ in seen.written.append(report.changed) }
     editing.playCounts = { paths in paths.map { $0 == "/none.flac" ? nil : 5 } }
     editing.setPlayCount = { seen.counts.append(($0, $1)) }
+    editing.ratings = { paths in paths.map { seen.indexRatings[$0] } }
+    editing.setRating = { seen.ratings.append(($0, $1)) }
     return editing
 }
 
@@ -148,4 +153,24 @@ private func loaded(_ editing: TagEditing, _ paths: [String]) async throws -> Ta
     #expect(seen.counts.count == 1, "declined, so the count waits with the tags")
     #expect(declining.isOpen)
     batch.close()
+}
+
+/// The read gives each track its rating from the index; a click on the stars rates at once,
+/// only the tracks the index has, with no write; a rating set elsewhere shows.
+@MainActor @Test func theStarsRateInTheIndexAtOnce() async throws {
+    let seen = Seen()
+    let editing = makeEditing(seen)
+    let editor = try await loaded(editing, ["/a.flac", "/none.flac"])
+    #expect(editor.model?.tracks.map(\.rating) == [2, nil])
+    #expect(editor.ratingStars.rating == 2)
+    let width = editor.ratingStars.intrinsicContentSize.width / 5
+    editor.ratingStars.click(atX: width * 4.5)
+    #expect(seen.ratings.map(\.0) == [5])
+    #expect(seen.ratings.map(\.1) == [["/a.flac"]])
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(seen.written.isEmpty)
+    seen.indexRatings["/a.flac"] = 1
+    editing.ratingsChanged()
+    #expect(editor.ratingStars.rating == 1)
+    editor.close()
 }

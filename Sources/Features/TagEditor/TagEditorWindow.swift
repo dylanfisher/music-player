@@ -75,6 +75,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// The buttons that run a registry command, each with its command.
     private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
+    /// The Info tab's stars at the title's right, which rate in the index at once.
+    let ratingStars = RatingStars()
+    /// Called with the stars a click on `ratingStars` gives the tracks, 0 to clear.
+    var rated: (Int) -> Void = { _ in }
     /// The File tab's play count, kept in the index, not the file (ADR 0162).
     let playCountField = NSTextField()
     private let playCountLabel = NSTextField(labelWithString: "")
@@ -447,6 +451,17 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             switch row {
             case .wide(let field):
                 cells.append([label(field), self.field(field), empty, empty])
+                spans.append(cells.count - 1)
+            case .rated(let field):
+                ratingStars.clicked = { [weak self] stars in
+                    self?.model?.setRating(stars)
+                    self?.rated(stars)
+                }
+                let row = NSStackView(views: [self.field(field), ratingStars])
+                row.alignment = .centerY
+                // The field takes the row's width, the stars only their own.
+                row.distribution = .fill
+                cells.append([label(field), row, empty, empty])
                 spans.append(cells.count - 1)
             case .pair(let wide, let short):
                 cells.append([
@@ -888,6 +903,18 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     /// Puts the model's values in the fields, and the art. A field typed in keeps what was
     /// typed, which a tab made since shows too.
+    /// The ratings the index has now for the window's tracks, one each, set from elsewhere.
+    func showRatings(_ ratings: [Int?]) {
+        model?.showRatings(ratings)
+        showRating()
+    }
+
+    private func showRating() {
+        guard let model else { return }
+        ratingStars.rating = model.shownRating
+        ratingStars.isEnabled = !model.ratedPaths.isEmpty
+    }
+
     private func showValues() {
         guard let model else { return }
         for (field, views) in fields {
@@ -909,6 +936,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             playCountField.stringValue = model.playCountText
         }
         playCountField.placeholderString = model.isPlayCountMixed ? mixedPlaceholder : nil
+        showRating()
         if !model.isTyped(.compilation) {
             compilationBox.state =
                 model.isMixed(.compilation)

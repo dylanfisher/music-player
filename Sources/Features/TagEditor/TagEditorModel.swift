@@ -22,11 +22,14 @@ package struct EditableTrack: Equatable, Sendable {
     /// Its play count in the index, not the file; nil when the index has no track at its path
     /// or it wasn't read.
     var playCount: Int?
+    /// Its rating in the index, 0 for unrated; nil when the index has no track at its path or
+    /// it wasn't read.
+    var rating: Int?
 
     init(
         path: String, tags: TrackTags, pictures: [ArtPicture],
         multiValued: Set<TagEditField> = [], file: FileFacts? = nil, readOnly: String? = nil,
-        playCount: Int? = nil
+        playCount: Int? = nil, rating: Int? = nil
     ) {
         self.path = path
         self.tags = tags
@@ -35,6 +38,7 @@ package struct EditableTrack: Equatable, Sendable {
         self.file = file
         self.readOnly = readOnly
         self.playCount = playCount
+        self.rating = rating
     }
 }
 
@@ -96,6 +100,30 @@ public struct TagEditorModel: Equatable, Sendable {
     /// The tracks a play count typed goes to: those the index has a track for, read-only files
     /// included, since it's stored in the index, not the file.
     var countedPaths: [String] { tracks.filter { $0.playCount != nil }.map(\.path) }
+
+    /// The tracks a click on the stars rates: those the index has a track for.
+    var ratedPaths: [String] { tracks.filter { $0.rating != nil }.map(\.path) }
+
+    /// The rating every rated track has, 0 for unrated or with none rated; nil when they
+    /// differ.
+    var shownRating: Int? {
+        let ratings = Set(tracks.compactMap(\.rating))
+        return ratings.count > 1 ? nil : ratings.first ?? 0
+    }
+
+    /// Gives every rated track `stars`, as a click on the stars sets it in the index. It isn't
+    /// an edit: Save has nothing more to store.
+    mutating func setRating(_ stars: Int) {
+        for index in tracks.indices where tracks[index].rating != nil {
+            tracks[index].rating = stars
+        }
+    }
+
+    /// The ratings the index has now, one per track, as `setRating` would leave them.
+    mutating func showRatings(_ ratings: [Int?]) {
+        precondition(ratings.count == tracks.count, "a rating for each track")
+        for (index, rating) in ratings.enumerated() { tracks[index].rating = rating }
+    }
 
     /// Whether Save can store anything: tags, or a play count.
     var canSaveAnything: Bool { canSave || !countedPaths.isEmpty }

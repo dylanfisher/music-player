@@ -90,6 +90,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
     /// Called after the track table's selection changed, which the play state keeps.
     public var selectionChanged: () -> Void = {}
+    /// Called after the browser rated tracks, from the menus, a shortcut or the Rating column,
+    /// so the info windows show it.
+    public var ratingsChanged: () -> Void = {}
     /// Called after each refresh for a library change, so other views can read their rows again.
     public var libraryRefreshed: () -> Void = {}
     /// The sidebar's context menu: ask before deleting this playlist, and open its rules.
@@ -278,7 +281,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         table.dropFiles = { urls in Task { await owner?.addFiles(urls) } }
         table.rateClicked = { id, stars in
-            owner?.edit("couldn't rate the track") { try await model.rate([id], stars: stars) }
+            owner?.edit("couldn't rate the track") {
+                try await model.rate([id], stars: stars)
+                owner?.ratingsChanged()
+            }
         }
         let timelineModel = TimelineModel(reader: reader) { ids in try index.playedTracks(ids: ids)
         }
@@ -2058,6 +2064,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         guard let ids = selectedTrackIDs(else: "couldn't rate the tracks") else { return }
         edit("couldn't rate the tracks") {
             try await self.model.rate(ids, stars: stars)
+            self.ratingsChanged()
             let title = ids.count == 1 ? try self.index.rows(ids: ids).first?.title : nil
             self.showRatingMessage(ratingMessage(stars: stars, count: ids.count, title: title))
         }
@@ -2146,6 +2153,14 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Sets the play count of the tracks at `paths` by hand, as Get Info's Save does.
+    /// Rates the tracks at `paths`, from Get Info's stars.
+    public func setRating(_ stars: Int, paths: [String]) {
+        edit("couldn't rate the tracks") {
+            try await self.model.setRating(stars, paths: paths)
+            self.ratingsChanged()
+        }
+    }
+
     public func setPlayCount(_ count: Int, paths: [String]) {
         edit("couldn't set the play count") {
             try await self.model.setPlayCount(count, paths: paths)

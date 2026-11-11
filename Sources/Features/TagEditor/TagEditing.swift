@@ -49,6 +49,12 @@ public final class TagEditing {
     /// The play count the index has for each path, nil for one it has no track for, for the
     /// File tab's Plays field.
     public var playCounts: @MainActor ([String]) -> [Int?] = { $0.map { _ in nil } }
+    /// The rating the index has for each path, 0 for unrated and nil for one it has no track
+    /// for, for the Info tab's stars.
+    public var ratings: @MainActor ([String]) -> [Int?] = { $0.map { _ in nil } }
+    /// Rates the tracks at the paths in the index, at once, from a click on an info window's
+    /// stars; no tag is written.
+    public var setRating: @MainActor (Int, [String]) -> Void = { _, _ in }
     /// Stores a play count typed in an info window for the tracks at the paths, in the index,
     /// once the window's Save goes ahead (ADR 0162).
     public var setPlayCount: @MainActor (Int, [String]) -> Void = { _, _ in }
@@ -338,6 +344,10 @@ public final class TagEditing {
         editor.isEnabled = { [weak self, weak editor] in self?.canRun($0, on: editor) == true }
         editor.release = { [weak self] in try await self?.release($0) ?? nil }
         editor.commandsChanged = { [weak self] in self?.refreshCommands() }
+        editor.rated = { [weak self, weak editor] stars in
+            guard let self, let paths = editor?.model?.ratedPaths else { return }
+            self.setRating(stars, paths)
+        }
         editor.saved = { [weak self, weak editor] edit in
             guard let self, let editor else { return }
             self.save(edit, from: editor, over: window)
@@ -352,6 +362,15 @@ public final class TagEditing {
         present(editor)
         refreshCommands()
         read(into: editor, over: window)
+    }
+
+    /// Shows the ratings the index has now in every info window, after a rating set elsewhere:
+    /// the menus, a shortcut or the track table.
+    public func ratingsChanged() {
+        for editor in editors {
+            guard let tracks = editor.model?.tracks else { continue }
+            editor.showRatings(ratings(tracks.map(\.path)))
+        }
     }
 
     /// Enables every info window's command buttons as the rules say now, each window's art
@@ -380,6 +399,9 @@ public final class TagEditing {
             self.reads[key] = nil
             for (index, count) in self.playCounts(tracks.map(\.path)).enumerated() {
                 tracks[index].playCount = count
+            }
+            for (index, rating) in self.ratings(tracks.map(\.path)).enumerated() {
+                tracks[index].rating = rating
             }
             if let model = editor.model {
                 guard problems.isEmpty, tracks.map(\.path) == model.tracks.map(\.path) else {

@@ -357,3 +357,18 @@ private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
     browser.fadeRatingMessage(2)
     try await waitFor("the fade") { browser.ratingMessageText == nil }
 }
+
+/// Get Info rates by path; every rating the browser sets tells the info windows.
+@MainActor @Test func ratingByPathRatesTheTracksAndSaysTheRatingsChanged() async throws {
+    let (browser, index) = try await browser(selecting: [2])
+    var changes = 0
+    browser.ratingsChanged = { changes += 1 }
+    let id = try #require(try browser.selectedTrackIDs().first)
+    let path = try #require(try index.paths(ids: [id])[id])
+    browser.setRating(3, paths: [path, "/not/in/the/index.flac"])
+    try await waitFor("the rating") { changes == 1 }
+    #expect(try index.rows(ids: [id]).first?.rating == 3)
+    browser.rateSelection(1)
+    try await waitFor("the second rating") { changes == 2 }
+    #expect(try index.rows(ids: [id]).first?.rating == 1)
+}
