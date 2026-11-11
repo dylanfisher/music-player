@@ -10,22 +10,23 @@ import Testing
 /// A CD release with what the tie-break reads; `numbers` are its labels' catalog numbers in order.
 private func release(
     _ id: Int, numbers: [String?] = [], barcodes: [String] = [], released: String? = nil,
-    country: String? = nil, format: String = "CD"
+    country: String? = nil, format: String = "CD", descriptions: [String] = []
 ) -> CatalogRelease {
     CatalogRelease(
         id: id, title: "Stockholm",
         labels: numbers.map { CatalogRelease.Label(name: "Svek", catalogNumber: $0) },
-        formats: [CatalogRelease.Format(name: format, descriptions: [])], country: country,
+        formats: [CatalogRelease.Format(name: format, descriptions: descriptions)],
+        country: country,
         released: released, barcodes: barcodes)
 }
 
 private func album(
     catalogNumber: String? = nil, barcode: String? = nil, date: String? = nil,
-    country: String? = nil
+    media: String? = nil, country: String? = nil
 ) -> DiscogsAlbum {
     DiscogsAlbum(
         id: 1, title: "Stockholm", artist: "Persuader", catalogNumber: catalogNumber,
-        barcode: barcode, date: date, country: country, tracks: [])
+        barcode: barcode, date: date, media: media, country: country, tracks: [])
 }
 
 /// The release the tie-break picks among `releases`, all fitting equally, and whether it's a tie.
@@ -52,6 +53,56 @@ private func pick(_ album: DiscogsAlbum, _ releases: [CatalogRelease]) -> (id: I
         [release(1, barcodes: ["5012345678900"]), release(2, barcodes: ["5 012345 678900"])])
     #expect(result.id == 2)
     #expect(!result.tied)
+}
+
+@Test func aBarcodeThatOnlyFoldsTheSameBeatsNone() {
+    let result = pick(
+        album(barcode: "5 012345 678900"),
+        [release(1, barcodes: ["4 000000 000000"]), release(2, barcodes: ["5012345678900"])])
+    #expect(result.id == 2)
+    #expect(!result.tied)
+}
+
+@Test func theMediaAsTaggedBeatsAFormatDiscogsHasSinceDescribedMore() {
+    let result = pick(
+        album(media: "Vinyl (LP)"),
+        [
+            release(1, format: "Vinyl", descriptions: ["LP", "Stereo"]),
+            release(2, format: "Vinyl", descriptions: ["LP"]),
+        ])
+    #expect(result.id == 2)
+    #expect(!result.tied)
+}
+
+@Test func aFormatThatFitsTheMediaBeatsOneThatDoesnt() {
+    let result = pick(
+        album(media: "Vinyl (LP)"),
+        [release(1), release(2, format: "Vinyl", descriptions: ["LP", "Stereo"])])
+    #expect(result.id == 2)
+    #expect(!result.tied)
+}
+
+@Test func theDateAsTaggedBeatsOneThatOnlyFitsAndOneThatFitsBeatsNone() {
+    let exact = pick(
+        album(date: "2001-05-15"),
+        [release(1, released: "2001-05"), release(2, released: "2001-05-15")])
+    #expect(exact.id == 2)
+    #expect(!exact.tied)
+    let fitting = pick(album(date: "2001"), [release(1), release(2, released: "2001-03-00")])
+    #expect(fitting.id == 2)
+    #expect(!fitting.tied)
+}
+
+@Test func aCountryThatFitsBeatsNone() {
+    let result = pick(album(country: "UK"), [release(1), release(2, country: "UK & Europe")])
+    #expect(result.id == 2)
+    #expect(!result.tied)
+}
+
+@Test func theCountryMostOfATieShareIsChosenOverAReleaseWithNone() {
+    let result = pick(album(), [release(1), release(2, country: "UK"), release(3, country: "UK")])
+    #expect(result.id == 2)
+    #expect(result.tied)
 }
 
 @Test func aNumberOnAnotherLabelBeatsNoneThatFits() {
