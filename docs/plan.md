@@ -399,6 +399,44 @@ It also found that `scripts/mutate-files.txt` covers only Playback, `ConfigStore
 step of `./scripts/check` only checks that the tier folders exist; and that the threat model,
 ADR 0025, was last amended by ADR 0145.
 
+### Before (measured 2026-11-11 on main at 5fb2cabe, after phases 78, 79, 81 and 82 landed)
+
+| File | Lines | Commits | Fixes |
+|---|---|---|---|
+| `Features/LibraryBrowser/LibraryBrowser.swift` | 2,774 | 171 | 46 |
+| `App/MusicPlayer/AppDelegate.swift` | 1,255 | 153 | 33 |
+| `Features/LibraryBrowser/TrackTableController.swift` | 1,042 | 69 | 25 |
+| `Features/LibraryBrowser/BrowserModel.swift` | 1,125 | 67 | 16 |
+| `Core/HALOutput/DeviceOutput.swift` | 1,657 | 50 | 27 |
+
+Commits are `git log --oneline -- <file>`; fixes are those with `fix` in the subject.
+
+| Count | Before |
+|---|---|
+| `dupes-allow.txt` entries (non-comment lines) | 158 |
+| `try?` in `Sources/` | 56, of which 50 have no comment on their line or the line above |
+| `@unchecked Sendable` or `nonisolated(unsafe)` in `Sources/` | 88 (the survey's 86 plus two since), of which 9 have no comment on their line or the line above (the count that the new step will make stricter, since it asks for the lock or queue by name) |
+
+Mutation scores, `./scripts/mutate --jobs 4 <file>` at the same commit (about 4 s a mutant with
+four jobs; the first run of a file adds a build). Score is killed over killed plus survived;
+uncompilable mutants aren't counted:
+
+| File | Mutants | Killed | Survived | Uncompilable | Score |
+|---|---|---|---|---|---|
+| `Playback/PlaybackEngine.swift` | 322 | 298 | 0 | 24 | 100% |
+| `Playback/PlayQueue.swift` | 42 | 40 | 0 | 2 | 100% |
+| `Playback/PlayCounter.swift` | 19 | 16 | 0 | 3 | 100% |
+| `Playback/PlayTracker.swift` | 12 | 7 | 0 | 5 | 100% |
+| `Settings/ConfigStore.swift` | 96 | 85 | 0 | 11 | 100% |
+| `Library/LibraryScanner.swift` | 73 | 61 | 0 | 12 | 100% |
+| `TagWriter/TagWriter.swift` (entries 199-303 and 386-413) | 30 | 21 | 0 | 9 | 100% |
+
+The files this phase adds have no entry yet, so no score. Their mutant counts, from
+`swift scripts/mutate.swift list`, give the cost: `DeviceOutput.swift` 493 (about 35 minutes),
+`LibrarySyncMerge.swift` 125, `BrowserModel.swift` 294 (the selection and sort lines are a
+part of it). `TieBreak` is not a file on main; `AlbumMatcher.swift` and the Downloads job
+states (`Features/Downloads`) are to be measured when their entries are added.
+
 - [ ] **The files agents edit most.** Split `LibraryBrowser.swift`, `AppDelegate.swift`,
       `TrackTableController.swift` and `BrowserModel.swift` along the seams they already have,
       one concern a file, so a typical change reads one small file and two phases adding
