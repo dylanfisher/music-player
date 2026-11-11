@@ -5,7 +5,7 @@ Agents work through it phase by phase, mostly unattended, and stop only at **har
 checkpoints**, where the owner has to try something on the DAC Mac, the Denon, a phone, or the
 2015 MacBook Pro.
 
-Finished phases, 1 to 76 apart from 10 and 13, 78, 81 and 82, are in
+Finished phases, 1 to 78 apart from 10 and 13, and 81 and 82, are in
 [plan-archive.md](plan-archive.md), with their implementation plans, Result lines and the full
 text of each checkpoint.
 
@@ -54,7 +54,7 @@ Set by the owner on 2026-11-10. Earlier run orders are in the archive.
    82 in parallel, each on its own branch and worktree, then 80, which builds on 79, then 83,
    after its music-recommender change lands.
 2. Phase 84, the codebase review for agents, runs after 83, so it reviews their code too.
-3. Phase 77 waits until the owner starts it.
+3. Phase 77 ran alongside them once the owner started it on 2026-11-10.
 4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
@@ -183,6 +183,8 @@ that phase's Result line, and delete its line here.
   the owner checks under its Result line, an unasked upgrade on the NAS.
 - **82** ([phase](plan-archive.md#82-focus-mode)): the owner checks under its Result line,
   focus mode while playing.
+- **77** ([phase](plan-archive.md#77-faster-whole-file-tag-rewrites)): the owner check under
+  its Result line, files a minute on the NAS for a large art or tag change.
 - **Window benchmarks** ([51h's Result](plan-archive.md#51h-the-tagger-second-pass)): the 11
   window rows of `./scripts/bench` hang in an agent session; run them on this Mac.
 
@@ -361,95 +363,6 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 Phases 77 to 84 are the owner's asks of 2026-11-10; phases 10 and 13 are from the original plan
 and haven't been built.
-
-### 77. Faster whole-file tag rewrites
-
-Asked by the owner on 2026-11-10, during a Discogs tagger Apply with covers over 15,435 files
-on the NAS. Its undo journal showed 8,104 of the first 14,376 files (56%) rewritten through the
-temp file, since the new cover didn't fit the tag's padding: 169 GB of originals, at about 75
-files a minute over the whole batch, or about 15 MB/s of audio. A rewrite runs inside
-`prepare` (`Core/TagWriter/TagWriter.swift`), one file at a time, and reads the original about
-three times, in `fileHashes`, in `writeTemp`'s copy and in `checkEdited`'s read-back, and
-writes it once. Only a chunk's writes in place run `writesAtOnce` (4) at a time (ADR 0108).
-Don't start until the owner asks.
-
-- [ ] **Several rewrites at once.** Files that go through the temp file are written a few at a
-      time, as a chunk's writes in place are, each touching only its own file and its own temp
-      file. Each file's journal steps keep today's order (the temp file written and read back,
-      then its record and old bytes, then the rename), and journal appends stay one at a time.
-      How many at once scales with the Mac, with the 2015 MacBook Pro as the floor, as
-      `filesReadAtOnce` does (ADR 0074); memory stays bounded, since each copy moves 4 MB at a
-      time. Results stay in the batch's order. A failure that stops the batch, such as a full
-      disk or a journal that can't be written, starts no new file, and the ones in flight finish
-      or are put back as today.
-- [ ] **Hash while copying.** `writeTemp` computes the original's whole-file and payload hashes
-      from the bytes it copies, on the descriptor whose identity it checks, instead of
-      `fileHashes` reading the file in a pass of its own first. The temp file's read-back still
-      has to give the payload's hash, and the record still carries `originalSHA256` for undo.
-      A file changed during the copy is caught as it is today, by the identity checks before
-      the rename.
-- [ ] **Bench.** A `tagBatchBenchmarks` row for an art change too large for the padding, so
-      every file is rewritten: the batch's time before and after, on the slow simulated NAS if
-      `SimulatedNAS` can stand in for writes, else on a local folder with a latency the plan
-      says. A budget row beside it in [Performance budgets](#performance-budgets).
-- [ ] **Tests.** A batch mixing writes in place and rewrites gives each file its result, in
-      order; a crash injected at each step (`WriteFaults`) with several rewrites in flight
-      recovers every file as today; a batch that stops leaves no temp file and no record
-      without its file; the recorded `originalSHA256` equals a separate hash of the original.
-- [ ] **ADR 0196**, amending ADRs 0107 and 0108: the rewrites' concurrency and where the hashes
-      come from.
-- [ ] **Owner check:** the next large art or tag change on the NAS, or one on a scratch copy of
-      a few albums of large FLACs whose tags have no padding: files a minute, compared with this
-      batch's 75.
-
-Plan:
-
-- 77.1 The bench row first, so its "before" is main's writer: `tagBatchBenchmarks` gets "20 40
-  MB FLACs' covers, too large for their padding, slow simulated NAS", a 2 MB cover replacing
-  the fixture FLAC's, with the edit left to choose its path (no `writesInPlace = false`), so
-  every file is rewritten because the cover doesn't fit. `SimulatedNAS` prices a scan's reads
-  only, so the row uses the bench's `SimulatedLink`, which already prices the writer's writes
-  and reads (10 ms a call, 57 MB/s over one link) and is what the temp-file rows run on. Its
-  budget is set from the measured before and after, in the Result line and the budgets table.
-- 77.2 Hash while copying. `FileHash.swift` gets a `FileHasher` (the whole-file and payload
-  digests fed chunk by chunk at their offsets), which `fileHashes` uses too, so the payload
-  overlap is one copy. `writeTemp` takes the payload ranges to hash, nil for undo's restore,
-  and returns the hashes with the temp file: when the kept ranges are in the original's order
-  (every FLAC, ID3 and MP4 rewrite builds them that way), it hashes each copied 4 MB block and
-  `pread`s the bytes between and after them (the old tags) on the same descriptor, whose
-  identity it checked; when the temp file is a clone (APFS, the audio where it was), or the
-  ranges aren't in order, it reads that descriptor once to hash it. A file shorter than its
-  identity's size fails as changed during the write. `prepare` drops its `fileHashes` pass;
-  `checkEdited` still hashes the temp file's payload on read-back, and the record carries
-  `originalSHA256` from `writeTemp`. Tests: the recorded hash equals a separate SHA-256 of the
-  original, for a rewrite that moves the audio and for one cloned; a rewrite of a grown FLAC
-  reads under 2.5 times its size (three passes before).
-- 77.3 Several rewrites at once. A new `RewriteBatch.swift` beside `InPlaceBatch.swift`:
-  `prepare` returns `.rewrite(RewriteJob)` for a file that doesn't fit (its segments, source,
-  parsed layout, identity and what it must read back as), and the rewrite's steps, unchanged
-  in order (restore segments and old bytes, the temp file written and read back, the record
-  appended, the rename, the record updated), move into `TagWriter.rewrite(_:entry:)`. The
-  batch loop reads and plans files in order as now and hands each rewrite to a thread of its
-  own, at most `rewritesAtOnce` in flight: `max(writesAtOnce, min(filesReadAtOnce, 8))`, so 4
-  on the 2015 MacBook Pro (`filesReadAtOnce` is 3 on its two cores), up to 8 on a larger Mac;
-  each holds one 4 MB copy buffer, one 4 MB read-back buffer and its tag bytes, so memory stays
-  under about 100 MB with covers of a few MB. The batch waits for a free slot before it hands
-  one over. Journal calls from rewrites go through one lock, one at a time; a chunk of writes in
-  place waits for the rewrites in flight to finish before its journal steps, so the two never
-  touch the journal at once. Records are numbered in the order their appends happen, which with
-  several in flight isn't the batch's order; undo restores each file on its own, so only the
-  undo report's order changes. Results go into the batch's array by index. A rewrite that stops
-  the batch (a full disk, a journal that can't be written) sets a flag: the loop starts no new
-  file, the rewrites in flight finish or are put back as today, a chunk already read is written
-  as today's chunk before a stopping file is, and every file without a result is reported not
-  written. Tests: a batch mixing writes in place and rewrites, with a failure among them, gives
-  each file its result in order; `rewritesAtOnce` rewrites are in flight at most, and that
-  many at least; each fault (`beforeReplacing`, `whenTempCloses`, `crashBeforeRename`) with
-  several rewrites in flight leaves every original as it was and the next write and undo as
-  today; a full disk in one rewrite stops the batch with no temp file left and every journal
-  record naming a file that was written, which undo puts back.
-- 77.4 ADR 0196, amending 0107 and 0108, linked from both; `TagWriter`'s and `write`'s doc
-  comments say rewrites run several at once.
 
 ### 79. Rating: the menu's mark, Get Info's stars, shortcuts and a message
 
