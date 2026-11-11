@@ -108,6 +108,7 @@ public enum AppMenus {
                     .submenu(
                         "Import from Other Players",
                         [.command(.importSwinsian), .command(.importITunes)], showsChords: true),
+                    .command(.exportLibraryProfile),
                     .separator,
                     .command(.addFolder), .command(.showWatchedFolders), .command(.checkHealth),
                     .command(.analyzeLibrary), .command(.pauseLibraryAnalysis),

@@ -30,6 +30,7 @@ struct Crafted {
     var mood: String? = nil
     var grouping: String? = nil
     var sizeBytes = 1
+    var compilation = false
 
     var scanned: ScannedFile {
         var tags = TrackTags()
@@ -48,6 +49,7 @@ struct Crafted {
         tags.genre = genre
         tags.mood = mood
         tags.grouping = grouping
+        tags.compilation = compilation
         let audio = TrackAudio(
             codec: codec, sampleRateHz: rateHz, bitsPerSample: bits, channels: 2,
             lengthFrames: Int(seconds * Double(rateHz)))

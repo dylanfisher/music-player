@@ -51,6 +51,15 @@ public actor LibraryReader {
         return try await Task.detached { try LibraryIndex(at: url).discogsAlbums() }.value
     }
 
+    /// Writes the library's profile for music-recommender to `url` (ADR 0198), on a connection
+    /// of its own, as `discogsAlbums` reads, and returns how many albums it holds.
+    public nonisolated func writeLibraryProfile(to url: URL) async throws -> Int {
+        let databaseURL = databaseURL
+        return try await Task.detached {
+            try LibraryIndex(at: databaseURL).writeLibraryProfile(to: url)
+        }.value
+    }
+
     /// The Discogs tagger's reviews, by album ID (ADR 0133).
     public func discogsReviews() throws -> [Int64: DiscogsReview] { try index.discogsReviews() }
 

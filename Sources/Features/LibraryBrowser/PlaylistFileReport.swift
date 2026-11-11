@@ -32,6 +32,11 @@ extension PlaylistImport {
     }
 }
 
+/// What the status bar says once Export Library Profile… has written `file`.
+func profileExportSummary(albums count: Int, file: String) -> String {
+    "Exported \(albums(count)) to \((terminalSafe(file) as NSString).lastPathComponent)"
+}
+
 /// "Exported 40 tracks to Mix.m3u8 · 3 not in the library · 1 not written", and a
 /// line for each path that couldn't be written, the first `PlaylistFile.maximumProblems`.
 func exportReport(

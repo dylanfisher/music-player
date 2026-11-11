@@ -386,6 +386,12 @@ public final class BrowserModel {
             groupByAlbumArtist: filter.groupByAlbumArtist, to: url, relativePaths: relativePaths)
     }
 
+    /// Writes the library's profile for music-recommender to `url`, and returns how many albums
+    /// it holds.
+    func exportLibraryProfile(to url: URL) async throws -> Int {
+        try await reader.writeLibraryProfile(to: url)
+    }
+
     public func renamePlaylist(_ id: Int64, to name: String) async throws {
         try await reader.renamePlaylist(id, to: name)
         try await reloadPlaylists()

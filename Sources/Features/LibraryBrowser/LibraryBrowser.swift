@@ -1883,6 +1883,20 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
+    /// Writes the library's profile for music-recommender to `url`, and says how many albums
+    /// it holds.
+    public func exportLibraryProfile(to url: URL) {
+        show(failure: "Exporting the library profile…")
+        Task {
+            do {
+                let written = try await model.exportLibraryProfile(to: url)
+                show(failure: profileExportSummary(albums: written, file: url.path))
+            } catch {
+                report(terminalSafe("couldn't export the library profile to \(url.path): \(error)"))
+            }
+        }
+    }
+
     /// Reads `player`'s library at `url` and shows what importing it would change in a sheet
     /// over `window`. One import is open at a time.
     public func importLibrary(_ player: PlayerLibrary.Player, from url: URL, over window: NSWindow)

@@ -124,6 +124,8 @@ extension CommandID {
     public static let exportPlaylist = CommandID("playlist.export")
     public static let importSwinsian = CommandID("library.importSwinsian")
     public static let importITunes = CommandID("library.importITunes")
+    /// Writes the library as music-recommender's profile reads it (ADR 0198).
+    public static let exportLibraryProfile = CommandID("library.exportProfile")
 
     public static let playPause = CommandID("playback.playPause")
     public static let play = CommandID("playback.play")
@@ -313,6 +315,7 @@ public enum AppCommands {
             Command(.exportPlaylist, "Export Playlist…"),
             Command(.importSwinsian, "Import from Swinsian…"),
             Command(.importITunes, "Import iTunes Library…"),
+            Command(.exportLibraryProfile, "Export Library Profile…"),
 
             Command(.playPause, "Play/Pause", [.init(.space)], links: true),
             Command(.play, "Play", links: true, argument: playArgument),

@@ -46,6 +46,9 @@ extension AppDelegate {
         dispatcher.handle(.importITunes, enabled: hasWindow) { [weak self] in
             self?.chooseLibraryToImport(.iTunes)
         }
+        dispatcher.handle(.exportLibraryProfile, enabled: hasWindow) { [weak self] in
+            self?.chooseProfileFile()
+        }
         let readable = { [weak self] in
             guard let playlist = self?.browser?.shownPlaylist else { return false }
             if case .unreadable = playlist.kind { return false }
@@ -224,6 +227,19 @@ extension AppDelegate {
             guard response == .OK, let url = panel.url else { return }
             self?.browser?.exportShownPlaylist(
                 playlist.id, to: url, relativePaths: relative.state == .on)
+        }
+    }
+
+    /// Export Library Profile…: a save panel for the JSON music-recommender's `profile load`
+    /// reads (ADR 0198). The file is written only where the user picks.
+    private func chooseProfileFile() {
+        guard let window = window?.window else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "library-profile.json"
+        panel.allowedContentTypes = [.json]
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.browser?.exportLibraryProfile(to: url)
         }
     }
 
