@@ -231,7 +231,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// layout reported, and nothing done to these columns is reported.
     func enterFocus() {
         guard unfocused == nil else { return }
-        unfocused = layout
+        let shown = layout
         let width = min(
             max(Double(table.visibleRect.width) / Double(Self.focusColumns.count), 100),
             TrackTableLayout.widthRange.upperBound)
@@ -239,6 +239,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             TrackTableLayout(
                 columns: Self.focusColumns.map { ColumnLayout(column: $0, width: width) },
                 sortColumn: model.tableSort.column, sortAscending: model.tableSort.ascending))
+        unfocused = shown
         for column in Self.focusColumns {
             table.tableColumn(withIdentifier: columnIdentifier(column))?.resizingMask = [
                 .autoresizingMask, .userResizingMask,
@@ -902,8 +903,12 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     /// Shows `layout`'s columns in its order and widths, and hides the others. The sort is the
     /// model's to change. Each move and resize would report the layout; the caller reports it
-    /// once instead.
+    /// once instead. In Focus Mode, they're the ones it puts back as it ends.
     func showColumns(_ layout: TrackTableLayout) {
+        if unfocused != nil {
+            unfocused = layout
+            return
+        }
         applyingColumns = true
         defer { applyingColumns = false }
         let shown = Set(layout.columns.map { columnIdentifier($0.column) })

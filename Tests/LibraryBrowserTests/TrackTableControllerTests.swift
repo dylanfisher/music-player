@@ -1490,4 +1490,14 @@ private func launchedTable(
     #expect(controller.layout == before)
     #expect(table.rowHeight == RowHeight.regular.points)
     #expect(Set(table.selectedRowIndexes.map { model.trackIDs[$0] }) == selected)
+
+    // Columns shown while it's on, as an import's, are the ones leaving puts back.
+    var imported = before
+    imported.columns.removeLast()
+    controller.enterFocus()
+    controller.showColumns(imported)
+    #expect(shown() == ["title", "artist", "album"])
+    #expect(controller.layout == imported)
+    controller.leaveFocus()
+    #expect(shown() == imported.columns.map(\.column.rawValue))
 }
