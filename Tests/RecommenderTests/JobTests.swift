@@ -328,3 +328,41 @@ private func texts(_ event: HandoffEvent) throws -> [String] {
     let read = try HandoffEvent(json: event.json)
     #expect(read.json == event.json)
 }
+
+/// The staged path the service sends names one folder in the staging folder, or none.
+@Test func aJobsStagedFolderIsOneFolderName() throws {
+    var job = try decodeReply(Array(jobReply(try jobJSON()).utf8), as: JobReply.self).job
+    for (path, folder) in [
+        ("job-42", "job-42"), ("..", nil), (".", nil), ("", nil), ("../x", nil), ("a/b", nil),
+        ("..job", "..job"), (".x", ".x"),
+    ] as [(String?, String?)] {
+        job.stagedPath = path
+        #expect(job.stagedFolder == folder, "\(String(describing: path))")
+    }
+    job.stagedPath = nil
+    #expect(job.stagedFolder == nil)
+}
+
+/// Each field the contract's example leaves null decodes when the service sends it.
+@Test func aJobsOptionalFieldsDecodeWhenSent() throws {
+    let text = try jobJSON(state: "failed")
+        .replacingOccurrences(of: #""failed_stage": null"#, with: #""failed_stage": "download""#)
+        .replacingOccurrences(
+            of: #""next_attempt_at": null"#, with: #""next_attempt_at": 1794070000"#
+        )
+        .replacingOccurrences(
+            of: #""progress": null"#,
+            with:
+                #""progress": {"files_done": 1, "files_total": 2, "bytes_done": 3, "bytes_total": 4}"#
+        )
+        .replacingOccurrences(of: #""bit_depth": 16"#, with: #""bit_depth": 24"#)
+        .replacingOccurrences(of: #""bitrate": null"#, with: #""bitrate": 1411"#)
+        .replacingOccurrences(of: #""variable_bitrate": null"#, with: #""variable_bitrate": false"#)
+    let job = try decodeReply(Array(jobReply(text).utf8), as: JobReply.self).job
+    #expect(job.failedStage == .download)
+    #expect(job.nextAttemptAt == 1_794_070_000)
+    #expect(job.progress == .init(filesDone: 1, filesTotal: 2, bytesDone: 3, bytesTotal: 4))
+    #expect(job.candidate?.bitDepth == 24)
+    #expect(job.candidate?.bitrateKbps == 1411)
+    #expect(job.candidate?.variableBitrate == false)
+}
