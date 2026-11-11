@@ -907,4 +907,42 @@ private extension Array where Element == Machine {
     let added = try b.index.database.prepare("SELECT added_seconds FROM paths WHERE path = ?")
         .map(b.path("y.flac").precomposedStringWithCanonicalMapping) { try $0.double(0) }
     #expect(added == [Double(a.nowMs) / 1000])
+    let counts = try b.index.database.prepare("SELECT play_count, skip_count FROM plays")
+        .map { [try $0.int(0), try $0.int(1)] }
+    #expect(counts == [[0, 1]], "a skip adds no play")
+}
+
+@Test func aOneStarRatingReachesTheOtherMachine() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    try a.index.setRating(1, trackIDs: [try a.scanned("x.flac")])
+    try b.scanned("x.flac")
+    try syncAll([a, b])
+    #expect(try b.track("x.flac")?.rating == 1)
+}
+
+/// A move onto a path this Mac has stats for keeps the later rating and opinion, which here
+/// are the new path's, and its last play, and adds no skip.
+@Test func aMoveOntoAPathRatedLaterTakesItsRatingOpinionAndLastPlay() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let old = try a.scanned("x.flac", title: "Song")
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
+    try a.index.setRating(4, trackIDs: [old])
+    try a.index.remove([old])
+    try a.scanned("renamed.flac", title: "Song")
+    #expect(try a.index.matchMoves().count == 1)
+    let renamed = try b.scanned("renamed.flac", title: "Song")
+    b.nowMs = a.nowMs + 60_000
+    try b.index.recordPlay(b.path("renamed.flac"), at: 1_700_000_500)
+    try b.index.setRating(2, trackIDs: [renamed])
+    try b.index.toggle(.liked, trackIDs: [renamed])
+    try a.sync()
+    #expect(try b.sync().problems.isEmpty)
+    let track = try #require(try b.track("renamed.flac"))
+    #expect(track.playCount == 2)
+    #expect(track.skipCount == 0)
+    #expect(track.lastPlayedSeconds == 1_700_000_500)
+    #expect(track.rating == 2)
+    #expect(track.loved)
 }
