@@ -13,6 +13,9 @@
   carried when the sheet found it, kept in the ledger when it isn't the job's.
   [0193](0193-approving-safe-matches-unasked.md): with Approve Safe Matches Automatically on,
   a staged job tagged clean whose plan asks nothing runs Approve's import without the sheet.
+  [0199](0199-an-import-deletes-what-it-replaces-without-the-finder.md): the old files go to
+  `FileManager.trashItem`, not `moveToTrash`, and on a share with no Trash the import deletes
+  them itself, so the Finder doesn't ask.
 - **See also:** [0026](0026-sync-identity-is-the-relative-path.md) (the move list that
   carries stats),
   [0028](0028-network-folders-by-share.md) (paths by share),
