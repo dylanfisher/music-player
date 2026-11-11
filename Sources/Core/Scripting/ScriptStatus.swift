@@ -103,8 +103,7 @@ extension ScriptStatus: Codable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         state = try container.decode(State.self, forKey: .state)
         track = try container.decode(Track?.self, forKey: .track)
         positionSeconds = try container.decode(Double?.self, forKey: .positionSeconds)
@@ -138,8 +137,7 @@ extension ScriptStatus.Track: Codable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         path = try container.decode(String.self, forKey: .path)
         title = try container.decode(String?.self, forKey: .title)
         artist = try container.decode(String?.self, forKey: .artist)

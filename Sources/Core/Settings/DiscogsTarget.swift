@@ -90,8 +90,7 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
             self = DiscogsTarget(names: PerTagFormat(name))
             return
         }
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         self = .key(
             try container.decode(PerTagFormat<String>.self, forKey: .key),
             numbered: try container.decodeIfPresent(PerTagFormat<String>.self, forKey: .numbered))

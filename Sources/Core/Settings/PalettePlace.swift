@@ -15,8 +15,7 @@ public struct PalettePlace: SettingValue {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         across = try container.decode(Double.self, forKey: .across)
         down = try container.decode(Double.self, forKey: .down)
     }

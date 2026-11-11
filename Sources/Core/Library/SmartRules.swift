@@ -29,8 +29,7 @@ public struct SmartRules: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         match = try container.decode(Match.self, forKey: .match)
         rules = try container.decode([SmartRule].self, forKey: .rules)
         limit = try container.decodeIfPresent(SmartLimit.self, forKey: .limit)
@@ -98,8 +97,7 @@ public struct SmartRule: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         field = try container.decode(SmartField.self, forKey: .field)
         comparison = try container.decode(SmartComparison.self, forKey: .comparison)
         value = try container.decode(SmartValue.self, forKey: .value)
@@ -260,8 +258,7 @@ public struct SmartLimit: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         count = try container.decode(Int.self, forKey: .count)
         order = try container.decode(SmartOrder.self, forKey: .order)
         if let problem {

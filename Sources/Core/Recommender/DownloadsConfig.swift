@@ -1,5 +1,6 @@
 import Foundation
 import LocalNetwork
+import Settings
 
 /// `downloads/config`'s reply, of which the player reads where slskd's web page is.
 package struct DownloadsConfig: Equatable, Sendable, Decodable {

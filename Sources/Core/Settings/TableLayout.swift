@@ -23,8 +23,7 @@ public struct TableLayout: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         widths = try container.decode([String: Double].self, forKey: .widths)
         order = try container.decode([String].self, forKey: .order)
         sortColumn = try container.decodeIfPresent(String.self, forKey: .sortColumn)

@@ -26,15 +26,6 @@ package func decodeReply<Reply: Decodable>(_ body: [UInt8], as _: Reply.Type)
     }
 }
 
-/// `decoder`'s object, checked to have no key but `Keys`. Every reply type's `init(from:)`
-/// starts with it, and `decodeReply` has read `ok` already.
-func strictContainer<Keys: CodingKey & CaseIterable>(_ decoder: any Decoder, _: Keys.Type) throws
-    -> KeyedDecodingContainer<Keys>
-{
-    try rejectUnknownKeys(decoder, Keys.self)
-    return try decoder.container(keyedBy: Keys.self)
-}
-
 /// Thrown by a job's decoding for a state this player doesn't have.
 struct UnknownJobState: Error {
     var name: String

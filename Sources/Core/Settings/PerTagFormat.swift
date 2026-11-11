@@ -46,8 +46,7 @@ public struct PerTagFormat<Value: Codable & Equatable & Sendable>: Codable, Equa
             self.init(value)
             return
         }
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         self.init(
             vorbis: try container.decode(Value.self, forKey: .vorbis),
             mp4: try container.decode(Value.self, forKey: .mp4),

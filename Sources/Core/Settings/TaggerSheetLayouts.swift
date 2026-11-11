@@ -19,8 +19,7 @@ public struct TaggerSheetLayouts: SettingValue {
         }
 
         public init(from decoder: any Decoder) throws {
-            try rejectUnknownKeys(decoder, CodingKeys.self)
-            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let container = try strictContainer(decoder, CodingKeys.self)
             width = try container.decode(Double.self, forKey: .width)
             height = try container.decode(Double.self, forKey: .height)
             table = try container.decode(TableLayout.self, forKey: .table)
@@ -43,8 +42,7 @@ public struct TaggerSheetLayouts: SettingValue {
         }
 
         public init(from decoder: any Decoder) throws {
-            try rejectUnknownKeys(decoder, CodingKeys.self)
-            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let container = try strictContainer(decoder, CodingKeys.self)
             paneWidth = try container.decode(Double.self, forKey: .paneWidth)
             table = try container.decode(TableLayout.self, forKey: .table)
         }
@@ -72,8 +70,7 @@ public struct TaggerSheetLayouts: SettingValue {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         otherReleases = try container.decodeIfPresent(Layout.self, forKey: .otherReleases)
         viewRelease = try container.decodeIfPresent(Layout.self, forKey: .viewRelease)
         viewChanges = try container.decodeIfPresent(Layout.self, forKey: .viewChanges)

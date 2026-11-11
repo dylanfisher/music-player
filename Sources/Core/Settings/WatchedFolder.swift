@@ -53,8 +53,7 @@ public struct WatchedFolder: SettingValue {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         path = try container.decode(String.self, forKey: .path)
         share = try container.decodeIfPresent(String.self, forKey: .share)
         kind = try container.decode(Kind.self, forKey: .kind)

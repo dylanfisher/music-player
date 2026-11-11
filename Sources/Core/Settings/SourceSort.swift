@@ -16,8 +16,7 @@ public struct SourceSort: SettingValue {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         source = try container.decode(BrowserSource.self, forKey: .source)
         column = try container.decode(TrackColumn.self, forKey: .column)
         ascending = try container.decode(Bool.self, forKey: .ascending)

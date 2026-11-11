@@ -46,8 +46,7 @@ public struct ScrollReport: Codable, Equatable, Sendable {
 
     /// Rejects a key it doesn't know, so a renamed field fails instead of reading as missing.
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         framesMs = try container.decode([Double].self, forKey: .framesMs)
         refreshFramesMs = try container.decode([Double].self, forKey: .refreshFramesMs)
         lastCoverMs = try container.decodeIfPresent(Double.self, forKey: .lastCoverMs)

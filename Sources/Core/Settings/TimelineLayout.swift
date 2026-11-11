@@ -21,8 +21,7 @@ public struct TimelineLayout: SettingValue {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         playedWidth = try container.decode(Double.self, forKey: .playedWidth)
         columns = try container.decode([ColumnLayout].self, forKey: .columns)
     }

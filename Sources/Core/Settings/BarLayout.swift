@@ -36,8 +36,7 @@ public struct BarLayout<Part: Codable & Hashable & Sendable>: Codable, Equatable
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         leading = try container.decode([BarColumn<Part>].self, forKey: .leading)
         center = try container.decode(BarColumn<Part>.self, forKey: .center)
         trailing = try container.decode([BarColumn<Part>].self, forKey: .trailing)

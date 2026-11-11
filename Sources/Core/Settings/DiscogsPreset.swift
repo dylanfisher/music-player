@@ -16,8 +16,7 @@ public struct NamedDiscogsMapping: SettingValue {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
         mapping = try container.decode(DiscogsMapping.self, forKey: .mapping)
     }

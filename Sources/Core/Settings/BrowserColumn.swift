@@ -21,8 +21,7 @@ public struct BrowserColumn: SettingValue {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         grouping = try container.decode(BrowserGrouping.self, forKey: .grouping)
         selection = try container.decode(String?.self, forKey: .selection)
     }

@@ -1,7 +1,7 @@
 /// Throws when the object being decoded has a key outside `Keys`, so a misspelled field fails
 /// instead of being ignored. Structured setting values call it first in `init(from:)`, and so do
 /// other stored values, such as a smart playlist's rules.
-public func rejectUnknownKeys<Keys: CodingKey & CaseIterable>(_ decoder: any Decoder, _: Keys.Type)
+func rejectUnknownKeys<Keys: CodingKey & CaseIterable>(_ decoder: any Decoder, _: Keys.Type)
     throws
 {
     let known = Set(Keys.allCases.map(\.stringValue))
@@ -12,6 +12,15 @@ public func rejectUnknownKeys<Keys: CodingKey & CaseIterable>(_ decoder: any Dec
         throw DecodingError.dataCorruptedError(
             forKey: key, in: raw, debugDescription: "unknown key")
     }
+}
+
+/// `decoder`'s object, checked by `rejectUnknownKeys` to have no key outside `Keys`: what a
+/// strict `init(from:)` decodes its fields from.
+public func strictContainer<Keys: CodingKey & CaseIterable>(_ decoder: any Decoder, _: Keys.Type)
+    throws -> KeyedDecodingContainer<Keys>
+{
+    try rejectUnknownKeys(decoder, Keys.self)
+    return try decoder.container(keyedBy: Keys.self)
 }
 
 private struct AnyKey: CodingKey {

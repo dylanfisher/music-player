@@ -37,8 +37,7 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         uid = try container.decode(String.self, forKey: .uid)
         hogMode = try container.decode(Bool.self, forKey: .hogMode)
         digitalVolume = try container.decode(Bool.self, forKey: .digitalVolume)
@@ -50,14 +49,12 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
 
     /// Playback's types aren't `Codable`, so their keys are checked here, at every level.
     private static func formats(from decoder: any Decoder) throws -> DeviceFormats {
-        try rejectUnknownKeys(decoder, FormatsKeys.self)
-        let container = try decoder.container(keyedBy: FormatsKeys.self)
+        let container = try strictContainer(decoder, FormatsKeys.self)
         var list = try container.nestedUnkeyedContainer(forKey: .formats)
         var formats: [PhysicalFormat] = []
         while !list.isAtEnd {
             let decoder = try list.superDecoder()
-            try rejectUnknownKeys(decoder, FormatKeys.self)
-            let format = try decoder.container(keyedBy: FormatKeys.self)
+            let format = try strictContainer(decoder, FormatKeys.self)
             formats.append(
                 PhysicalFormat(
                     formatID: try format.decode(String.self, forKey: .formatID),

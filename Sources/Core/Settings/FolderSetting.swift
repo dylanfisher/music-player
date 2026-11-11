@@ -15,8 +15,7 @@ private enum FolderSettingKeys: String, CodingKey, CaseIterable {
 
 extension FolderSetting {
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, FolderSettingKeys.self)
-        let container = try decoder.container(keyedBy: FolderSettingKeys.self)
+        let container = try strictContainer(decoder, FolderSettingKeys.self)
         self.init(
             path: try container.decode(String.self, forKey: .path),
             share: try container.decodeIfPresent(String.self, forKey: .share))

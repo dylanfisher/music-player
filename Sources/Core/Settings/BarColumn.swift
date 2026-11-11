@@ -19,8 +19,7 @@ public struct BarColumn<Part: Codable & Hashable & Sendable>: Codable, Equatable
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         parts = try container.decode([Part].self, forKey: .parts)
         width = try container.decode(BarWidth.self, forKey: .width)
         alignment = try container.decode(BarAlignment.self, forKey: .alignment)

@@ -48,8 +48,7 @@ public struct ResumePoint: SettingValue {
         self.init()
         if try decoder.singleValueContainer().decodeNil() { return }
         do {
-            try rejectUnknownKeys(decoder, CodingKeys.self)
-            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let container = try strictContainer(decoder, CodingKeys.self)
             let seconds = try container.decode(Double.self, forKey: .seconds)
             guard seconds.isFinite, seconds >= 0 else {
                 throw DecodingError.dataCorruptedError(

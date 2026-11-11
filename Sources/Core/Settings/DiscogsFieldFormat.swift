@@ -87,8 +87,7 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         join = try container.decodeIfPresent(String.self, forKey: .join)
         names = try container.decodeIfPresent(Names.self, forKey: .names)
         suffixes = try container.decodeIfPresent(Suffixes.self, forKey: .suffixes)

@@ -29,8 +29,7 @@ public struct DiscogsFieldRule: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(decoder, CodingKeys.self)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         mode = try container.decode(Mode.self, forKey: .mode)
         targets = try container.decode([DiscogsTarget].self, forKey: .targets)
         format =
