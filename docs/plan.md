@@ -464,6 +464,45 @@ deleting at once. The plan confirms where the dialog comes from before changing 
 - [ ] **Owner check:** with Approve Safe Matches Automatically on, an upgrade of an album on the
       NAS lands with no dialog, and its old files are gone.
 
+Implementation plan, phase 81 (ADR 0199):
+
+What exists, found by search (map.md recipes): the import's old files reach `ImportRun.delete`
+(`Core/Library/ApprovedImport.swift`), which calls `ImportRun.trash`, `Downloads.Setup.trash`,
+which the app wires to `moveToTrash(urls).failure` (`DownloadsCommands.swift`), the same
+`NSWorkspace.recycle` call Remove… makes. **Where the dialog comes from:** nothing in the app
+asks. The only alerts in `Features/Downloads` are the retry, paste-release and failure sheets,
+and the unasked path (`approveUnasked`) shows none of them before the import. `recycle` hands
+the files to the Finder, and on a volume with no Trash the Finder asks whether to delete them
+at once before it does (ADR 0125 saw the delete, and the error reported after it). So the
+dialog is the Finder's, and only a removal that doesn't go through the Finder avoids it.
+`FileManager.trashItem(at:)` shows no UI: it moves a file to its volume's Trash, and on a
+volume with no Trash throws `CocoaError.featureUnsupported` and leaves the file. The owner check
+confirms it on the NAS. Opening Downloads offers the selection through `show(offeringSelection:)`
+→ `currentSelection()` → `offerSelection()` → `queueFromSelection(asked: false)`; Library
+Selection… goes through `add(.fromSelection)`, which reads the selection itself.
+
+- 81.1 `trashOrDelete(_:trashItem:)` (`Core/Library`, a file of its own beside `ImportRun`):
+  off the main actor, each file in turn to `trashItem` (`FileManager.trashItem` by default),
+  and one it throws `featureUnsupported` for is removed with `FileManager.removeItem`. Gives
+  each file it couldn't remove with why, nil when none. `ImportRun.delete`'s failure says the
+  files weren't removed rather than that the Trash refused them. The app wires
+  `Downloads.Setup.trash` to it; Remove… keeps `moveToTrash`. Doc comments on `moveToTrash`,
+  `Setup.trash`, `ImportRun.trash` and `ImportStep.Kind` follow. Tests: in
+  `ApprovedImportTests`, an upgrade whose stand-in has no Trash (throws `featureUnsupported`)
+  deletes its old files and lands, and one whose stand-in moves to a Trash folder leaves the
+  old files there; in `TrashOrDeleteTests`, a file in a read-only folder on a volume with no
+  Trash is reported and stays, and an error other than `featureUnsupported` is reported
+  without a delete. Both the sheet's Approve and the unasked one run `ImportRun`, so both
+  change. The Finder's dialog itself can't be seen from a test; that it no longer comes rests
+  on the import not calling `recycle`, which the owner check confirms.
+- 81.2 No offer for one track (`Features/Downloads`): `currentSelection()` gives nil for fewer
+  than two tracks, so `show(offeringSelection:)` offers nothing for one; Library Selection…
+  is unchanged. Test: `openingWithASelectionOffersFromLibrarySelectionOnceItCanQueue` with one
+  track offers nothing, with two it offers them.
+- 81.3 ADR 0199, amending 0147 (and 0125's note on a share with no Trash); AGENTS.md's
+  boundary sentence for Approve says the replaced files go to the Trash, or are deleted on a
+  share with no Trash, in place of "the same Trash call".
+
 ### 82. Focus mode
 
 Asked by the owner on 2026-11-10.
