@@ -11431,3 +11431,103 @@ the other stages' costs weren't recorded.
 **Owner checks:** on the 2015 MacBook Pro on battery, play to the Denon past the display's
 sleep; it plays on, and `pmset -g assertions` lists "Music Player playing to <the Denon>" while
 it plays and not after Pause. And the sync merge row on a quiet machine (19.34 s under load).
+
+### 81. Downloads: approving unasked without a dialog, and no offer for one track
+
+Asked by the owner on 2026-11-10. With Approve Safe Matches Automatically on, an upgrade
+approved unasked still stops on a dialog saying its old files will be deleted, which defeats
+approving unasked. The likely source: `moveToTrash` (`LibraryBrowser/MoveToTrash.swift`) calls
+`NSWorkspace.recycle`, and on a share with no Trash, such as the NAS, the Finder asks before
+deleting at once. The plan confirms where the dialog comes from before changing anything.
+
+- [x] **No second question.** On a volume with no Trash, the old files an approved import
+      replaces are deleted by the import itself, one by one, with no dialog, as AGENTS.md
+      already allows; on a volume with a Trash they still go to it. This holds for the sheet's
+      Approve too, whose sheet already says the old files are deleted permanently
+      (`ApproveSheet`), so the owner isn't asked twice. Remove… keeps the Finder's dialog, since
+      nothing before it says the files are deleted for good. A file that can't be deleted is a
+      failure the job reports, as today.
+- [x] **No offer for one track.** Opening Downloads with a single track selected doesn't offer
+      From Library Selection for its album (`offerSelection`, `queueFromSelection(asked:
+      false)`); two or more tracks still do. Library Selection… from the window's menu still
+      queues one track's album when asked.
+- [x] **Tests.** Through the `trash` stand-in in `Downloads.Setup`: an unasked upgrade on a
+      volume with no Trash deletes its old files and raises no alert; one with a Trash moves
+      them there; a failed delete is reported. Opening with one track selected offers nothing,
+      with two it offers their albums.
+- [x] **ADR 0199**, amending ADR 0147: how an approved import removes the files it replaces on
+      a share with no Trash.
+- [x] **Owner check:** with Approve Safe Matches Automatically on, an upgrade of an album on the
+      NAS lands with no dialog, and its old files are gone.
+
+Implementation plan, phase 81 (ADR 0199):
+
+What exists, found by search (map.md recipes): the import's old files reach `ImportRun.delete`
+(`Core/Library/ApprovedImport.swift`), which calls `ImportRun.trash`, `Downloads.Setup.trash`,
+which the app wires to `moveToTrash(urls).failure` (`DownloadsCommands.swift`), the same
+`NSWorkspace.recycle` call Remove… makes. **Where the dialog comes from:** nothing in the app
+asks. The only alerts in `Features/Downloads` are the retry, paste-release and failure sheets,
+and the unasked path (`approveUnasked`) shows none of them before the import. `recycle` hands
+the files to the Finder, and on a volume with no Trash the Finder asks whether to delete them
+at once before it does (ADR 0125 saw the delete, and the error reported after it). So the
+dialog is the Finder's, and only a removal that doesn't go through the Finder avoids it.
+`FileManager.trashItem(at:)` shows no UI: it moves a file to its volume's Trash, and on a
+volume with no Trash throws `CocoaError.featureUnsupported` and leaves the file. The owner check
+confirms it on the NAS. Opening Downloads offers the selection through `show(offeringSelection:)`
+→ `currentSelection()` → `offerSelection()` → `queueFromSelection(asked: false)`; Library
+Selection… goes through `add(.fromSelection)`, which reads the selection itself.
+
+- 81.1 `trashOrDelete(_:trashItem:)` (`Core/Library`, a file of its own beside `ImportRun`):
+  off the main actor, each file in turn to `trashItem` (`FileManager.trashItem` by default),
+  and one it throws `featureUnsupported` for is removed with `FileManager.removeItem`. Gives
+  each file it couldn't remove with why, nil when none. `ImportRun.delete`'s failure says the
+  files weren't removed rather than that the Trash refused them. The app wires
+  `Downloads.Setup.trash` to it; Remove… keeps `moveToTrash`. Doc comments on `moveToTrash`,
+  `Setup.trash`, `ImportRun.trash` and `ImportStep.Kind` follow. Tests: in
+  `ApprovedImportTests`, an upgrade whose stand-in has no Trash (throws `featureUnsupported`)
+  deletes its old files and lands, and one whose stand-in moves to a Trash folder leaves the
+  old files there; in `TrashOrDeleteTests`, a file in a read-only folder on a volume with no
+  Trash is reported and stays, and an error other than `featureUnsupported` is reported
+  without a delete. Both the sheet's Approve and the unasked one run `ImportRun`, so both
+  change. The Finder's dialog itself can't be seen from a test; that it no longer comes rests
+  on the import not calling `recycle`, which the owner check confirms.
+- 81.2 No offer for one track (`Features/Downloads`): `currentSelection()` gives nil for fewer
+  than two tracks, so `show(offeringSelection:)` offers nothing for one; Library Selection…
+  is unchanged. Test: `openingWithASelectionOffersFromLibrarySelectionOnceItCanQueue` with one
+  track offers nothing, with two it offers them.
+- 81.3 ADR 0199, amending 0147 (0125, about Remove…, is unchanged); AGENTS.md's
+  boundary sentence for Approve says the replaced files go to the Trash, or are deleted on a
+  share with no Trash, in place of "the same Trash call".
+
+Result, phase 81: shipped the four items (ADR 0199, amending 0147). The dialog was the Finder's:
+an import passed its old files to `moveToTrash`, whose `NSWorkspace.recycle` hands them to the
+Finder, and on a share with no Trash the Finder asks before deleting. `trashOrDelete`
+(`Core/Library/TrashOrDelete.swift`) now gives each file in turn to `FileManager.trashItem`,
+which shows no UI, and deletes one with `removeItem`, logged, only when the Trash throws
+`featureUnsupported`, as is or underlying another error; any other error is reported and the
+file stays. `Downloads.Setup.trash` is wired to it, so the sheet's Approve and the unasked one
+both change; Remove… keeps `moveToTrash` and the Finder's dialog, and `moveToTrash` is now
+internal to LibraryBrowser. Opening Downloads with one track selected offers nothing
+(`currentSelection()` gives nil under two tracks); Library Selection… is unchanged. Tests: 2 in
+`ApprovedImportTests` (no Trash deletes the old files and lands, a Trash leaves them in a
+stand-in Trash folder), 5 in `TrashOrDeleteTests`, and the opening-with-a-selection test now
+checks one track and two. Found in review: a fallback widened to POSIX ENOTSUP was narrowed
+back to `featureUnsupported`, since ENOTSUP comes from other share failures too. Gaps: no test
+can show the Finder's dialog, and none covers Library Selection… queueing one track's album
+(code unchanged). Bench (every non-window row, under load from parallel phases): Approve a
+staged 12-file album 0.84 s local and 3.09 s on the NAS; Stats period change 259 ms in the full
+run and 257 to 258 ms alone (budget 250 ms, phase 73 247 ms, +4%), not branch-caused, which
+touches no stats code, and not A/B'd; history timeline page, history one row per track and Get
+Info one track missed in the full run and passed alone (1.52 ms, 14.50 ms, 48.43 ms). Window
+rows not run. Gate: three review rounds; round 2 found 1 above low and 3 low, fixed; round 3
+nothing above low (2 low). Simplify kept `hasNoTrash` private to its one caller. Architecture
+found nothing. Full `./scripts/check` passed but for `theGlassHeadersAreFrosted`, after a rerun
+of the test step for `aSearchTypedDuringARefreshDoesNotWaitForItsQueries`, slow under load.
+
+Cost: implementer (Opus) 40 tool calls, 25 min; simplify 10 tool calls; second fix 8 tool
+calls; bench 15 tool calls; the other stages' costs weren't recorded.
+
+**Owner checks:** with Approve Safe Matches Automatically on, an upgrade of an album on the NAS
+lands with no dialog, and its old files are gone. If the job fails at its delete step instead,
+paste its error: the share throws something other than `featureUnsupported`, and the fallback
+needs it. And the Stats period change row on a quiet machine (257 ms under load).
