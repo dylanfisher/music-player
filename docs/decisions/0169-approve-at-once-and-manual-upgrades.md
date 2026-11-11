@@ -91,4 +91,5 @@ album when it first opens, so it shows on the album's tier tab.
 ## AGENTS.md
 
 No change: Approve still renames the staged files into the library folder and passes the files
-it replaces to the Trash call, which the boundary's ADR 0147 sentence says.
+it replaces to the Trash call, which the boundary's ADR 0147 sentence says (ADR 0199 has since
+changed that call).

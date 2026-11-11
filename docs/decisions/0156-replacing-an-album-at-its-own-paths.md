@@ -82,4 +82,4 @@ The music files bullet's ADR 0147 sentence reads: Approve in the Downloads windo
 staged files into the library folder, never over a file, and for an upgrade then passes the files
 it replaces to the same Trash call, which on a share with no Trash deletes them; an old file
 replaced at its own path is first renamed beside itself to a hidden name
-(this ADR).
+(this ADR). ADR 0199 has since changed the Trash call, see there.

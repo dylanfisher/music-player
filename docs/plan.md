@@ -499,7 +499,7 @@ Selection… goes through `add(.fromSelection)`, which reads the selection itsel
   than two tracks, so `show(offeringSelection:)` offers nothing for one; Library Selection…
   is unchanged. Test: `openingWithASelectionOffersFromLibrarySelectionOnceItCanQueue` with one
   track offers nothing, with two it offers them.
-- 81.3 ADR 0199, amending 0147 (and 0125's note on a share with no Trash); AGENTS.md's
+- 81.3 ADR 0199, amending 0147 (0125, about Remove…, is unchanged); AGENTS.md's
   boundary sentence for Approve says the replaced files go to the Trash, or are deleted on a
   share with no Trash, in place of "the same Trash call".
 

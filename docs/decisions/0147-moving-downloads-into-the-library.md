@@ -36,7 +36,7 @@ AGENTS.md allows neither. ADR 0124 lets a drop create copies in the library fold
 rename a file into it; ADR 0050 lets only Remove and Move to Trash pass files to the Trash, for
 tracks the user picked. ADR 0125 found that a share with no Trash deletes the file and still
 reports an error. The owner's NAS share has no Trash, so on it the upgrade's Trash call is a
-permanent delete.
+permanent delete (ADR 0199 now makes that delete itself, without the Finder).
 
 ## Decision
 
@@ -78,8 +78,8 @@ answer, nothing moves.
 3. The new files move in as for a new album.
 4. Each moved file is read again: its tags read, its size equals the one recorded after the tag write (ADR 0146), and the
    file count is the job's. A failure stops here, with the old files untouched.
-5. The old files go to `moveToTrash`, the function Remove and Move to Trash calls, made public
-   in `Features/LibraryBrowser` and handed to the import as a closure, so there is one copy. Only
+5. The old files go to `trashOrDelete` (`Core/Library`), handed to the import as a closure, which
+   moves each to its volume's Trash or, on a share with no Trash, deletes it (ADR 0199). Only
    files the job lists as the album's, resolved by path and still carrying the release id, are
    passed; for an album found by its artist and title, the release id each carried when the
    sheet found it (ADR 0169).
@@ -139,3 +139,4 @@ The music files bullet in Boundaries has one sentence for this ADR, after the AD
 Approve in the Downloads window renames the staged files into the library folder, never over a
 file, and for an upgrade then passes the files it replaces to the same Trash call, which on a
 share with no Trash deletes them. ADR 0146 adds the bullet's other clause. The detail stays here.
+ADR 0199 replaced "the same Trash call" with the Trash, or a delete on a share with no Trash.
