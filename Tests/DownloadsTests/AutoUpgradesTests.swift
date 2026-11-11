@@ -109,6 +109,16 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
         ).isEmpty)
 }
 
+@Test func twoAlbumsOfOneReleaseMakeOneChoice() {
+    let twin = UpgradeCandidate(
+        albumID: 9, title: "Album 1", artist: "Made-Up Artist", releaseID: 1,
+        sharePaths: ["library/1 copy/01.mp3"], quality: "MP3 320 kbps", kbps: 320, plays: 0)
+    let chosen = AutoUpgrades.next(
+        [candidate(1, plays: 5), twin, candidate(2)], jobs: [], never: [], misses: [:],
+        skipped: [], now: Date(), room: 3)
+    #expect(chosen.map(\.albumID) == [1, 2])
+}
+
 /// The albums the index would list now.
 private final class Library: @unchecked Sendable {
     private let lock = NSLock()

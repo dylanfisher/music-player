@@ -69,26 +69,27 @@ enum AutoUpgrades {
         }
     }
 
-    /// Up to `room` of `candidates` to queue, highest score first: none marked Never Upgrade
-    /// (`never`), set aside or waiting after a miss at `now`, or with a job on the service for
-    /// its release that isn't ended, from either Mac, and none in `skipped`.
+    /// Up to `room` of `candidates` to queue, highest score first and one per release: none
+    /// marked Never Upgrade (`never`), set aside or waiting after a miss at `now`, or with a
+    /// job on the service for its release that isn't ended, from either Mac, and none in
+    /// `skipped`.
     static func next(
         _ candidates: [UpgradeCandidate], jobs: some Sequence<DownloadJob>, never: Set<Int>,
         misses: [Int: UpgradeMiss], skipped: Set<Int>, now: Date, room: Int
     ) -> [UpgradeCandidate] {
-        guard room > 0 else { return [] }
-        let active = Set(jobs.filter { !terminal.contains($0.state) }.map(\.release.releaseID))
+        var taken = Set(jobs.filter { !terminal.contains($0.state) }.map(\.release.releaseID))
         let seconds = now.timeIntervalSince1970
-        return candidates.filter { candidate in
+        var chosen: [UpgradeCandidate] = []
+        for candidate in candidates.sorted(by: { $0.precedes($1) }) where chosen.count < room {
             let release = candidate.releaseID
-            if never.contains(release) || active.contains(release) || skipped.contains(release) {
-                return false
+            if never.contains(release) || skipped.contains(release) { continue }
+            if let miss = misses[release], !(miss.retryAt.map { $0 <= seconds } ?? false) {
+                continue
             }
-            guard let miss = misses[release] else { return true }
-            return miss.retryAt.map { $0 <= seconds } ?? false
+            // Two albums of one release make one job.
+            guard taken.insert(release).inserted else { continue }
+            chosen.append(candidate)
         }
-        .sorted { $0.precedes($1) }
-        .prefix(room)
-        .map { $0 }
+        return chosen
     }
 }
