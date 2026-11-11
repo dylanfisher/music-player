@@ -228,6 +228,22 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     #expect(menu.listedCommands.filter { $0 == .showAlbum }.count == 1)
 }
 
+@MainActor @Test func theRatingSubmenuShowsEachItemsMarkFromTheDispatcher() throws {
+    let (menu, dispatcher) = try menu()
+    var marks: [CommandID: NSControl.StateValue] = [:]
+    for id in CommandID.rate {
+        dispatcher.handle(
+            id, isOn: { marks[id] == .on }, isMixed: { marks[id] == .mixed }, run: {})
+    }
+    let rating = items(menu.trackMenu).map(\.0).filter {
+        !$0.isHidden && ($0.representedObject as? CommandID).map(CommandID.rate.contains) == true
+    }
+    #expect(rating.count == CommandID.rate.count)
+    marks = [CommandID.rate[2]: .mixed, CommandID.rate[4]: .mixed, CommandID.rate[5]: .on]
+    for item in rating { _ = menu.validateMenuItem(item) }
+    #expect(rating.map(\.state) == [.off, .off, .mixed, .off, .mixed, .on])
+}
+
 @MainActor @Test func aPlaylistSubmenuListsItsPlaylistsOrSaysItHasNone() throws {
     var playlists = [
         Playlist(id: 4, name: "Mix", kind: .manual), Playlist(id: 9, name: "Road", kind: .manual),

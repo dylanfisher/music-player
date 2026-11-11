@@ -20,6 +20,7 @@ public final class CommandDispatcher {
         var run: () -> Void
         var isEnabled: () -> Bool
         var isOn: (() -> Bool)?
+        var isMixed: (() -> Bool)?
         var title: (() -> String)?
     }
 
@@ -41,20 +42,25 @@ public final class CommandDispatcher {
     }
 
     /// `run` does the command; `enabled` says whether it can now; `isOn` gives a toggle its
-    /// check mark; `title` names it as it would run now, in the menus and the palette.
+    /// check mark; `isMixed` gives it the mixed mark instead, for a choice the things it acts
+    /// on differ in; `title` names it as it would run now, in the menus and the palette.
     public func handle(
         _ id: CommandID, enabled: @escaping () -> Bool = { true }, isOn: (() -> Bool)? = nil,
-        title: (() -> String)? = nil, run: @escaping () -> Void
+        isMixed: (() -> Bool)? = nil, title: (() -> String)? = nil, run: @escaping () -> Void
     ) {
         precondition(bindings.defaults.command(id) != nil, "\(id) isn't a registered command")
         precondition(handlers[id] == nil, "\(id) has two handlers")
-        handlers[id] = Handler(run: run, isEnabled: enabled, isOn: isOn, title: title)
+        handlers[id] = Handler(
+            run: run, isEnabled: enabled, isOn: isOn, isMixed: isMixed, title: title)
     }
 
     public func isEnabled(_ id: CommandID) -> Bool { handlers[id]?.isEnabled() ?? false }
 
     /// Nil for a command that isn't a toggle.
     public func isOn(_ id: CommandID) -> Bool? { handlers[id]?.isOn?() }
+
+    /// Whether the command shows the mixed mark now; false for one that has none.
+    public func isMixed(_ id: CommandID) -> Bool { handlers[id]?.isMixed?() == true }
 
     /// The title the command has now; nil for one whose title is always its registered one.
     public func title(_ id: CommandID) -> String? { handlers[id]?.title?() }

@@ -33,6 +33,18 @@ private func dispatcher() throws -> CommandDispatcher {
     #expect(ran == [play, stop])
 }
 
+@MainActor @Test func aCommandShowsTheMixedMarkOnlyWhenItsHandlerSaysSo() throws {
+    let dispatcher = try dispatcher()
+    var mixed = false
+    dispatcher.handle(play, isOn: { true }, isMixed: { mixed }, run: {})
+    dispatcher.handle(stop) {}
+    #expect(!dispatcher.isMixed(play))
+    mixed = true
+    #expect(dispatcher.isMixed(play))
+    #expect(!dispatcher.isMixed(stop))
+    #expect(!dispatcher.isMixed(bigger))
+}
+
 @MainActor @Test func aCommandWithNoHandlerIsRefused() throws {
     let dispatcher = try dispatcher()
     #expect(dispatcher.key([KeyChord(.space)]) == .refused)
