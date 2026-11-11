@@ -331,3 +331,29 @@ private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
     browser.table.table.selectRowIndexes([], byExtendingSelection: false)
     #expect(ratingMarks(browser) == [.off, .off, .off, .off, .off, .off])
 }
+
+@Test func theRatingMessageNamesOneTrackOrCountsSeveral() {
+    #expect(ratingMessage(stars: 4, count: 1, title: "Song") == "Rated “Song” ★★★★")
+    #expect(ratingMessage(stars: 4, count: 3, title: nil) == "Rated 3 tracks ★★★★")
+    #expect(ratingMessage(stars: 0, count: 1, title: "Song") == "Cleared the rating of “Song”")
+    #expect(ratingMessage(stars: 0, count: 2, title: nil) == "Cleared the rating of 2 tracks")
+}
+
+@MainActor @Test func ratingFromTheMenuSaysSoAndANewerMessageOutlivesTheOldersFade() async throws {
+    let (browser, index) = try await browser(selecting: [2])
+    let title = try #require(try index.rows(ids: try browser.selectedTrackIDs()).first?.title)
+    #expect(browser.ratingMessageText == nil)
+    browser.rateSelection(4)
+    try await waitFor("the message") { browser.ratingMessageText != nil }
+    #expect(browser.ratingMessageText == "Rated “\(title)” ★★★★")
+    browser.table.table.selectRowIndexes([2, 3, 4], byExtendingSelection: false)
+    browser.rateSelection(0)
+    try await waitFor("the second message") {
+        browser.ratingMessageText == "Cleared the rating of 3 tracks"
+    }
+    // The first message's fade, due now, leaves the second showing.
+    browser.fadeRatingMessage(1)
+    #expect(browser.ratingMessageText == "Cleared the rating of 3 tracks")
+    browser.fadeRatingMessage(2)
+    try await waitFor("the fade") { browser.ratingMessageText == nil }
+}

@@ -178,6 +178,8 @@ private func column(
         let leading = browser.statusLeading.arrangedSubviews
         let index = try #require(leading.firstIndex(of: accessory))
         #expect(leading[index - 1] === browser.analysisLabel)
-        #expect(leading[index + 1] === browser.statusColumn(at: .leading(0)))
+        // The rating's message, hidden until a rating, then the leading columns.
+        #expect(leading[index + 1] === browser.ratingLabel)
+        #expect(leading[index + 2] === browser.statusColumn(at: .leading(0)))
     }
 }

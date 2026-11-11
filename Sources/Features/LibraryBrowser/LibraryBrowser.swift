@@ -205,6 +205,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Library after Analyze Library's (ADR 0119).
     let scanPauseButton = NSButton()
     let analysisLabel = NSTextField(labelWithString: "")
+    /// What the last rating from a menu or a shortcut set, after the scan's and the analysis's
+    /// text so it never covers them, until it fades.
+    let ratingLabel = NSTextField(labelWithString: "")
+    /// How many rating messages have shown, so the fade of one replaced since leaves the newer
+    /// one showing.
+    private var ratingMessagesShown = 0
     let analysisPauseButton = NSButton()
     /// Where Analyze Library is, while it runs or is paused.
     private var analysisProgress: LibraryAnalysis.Progress?
@@ -394,6 +400,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         // The lists' font, so the bar reads as part of the tables, as Swinsian's does.
         statusLabel.font = TextCell.font
         statusLabel.lineBreakMode = .byTruncatingTail
+        ratingLabel.font = TextCell.font
+        ratingLabel.lineBreakMode = .byTruncatingTail
+        ratingLabel.isHidden = true
         for label in [scanLabel, analysisLabel] {
             label.font = TextCell.font
             label.textColor = .secondaryLabelColor
@@ -424,6 +433,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         {
             statusLeading.addArrangedSubview(view)
         }
+        statusLeading.addArrangedSubview(ratingLabel)
         statusTrailing.addArrangedSubview(problemsButton)
         for stack in [statusLeading, statusTrailing] {
             stack.detachesHiddenViews = true
@@ -2043,9 +2053,49 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
+    /// Rates the selected tracks, then says so in the status bar.
     public func rateSelection(_ stars: Int) {
         guard let ids = selectedTrackIDs(else: "couldn't rate the tracks") else { return }
-        edit("couldn't rate the tracks") { try await self.model.rate(ids, stars: stars) }
+        edit("couldn't rate the tracks") {
+            try await self.model.rate(ids, stars: stars)
+            let title = ids.count == 1 ? try self.index.rows(ids: ids).first?.title : nil
+            self.showRatingMessage(ratingMessage(stars: stars, count: ids.count, title: title))
+        }
+    }
+
+    /// Shows `text` in the rating's label, in place of any message there, and fades it out
+    /// after `ratingMessageSeconds`.
+    func showRatingMessage(_ text: String) {
+        ratingMessagesShown += 1
+        let shown = ratingMessagesShown
+        ratingLabel.stringValue = text
+        ratingLabel.alphaValue = 1
+        ratingLabel.isHidden = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.ratingMessageSeconds) {
+            [weak self] in self?.fadeRatingMessage(shown)
+        }
+    }
+
+    /// Fades the message `shown` counted, unless a newer one has replaced it.
+    func fadeRatingMessage(_ shown: Int) {
+        guard shown == ratingMessagesShown else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.ratingFadeSeconds
+            ratingLabel.animator().alphaValue = 0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.ratingFadeSeconds) {
+            [weak self] in
+            guard let self, shown == self.ratingMessagesShown else { return }
+            self.ratingLabel.isHidden = true
+        }
+    }
+
+    static let ratingMessageSeconds = 3.0
+    static let ratingFadeSeconds = 0.25
+
+    /// The rating message while it shows, for tests.
+    var ratingMessageText: String? {
+        ratingLabel.isHidden || ratingLabel.alphaValue == 0 ? nil : ratingLabel.stringValue
     }
 
     /// Follows `library.groupByAlbumArtist`.
@@ -2230,7 +2280,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Puts `view` on the status bar's left, after the scan, saving and analysis text and
-    /// before the leading columns, where another feature shows what it's doing; it hides
+    /// before the rating's message and the leading columns, where another feature shows what it's doing; it hides
     /// itself when it has nothing to show (ADR 0163).
     public func setStatusAccessory(_ view: NSView) {
         // The init puts the label in the stack, so it's always there.
