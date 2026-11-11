@@ -391,6 +391,84 @@ rating as chosen, Get Info shows none, and its commands have no default chords.
 - [ ] **Owner check:** rate the playing track with ⌘⌥⇧4, see the message, the menu's tick and
       Get Info's four stars; set it to two from Get Info.
 
+Implementation plan, phase 79 (ADR 0202):
+
+What exists, found by search (map.md recipes): `CommandID.rate` (`Core/Commands`), six
+commands titled "Clear Rating" and "Rate ★…" with no chords, in the Track menu's and the
+context menu's Rating submenu (`AppMenus`, `showsChords: true`); both menus are `MainMenu`'s,
+whose `validateMenuItem` sets each item's state from `CommandDispatcher.isOn`, on or off only.
+The app runs them through `LibraryBrowser.rateSelection`, on `selectedTrackIDs()` (the track
+table's or the timeline's selection, each track once), and `LibraryReader.setRating` writes the
+`ratings` table. `RatingClick` (`Features/LibraryBrowser`) maps a click in the Rating column;
+`stars(_:)` (`Primitives/DisplayText`) draws the stars. Get Info (`Features/TagEditor`) reads
+the index's play count per path through `TagEditing.playCounts`, which the app answers from
+`trackLookup`, a `TrackRow` with the rating too. The status bar's left stack (`statusLeading`)
+holds the scan, saving and analysis text and the Downloads accessory (ADR 0163).
+
+The plan's answers:
+
+- **The tracks the commands act on** stay the selection, as for Like and Dislike; the owner
+  check rates the playing track by selecting it. Rating the playing track with nothing
+  selected would be a new rule for every track command, so it isn't added here.
+- **No default chord clashes:** the only digit chords are ⌃⌥1–4 (sort) and ⌘0 (Focus
+  Sidebar); none has ⌘⌥⇧, macOS's screenshot keys are ⌘⇧3–5 without ⌥, and `KeyBindings`
+  throws on a clash between defaults, which `AppCommandsTests` builds. AppKit matches a menu
+  item "1" with ⌘⌥⇧ against a real key event, whose `charactersIgnoringModifiers` is "!" on
+  a US layout (checked with a `CGEvent` for key code 18); the lists' own routing already tries
+  the unshifted key (`KeyChord.candidates`).
+- **Where the message goes while a scan runs:** in a label of its own in `statusLeading`,
+  after the scan, saving and analysis text, so with nothing running it's at the bar's bottom
+  left and during a scan it sits to the right of the scan's text and bar, never over them.
+  The totals' label, which failures use, stays as it is.
+- **Get Info's mixed state:** five empty stars in the tertiary label color, with "Mixed" as
+  their tooltip and accessibility value, as the fields' mixed placeholder; hovering and
+  clicking work as for one track. A track the index doesn't have (not yet scanned) can't be
+  rated, so the stars are off while no track of the window is in the index.
+- **A rating set elsewhere while Get Info is open** (a shortcut, the menu, the table): the
+  open windows read their ratings again. A rating synced from another Mac shows on reopening
+  the window; phase 80 makes the bar follow syncs.
+
+Order, each step its own commit:
+
+- 79.1 Mixed marks (`Core/Commands`): `CommandDispatcher.handle` takes `isMixed`, and
+  `isMixed(_:)` answers it; `MainMenu.validateMenuItem` sets `.mixed` when it's true, before
+  `isOn`. Tests in `CommandDispatcherTests`.
+- 79.2 The selection's ratings (`Core/Library`): `LibraryIndex.ratings(ids:) -> Set<Int>`,
+  0 for unrated, through `inChunks`. The browser's `selectionRatings()` keeps the last answer
+  by the selected IDs and the index's change stamp, so the six items of an open submenu and a
+  key press read it once per change. A pure `ratingMark(stars:ratings:)`, on for a rating all
+  the tracks have, mixed for one of several. The app passes it as `isOn` and `isMixed` for
+  `CommandID.rate`. Tests: `LibraryTests` for the query, `LibraryBrowserTests` for one track,
+  several alike and several mixed, Clear Rating included, and the mark after a rating set.
+- 79.3 Default chords (`Core/Commands`): ⌘⌥⇧0 to ⌘⌥⇧5 on `CommandID.rate`. Tests in
+  `AppCommandsTests`: each command's chord, and the bindings build with them; the Shortcuts
+  pane lists them as any other.
+- 79.4 The message (`Features/LibraryBrowser`): a pure `ratingMessage(stars:count:title:)`
+  ("Rated “Title” ★★★★", "Rated 3 tracks ★★★★", "Cleared the rating of “Title”", "Cleared the
+  rating of 3 tracks"; a track with no title by its file name). `rateSelection` shows it once
+  the write is done, in the new label; it fades over 0.25 s after 3 s, and a newer message
+  replaces it and restarts the wait, by a counter, so an older wait doesn't hide it. Table
+  clicks show none, as their stars change in place. Tests: the text for each case, and that a
+  second message replaces the first and outlives the first's wait.
+- 79.5 `RatingClick` moves to `Core/Library` (refactor, its own commit): Get Info is another
+  feature, so the lowest module both import holds it (map.md, Promotion). It gains
+  `hovered(at:starWidth:)`, the star under the pointer, 0 left of the first, and `stars` takes
+  an optional current rating, nil for mixed, which no click clears.
+- 79.6 Get Info's stars (`Features/TagEditor`): `EditableTrack.rating` (nil when the index has
+  no track), read with the play count: `TagEditing.playCounts` becomes `indexRows`, one
+  `TrackRow?` per path, so the two come from one lookup. `TagEditorModel` gains the shown
+  rating (nil when mixed), `ratedPaths`, and `setRating`, which isn't an edit: Save stays as
+  it was. A `RatingStars` view at the right of the Info tab's title row (a `TagEditorRow` case
+  for the title with the stars) draws ☆/★ in the field's font, fills to `hovered` under the
+  pointer, and a click calls `TagEditing.setRating` at once (the app passes it to the browser,
+  which writes by path as `setPlayCount` does: `LibraryReader.setRating(_:paths:)`); no tag is
+  written. `TagEditing.ratingsChanged()` reads the open windows' ratings again; the app calls
+  it after a rating from the browser. Tests in `TagEditorModelTests` (one, alike, mixed, set,
+  not an edit) and `TagEditorWindowTests` (the stars show the rating, a click through
+  `RatingClick` sets it once, on the current rating clears it, no tag write).
+- 79.7 ADR 0202: the message's place beside the scan, Get Info setting the rating at once
+  and its mixed look, and the commands acting on the selection.
+
 ### 80. The rating in the status bar and the toolbar
 
 Asked by the owner on 2026-11-10, with phase 79, which it follows.
