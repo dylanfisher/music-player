@@ -980,9 +980,7 @@ private final class ShiftedClock: @unchecked Sendable {
     await eventually("the assertion") { sleep.held == 1 }
     #expect(sleep.created == ["Music Player playing to Denon AVR-X1800H"])
     // The polls while it plays take no second one.
-    await eventually("several polls") {
-        fake.actions.filter { $0 == "GetTransportInfo" }.count >= 3
-    }
+    await eventually("several polls") { fake.transportPolls >= 3 }
     #expect(sleep.created.count == 1)
     output.pause()
     await eventually("a pause") { fake.transportState == .paused }
@@ -1005,9 +1003,7 @@ private final class ShiftedClock: @unchecked Sendable {
     defer { output.close() }
     output.load(item(1), startSeconds: 0, playing: false)
     await log.wait(for: ["started 1"])
-    await eventually("several polls") {
-        fake.actions.filter { $0 == "GetTransportInfo" }.count >= 3
-    }
+    await eventually("several polls") { fake.transportPolls >= 3 }
     #expect(sleep.created == [])
 }
 
@@ -1023,8 +1019,8 @@ private final class ShiftedClock: @unchecked Sendable {
     await log.wait(for: ["started 1", "lost 1"], seconds: 10)
     await eventually("the release") { sleep.held == 0 }
     // Watching for it to come back takes none: a probe it doesn't answer, then one it does.
-    let asked = fake.actions.filter { $0 == "GetTransportInfo" }.count
-    await eventually("a probe") { fake.actions.filter { $0 == "GetTransportInfo" }.count > asked }
+    let asked = fake.transportPolls
+    await eventually("a probe") { fake.transportPolls > asked }
     #expect(sleep.created.count == 1)
     fake.answersAgain()
     await log.wait(for: ["started 1", "lost 1", "returned"], seconds: 10)

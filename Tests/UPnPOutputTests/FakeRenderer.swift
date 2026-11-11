@@ -208,6 +208,8 @@ final class FakeRenderer: @unchecked Sendable {
     var actions: [String] { lock.withLock { log } }
     /// The actions that change something, without the polls.
     var commands: [String] { actions.filter { !$0.hasPrefix("Get") } }
+    /// How many times it was asked its transport state.
+    var transportPolls: Int { actions.filter { $0 == "GetTransportInfo" }.count }
     var transportState: State {
         lock.withLock {
             tick()
