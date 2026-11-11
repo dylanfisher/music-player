@@ -51,17 +51,28 @@ func aFileThatCantBeDeletedOnAShareWithNoTrashIsReported() async throws {
     #expect(!FileManager.default.fileExists(atPath: folder.file.path))
 }
 
-/// The share's no-Trash error may come as POSIX `ENOTSUP`, given as is or underlying a Cocoa
-/// error; each deletes the file.
+/// The Trash's `featureUnsupported` underlying another error still means no Trash, and deletes.
+@Test func noTrashUnderlyingAnotherErrorDeletesTheFile() async throws {
+    let folder = try Folder()
+    let noTrash = NSError(
+        domain: NSCocoaErrorDomain, code: CocoaError.fileWriteUnknown.rawValue,
+        userInfo: [NSUnderlyingErrorKey: CocoaError(.featureUnsupported) as NSError])
+    let failure = await trashOrDelete([folder.file]) { _ in throw noTrash }
+    #expect(failure == nil)
+    #expect(!FileManager.default.fileExists(atPath: folder.file.path))
+}
+
+/// POSIX `ENOTSUP` can come from other failures than a missing Trash, so it deletes nothing,
+/// given as is or underlying a Cocoa error.
 @Test(arguments: [
     POSIXError(.ENOTSUP) as NSError,
     NSError(
         domain: NSCocoaErrorDomain, code: CocoaError.fileWriteUnknown.rawValue,
         userInfo: [NSUnderlyingErrorKey: POSIXError(.ENOTSUP) as NSError]),
 ])
-func aShareWithNoTrashSayingSoAnotherWayDeletesTheFile(_ noTrash: NSError) async throws {
+func notSupportedFromTheTrashDeletesNothing(_ error: NSError) async throws {
     let folder = try Folder()
-    let failure = await trashOrDelete([folder.file]) { _ in throw noTrash }
-    #expect(failure == nil)
-    #expect(!FileManager.default.fileExists(atPath: folder.file.path))
+    let failure = await trashOrDelete([folder.file]) { _ in throw error }
+    #expect(failure?.hasPrefix(folder.file.path + ": ") == true)
+    #expect(FileManager.default.fileExists(atPath: folder.file.path))
 }
