@@ -5,8 +5,8 @@ Agents work through it phase by phase, mostly unattended, and stop only at **har
 checkpoints**, where the owner has to try something on the DAC Mac, the Denon, a phone, or the
 2015 MacBook Pro.
 
-Finished phases, 1 to 76 apart from 10 and 13, are in [plan-archive.md](plan-archive.md), with
-their implementation plans, Result lines and the full text of each checkpoint.
+Finished phases, 1 to 76 apart from 10 and 13, and 78, are in [plan-archive.md](plan-archive.md),
+with their implementation plans, Result lines and the full text of each checkpoint.
 
 Each phase ends with the [phase gate](#phase-gate): review, performance audit, and architecture
 check. A phase isn't done until its gate passes.
@@ -49,13 +49,12 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 Set by the owner on 2026-11-10. Earlier run orders are in the archive.
 
-1. Phase 78 runs next.
-2. Phases 79 to 83, the owner's feedback of 2026-11-10 (second list), run after 78: 79, 81 and
+1. Phases 79 to 83, the owner's feedback of 2026-11-10 (second list), run after 78: 79, 81 and
    82 in parallel, each on its own branch and worktree, then 80, which builds on 79, then 83,
    after its music-recommender change lands.
-3. Phase 84, the codebase review for agents, runs after 83, so it reviews their code too.
-4. Phase 77 waits until the owner starts it.
-5. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+2. Phase 84, the codebase review for agents, runs after 83, so it reviews their code too.
+3. Phase 77 waits until the owner starts it.
+4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -177,6 +176,8 @@ that phase's Result line, and delete its line here.
   its Result line, and whether its wording will do.
 - **76** ([phase](plan-archive.md#76-a-layout-editor-for-the-status-bars-totals)): the owner
   checks and two questions under its Result line.
+- **78** ([phase](plan-archive.md#78-staying-awake-while-playing-to-a-renderer)): the owner
+  checks under its Result line, on the 2015 MacBook Pro on battery with the Denon.
 - **Window benchmarks** ([51h's Result](plan-archive.md#51h-the-tagger-second-pass)): the 11
   window rows of `./scripts/bench` hang in an agent session; run them on this Mac.
 
@@ -392,74 +393,6 @@ Don't start until the owner asks.
 - [ ] **Owner check:** the next large art or tag change on the NAS, or one on a scratch copy of
       a few albums of large FLACs whose tags have no padding: files a minute, compared with this
       batch's 75.
-
-### 78. Staying awake while playing to a renderer
-
-Asked by the owner on 2026-11-10. Playing to the Denon from the 2015 MacBook Pro on battery
-stops a minute after the display sleeps: its battery profile has `displaysleep 5` and `sleep 1`,
-and `pmset -g log` shows an `Idle Sleep` each time. Playing to a local device keeps the Mac awake
-because CoreAudio holds an assertion while its IO runs, but a renderer pulls the stream from the
-app's HTTP server, so nothing does, and `Sources/` holds no power assertion of its own.
-
-- [ ] **The assertion.** While a renderer is playing, `RendererSession` holds a
-      `PreventUserIdleSystemSleep` assertion (`IOPMAssertionCreateWithName`, macOS 12), named
-      for the app and the renderer, and releases it on pause, stop, a lost renderer and close.
-      The display still sleeps. One assertion per session, never two; a failed create is logged
-      as an error, not swallowed. Lid closed, a user's Sleep and a low battery still sleep the
-      Mac, as for local playback.
-- [ ] **Tests.** Through a stand-in for the assertion calls: play takes it once, pause, stop, a
-      lost renderer and close release it, a resume takes it again, and a session never leaves
-      one held.
-- [ ] **ADR 0197**: why the app holds its own assertion for a renderer and not for a local
-      device, and why system sleep only, not display sleep.
-- [ ] **Owner check:** on the 2015 MacBook Pro on battery, play to the Denon and leave it past
-      the display's sleep; it plays on, and `pmset -g assertions` lists the app's assertion
-      while it plays and not after Pause.
-
-Implementation plan, phase 78 (ADR 0197):
-
-What exists, found by search (map.md recipes): no IOKit power call anywhere in `Sources/`.
-`RendererOutput` (`Core/UPnPOutput`) starts one `RendererSession` actor and feeds it commands
-and polls; `close()` is synchronous and doesn't wait on the session, so it stops the server
-through `RendererShared`, the lock-guarded state both sides reach. At the end of each `run` the
-session already settles one derived want, the ticker's (`shared.wantTicks`); whether the
-assertion is wanted is the same kind of fact: `current?.playing == true`. That one test covers
-play, a resume, Pause (also one queued while the renderer starts), a pause or play on the
-renderer's own remote once the session follows it, Stop, a played-out queue, a refused or
-failed track and a lost renderer, since each of those either clears `playing` or calls
-`release()`, which drops `current`. `appDisplayName` (`Core/Log`) names the app.
-
-- 78.1 The assertion (`Core/UPnPOutput`): `SleepAssertionCalls`, the two IOKit calls as
-  closures (`IOPMAssertionCreateWithName` with `kIOPMAssertPreventUserIdleSystemSleep`, and
-  `IOPMAssertionRelease`), with `.live`, the seam tests replace. `SleepAssertion`, a small
-  lock-guarded holder: `hold(_ wanted:)` takes one assertion only on a change from not wanted to
-  wanted and releases it on the change back, so repeated polls never take a second; a failed
-  create is logged as an error with its IOReturn and not retried until the next change to
-  wanted; `close()` releases and refuses every later hold, for a `run` still going when the
-  output closes. One holder per output, named "Music Player playing to <renderer>". It stays in
-  `UPnPOutput`, not a primitive: it has one caller (principle 3). Tests in
-  `SleepAssertionTests`: once per change, released on the change back, a failed create neither
-  held nor retried until wanted again, nothing after close.
-- 78.2 The session (`Core/UPnPOutput`): `RendererOutput`'s internal init takes the calls, the
-  public one passes `.live`; the session calls `hold(current?.playing == true)` at the end of
-  each `run`, beside the ticker's want, and `close()` calls the holder's `close()`. Tests in
-  `RendererOutputTests` against the fake renderer and a recording stand-in, which also counts the
-  most held at once: play takes it once over several polls, Pause releases, a resume takes it
-  again, Stop, a lost renderer, a played-out track and close release it, a load paused takes
-  none, and no test ever sees two held. The other tests pass the stand-in too, so no test takes
-  a real assertion.
-  A renderer that stays transitioning, or in a state the app doesn't know, for two minutes
-  after Play, before it has started the track, fails it as never started and the session sends
-  Stop, so it can't keep the Mac awake for good (ADR 0197); the wait is timed by the clock, and
-  a stopped or failed poll or a Pause starts it again. Test: a fake renderer that never leaves
-  transitioning, its clock moved on, fails the track and releases the assertion.
-- 78.3 ADR 0197: CoreAudio holds an assertion while a local device's IO runs and nothing does
-  for a renderer that pulls over HTTP; `PreventUserIdleSystemSleep`, not
-  `PreventUserIdleDisplaySleep`, because the display has nothing to show and on battery should
-  sleep, and lid close, Sleep and low battery still sleep the Mac as for local playback; held
-  while the engine says playing, so a paused session lets the Mac sleep.
-
-Not touched: the real-time path (no change reachable from the IO proc) and the HTTP server.
 
 ### 79. Rating: the menu's mark, Get Info's stars, shortcuts and a message
 

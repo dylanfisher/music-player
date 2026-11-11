@@ -11329,3 +11329,105 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
+
+### 78. Staying awake while playing to a renderer
+
+Asked by the owner on 2026-11-10. Playing to the Denon from the 2015 MacBook Pro on battery
+stops a minute after the display sleeps: its battery profile has `displaysleep 5` and `sleep 1`,
+and `pmset -g log` shows an `Idle Sleep` each time. Playing to a local device keeps the Mac awake
+because CoreAudio holds an assertion while its IO runs, but a renderer pulls the stream from the
+app's HTTP server, so nothing does, and `Sources/` holds no power assertion of its own.
+
+- [x] **The assertion.** While a renderer is playing, `RendererSession` holds a
+      `PreventUserIdleSystemSleep` assertion (`IOPMAssertionCreateWithName`, macOS 12), named
+      for the app and the renderer, and releases it on pause, stop, a lost renderer and close.
+      The display still sleeps. One assertion per session, never two; a failed create is logged
+      as an error, not swallowed. Lid closed, a user's Sleep and a low battery still sleep the
+      Mac, as for local playback.
+- [x] **Tests.** Through a stand-in for the assertion calls: play takes it once, pause, stop, a
+      lost renderer and close release it, a resume takes it again, and a session never leaves
+      one held.
+- [x] **ADR 0197**: why the app holds its own assertion for a renderer and not for a local
+      device, and why system sleep only, not display sleep.
+- [ ] **Owner check:** on the 2015 MacBook Pro on battery, play to the Denon and leave it past
+      the display's sleep; it plays on, and `pmset -g assertions` lists the app's assertion
+      while it plays and not after Pause.
+
+Implementation plan, phase 78 (ADR 0197):
+
+What exists, found by search (map.md recipes): no IOKit power call anywhere in `Sources/`.
+`RendererOutput` (`Core/UPnPOutput`) starts one `RendererSession` actor and feeds it commands
+and polls; `close()` is synchronous and doesn't wait on the session, so it stops the server
+through `RendererShared`, the lock-guarded state both sides reach. At the end of each `run` the
+session already settles one derived want, the ticker's (`shared.wantTicks`); whether the
+assertion is wanted is the same kind of fact: `current?.playing == true`. That one test covers
+play, a resume, Pause (also one queued while the renderer starts), a pause or play on the
+renderer's own remote once the session follows it, Stop, a played-out queue, a refused or
+failed track and a lost renderer, since each of those either clears `playing` or calls
+`release()`, which drops `current`. `appDisplayName` (`Core/Log`) names the app.
+
+- 78.1 The assertion (`Core/UPnPOutput`): `SleepAssertionCalls`, the two IOKit calls as
+  closures (`IOPMAssertionCreateWithName` with `kIOPMAssertPreventUserIdleSystemSleep`, and
+  `IOPMAssertionRelease`), with `.live`, the seam tests replace. `SleepAssertion`, a small
+  lock-guarded holder: `hold(_ wanted:)` takes one assertion only on a change from not wanted to
+  wanted and releases it on the change back, so repeated polls never take a second; a failed
+  create is logged as an error with its IOReturn and not retried until the next change to
+  wanted; `close()` releases and refuses every later hold, for a `run` still going when the
+  output closes. One holder per output, named "Music Player playing to <renderer>". It stays in
+  `UPnPOutput`, not a primitive: it has one caller (principle 3). Tests in
+  `SleepAssertionTests`: once per change, released on the change back, a failed create neither
+  held nor retried until wanted again, nothing after close.
+- 78.2 The session (`Core/UPnPOutput`): `RendererOutput`'s internal init takes the calls, the
+  public one passes `.live`; the session calls `hold(current?.playing == true)` at the end of
+  each `run`, beside the ticker's want, and `close()` calls the holder's `close()`. Tests in
+  `RendererOutputTests` against the fake renderer and a recording stand-in, which also counts the
+  most held at once: play takes it once over several polls, Pause releases, a resume takes it
+  again, Stop, a lost renderer, a played-out track and close release it, a load paused takes
+  none, and no test ever sees two held. The other tests pass the stand-in too, so no test takes
+  a real assertion.
+  A renderer that stays transitioning, or in a state the app doesn't know, for two minutes
+  after Play, before it has started the track, fails it as never started and the session sends
+  Stop, so it can't keep the Mac awake for good (ADR 0197); the wait is timed by the clock, and
+  a stopped or failed poll or a Pause starts it again. Test: a fake renderer that never leaves
+  transitioning, its clock moved on, fails the track and releases the assertion.
+- 78.3 ADR 0197: CoreAudio holds an assertion while a local device's IO runs and nothing does
+  for a renderer that pulls over HTTP; `PreventUserIdleSystemSleep`, not
+  `PreventUserIdleDisplaySleep`, because the display has nothing to show and on battery should
+  sleep, and lid close, Sleep and low battery still sleep the Mac as for local playback; held
+  while the engine says playing, so a paused session lets the Mac sleep.
+
+Not touched: the real-time path (no change reachable from the IO proc) and the HTTP server.
+
+Result, phase 78: shipped the three items (ADR 0197). While a renderer plays, its session holds
+one `PreventUserIdleSystemSleep` assertion, "Music Player playing to <renderer>", named afresh
+each time it's taken, since a renderer found again may come back under a new name; the display
+still sleeps. `SleepAssertion` (`Core/UPnPOutput`) takes it on a change to playing and releases
+it on the change back, calling IOKit outside its lock; a failed create is logged with its
+IOReturn in hex and tried again only on the next change; `close()` releases it at once and
+refuses every later hold, and a holder dropped without `close()` releases what it holds. The
+session settles it at the end of each `run`, beside the ticker's want, from `current?.playing`,
+so Pause, Stop, a lost renderer, a refused track and a played-out queue all release it. Found
+in review: a renderer that never left TRANSITIONING (or answered a state the app doesn't know)
+before starting a track kept the Mac awake for good, so now one still waiting two minutes by
+the clock after Play fails the track and the session sends Stop; a stopped or failed poll or a
+Pause starts the wait again. Tests: 13 new, 6 in `SleepAssertionTests` and 7 in
+`RendererOutputTests`, through a recording stand-in that also counts the most held at once;
+every other renderer test passes the stand-in, so no test takes a real assertion. Holding while
+merely loaded instead of playing fails the play and pause test. Real-time path untouched.
+Bench (every non-window row, under load from parallel phases): no budget miss and no
+regression above 10% after reruns; sync merge of 1M play events 19.34 s (budget 20 s, phase 73
+6.45 to 7.8 s quiet) and https 3 MB read 34.48 ms (phase 73 2.3 ms) read slow under load and
+weren't A/B'd; the tightest other row, Stats period change, 229 ms (250 ms). The tag write batch
+through the temp file on the NAS errored in the full run and passed alone (73.62 s, 100 s);
+metadata parse 5.16 s in the full run, 3.08 s alone (5 s). Window rows not run. Gate: three
+review rounds; round 2 found 2 above low and 4 low, fixed (IOKit outside the lock, the name
+per take, the stuck-transitioning wait, tests waiting on what they claim), round 3 nothing
+above low (2 low). Simplify counted the fake renderer's polls in one place. Architecture found
+nothing. Full `./scripts/check` passed but for `theGlassHeadersAreFrosted`.
+
+Cost: implementer (Opus) 38 tool calls, 25 min; simplify 13 tool calls; third review 3 min;
+the other stages' costs weren't recorded.
+
+**Owner checks:** on the 2015 MacBook Pro on battery, play to the Denon past the display's
+sleep; it plays on, and `pmset -g assertions` lists "Music Player playing to <the Denon>" while
+it plays and not after Pause. And the sync merge row on a quiet machine (19.34 s under load).
