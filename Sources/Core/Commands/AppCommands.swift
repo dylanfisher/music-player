@@ -369,8 +369,11 @@ public enum AppCommands {
             Command(.openConfigFile, "Open Config File"),
             Command(.copyDefaultConfig, "Copy Default Config"),
         ]
+        // ⌘⌥⇧0 clears, ⌘⌥⇧1 to ⌘⌥⇧5 give the stars; no other default has ⌘⌥⇧ with a digit.
         + CommandID.rate.enumerated().map { count, id in
-            Command(id, count == 0 ? "Clear Rating" : "Rate \(stars(count))")
+            Command(
+                id, count == 0 ? "Clear Rating" : "Rate \(stars(count))",
+                [.init(.character(Character(String(count))), [opt, cmd, shift])])
         }
         + ReceiverSoundMode.allCases.map {
             Command(.receiverSoundMode($0), "Receiver \($0.title)")

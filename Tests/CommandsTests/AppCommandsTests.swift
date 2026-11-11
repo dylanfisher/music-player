@@ -139,6 +139,18 @@ import Testing
     #expect(registry.command(.focusPreviousPane)?.chords == [])
 }
 
+/// ⌘⌥⇧0 clears the rating and ⌘⌥⇧1 to ⌘⌥⇧5 rate, taking no other command's chord.
+@Test func theRatingCommandsHaveTheDigitsWithCommandOptionAndShift() throws {
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "Test"))
+    #expect(bindings.dropped.isEmpty)
+    for (stars, id) in CommandID.rate.enumerated() {
+        let chord = KeyChord(.character(Character(String(stars))), [.command, .option, .shift])
+        #expect(bindings.registry.command(id)?.chords == [chord])
+        #expect(bindings.registry.command(for: chord) == id)
+    }
+}
+
 @Test func theEditMenuHasCopyPasteAndDeleteAsStandardItems() throws {
     let edit = try #require(AppMenus.sections(appName: "Test").first { $0.title == "Edit" })
     let standard = edit.entries.compactMap { entry in
