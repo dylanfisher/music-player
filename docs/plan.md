@@ -53,8 +53,9 @@ Set by the owner on 2026-11-10. Earlier run orders are in the archive.
 2. Phases 79 to 83, the owner's feedback of 2026-11-10 (second list), run after 78: 79, 81 and
    82 in parallel, each on its own branch and worktree, then 80, which builds on 79, then 83,
    after its music-recommender change lands.
-3. Phase 77 waits until the owner starts it.
-4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+3. Phase 84, the codebase review for agents, runs after 83, so it reviews their code too.
+4. Phase 77 waits until the owner starts it.
+5. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -349,7 +350,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phases 77 to 83 are the owner's asks of 2026-11-10; phases 10 and 13 are from the original plan
+Phases 77 to 84 are the owner's asks of 2026-11-10; phases 10 and 13 are from the original plan
 and haven't been built.
 
 ### 77. Faster whole-file tag rewrites
@@ -555,6 +556,98 @@ rejected and searched again from another peer; albums can be marked Never Upgrad
       in-flight limit, and rejecting an unclean download unasked.
 - [ ] **Owner check:** turn it on with a handful of candidates; three jobs queue, the
       most-played lowest-quality first, clean ones land, and a fourth queues as one finishes.
+
+### 84. A codebase agents can keep changing safely
+
+Asked by the owner on 2026-11-10: a review of the tree, fixing what it finds, aimed at what makes
+the next phases cheaper and safer for agents. Agents write all of this code. What costs them is
+reading a large file to make a small change, editing a file another phase's branch is editing
+too, a test suite that passes a wrong edit, a rule that lives only in prose, and a map or a
+duplicate that points the wrong way. A function's branch count, on its own, isn't a target.
+Nothing the user sees changes.
+
+The survey of 2026-11-10 counted, for each file, the commits since the start that touched it
+and how many of them were `fix`:
+
+| File | Lines | Commits | Fixes |
+|---|---|---|---|
+| `Features/LibraryBrowser/LibraryBrowser.swift` | 2,619 | 159 | 41 |
+| `App/MusicPlayer/AppDelegate.swift` | 1,229 | 146 | 32 |
+| `Features/LibraryBrowser/TrackTableController.swift` | 973 | 66 | 24 |
+| `Features/LibraryBrowser/BrowserModel.swift` | 1,118 | 65 | 15 |
+| `Core/HALOutput/DeviceOutput.swift` | 1,657 | 50 | 27 |
+
+It also found that `scripts/mutate-files.txt` covers only Playback, `ConfigStore`,
+`LibraryScanner` and `TagWriter`; that `scripts/dupes-allow.txt` has 167 entries; that
+`Sources/` has 56 `try?` and 86 `@unchecked Sendable` or `nonisolated(unsafe)`; that the `map`
+step of `./scripts/check` only checks that the tier folders exist; and that the threat model,
+ADR 0025, was last amended by ADR 0145.
+
+- [ ] **The files agents edit most.** Split `LibraryBrowser.swift`, `AppDelegate.swift`,
+      `TrackTableController.swift` and `BrowserModel.swift` along the seams they already have,
+      one concern a file, so a typical change reads one small file and two phases adding
+      features rarely edit the same one. The plan first sorts the last 60 commits to each file
+      by the part of it they changed, and splits along those parts. Code moves only; nothing
+      is rewritten, renamed or changed in behavior, and the tests pass unchanged. Where every
+      feature adds a line to one shared list (a command's registration, a menu item, a setting
+      change), the plan says whether each feature can own its piece in its own file, and does
+      it only if the list stays defined once (principle 1).
+- [ ] **Why `DeviceOutput.swift` keeps breaking.** Read its 27 fix commits and group them by
+      cause: a state the tests can't reach, a device callback's order, a missing stand-in, or
+      something else. Fix the cause the largest group shares, for example a test seam or one
+      state machine where there are several flags, with a test for each past bug that group
+      holds. Report the rest. Splitting the file follows from that, not the other way round.
+- [ ] **Tests that catch a wrong edit.** Add `scripts/mutate-files.txt` entries for the logic
+      agents change most and that has none: `DeviceOutput`, `LibrarySyncMerge`, `TieBreak`
+      and `AlbumMatcher`, `BrowserModel`'s selection and sort, and `Downloads`' job states. Run
+      `./scripts/mutate` on each and add a test that kills each surviving mutant that matters.
+      The Result line gives each file's score before and after. Parsers are left to
+      `scripts/fuzz`, which already covers them.
+- [ ] **Checks, so it doesn't slide back.** New steps in `./scripts/check`, each failing on a new
+      case and listing today's in an allowlist that only shrinks:
+      - a file in `Sources/` over 1,000 lines;
+      - a `try?` with no comment on its line or the line above saying why the failure doesn't
+        matter (principle 5);
+      - an `@unchecked Sendable` or `nonisolated(unsafe)` with no comment naming the lock or
+        queue that guards it.
+
+      Clear what the audit can on the way: each `try?` and unchecked sendable it reads is
+      either explained or fixed. ADR 0201 records the limits and why.
+- [ ] **A map that stays true.** The `map` step also fails when a path or file that
+      `docs/map.md` names in backticks doesn't exist, or when a module folder under
+      `Sources/<Tier>/` isn't in the map. Bring map.md up to date for the splits above.
+- [ ] **Duplication.** Reread each entry in `dupes-allow.txt`. An entry whose reason no longer
+      holds is removed and its duplicate fixed. The 5-file strict-decode block (`b013e447`, in
+      `SmartRules`, `SourceSort`, `TaggerSheetLayouts`, `TrackTableLayout` and others) and its
+      4-file siblings are the first candidates for one helper. `/simplify` runs across the
+      modules phases 54 to 83 touched, looking for a second or third copy in a neighboring
+      module, which a phase's own gate can't see.
+- [ ] **Security.** Bring ADR 0025's table up to date for what was built since ADR 0145: staged
+      downloads and the folder names the service sends (ADR 0146), Approve moving files into
+      the library and approving unasked (0147, 0156, 0193), Keep Files Organized, whose paths
+      come from tags (0164), snapshots and their restore (0142, 0181), and the profile export
+      (0198). Each row gets an attacker, a mitigation and a test or check, like the table's
+      other rows. The questions: can a tag value or a service reply name a path outside the
+      library or staging folder, through `..`, an absolute path or a link? Can a restored
+      snapshot carry a secret or write outside the app's folders? Does the export send only
+      what ADR 0198 lists? A gap is fixed, with its test.
+- [ ] **Performance since phase 73.** Run every bench row an agent session can against phase
+      73's Result numbers and the budgets. A row more than 10% slower is profiled and fixed, or
+      given a written reason. The items in [Later](#later) stay there.
+- [ ] **How it runs.** One Sonnet auditor per item above, in parallel, writes its findings into
+      one triaged list under this heading: fix, defer with a reason, or drop. The fixes run in
+      lanes that touch separate files, each on its own branch from `phase/84-agent-health`,
+      with Opus implementers, one commit a fix, each passing `./scripts/check --changed main`.
+      The file splits land last, after the other lanes, so they don't conflict with them, and
+      only once phases 79 to 83 have landed. `TagWriter.prepare` and `FileReplace.writeTemp`
+      are left to phase 77 while it's unbuilt, since it rewrites both.
+- [ ] **ADR 0201**, amending ADR 0025: the threat model's new rows, the new check steps and
+      their limits, and what `DeviceOutput`'s fixes had in common.
+- [ ] **Result line:** before and after for each count above (lines and commits of the five
+      files, mutation scores, allowlist entries, unexplained `try?` and unchecked sendables),
+      the findings deferred and why, and what the phase cost.
+- [ ] **Owner check:** none beyond a normal session's use, since nothing the user sees changes.
+      The window rows go to the owner's Mac if any window code moved.
 
 ### 10. Web remote
 
