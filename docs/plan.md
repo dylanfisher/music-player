@@ -5,7 +5,7 @@ Agents work through it phase by phase, mostly unattended, and stop only at **har
 checkpoints**, where the owner has to try something on the DAC Mac, the Denon, a phone, or the
 2015 MacBook Pro.
 
-Finished phases, 1 to 83 apart from 10 and 13, are in
+Finished phases, 1 to 84 apart from 10 and 13, are in
 [plan-archive.md](plan-archive.md), with their implementation plans, Result lines and the full
 text of each checkpoint.
 
@@ -48,14 +48,10 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 ### Current run order
 
-Set by the owner on 2026-11-10. Earlier run orders are in the archive.
+Set by the owner on 2026-11-11. Earlier run orders are in the archive.
 
-1. Phases 79 to 83, the owner's feedback of 2026-11-10 (second list), run after 78: 79, 81 and
-   82 in parallel, each on its own branch and worktree, then 80, which builds on 79, then 83,
-   after its music-recommender change lands.
-2. Phase 84, the codebase review for agents, runs after 83, so it reviews their code too.
-3. Phase 77 ran alongside them once the owner started it on 2026-11-10.
-4. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+1. Phase 85, what phase 84 left, waits until the owner starts it.
+2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -370,334 +366,26 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phases 77 to 84 are the owner's asks of 2026-11-10; phases 10 and 13 are from the original plan
+Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan
 and haven't been built.
 
-### 84. A codebase agents can keep changing safely
+### 85. The file splits and the performance rerun
 
-Asked by the owner on 2026-11-10: a review of the tree, fixing what it finds, aimed at what makes
-the next phases cheaper and safer for agents. Agents write all of this code. What costs them is
-reading a large file to make a small change, editing a file another phase's branch is editing
-too, a test suite that passes a wrong edit, a rule that lives only in prose, and a map or a
-duplicate that points the wrong way. A function's branch count, on its own, isn't a target.
-Nothing the user sees changes.
+Left from phase 84 when the owner landed it early on 2026-11-11. Its triage (in the archive,
+under [phase 84](plan-archive.md#84-a-codebase-agents-can-keep-changing-safely)) has the
+detail of each item.
 
-The survey of 2026-11-10 counted, for each file, the commits since the start that touched it
-and how many of them were `fix`:
-
-| File | Lines | Commits | Fixes |
-|---|---|---|---|
-| `Features/LibraryBrowser/LibraryBrowser.swift` | 2,619 | 159 | 41 |
-| `App/MusicPlayer/AppDelegate.swift` | 1,229 | 146 | 32 |
-| `Features/LibraryBrowser/TrackTableController.swift` | 973 | 66 | 24 |
-| `Features/LibraryBrowser/BrowserModel.swift` | 1,118 | 65 | 15 |
-| `Core/HALOutput/DeviceOutput.swift` | 1,657 | 50 | 27 |
-
-It also found that `scripts/mutate-files.txt` covers only Playback, `ConfigStore`,
-`LibraryScanner` and `TagWriter`; that `scripts/dupes-allow.txt` has 167 entries; that
-`Sources/` has 56 `try?` and 86 `@unchecked Sendable` or `nonisolated(unsafe)`; that the `map`
-step of `./scripts/check` only checks that the tier folders exist; and that the threat model,
-ADR 0025, was last amended by ADR 0145.
-
-### Before (measured 2026-11-11 on main at 5fb2cabe, after phases 78, 79, 81 and 82 landed)
-
-| File | Lines | Commits | Fixes |
-|---|---|---|---|
-| `Features/LibraryBrowser/LibraryBrowser.swift` | 2,774 | 171 | 46 |
-| `App/MusicPlayer/AppDelegate.swift` | 1,255 | 153 | 33 |
-| `Features/LibraryBrowser/TrackTableController.swift` | 1,042 | 69 | 25 |
-| `Features/LibraryBrowser/BrowserModel.swift` | 1,125 | 67 | 16 |
-| `Core/HALOutput/DeviceOutput.swift` | 1,657 | 50 | 27 |
-
-Commits are `git log --oneline -- <file>`; fixes are those with `fix` in the subject.
-
-| Count | Before |
-|---|---|
-| `dupes-allow.txt` entries (non-comment lines) | 158 |
-| `try?` in `Sources/` | 56, of which 50 have no comment on their line or the line above |
-| `@unchecked Sendable` or `nonisolated(unsafe)` in `Sources/` | 88 (the survey's 86 plus two since), of which 9 have no comment on their line or the line above (the count that the new step will make stricter, since it asks for the lock or queue by name) |
-
-Mutation scores, `./scripts/mutate --jobs 4 <file>` at the same commit (about 4 s a mutant with
-four jobs; the first run of a file adds a build). Score is killed over killed plus survived;
-uncompilable mutants aren't counted:
-
-| File | Mutants | Killed | Survived | Uncompilable | Score |
-|---|---|---|---|---|---|
-| `Playback/PlaybackEngine.swift` | 322 | 298 | 0 | 24 | 100% |
-| `Playback/PlayQueue.swift` | 42 | 40 | 0 | 2 | 100% |
-| `Playback/PlayCounter.swift` | 19 | 16 | 0 | 3 | 100% |
-| `Playback/PlayTracker.swift` | 12 | 7 | 0 | 5 | 100% |
-| `Settings/ConfigStore.swift` | 96 | 85 | 0 | 11 | 100% |
-| `Library/LibraryScanner.swift` | 73 | 61 | 0 | 12 | 100% |
-| `TagWriter/TagWriter.swift` (entries 199-303 and 386-413) | 30 | 21 | 0 | 9 | 100% |
-
-The files this phase adds have no entry yet, so no score. Their mutant counts, from
-`swift scripts/mutate.swift list`, give the cost: `DeviceOutput.swift` 493 (about 35 minutes),
-`LibrarySyncMerge.swift` 125, `BrowserModel.swift` 294 (the selection and sort lines are a
-part of it). `TieBreak` is not a file on main; `AlbumMatcher.swift` and the Downloads job
-states (`Features/Downloads`) are to be measured when their entries are added.
-
-- [ ] **The files agents edit most.** Split `LibraryBrowser.swift`, `AppDelegate.swift`,
-      `TrackTableController.swift` and `BrowserModel.swift` along the seams they already have,
-      one concern a file, so a typical change reads one small file and two phases adding
-      features rarely edit the same one. The plan first sorts the last 60 commits to each file
-      by the part of it they changed, and splits along those parts. Code moves only; nothing
-      is rewritten, renamed or changed in behavior, and the tests pass unchanged. Where every
-      feature adds a line to one shared list (a command's registration, a menu item, a setting
-      change), the plan says whether each feature can own its piece in its own file, and does
-      it only if the list stays defined once (principle 1).
-- [ ] **Why `DeviceOutput.swift` keeps breaking.** Read its 27 fix commits and group them by
-      cause: a state the tests can't reach, a device callback's order, a missing stand-in, or
-      something else. Fix the cause the largest group shares, for example a test seam or one
-      state machine where there are several flags, with a test for each past bug that group
-      holds. Report the rest. Splitting the file follows from that, not the other way round.
-- [ ] **Tests that catch a wrong edit.** Add `scripts/mutate-files.txt` entries for the logic
-      agents change most and that has none: `DeviceOutput`, `LibrarySyncMerge`, `TieBreak`
-      and `AlbumMatcher`, `BrowserModel`'s selection and sort, and `Downloads`' job states. Run
-      `./scripts/mutate` on each and add a test that kills each surviving mutant that matters.
-      The Result line gives each file's score before and after. Parsers are left to
-      `scripts/fuzz`, which already covers them.
-- [ ] **Checks, so it doesn't slide back.** New steps in `./scripts/check`, each failing on a new
-      case and listing today's in an allowlist that only shrinks:
-      - a file in `Sources/` over 1,000 lines;
-      - a `try?` with no comment on its line or the line above saying why the failure doesn't
-        matter (principle 5);
-      - an `@unchecked Sendable` or `nonisolated(unsafe)` with no comment naming the lock or
-        queue that guards it.
-
-      Clear what the audit can on the way: each `try?` and unchecked sendable it reads is
-      either explained or fixed. ADR 0201 records the limits and why.
-- [ ] **A map that stays true.** The `map` step also fails when a path or file that
-      `docs/map.md` names in backticks doesn't exist, or when a module folder under
-      `Sources/<Tier>/` isn't in the map. Bring map.md up to date for the splits above.
-- [ ] **Duplication.** Reread each entry in `dupes-allow.txt`. An entry whose reason no longer
-      holds is removed and its duplicate fixed. The 5-file strict-decode block (`b013e447`, in
-      `SmartRules`, `SourceSort`, `TaggerSheetLayouts`, `TrackTableLayout` and others) and its
-      4-file siblings are the first candidates for one helper. `/simplify` runs across the
-      modules phases 54 to 83 touched, looking for a second or third copy in a neighboring
-      module, which a phase's own gate can't see.
-- [ ] **Security.** Bring ADR 0025's table up to date for what was built since ADR 0145: staged
-      downloads and the folder names the service sends (ADR 0146), Approve moving files into
-      the library and approving unasked (0147, 0156, 0193), Keep Files Organized, whose paths
-      come from tags (0164), snapshots and their restore (0142, 0181), and the profile export
-      (0198). Each row gets an attacker, a mitigation and a test or check, like the table's
-      other rows. The questions: can a tag value or a service reply name a path outside the
-      library or staging folder, through `..`, an absolute path or a link? Can a restored
-      snapshot carry a secret or write outside the app's folders? Does the export send only
-      what ADR 0198 lists? A gap is fixed, with its test.
-- [ ] **Performance since phase 73.** Run every bench row an agent session can against phase
-      73's Result numbers and the budgets. A row more than 10% slower is profiled and fixed, or
-      given a written reason. The items in [Later](#later) stay there.
-- [ ] **How it runs.** One Sonnet auditor per item above, in parallel, writes its findings into
-      one triaged list under this heading: fix, defer with a reason, or drop. The fixes run in
-      lanes that touch separate files, each on its own branch from `phase/84-agent-health`,
-      with Opus implementers, one commit a fix, each passing `./scripts/check --changed main`.
-      The file splits land last, after the other lanes, so they don't conflict with them, and
-      only once phases 79 to 83 have landed. `TagWriter.prepare` and `FileReplace.writeTemp`
-      are left to phase 77 while it's unbuilt, since it rewrites both.
-- [ ] **ADR 0201**, amending ADR 0025: the threat model's new rows, the new check steps and
-      their limits, and what `DeviceOutput`'s fixes had in common.
-- [ ] **Result line:** before and after for each count above (lines and commits of the five
-      files, mutation scores, allowlist entries, unexplained `try?` and unchecked sendables),
-      the findings deferred and why, and what the phase cost.
-- [ ] **Owner check:** none beyond a normal session's use, since nothing the user sees changes.
-      The window rows go to the owner's Mac if any window code moved.
-
-#### Triage, phase 84
-
-Eight Sonnet auditors (splits, deviceoutput, mutation, checks, map, dupes, security, perf)
-read main at 5fb2cabe, read only. Phases 78, 79, 81 and 82 have landed; 77, 80 and 83 haven't,
-so only what is on main was reviewed, and `TagWriter.prepare` and `FileReplace.writeTemp` stay
-untouched. Each finding is fixed, deferred with a reason, or dropped. A lane owns its files: no
-two lanes edit the same file, and a test a lane adds for a file another lane owns goes in a new
-test file. The splits lane runs last, on the merged branch, and may touch any file.
-
-Two corrections to the Before numbers. Every mutation score above is false:
-`scripts/mutate` calls `/usr/bin/timeout`, which macOS doesn't have, so `swift test` never ran
-and every mutant that built counted as killed (84.1 reruns them). And the `try?` count with a
-word-boundary grep, `\btry\?`, is 53, not 56: the plain pattern matched `Entry?`. The After
-row uses `\btry\?`.
-
-Fix:
-
-- 84.1 `scripts/mutate` runs its tests: a time limit that exists on stock macOS (`perl -e
-  'alarm 240; exec @ARGV' --`), and it refuses to score when the unmutated tests fail, or when a
-  killed mutant's log has no failing test run. The unmutated build builds only the entry's test
-  products, and the default is `--jobs 3`, with no more jobs than mutants. Rerun the seven
-  existing entries for real Before scores, and correct ADR 0027's. Lane `mutation`.
-- 84.2 TieBreak entry and tests that kill its survivors that matter: the empty-barcode match
-  (line 28), a number on another label and barcode plus number (33, 34, 41), exact country
-  against a fitting region and an unset country (62, 68), and `samePressing`/`datesFit`'s
-  boundaries (94, 96, 138, 164, 168). About 40 survivors are binary step weights (`1 to 2`)
-  that don't change the order: equivalent, left. Lane `mutation`.
-- 84.3 AlbumMatcher entry and tests: the tie flag `tiedAcrossMastersAndTitles` (one master, one
-  title, two of each, at `MatchThreshold.tie` and beyond, lines 414-423), the artist-only cap,
-  gate and cache (252-312), the rematch's foundBy, the `.matched` tier and equal-score order
-  (336-380), cancellation and the restored waiting state. `reserveCapacity` and the reporter's
-  throttle constants are equivalent, left. Lane `mutation`.
-- 84.4 Entries, runs and killing tests for `LibrarySyncMerge`, the Downloads job states
-  (`DownloadJob.swift` with the transitions in `DownloadsModel.swift` and
-  `Downloads+AutoUpgrade.swift`) and `BrowserModel`'s selection and sort ranges. Lane
-  `mutation`.
-- 84.5 `DeviceOutput`'s control thread becomes one steppable machine: an internal
-  `ControlSeam` init parameter (`startThread`, `consumed`, `now`, `afterChunk`), `run()` is
-  `wait(); step()`, and tests step it. It cures the largest group of its fix commits, about 10
-  of 29: the control pass, the caller's posts and the IO proc's consumed count were ordered only
-  by wall-clock timing. The machine goes in a file of its own, so `DeviceOutput.swift` ends no
-  longer than its 1,657 lines. Nothing reachable from the IO proc changes. Lane
-  `deviceoutput`.
-- 84.6 Regression tests for the two bugs of that group with none, f4f43bbf (a boundary is
-  announced before the in-refill position) and 6144577a (position published after each chunk).
-  Lane `deviceoutput`.
-- 84.7 The group's other regression tests (246364e1, 6d416c06, 7b935bd0, 8e308a5d, 2c77214f,
-  7ddef2df) rewritten on the stepped machine, with one wall-clock smoke test kept per area.
-  Lane `deviceoutput`.
-- 84.8 `DeviceOutput`'s mutation entries, by ranges of about 150 mutants, run after 84.5 lands,
-  with tests for the survivors that matter. Its lines move in 84.5, so this runs on the merged
-  branch: the splits lane's first commits.
-- 84.9 Check step `size`: a `.swift` file in `Sources/` over 1,000 lines fails unless
-  `scripts/size-allow.txt` lists it with a ceiling, which only goes down, and an entry at or
-  under 1,000 fails. Today's nine files, at their current lines. With `scripts/size-test`.
-  Lane `checks`.
-- 84.10 Check step for `try?`: each needs a why-comment on its line or the `//` run above;
-  allowlist by file and count, not line. Comment every site in Core, Features and App; in
-  `Sources/Tools` comment or allow by file. ScriptTool's retry sleep (`main.swift:89`) checks
-  `Task.isCancelled` after it, and `TaggerModel.swift:700` says why its read's error is
-  reported elsewhere or reads it. Sites in files another lane owns are allowlisted here and
-  cleared by that lane (see the splits lane). Lane `checks`.
-- 84.11 Check step for `@unchecked Sendable` and `nonisolated(unsafe)`: the comment on the line or
-  the `//` block above names the guard (lock, queue, condition, serial, main actor, one thread,
-  set once, immutable). Fix the 44 comments that name none and the 9 with no comment;
-  `ReportBox` (CaptureCommand) and `ListingBox` (RendererWiring) are read first, and replaced by
-  a Sendable type if their handoff has no lock or semaphore. Lane `checks`.
-- 84.12 The `map` step checks every backticked path in `docs/map.md` that starts with
-  `Sources/`, `Tests/`, `scripts/`, `docs/` or `Support/` (placeholders with `<`, `>`, `*` or
-  `{` skipped) and its `decisions/` links. For modules it keeps the map free of an inventory
-  and checks it against the package instead: a folder `Sources/<Tier>/<Name>` that no target
-  path names, a tier folder that no Tiers row names, or a row that `arch.swift`'s `allowed`
-  doesn't have, fails. This replaces the phase text's "a module folder isn't in the map", which
-  would make map.md a hand-kept list; ADR 0201 says why. The `<!-- paths: -->` comment goes,
-  derived from the table. `steps` picks `map` for `Package.swift` and a new module folder, with
-  `check-test` cases. Lane `checks`.
-- 84.13 map.md's prose: the Tiers intro says the tiers are fixed by `arch.swift` and
-  `Package.swift`; the features row drops "later remote control" and the Core row names what it
-  holds; tests exist "where a module has logic to test"; the main-actor file-system rule is
-  marked a convention, apart from what `arch.swift` enforces. Lane `checks`.
-- 84.14 A `strictContainer(_:_:)` helper beside `rejectUnknownKeys`, used by every strict
-  decoder, so the nine strict-decode block entries go (b013e447 and its siblings), and the
-  NamedDiscogsMapping and PalettePlace advisory with them. With a StrictKeys test. Lane `dupes`.
-- 84.15 The strict-key check moves to a primitive that Settings and HALOutput import, and
-  `DeviceSnapshot`'s private copy and its `AnyKey` go, with the `literal "unknown key"` entry.
-  Lane `dupes`.
-- 84.16 One shared tools helper for `fail(_:)` and the flag messages (unknown, missing value,
-  given twice, only goes with), in a target every tier that has a copy may import (a primitive,
-  if `arch.swift` allows), used by DiscogsImport, Fuzz, FailureDrill, TagCorpus and
-  GenerateFixtures. The entries it clears go; an entry that still holds for the app's or
-  `ScriptArguments`' copy keeps a reason naming the tier. `App/ScriptTool/main.swift` is the
-  checks lane's file and is left. Lane `dupes`.
-- 84.17 `ServiceToken` and `DiscogsToken` share one redacting secret type, so a leak fixed in one
-  is fixed in both, with a test that both print redacted through `String(describing:)`, `dump`
-  and `Mirror`. Lane `dupes`.
-- 84.18 The three folder settings (a757a385) share `FolderSetting`'s shape if they can; if their
-  fields differ in a way that matters, the entry keeps a reason that says how. Lane `dupes`.
-- 84.19 An upgrade's old files and its set-aside names pass to the Trash or a delete only as
-  regular files (lstat), and a set-aside name only as `.upgrade-<job>-<n>` inside the library
-  folder; anything else fails the step at `.delete` with nothing removed. Lane `security`.
-- 84.20 Staged file names are validated once, where `DownloadJob` decodes them, with the one
-  shared `isRelativeInside`; `ApprovalPlan.checked` and `sizesOnDisk` take only validated names,
-  and `StagedAlbum`'s private copy goes. Tests for `..` and absolute names, and a `..` move.
-  Lane `security`.
-- 84.21 Approve Safe Matches Automatically also needs the staged files' release id tag, read by
-  the player, to equal the job's release, so a spoofed "clean" reply alone (row 65) can't
-  approve. Lane `security`.
-- 84.22 Restore refuses a snapshot outside a local folder, a copy that isn't a regular file, and
-  a gzip that expands past a cap (4 GiB); tests that a snapshot name with `..` or `/` isn't
-  accepted and that restore writes only in the app's folders. Lane `security`.
-- 84.23 The snapshot writer's close is checked in its success path, so a failed close (a full
-  disk) fails the snapshot; `try?` stays only in the cleanup after an earlier throw. Lane
-  `security`.
-- 84.24 A failed release of the review claim after a stale sheet is reported in the refusal's
-  text (`DownloadsCoordinator.swift:420`). Lane `security`.
-- 84.25 The profile export refuses an indexed file or a link as its destination, and tests pin
-  ADR 0198's nine keys, no path or rating, and hostile title text staying a JSON string. Lane
-  `security`.
-- 84.26 `LibraryFolderLayout` passes the extension through the same safe-name rule, with tests
-  for `..`, `../..` and `/etc/passwd` as artist, album and title, and a symlinked artist folder.
-  Lane `security`.
-- 84.27 `old_paths` entries are checked with `isRelativeInside` where they are decoded, with
-  tests at Approve's level. Lane `security`.
-- 84.28 ADR 0201, amending ADR 0025: rows 66 to about 75 (staged names, old paths, staged tag
-  writes, Approve's moves, Trash and delete, approving unasked, Organize's tag-derived names,
-  snapshot write and restore, profile export) with "a Soulseek peer, through the service" in
-  Who attacks, each with its test; and the sections on the new check steps' limits and on what
-  `DeviceOutput`'s fixes had in common, written from this list. Lane `security`.
-- 84.29 `AppCommands` and `AppMenus` split per area into extension files in `Core/Commands`,
-  joined in the current order in the one file that lists the areas, with a test that the ID
-  list and order are unchanged. Each feature then owns its declarations, still defined once,
-  and `CommandRegistry` still checks uniqueness once. The splits lane.
-- 84.30 The four file splits, as the auditor drew them. The splits lane.
-- 84.31 Performance: the loaded run (load 42 to 116) is inconclusive. In the gate, once the
-  lanes are done and the machine is quieter, rerun alone, alternating with a freshly built
-  main: Analyze 1741 first (35.7 s against 4.45 s in phase 73; bisect and profile if it holds),
-  then Approve local (lossy-origin check 6.72 s) and Apply to All (13.73 s), then the rest of
-  the over-budget list and the tight rows (History, tag journal, sync merge), and the playback
-  rows, which weren't reached. The orchestrator.
-
-Deferred:
-
-- `DeviceOutput`'s other fix groups: device lost and return (7), format and DoP (7), file ended
-  early (3). They already have tests through the null device's step failures. One
-  `ControlState` enum for `returnTo`, `returnDue`, `pausing`, `running`, `drainedAt` and the
-  first-sound target is the next candidate, after 84.5 shows the stepped machine holds.
-- A test that every command has a handler: handlers are registered on the app's launch path,
-  which no test builds without the app, and menu-only actions would need listing first. The
-  launch order list stays the one place that shows registration order.
-- The size step for `Tests/`: the phase scopes it to `Sources/`, and six test files are over
-  1,000 lines. The owner can widen it.
-- Shared constants for button titles ("Cancel" in 26 files, "Save", "Reveal in Finder",
-  "Rating"): they are AppKit's standard titles, and the edit would touch files every lane and
-  the splits touch. Their entries keep their reasons.
-- An `old_paths` file outside the library folder: requiring it inside would refuse an upgrade
-  of an album the owner keeps in another watched folder, which ADR 0147 allows. The owner
-  decides.
-- A wider `/simplify` across the modules phases 54 to 83 touched, for copies under the dupes
-  tool's 20-line threshold: its edits would overlap every lane. The gate's `/simplify` covers
-  the phase's own diff.
-- The window rows of the bench, for the owner's Mac, since window code moves.
-
-Dropped:
-
-- The `NetworkTargets` advisory block: a fuzzer's two targets, advisory only.
-- The `standardError` declaration in `FullDisk.swift` and `RoundTrip.swift`: two copies, under
-  principle 3's third.
-- A grep check that Recommender never reads `LibraryProfile`: 84.25's key-set test pins what the
-  export holds, and nothing in the request code sends a file.
-- A nested or unknown key holding a secret in a snapshot's config copy: the token's only place is
-  its own key, which the copy strips. The index copy's 0644 mode is in 84.28's row: it's a
-  listing, not a secret.
-
-Lanes, each on its own branch from `phase/84-agent-health`, with Opus implementers:
-
-- `mutation` (84.1 to 84.4): `scripts/mutate`, `scripts/mutate-files.txt`, ADR 0027,
-  `Tests/DiscogsTests/AlbumMatcherTests.swift`, a new `TieBreakTests.swift`,
-  `Tests/LibraryTests/SyncTests.swift`, `Tests/RecommenderTests/JobTests.swift`, `DownloadsModelTests.swift`,
-  `AutoUpgradesTests.swift`, `BrowserModelTests.swift`. Tests only, no `Sources`.
-- `deviceoutput` (84.5 to 84.7): `DeviceOutput.swift` and the new file its machine goes in,
-  `DeviceOutputTests.swift` and a new stepped test file.
-- `checks` (84.9 to 84.13): `scripts/check`, `scripts/check-test`, the new step scripts, tests
-  and allowlists, `scripts/arch.swift`, `docs/map.md`, and the `try?` and unchecked comment
-  sites in files no other lane owns.
-- `dupes` (84.14 to 84.18): `scripts/dupes-allow.txt`, `Package.swift`, the strict decoders in
-  `Core/Settings`, `Core/Scripting`, `Core/Library/SmartRules.swift`,
-  `Core/Recommender/ServiceReply.swift`, `Core/HALOutput/DeviceSnapshot.swift` and
-  `Features/LibraryBrowser/ScrollReport.swift`, the two tokens, the folder settings, the
-  `main.swift`, `DrillCommand.swift` and `Arguments.swift` of DiscogsImport, Fuzz, FailureDrill,
-  TagCorpus and GenerateFixtures, and the `try?` and unchecked comments in all of these.
-- `security` (84.19 to 84.28): `TrashOrDelete`, `ApprovedImport`, `ImportJobs`, `DownloadJob`,
-  `StagedAlbum`, `ApprovalPlan`, `DownloadsCoordinator`, `SnapshotRestore`, `GzipFile`,
-  `IndexSnapshot`, `LibraryProfileExport`, `LibraryFolderLayout`, `UpgradeMapping`, their test
-  files and new ones, ADR 0025 and ADR 0201.
-- The splits lane last (84.8, 84.29, 84.30), on the merged branch.
+- [ ] **The splits** (84.29, 84.30): `AppCommands` and `AppMenus` per area in `Core/Commands`,
+      then `LibraryBrowser.swift`, `AppDelegate.swift`, `TrackTableController.swift` and
+      `BrowserModel.swift` along the seams the auditor drew, code moves only, with
+      `size-allow.txt`'s ceilings and map.md brought down to match.
+- [ ] **`DeviceOutput`'s mutation entries** (84.8), by ranges of about 150 mutants, with tests
+      for the survivors that matter.
+- [ ] **Performance rerun** (84.31): on a quiet machine, alternating with main's binary, Analyze
+      1741 first, then Approve local, Apply to All, the over-budget and tight rows and the
+      playback rows.
+- [ ] **Code review** of phase 84's 52 commits, which landed without one: `/code-review high`
+      on `5fb2cabe..` the landing commit, its confirmed findings fixed.
 
 ### 10. Web remote
 
