@@ -5,9 +5,15 @@ import CoreGraphics
 /// rating the track has, clears it, since an unrated track's stars don't show to click.
 public enum RatingClick {
     /// `x` is from the left of the cell's text, `starWidth` one star's in the cell's font.
-    public static func stars(at x: CGFloat, starWidth: CGFloat, current: Int) -> Int {
-        guard x >= 0, starWidth > 0 else { return 0 }
-        let star = min(SmartField.maxRating, Int(x / starWidth) + 1)
+    /// `current` is nil for tracks rated differently, which a click on a star never clears.
+    public static func stars(at x: CGFloat, starWidth: CGFloat, current: Int?) -> Int {
+        let star = hovered(at: x, starWidth: starWidth)
         return star == current ? 0 : star
+    }
+
+    /// The stars a pointer at `x` fills, up to the one under it; 0 left of the first.
+    public static func hovered(at x: CGFloat, starWidth: CGFloat) -> Int {
+        guard x >= 0, starWidth > 0 else { return 0 }
+        return min(SmartField.maxRating, Int(x / starWidth) + 1)
     }
 }
