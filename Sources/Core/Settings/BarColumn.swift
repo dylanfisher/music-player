@@ -42,6 +42,7 @@ public enum BarWidth: Codable, Hashable, Sendable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
+        // Not a number means the other spelling, whose decode below throws if it isn't one.
         if let points = try? container.decode(Int.self) {
             self = .fixed(points)
             return

@@ -87,6 +87,7 @@ public enum DiscogsTarget: Codable, Equatable, Sendable {
     /// custom key's ("DISCOGS_RELEASE_ID"), or an object for a key spelled per format or
     /// numbered: `{"key": {"vorbis": …, "mp4": …, "id3": …}, "numbered": …}`.
     public init(from decoder: any Decoder) throws {
+        // Not a string means the object, whose decode below throws if it isn't one.
         if let name = try? decoder.singleValueContainer().decode(String.self) {
             self = DiscogsTarget(names: PerTagFormat(name))
             return

@@ -159,6 +159,7 @@ do {
 /// When a progress line was last printed, read and set from the import's thread.
 final class LockedDate: Sendable {
     private let lock = NSLock()
+    // Guarded by lock.
     private nonisolated(unsafe) var date = Date.distantPast
 
     /// Whether `seconds` have gone by since it last said so, noting now when they have.
@@ -175,7 +176,9 @@ final class LockedDate: Sendable {
 /// import's thread.
 final class ReportState: Sendable {
     private let lock = NSLock()
+    // Guarded by lock.
     private nonisolated(unsafe) var stage: CatalogImportProgress.Stage?
+    // Guarded by lock.
     private nonisolated(unsafe) var checkpointed: [CatalogImportProgress.Stage] = []
 
     /// Notes a report of `stage`, after a checkpoint if `checkpointed`: whether the stage is

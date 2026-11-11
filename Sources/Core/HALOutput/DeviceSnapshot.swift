@@ -42,6 +42,7 @@ struct DeviceSnapshot: Codable, Equatable {
 /// provider for every change of output settings, and one store serves them all, so a later
 /// provider restores the device to how it was before playback, not to how a session that was
 /// still restoring it left it.
+/// Unchecked: `snapshots` is read and written only inside `lock`.
 public final class DeviceSnapshots: @unchecked Sendable {
     private let lock = NSLock()
     private var snapshots: [String: DeviceSnapshot] = [:]

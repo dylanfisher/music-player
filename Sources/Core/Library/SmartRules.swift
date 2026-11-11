@@ -117,6 +117,7 @@ public enum SmartValue: Codable, Equatable, Sendable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
+        // Not a whole number means text, whose decode below throws if it isn't that either.
         if let number = try? container.decode(Int.self) {
             self = .number(number)
         } else {

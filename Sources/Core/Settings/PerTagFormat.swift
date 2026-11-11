@@ -43,6 +43,7 @@ public struct PerTagFormat<Value: Codable & Equatable & Sendable>: Codable, Equa
     }
 
     public init(from decoder: any Decoder) throws {
+        // Not a single value means the per-format object, whose decode below throws if it isn't.
         if let value = try? decoder.singleValueContainer().decode(Value.self) {
             self.init(value)
             return
