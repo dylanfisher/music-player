@@ -29,6 +29,14 @@ extension RecommenderClient {
             .job
     }
 
+    /// Throws a staged job's copy away and searches again, leaving out every peer the job
+    /// tried (music-recommender's ADR 0023). Refused with `claimed` while anyone holds a review
+    /// claim or tagging lease on it, so the holder gives its own up first.
+    package func requeue(_ id: Int) async throws(RecommenderError) -> DownloadJob {
+        try await call("/v1/downloads/requeue", body: CancelRequest(id: id), as: JobReply.self)
+            .job
+    }
+
     /// Sends `event` for the job `id` as `machine`, the same name on every request from this
     /// Mac.
     package func handoff(_ id: Int, machine: String, _ event: HandoffEvent)
@@ -86,6 +94,7 @@ private struct RetryRequest: Encodable {
     }
 }
 
+/// The body of `cancel` and `requeue`.
 private struct CancelRequest: Encodable {
     var id: Int
 }

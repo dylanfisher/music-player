@@ -155,7 +155,7 @@ private let snapshot = ReleaseSnapshot(
     #expect(refusal.code == .alreadyActive && refusal.jobID == 7)
 }
 
-@Test func retryCancelAndHandoffSendTheirBodies() async throws {
+@Test func retryCancelRequeueAndHandoffSendTheirBodies() async throws {
     let events: [(HandoffEvent, String)] = [
         (.lease, #"{"type": "lease"}"#),
         (.releaseLease, #"{"type": "release_lease"}"#),
@@ -176,12 +176,13 @@ private let snapshot = ReleaseSnapshot(
         ),
     ]
     let reply = jobReply(try jobJSON())
-    let stub = try await StubService(Array(repeating: (200, reply), count: 3 + events.count))
+    let stub = try await StubService(Array(repeating: (200, reply), count: 4 + events.count))
     defer { stub.stop() }
     let client = try stub.client
     _ = try await client.retry(42, policy: .lossless)
     _ = try await client.retry(42)
     _ = try await client.cancel(42)
+    _ = try await client.requeue(42)
     for (event, _) in events { _ = try await client.handoff(42, machine: "Living Room", event) }
     let requests = stub.requests
     #expect(requests[0].head.hasPrefix("POST /v1/downloads/retry "))
@@ -189,8 +190,10 @@ private let snapshot = ReleaseSnapshot(
     #expect(try requests[1].json == json(#"{"id": 42}"#))
     #expect(requests[2].head.hasPrefix("POST /v1/downloads/cancel "))
     #expect(try requests[2].json == json(#"{"id": 42}"#))
+    #expect(requests[3].head.hasPrefix("POST /v1/downloads/requeue "))
+    #expect(try requests[3].json == json(#"{"id": 42}"#))
     for (index, (_, expected)) in events.enumerated() {
-        let request = requests[3 + index]
+        let request = requests[4 + index]
         #expect(request.head.hasPrefix("POST /v1/downloads/handoff "))
         #expect(
             try request.json

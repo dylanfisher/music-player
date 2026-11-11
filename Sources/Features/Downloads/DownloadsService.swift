@@ -13,6 +13,8 @@ package struct DownloadsService: Sendable {
     /// Starts a failed or unfound job again, with a new policy for one that searches again.
     var retry: @Sendable (Int, FormatPolicy?) async throws(RecommenderError) -> DownloadJob
     var cancel: @Sendable (Int) async throws(RecommenderError) -> DownloadJob
+    /// Throws a staged copy away and searches again from a peer the job hasn't tried.
+    var requeue: @Sendable (Int) async throws(RecommenderError) -> DownloadJob
     /// slskd's web page as this Mac opens it; nil while the service reports none.
     var slskdPage: @Sendable () async throws(RecommenderError) -> URL?
 }
@@ -36,6 +38,7 @@ extension DownloadsService {
             try await client().retry(id, policy: policy)
         }
         cancel = { id throws(RecommenderError) in try await client().cancel(id) }
+        requeue = { id throws(RecommenderError) in try await client().requeue(id) }
         slskdPage = { () throws(RecommenderError) in try await client().slskdPage() }
     }
 }

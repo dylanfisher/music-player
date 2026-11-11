@@ -142,6 +142,7 @@ final class FakeService: @unchecked Sendable {
             },
             retry: { id, policy throws(RecommenderError) in try self.retry(id, policy) },
             cancel: { id throws(RecommenderError) in try self.cancel(id) },
+            requeue: { id throws(RecommenderError) in try self.requeue(id) },
             slskdPage: { () throws(RecommenderError) in
                 try self.locked { () throws(RecommenderError) in
                     guard !self.isDown else { throw self.unreachable("/v1/downloads/config") }
@@ -192,9 +193,40 @@ final class FakeService: @unchecked Sendable {
         try change(id, "/v1/downloads/cancel") { $0.state = .cancelled }
     }
 
-    private func change(_ id: Int, _ path: String, _ body: (inout DownloadJob) -> Void)
-        throws(RecommenderError) -> DownloadJob
-    {
+    /// Every job requeued, in order.
+    var requeued: [Int] { lock.withLock { requeues } }
+    private var requeues: [Int] = []
+
+    /// As music-recommender's ADR 0023: from `staged` only, while no one holds the job.
+    private func requeue(_ id: Int) throws(RecommenderError) -> DownloadJob {
+        try change(id, "/v1/downloads/requeue") { job throws(RecommenderError) in
+            guard job.state == .staged else {
+                throw RecommenderError(
+                    service: "fake",
+                    kind: .refused(
+                        ServiceRefusal(code: .illegalTransition, message: "illegal_transition")))
+            }
+            let held = live(job)
+            if let hold = held.lease ?? held.review {
+                var refusal = ServiceRefusal(code: .claimed, message: "claimed")
+                refusal.machine = hold.machine
+                refusal.expiresAt = hold.expiresAt
+                throw RecommenderError(service: "fake", kind: .refused(refusal))
+            }
+            requeues.append(id)
+            job.state = .queued
+            job.candidate = nil
+            job.files = []
+            job.stagedPath = nil
+            job.tagging = DownloadJob.Tagging(status: .none, reasons: [])
+            job.cleanupPending = true
+        }
+    }
+
+    private func change(
+        _ id: Int, _ path: String,
+        _ body: (inout DownloadJob) throws(RecommenderError) -> Void
+    ) throws(RecommenderError) -> DownloadJob {
         try locked { () throws(RecommenderError) -> DownloadJob in
             if isDown { throw unreachable(path) }
             guard var job = store[id] else {
@@ -202,7 +234,7 @@ final class FakeService: @unchecked Sendable {
                     service: "fake",
                     kind: .refused(ServiceRefusal(code: .noSuchJob, message: "no_such_job")))
             }
-            body(&job)
+            try body(&job)
             revision += 1
             job.revision = revision
             store[id] = job
