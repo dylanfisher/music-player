@@ -89,3 +89,73 @@ import Testing
     #expect(try index.writeLibraryProfile(to: url) == 1)
     #expect(try Data(contentsOf: url) == index.libraryProfile().json())
 }
+
+// What the export holds and where it may write (ADR 0198; ADR 0025, row 75).
+
+@Test func eachAlbumHoldsADR0198sNineKeysAndNoPathOrRating() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/m/a/1.flac", album: "A", custom: [DiscogsKey.releaseID: "42"]).scanned
+    ])
+    try index.setRating(5, trackIDs: ids(index, ["/m/a/1.flac"]))
+    let root = try #require(
+        try JSONSerialization.jsonObject(with: index.libraryProfile().json()) as? [String: Any])
+    #expect(Set(root.keys) == ["albums"])
+    let albums = try #require(root["albums"] as? [[String: Any]])
+    #expect(albums.count == 1)
+    #expect(
+        Set(albums[0].keys) == [
+            "artist", "title", "track_count", "durations", "catalog_numbers", "barcodes",
+            "discogs_release_id", "plays", "loved",
+        ])
+    let text = String(decoding: try index.libraryProfile().json(), as: UTF8.self)
+    #expect(!text.contains("/m/"), "no path")
+    #expect(!text.contains("rating"))
+}
+
+@Test func aHostileTitleStaysOneJSONString() throws {
+    let hostile =
+        #"A", "plays": 999, "x": {"#
+        + "\u{1B}[31m\u{202E}\\ \n</script>"
+    let index = try craftedIndex([
+        Crafted(path: "/m/a/1.flac", album: hostile, albumArtist: hostile).scanned
+    ])
+    let root = try #require(
+        try JSONSerialization.jsonObject(with: index.libraryProfile().json()) as? [String: Any])
+    let album = try #require((root["albums"] as? [[String: Any]])?.first)
+    #expect(album["title"] as? String == hostile)
+    #expect(album["artist"] as? String == hostile)
+    #expect(album["plays"] as? Int == 0)
+    #expect(album.count == 9)
+}
+
+@Test func theProfileIsNeverWrittenOverAFileOfTheLibraryOrALink() throws {
+    let folder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("profile-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let music = folder.appendingPathComponent("1.flac")
+    let bytes = Data("flac".utf8)
+    try bytes.write(to: music)
+    let index = try craftedIndex([Crafted(path: music.path, album: "B").scanned])
+    #expect(throws: ProfileDestinationRefusal.indexed(music.path)) {
+        try index.writeLibraryProfile(to: music)
+    }
+    #expect(try Data(contentsOf: music) == bytes)
+    // The same file by a folder that links to its own.
+    let linked = folder.appendingPathComponent("linked", isDirectory: true)
+    try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: folder)
+    let real = try #require(resolved(folder.path)) + "/1.flac"
+    try index.store([Crafted(path: real, album: "B").scanned])
+    #expect(throws: ProfileDestinationRefusal.indexed(real)) {
+        try index.writeLibraryProfile(to: linked.appendingPathComponent("1.flac"))
+    }
+    let link = folder.appendingPathComponent("profile.json")
+    let target = folder.appendingPathComponent("target.txt")
+    try Data("keep".utf8).write(to: target)
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+    #expect(throws: ProfileDestinationRefusal.link(link.path)) {
+        try index.writeLibraryProfile(to: link)
+    }
+    #expect(try Data(contentsOf: target) == Data("keep".utf8))
+    #expect(try Data(contentsOf: music) == bytes)
+}

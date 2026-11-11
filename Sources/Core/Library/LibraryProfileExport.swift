@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Recommender
 
@@ -52,11 +53,36 @@ extension LibraryIndex {
     }
 
     /// Writes `libraryProfile()` to `url` as JSON, in place of any file there, and returns how
-    /// many albums it holds.
+    /// many albums it holds. A link, or a file the index holds, at `url` is refused, so a slip
+    /// in the save panel can't replace a music file or a file a link names (ADR 0025, row 75).
     package func writeLibraryProfile(to url: URL) throws -> Int {
+        var info = stat()
+        if lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFLNK {
+            throw ProfileDestinationRefusal.link(url.path)
+        }
+        let folder = url.deletingLastPathComponent().path
+        let real = resolved(folder).map { $0 + "/" + url.lastPathComponent }
+        for path in [url.path, real].compactMap({ $0 }) where try track(path: path) != nil {
+            throw ProfileDestinationRefusal.indexed(path)
+        }
         let profile = try libraryProfile()
         try profile.json().write(to: url, options: .atomic)
         return profile.albums.count
+    }
+}
+
+/// Why the profile isn't written where the owner chose.
+enum ProfileDestinationRefusal: Error, Equatable, CustomStringConvertible {
+    /// A symbolic link is there.
+    case link(String)
+    /// A file of the library is there.
+    case indexed(String)
+
+    var description: String {
+        switch self {
+        case .link(let path): "\(path) is a link, so the profile isn't written over it"
+        case .indexed(let path): "\(path) is in the library, so the profile isn't written over it"
+        }
     }
 }
 
