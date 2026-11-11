@@ -581,3 +581,104 @@ private final class HeldList: @unchecked Sendable {
     downloads.setTagged([1: TaggedRelease(folder: "job-1", releaseID: 5151)])
     #expect(changes == before + 1, "the same releases change nothing")
 }
+
+@MainActor @Test func openingTheWindowAfterAStopDoesntPollAgain() async throws {
+    let service = FakeService([job(1, .downloading)])
+    let clock = service.clock
+    let downloads = model(service)
+    downloads.start()
+    await eventually("the first poll and its wait") { clock.waiting == [60] }
+    downloads.stop()
+    await eventually("no wait after stopping") { clock.waiting.isEmpty }
+    downloads.setWindowOpen(true)
+    try await Task.sleep(nanoseconds: 300_000_000)
+    #expect(service.listed.count == 1)
+    #expect(clock.waiting.isEmpty)
+}
+
+/// Closing the window forgets the speeds, and the rows shown without them change.
+@MainActor @Test func closingTheWindowDropsTheSpeedsShown() async {
+    let service = FakeService([
+        job(1, .downloading) {
+            $0.progress = .init(filesDone: 0, filesTotal: 2, bytesDone: 100, bytesTotal: 1_000)
+        }
+    ])
+    let downloads = model(service)
+    var changes = 0
+    downloads.changed = { changes += 1 }
+    downloads.setWindowOpen(true)
+    await downloads.poll()
+    let shown = changes
+    downloads.setWindowOpen(false)
+    #expect(changes == shown + 1)
+}
+
+/// Cancelling the caller of a poll cancels its request, and its reply isn't taken.
+@MainActor @Test func cancellingAPollCancelsItsRequest() async {
+    let fake = FakeService([job(1)])
+    let base = fake.service
+    var service = base
+    service.refreshed = { jobs throws(RecommenderError) in
+        // Answers once cancelled, or after 5 s, which only a request left running waits out.
+        let deadline = Date().addingTimeInterval(5)
+        while !Task.isCancelled, Date() < deadline {
+            do { try await Task.sleep(nanoseconds: 10_000_000) } catch { break }
+        }
+        return try await base.refreshed(jobs)
+    }
+    let clock = fake.clock
+    let downloads = DownloadsModel(
+        service: service, machine: "Studio", now: { Date(timeIntervalSince1970: clock.now) },
+        sleep: { try await clock.sleep($0) })
+    let polling = Task { await downloads.poll() }
+    await Task.yield()
+    polling.cancel()
+    await polling.value
+    #expect(downloads.rows.isEmpty)
+}
+
+/// With a speed shown, a poll that brings nothing new changes nothing, and one after the speed
+/// lapsed shows the rows without it.
+@MainActor @Test func aSpeedThatLapsesChangesTheRowsWithNothingNew() async {
+    func downloading(_ revision: Int, bytes: Int) -> DownloadJob {
+        job(1, .downloading, revision: revision) {
+            $0.progress = .init(
+                filesDone: 0, filesTotal: 2, bytesDone: bytes, bytesTotal: 100_000_000)
+        }
+    }
+    let service = FakeService([downloading(1, bytes: 0)])
+    let clock = service.clock
+    let downloads = model(service)
+    var changes = 0
+    downloads.changed = { changes += 1 }
+    downloads.setWindowOpen(true)
+    await downloads.poll()
+    clock.advance(by: 10)
+    service.put(downloading(2, bytes: 10_000_000))
+    await downloads.poll()
+    #expect(downloads.rows.first?.state.contains(" · ") == true, "a speed shows")
+    let shown = changes
+    await downloads.poll()
+    #expect(changes == shown, "nothing new")
+    clock.advance(by: TransferRates.heldSeconds + 10)
+    await downloads.poll()
+    #expect(changes == shown + 1)
+    #expect(downloads.rows.first?.state.contains(" · ") == false)
+}
+
+@MainActor @Test func leavingAJobForReviewAndForgettingItChangeItsRow() async {
+    let service = FakeService([job(1)])
+    let downloads = model(service)
+    await downloads.poll()
+    var changes = 0
+    downloads.changed = { changes += 1 }
+    downloads.leave(1, "it needs a look")
+    #expect(changes == 1)
+    let left = downloads.rows.first?.stateDetail
+    #expect(left?.contains("it needs a look") == true)
+    downloads.leave(1, "it needs a look")
+    #expect(changes == 1, "the same reason again")
+    downloads.forgetLeftForReview()
+    #expect(changes == 2)
+    #expect(downloads.rows.first?.stateDetail != left)
+}

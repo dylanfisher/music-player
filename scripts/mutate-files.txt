@@ -23,3 +23,4 @@ Sources/Core/Discogs/AlbumMatcher.swift all DiscogsTests
 Sources/Core/Library/LibrarySyncMerge.swift all LibraryTests
 # The download jobs' states, and how the Downloads window and the upgrades act on them.
 Sources/Core/Recommender/DownloadJob.swift all RecommenderTests
+Sources/Features/Downloads/DownloadsModel.swift all DownloadsTests
