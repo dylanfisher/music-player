@@ -3,10 +3,10 @@ import BarView
 import Settings
 
 /// The playing track's parts of the status bar: art, title and artist, the format line, a seek
-/// bar with its times and the rating's stars, one view each, which the browser lays out in the user's order. The
-/// minimal style puts the track on one line; the tall one gives it two, under a larger title.
-/// A playback problem in the format line has a question mark after it, and a click on either
-/// opens its details.
+/// bar with its times and the rating's stars, one view each, which the browser lays out in the
+/// user's order. The minimal style puts the track on one line; the tall one gives it two, under
+/// a larger title. A playback problem in the format line has a question mark after it, and a
+/// click on either opens its details.
 @MainActor
 public final class StatusBarParts: NSObject {
     /// The text's size in the minimal style, the track table's.

@@ -3,9 +3,10 @@ import BarView
 import Settings
 
 /// The toolbar's now-playing status: the playing track's art, title, title line, artist and
-/// album, format line, seek bar and rating, laid out in columns as `appearance.headerStatusLayout` says (ADR 0085).
-/// A flexible center column takes the width the side columns leave, a stacked column always
-/// stacks, and the status is as tall as its tallest column.
+/// album, format line, seek bar and rating, laid out in columns as
+/// `appearance.headerStatusLayout` says (ADR 0085). A flexible center column takes the width
+/// the side columns leave, a stacked column always stacks, and the status is as tall as its
+/// tallest column.
 @MainActor
 public final class HeaderStatus {
     static let spacingPoints = 10.0
