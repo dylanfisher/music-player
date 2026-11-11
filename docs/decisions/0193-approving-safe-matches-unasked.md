@@ -5,7 +5,9 @@
 - **Amends:** [0147](0147-moving-downloads-into-the-library.md) (Approve is the owner's
   confirmation for each job)
 - **Amended by:** [0195](0195-approving-a-clearly-better-replacement-unasked.md): a job that
-  replaces a library album of its release id is approved when it's clearly higher quality.
+  replaces a library album of its release id is approved when it's clearly higher quality;
+  [0200](0200-upgrading-to-flac-automatically.md): a job of Upgrade to FLAC Automatically's
+  left for a lossy-origin finding is requeued.
 - **See also:** [0146](0146-staged-tag-writes.md) (a clean run),
   [0169](0169-approve-at-once-and-manual-upgrades.md) (the sheet's plan, Keep Both),
   [0156](0156-replacing-an-album-at-its-own-paths.md) (an upgrade at its own paths)

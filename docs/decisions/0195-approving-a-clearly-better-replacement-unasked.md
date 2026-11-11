@@ -3,6 +3,8 @@
 - **Date:** 2026-11-10
 - **Status:** accepted
 - **Amends:** [0193](0193-approving-safe-matches-unasked.md) (what is safe)
+- **Amended by:** [0200](0200-upgrading-to-flac-automatically.md): Upgrade to FLAC
+  Automatically queues upgrades for it to approve.
 - **See also:** [0169](0169-approve-at-once-and-manual-upgrades.md) (a new album that replaces
   one, Keep Both), [0147](0147-moving-downloads-into-the-library.md) (Approve)
 
