@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Runs scripts/unchecked.swift on two fixture trees under .build/unchecked-test and checks what it
+# reports: one tree it must pass, and one with each kind of unchecked sendable that names no guard
+# and each kind of bad allowlist entry, which it must fail at each.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+base=.build/unchecked-test
+rm -rf "$base"
+problems=0
+
+# write <path> — the file's text comes from standard input.
+write() {
+  mkdir -p "$(dirname "$1")"
+  cat > "$1"
+}
+
+# expect <tree> <exit status> <line>... — runs the script on <tree>, then checks the status and
+# that each <line> is a whole line of its output.
+expect() {
+  local tree="$1" status="$2"; shift 2
+  local output actual
+  output=$(swift scripts/unchecked.swift --root "$tree" 2>&1)
+  actual=$?
+  if [ "$actual" != "$status" ]; then
+    printf 'unchecked-test: %s exited %s, expected %s:\n%s\n' "$tree" "$actual" "$status" "$output" >&2
+    problems=$((problems + 1))
+  fi
+  for line in "$@"; do
+    if ! printf '%s\n' "$output" | grep -qxF -- "$line"; then
+      printf 'unchecked-test: %s is missing the line\n  %s\nin:\n%s\n' "$tree" "$line" "$output" >&2
+      problems=$((problems + 1))
+    fi
+  done
+}
+
+# Passes: a guard named above, in a doc comment, on the line, above an attribute, as the end of
+# a name, in each word of the vocabulary, a site in a string or a comment, and allowlisted files
+# at or under their counts.
+clean="$base/clean"
+write "$clean/Sources/Core/A/One.swift" <<'EOF'
+// `count` is guarded by `lock`.
+final class A: @unchecked Sendable {}
+/// Its state is touched only on `queue`.
+final class B: @unchecked Sendable {}
+nonisolated(unsafe) var c = 0  // Set once, at launch.
+/// Only the main actor touches it.
+@available(macOS 12, *)
+final class D: @unchecked Sendable {}
+// Guarded by `stateLock`.
+nonisolated(unsafe) var e = 0
+// The semaphore orders the handoff.
+nonisolated(unsafe) var f = 0
+// Immutable after init.
+final class G: @unchecked Sendable {}
+// Used from one thread.
+final class H: @unchecked Sendable {}
+// Serial, on the main queue.
+final class I: @unchecked Sendable {}
+let j = "@unchecked Sendable in a string"
+// nonisolated(unsafe) in a comment
+EOF
+write "$clean/Sources/Core/B/Listed.swift" <<'EOF'
+final class A: @unchecked Sendable {}
+final class B: @unchecked Sendable {}
+EOF
+write "$clean/Sources/Core/B/Shrunk.swift" <<'EOF'
+final class A: @unchecked Sendable {}
+EOF
+write "$clean/scripts/unchecked-allow.txt" <<'EOF'
+# A comment line.
+Sources/Core/B/Listed.swift | 2 | reviewed
+Sources/Core/B/Shrunk.swift | 3 | two named since
+EOF
+expect "$clean" 0 \
+  "scripts/unchecked-allow.txt:3: Sources/Core/B/Shrunk.swift has 1 sites that name no guard: lower its count to 1" \
+  "12 unchecked sendables, each naming its guard or allowlisted (2 entries)"
+
+# Fails: no comment, a comment that names no guard, a word that only contains one (`blocks`,
+# `clock`), a comment above another statement, a file over its count, an entry for a file with
+# none, a repeat and malformed entries.
+planted="$base/planted"
+write "$planted/Sources/Core/A/One.swift" <<'EOF'
+final class A: @unchecked Sendable {}
+// A box for the result.
+final class B: @unchecked Sendable {}
+// It blocks the caller until the clock ticks.
+nonisolated(unsafe) var c = 0
+// Guarded by `lock`.
+let d = 1
+nonisolated(unsafe) var e = 0
+EOF
+write "$planted/Sources/Core/B/Grown.swift" <<'EOF'
+final class A: @unchecked Sendable {}
+final class B: @unchecked Sendable {}
+EOF
+write "$planted/Sources/Core/B/Clean.swift" <<'EOF'
+final class A: @unchecked Sendable {}  // Guarded by `lock`.
+EOF
+write "$planted/scripts/unchecked-allow.txt" <<'EOF'
+Sources/Core/B/Grown.swift | 1 | grew
+Sources/Core/B/Clean.swift | 1 | named since
+Sources/Core/B/Grown.swift | 2 | again
+Sources/Core/B/Grown.swift | 2
+EOF
+expect "$planted" 1 \
+  "Sources/Core/A/One.swift:1: no comment names the lock, queue or other guard that makes it safe" \
+  "Sources/Core/A/One.swift:3: no comment names the lock, queue or other guard that makes it safe" \
+  "Sources/Core/A/One.swift:5: no comment names the lock, queue or other guard that makes it safe" \
+  "Sources/Core/A/One.swift:8: no comment names the lock, queue or other guard that makes it safe" \
+  "scripts/unchecked-allow.txt:1: Sources/Core/B/Grown.swift has 2 sites that name no guard, over its 1: name it at each new one; they're at lines 1, 2" \
+  "scripts/unchecked-allow.txt:2: Sources/Core/B/Clean.swift has no site that names no guard, delete the entry" \
+  "scripts/unchecked-allow.txt:3: repeats line 1" \
+  'scripts/unchecked-allow.txt:4: expected `<file> | <count> | <reason>`'
+
+# A flag without its value fails loudly instead of checking the current folder.
+output=$(swift scripts/unchecked.swift --root 2>&1)
+status=$?
+if [ "$status" != 2 ] || [ "$output" != "unchecked: --root needs a directory" ]; then
+  printf 'unchecked-test: --root without a value exited %s:\n%s\n' "$status" "$output" >&2
+  problems=$((problems + 1))
+fi
+
+if [ "$problems" -gt 0 ]; then
+  echo "unchecked-test: $problems problems" >&2
+  exit 1
+fi
+echo "unchecked passes the clean tree and fails each unnamed guard and bad entry"

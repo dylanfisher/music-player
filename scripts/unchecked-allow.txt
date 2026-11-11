@@ -1,0 +1,8 @@
+# Files with an `@unchecked Sendable` or `nonisolated(unsafe)` whose comment names no lock, queue
+# or other guard, each with how many, `<file> | <count> | <reason>` (scripts/unchecked.swift, ADR
+# 0201). A count only goes down: name the guard at a site, or make the type Sendable, then lower
+# the count, and delete the entry at none.
+Sources/Core/Discogs/StagedAlbum.swift | 1 | the security lane's file, phase 84 (84.20)
+Sources/Core/HALOutput/DeviceOutput.swift | 1 | the deviceoutput lane's file, phase 84 (84.5)
+Sources/Core/HALOutput/DeviceSnapshot.swift | 1 | the dupes lane's file, phase 84 (84.15)
+Sources/Tools/DiscogsImport/main.swift | 3 | the dupes lane's file, phase 84 (84.16)
