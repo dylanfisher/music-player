@@ -384,3 +384,11 @@ private func rows() -> [DownloadRow] {
     #expect(again.queueButton.title == Downloads.queueAgainTitle)
     #expect(again.policyPopUp.superview == nil, "one policy is no choice")
 }
+
+@MainActor
+@Test func notFoundSaysQueueAgainWaitsForTheBox() {
+    let box = AppSettings().autoUpgrade.title
+    #expect(Downloads.notFoundNote(autoUpgrade: true).hasSuffix("so it queues them in turn."))
+    let off = Downloads.notFoundNote(autoUpgrade: false)
+    #expect(off.contains("with \(box) off, nothing is queued until it's turned on"))
+}

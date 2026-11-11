@@ -993,9 +993,7 @@ package final class Downloads {
                 }
                 let sheet = QueueSheet(
                     heading: "Upgrades Not Found",
-                    note:
-                        "Albums Upgrade to FLAC Automatically set aside after searching four"
-                        + " times. Queue Again clears their misses, so it queues them in turn.",
+                    note: Self.notFoundNote(autoUpgrade: autoUpgrade),
                     choices: choices, policies: [.flac], tickingAll: false,
                     button: Self.queueAgainTitle)
                 present(sheet) {
@@ -1055,6 +1053,17 @@ package final class Downloads {
 
     /// Not Found's button.
     static let queueAgainTitle = "Queue Again"
+
+    /// Not Found's note, saying when Queue Again queues nothing until the box is on.
+    static func notFoundNote(autoUpgrade: Bool) -> String {
+        let box = AppSettings().autoUpgrade.title
+        let note =
+            "Albums \(box) set aside after searching four times. \(queueAgainTitle) clears"
+            + " their misses"
+        return autoUpgrade
+            ? note + ", so it queues them in turn."
+            : note + "; with \(box) off, nothing is queued until it's turned on."
+    }
 
     /// Runs `change` on the index off the main thread, then `then`; an alert headed `failure`
     /// when it threw.
