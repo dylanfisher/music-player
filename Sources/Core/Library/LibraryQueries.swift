@@ -63,7 +63,7 @@ extension LibraryIndex {
 
     /// Changes whenever a connection commits a change to the index: another connection through
     /// `data_version`, this one through `total_changes()`.
-    func changeStamp() throws -> [Int] {
+    public func changeStamp() throws -> [Int] {
         [try statement("PRAGMA data_version").map { try $0.int(0) }[0], try totalChanges()]
     }
 
@@ -249,6 +249,20 @@ extension LibraryIndex {
         // An ID asked for in two chunks comes back from both.
         let byID = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return ids.compactMap { byID[$0] }
+    }
+
+    /// The ratings `ids` have, in stars, 0 for unrated, each once, for the Rating submenu's
+    /// marks. An ID with no track is left out.
+    public func ratings(ids: [Int64]) throws -> Set<Int> {
+        Set(
+            try inChunks(
+                ids,
+                {
+                    """
+                    SELECT DISTINCT ifnull(r.rating, 0) FROM tracks t
+                    LEFT JOIN ratings r ON r.path_id = t.file_id WHERE t.file_id IN (\($0))
+                    """
+                }, { try $0.int(0) }))
     }
 
     /// Runs `sql`, given the placeholders of one `IN` list, over `ids` a chunk at a time, since

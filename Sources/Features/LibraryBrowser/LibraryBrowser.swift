@@ -231,6 +231,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var isResolvingLostStats = false
     private(set) var lostStatsSheet: LostStatsSheet?
     private var isImportingMoves = false
+    /// The selected tracks' ratings as last read, with the index's change stamp then.
+    private var selectionRatingsRead: (ids: [Int64], stamp: [Int], ratings: Set<Int>)?
 
     /// `index` is a connection for the main thread, which fetches the table's rows a page at a
     /// time: a page is one primary-key lookup per row and takes well under a millisecond.
@@ -2018,6 +2020,29 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Rates the selected tracks; 0 stars clears their rating.
+    /// The mark of the Rating submenu's item for `stars` over the selected tracks.
+    public func selectionRatingMark(_ stars: Int) -> RatingMark {
+        RatingMark(stars: stars, ratings: selectionRatings())
+    }
+
+    /// The ratings the selected tracks have, read again only when the selection or the index
+    /// changed since the last read, so validating the submenu's six items reads them once.
+    private func selectionRatings() -> Set<Int> {
+        do {
+            let ids = try selectedTrackIDs()
+            let stamp = try index.changeStamp()
+            if let read = selectionRatingsRead, read.ids == ids, read.stamp == stamp {
+                return read.ratings
+            }
+            let ratings = try index.ratings(ids: ids)
+            selectionRatingsRead = (ids, stamp, ratings)
+            return ratings
+        } catch {
+            logger.error("couldn't read the selected tracks' ratings: \(error)")
+            return []
+        }
+    }
+
     public func rateSelection(_ stars: Int) {
         guard let ids = selectedTrackIDs(else: "couldn't rate the tracks") else { return }
         edit("couldn't rate the tracks") { try await self.model.rate(ids, stars: stars) }

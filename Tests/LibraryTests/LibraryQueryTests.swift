@@ -119,6 +119,21 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     #expect(try index.trackTotals(ids: []) == TrackTotals())
 }
 
+@Test func ratingsListEachRatingTheTracksHaveOnce() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let ids = Array(try index.trackIDs(sortedBy: .title).prefix(4))
+    #expect(ids.count == 4)
+    #expect(try index.ratings(ids: ids) == [0])
+    try index.setRating(3, trackIDs: [ids[0], ids[1]])
+    try index.setRating(5, trackIDs: [ids[2]])
+    #expect(try index.ratings(ids: [ids[0], ids[1]]) == [3])
+    #expect(try index.ratings(ids: ids) == [0, 3, 5])
+    #expect(try index.ratings(ids: [ids[2], -1]) == [5])
+    #expect(try index.ratings(ids: []) == [])
+}
+
 /// The albums are counted once each, however many of their tracks the list holds; a track with
 /// no album adds none.
 @Test func trackTotalsCountEachAlbumOnce() throws {

@@ -94,9 +94,11 @@ extension AppDelegate {
             self?.browser?.showSelection(in: .artist)
         }
         for (stars, id) in CommandID.rate.enumerated() {
-            dispatcher.handle(id, enabled: hasSelectedTracks) { [weak self] in
-                self?.browser?.rateSelection(stars)
-            }
+            dispatcher.handle(
+                id, enabled: hasSelectedTracks,
+                isOn: { [weak self] in self?.browser?.selectionRatingMark(stars) == .on },
+                isMixed: { [weak self] in self?.browser?.selectionRatingMark(stars) == .mixed },
+                run: { [weak self] in self?.browser?.rateSelection(stars) })
         }
     }
 

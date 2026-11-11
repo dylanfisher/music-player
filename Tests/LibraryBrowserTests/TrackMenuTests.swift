@@ -302,3 +302,32 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     await browser.table.albumMovesDone()
     #expect(browser.table.table.selectedRowIndexes == IndexSet(0...next))
 }
+
+/// The Rating submenu's marks, from Clear Rating to five stars.
+@MainActor
+private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
+    (0...5).map(browser.selectionRatingMark)
+}
+
+@MainActor @Test func theRatingSubmenuMarksTheSelectedTracksRatings() async throws {
+    let (browser, index) = try await browser(selecting: [2])
+    let ids = try browser.selectedTrackIDs()
+    #expect(ratingMarks(browser) == [.on, .off, .off, .off, .off, .off])
+    try index.setRating(4, trackIDs: ids)
+    #expect(ratingMarks(browser) == [.off, .off, .off, .off, .on, .off])
+    // Several alike.
+    browser.table.table.selectRowIndexes([2, 3], byExtendingSelection: false)
+    let both = try browser.selectedTrackIDs()
+    try index.setRating(4, trackIDs: both)
+    #expect(ratingMarks(browser) == [.off, .off, .off, .off, .on, .off])
+    // Several rated differently, one unrated among them.
+    browser.table.table.selectRowIndexes([2, 3, 4], byExtendingSelection: false)
+    try index.setRating(2, trackIDs: [both[1]])
+    #expect(ratingMarks(browser) == [.mixed, .off, .mixed, .off, .mixed, .off])
+    // A rating set from the menu shows at its next check.
+    browser.rateSelection(5)
+    try await waitFor("the rating") { browser.selectionRatingMark(5) == .on }
+    #expect(ratingMarks(browser) == [.off, .off, .off, .off, .off, .on])
+    browser.table.table.selectRowIndexes([], byExtendingSelection: false)
+    #expect(ratingMarks(browser) == [.off, .off, .off, .off, .off, .off])
+}
