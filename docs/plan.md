@@ -431,7 +431,7 @@ failed track and a lost renderer, since each of those either clears `playing` or
 
 - 78.1 The assertion (`Core/UPnPOutput`): `SleepAssertionCalls`, the two IOKit calls as
   closures (`IOPMAssertionCreateWithName` with `kIOPMAssertPreventUserIdleSystemSleep`, and
-  `IOPMAssertionRelease`), with `.system`, the seam tests replace. `SleepAssertion`, a small
+  `IOPMAssertionRelease`), with `.live`, the seam tests replace. `SleepAssertion`, a small
   lock-guarded holder: `hold(_ wanted:)` takes one assertion only on a change from not wanted to
   wanted and releases it on the change back, so repeated polls never take a second; a failed
   create is logged as an error with its IOReturn and not retried until the next change to
@@ -441,7 +441,7 @@ failed track and a lost renderer, since each of those either clears `playing` or
   `SleepAssertionTests`: once per change, released on the change back, a failed create neither
   held nor retried until wanted again, nothing after close.
 - 78.2 The session (`Core/UPnPOutput`): `RendererOutput`'s internal init takes the calls, the
-  public one passes `.system`; the session calls `hold(current?.playing == true)` at the end of
+  public one passes `.live`; the session calls `hold(current?.playing == true)` at the end of
   each `run`, beside the ticker's want, and `close()` calls the holder's `close()`. Tests in
   `RendererOutputTests` against the fake renderer and a recording stand-in, which also counts the
   most held at once: play takes it once over several polls, Pause releases, a resume takes it
