@@ -33,20 +33,20 @@ its reason ([ADR 0024](decisions/0024-single-source-check.md)).
 
 ## Tiers
 
-The default vocabulary below is a recommendation, not a mandate. **Rename these to whatever fits
-the project** — `modules`, `services`, `packages`, `internal` are all fine. What must not change is
-the dependency direction.
+The tiers are fixed by `allowed` in `scripts/arch.swift` and by the target paths in
+`Package.swift`, and the `map` step of `./scripts/check` checks this table against both. Renaming
+a tier changes the table, `allowed` and every target's `path:` together.
 
 | Tier | Path | What belongs here | May import from |
 |---|---|---|---|
 | **primitives** | `Sources/Primitives` | Portable units with no knowledge of music or this app: ring buffer, SQLite wrapper, HTTP server, SSDP, key chords, window placement. No settings reads. System frameworks are fine, AppKit included, in a file of its own (`<Type>+AppKit.swift`) so the rest of the unit stays testable without a window. | nothing in this table |
-| **core** | `Sources/Core` | The domain: library index and scanner, tag reading, decoders, audio analysis, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer), settings, logging, and views two features share (AppKit, in a module of their own). | primitives, other core modules |
-| **features** | `Sources/Features` | User-facing slices: library browser, now playing, settings window, and later remote control. | core, primitives |
+| **core** | `Sources/Core` | The domain: the library index, scanner and sync, tag reading and writing, decoders and playback, audio analysis, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer, receiver control), Discogs and the recommender service, commands and scripting, settings, snapshots, logging, and the bars' column views that two features share (`BarView`, the one Core module with AppKit). | primitives, other core modules |
+| **features** | `Sources/Features` | User-facing slices: library browser, now playing, settings window, tag editor, Discogs tagger, downloads. | core, primitives |
 | **app** | `Sources/App` | The composition root: `main`, app delegate, menus. Wires features together; holds no logic of its own. A second executable here, the `music-player` command line, ships in the bundle beside the app. | features, core, primitives |
 | **tools** | `Sources/Tools` | Development tooling that never ships in the app: the fixture generator, test stand-ins such as a null audio device, and benchmarks. | tools, features, core, primitives |
 
-Each SwiftPM target is one module at `Sources/<Tier>/<Name>`, and its tests are at
-`Tests/<Name>Tests`. `Support/` holds bundle resources such as `Info.plist`, which
+Each SwiftPM target is one module at `Sources/<Tier>/<Name>`, and where a module has logic to test,
+its tests are at `Tests/<Name>Tests`. `Support/` holds bundle resources such as `Info.plist`, which
 `scripts/bundle` copies into the `.app`.
 
 **Dependency direction is one-way: app → features → core → primitives.** Never upward, never
@@ -70,11 +70,13 @@ on any other ([ADR 0030](decisions/0030-public-surface-check.md)).
 
 `scripts/arch.swift` enforces this from `Package.swift`, and `./scripts/check` runs it. The
 compiler already rejects any import a target hasn't declared, so checking the declared
-dependencies covers every import. Its tier map has to match the table above.
+dependencies covers every import.
 
 It also fails a `fileURLWithPath:` call without `isDirectory:`, which makes Foundation stat the
-path. Track paths take `false`, folders `true`. Nothing on the main actor touches the file system
-for a track path; that work goes through a detached task or the index.
+path. Track paths take `false`, folders `true`.
+
+A convention no script checks: nothing on the main actor touches the file system for a track
+path; that work goes through a detached task or the index.
 
 ## Naming
 
