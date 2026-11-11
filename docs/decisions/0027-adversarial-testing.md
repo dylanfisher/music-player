@@ -120,10 +120,20 @@ is a few lines the fixtures already had. The properties:
 across its boundary (`<` and `<=`, `>` and `>=`) or negated (`==` and `!=`), `&&` and `||`
 swapped, a statement alone on its line dropped, and an integer literal plus or minus one. It
 finds binary operators by the spaces the formatter puts around them, which generics, ranges and
-shifts don't have. `scripts/mutate` runs them in 4 git worktrees of HEAD under `.build/mutate`,
-each with its own scratch path, applying one mutant, building only its entry's test target and
-running it, then checking the file out again; the main checkout isn't written. A mutant that
-doesn't compile isn't counted. The files and line ranges are in `scripts/mutate-files.txt`.
+shifts don't have. `scripts/mutate` runs them in 3 git worktrees of HEAD under `.build/mutate`
+(`--jobs`, never more than there are mutants), each with its own scratch path, applying one
+mutant, building only its entry's test targets and running their bundles as `scripts/test`
+does, then checking the file out again; the main checkout isn't written. A mutant that doesn't
+compile isn't counted. The files and line ranges are in `scripts/mutate-files.txt`.
+
+Each job first runs the entries' tests unmutated, and the run refuses to score when they fail,
+or when a mutant's tests never start: until phase 84 the script called `/usr/bin/timeout`,
+which macOS doesn't have, so no test ran and every mutant that built counted as killed. A
+mutant's run has three times its targets' unmutated time, 4 minutes at least, before a perl
+parent kills it, polling, since an alarm reached neither the test helper nor a perl waiting
+on it. A bundle that fails runs once more and counts only when it fails again: on a loaded
+machine the watcher and search timing tests fail now and then. `LibraryBrowserTests` is run
+with `--jobs 1`, since three of its window tests at once time out.
 
 ### What the runs found, and the mutants that survive
 
@@ -166,6 +176,49 @@ the log. Each of the 32 survivors is one no test can tell from the original:
 
 ConfigStore's backoff is `nextRetry(after:)`, so the longest wait is tested directly, and its
 retry timer is injectable, so the retry tests don't wait on real time.
+
+### Scores measured again in phase 84
+
+The scores and survivors above can't be repeated: from 1b6c9057 to phase 84 the script called
+`/usr/bin/timeout`, which macOS doesn't have, so a run's scores said nothing. Measured on
+2026-11-11 with the tests running, the seven entries score 450 killed of 528 (85.2%): PlayQueue
+100% (40 of 40), PlayCounter 93.8% (15 of 16), PlayTracker 85.7% (6 of 7), the tag writer's
+checks 85.7% (18 of 21), ConfigStore 84.7% (72 of 85), the engine 83.6% (249 of 298) and the
+scanner 82.0% (50 of 61). Their survivors aren't sorted into the groups above yet; the engine's
+are mostly the initial values and resets listed there.
+
+Phase 84 added entries for the logic agents change most, and tests for each survivor that
+matters. Before and after, at the phase's commits:
+
+| File | Before | After |
+|---|---|---|
+| `Discogs/TieBreak.swift` | 57.6% (68 of 118) | 78.0% (92 of 118) |
+| `Discogs/AlbumMatcher.swift` | 63.5% (61 of 96) | 88.5% (85 of 96) |
+| `Library/LibrarySyncMerge.swift` | 56.1% (60 of 107) | 70.1% (75 of 107) |
+| `Recommender/DownloadJob.swift` | 60.0% (12 of 20) | 100% (20 of 20) |
+| `Downloads/DownloadsModel.swift` | 82.5% (47 of 57) | 94.7% (54 of 57) |
+| `Downloads/Downloads+AutoUpgrade.swift` | 58.6% (17 of 29) | 82.8% (24 of 29) |
+| `LibraryBrowser/BrowserModel.swift`, sort and steps | 62.9% (22 of 35) | 85.7% (30 of 35) |
+
+The sync merge's After was measured before the test of a cleared rating, which kills one
+more. The survivors left, none of which a test can tell from the original:
+
+- **Weights and edges no input reaches:** tie-break step weights raised from 1 to 2, a step's
+  `?? 0` for a tag the album lacks, which every release gets alike, the tie's `1e-9` margin and
+  the matcher's caches and caps by one.
+- **Clean-up of a row about to go:** a merged move's ratings, opinions, imported counts and
+  clocks on the path it empties, and the merge's path cache. The move's case with no clock on
+  either path holds only stats from before the clocks.
+- **What nothing reads:** a run's progress before its first report, the reporter's stride,
+  `reserveCapacity`, the default sleep's floor, a run's first cancel check, which the one per
+  album repeats, and a move outside this Mac's folders, counted toward a problem line.
+- **Equal results by another way:** the browser's selection timer cancelled, where a second
+  timer settles the same pending place again, a step shown reloading its panes from the second
+  column, and the sort from before a deleted playlist left set; a requeue giving up this Mac's
+  review claim first, which the stand-in service doesn't hold it to.
+
+Two survive tests written to kill them, for reasons not found: a stop leaving the downloads
+model's polling task set, and forgetting the jobs left for review without rebuilding the rows.
 
 ## Alternatives considered
 
