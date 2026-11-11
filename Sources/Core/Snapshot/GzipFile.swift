@@ -103,6 +103,9 @@ private final class FilePair {
     private let destination: URL
     private let reader: FileHandle
     private let writer: FileHandle
+    /// Set by `finish` once the writer is closed: it closes the reader too, and says if either
+    /// close failed.
+    private var closed = false
 
     init(_ source: URL, _ destination: URL) throws(SnapshotError) {
         self.source = source
@@ -124,8 +127,11 @@ private final class FilePair {
 
     deinit {
         output.deallocate()
+        guard !closed else { return }
+        // Reached only after a throw, which says what went wrong, and the caller deletes the
+        // file written; a close that fails too changes neither.
         try? reader.close()
-        try? writer.close()
+        try? writer.close()  // As the reader's, above.
     }
 
     /// The next chunk of the source, shorter only at its end.
@@ -148,12 +154,21 @@ private final class FilePair {
         }
     }
 
-    /// Flushes the destination to the disk, so a rename after it can't leave a short file.
+    /// Flushes the destination to the disk, so a rename after it can't leave a short file, and
+    /// closes both files. A close that fails, as one can when the disk is full, throws, so the
+    /// file isn't taken for whole.
     func finish() throws(SnapshotError) {
         do {
             try writer.synchronize()
+            try writer.close()
         } catch {
             throw .file(destination.path, error.localizedDescription)
+        }
+        closed = true
+        do {
+            try reader.close()
+        } catch {
+            throw .file(source.path, error.localizedDescription)
         }
     }
 }
