@@ -93,6 +93,9 @@ enum DoPRefusal: Sendable {
 /// `use(_:)` moves playback to another device mid-track. When the device in use goes away and
 /// another is chosen, the first is watched, and output goes back to it once it returns, unless
 /// the other one is playing (ADR 0037).
+///
+/// Unchecked Sendable: `condition` guards what callers share with the control thread, and the
+/// rest belongs to the one control thread, which `step()` runs (`DeviceOutput+Control.swift`).
 public final class DeviceOutput: Output, @unchecked Sendable {
     public let events: AsyncStream<OutputEvent>
     /// The signal path each time the audible track, the gain or the device's state changes,
@@ -105,9 +108,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private let returnContinuation: AsyncStream<String>.Continuation
     /// Guards `pending`, `published`, `seekTarget`, `isClosed` and `volumeOn`, and wakes the
     /// control thread.
-    private let condition = NSCondition()
+    let condition = NSCondition()
     /// Each command with the interval generation current when it was posted.
-    private var pending: [(command: Command, generation: UInt64)] = []
+    var pending: [(command: Command, generation: UInt64)] = []
     private var published: OutputPosition?
     /// The last seek posted, and how many posted seeks the control thread hasn't done.
     /// `position()` reports it until they're all done: `published` holds the time from before
@@ -123,7 +126,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private var returnTo: DeviceChoice?
     /// Set when the device list changed or playback stopped, so the pass ends by checking whether
     /// to go back to `returnTo`.
-    private var returnDue = false
+    var returnDue = false
     /// What the device last reported, which a DSD track has to fit before it plays.
     private var knownFormats: DeviceFormats?
     private var device: (any PCMDevice)?
@@ -169,17 +172,18 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private let fileLatency: FileLatency?
     /// The play-to-first-sample interval: begun when a load or seek is posted, ended here once
     /// the device has taken a sample of the new audio, cancelled when none will follow.
-    private let firstSound: PendingInterval
+    let firstSound: PendingInterval
     /// The consumed-bytes count the IO proc must pass for the interval to end: the start of the
     /// audio the last load or seek queued. Nil until the control thread has processed it, so
     /// audio from before it can't end the interval.
     private var firstSoundTarget: (generation: UInt64, byte: UInt64)?
     /// The interval generation current when the command now running was posted, or when the
     /// pass began; a cancel reaches no later interval than this.
-    private var passGeneration: UInt64 = 0
+    var passGeneration: UInt64 = 0
     /// Names the calls on this thread that haven't returned (ADR 0121).
     private let watch: StepWatch
     private let diagnostics: OutputDiagnostics
+    private let control: ControlSeam
 
     /// `fileLatency` is for benchmarks: it makes PCM files read as from a NAS. `firstSound` is
     /// for tests.
@@ -192,12 +196,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             diagnostics: OutputDiagnostics())
     }
 
-    /// `diagnostics` is for tests.
+    /// `diagnostics` and `control` are for tests.
     init(
         _ choice: DeviceChoice, fileLatency: FileLatency? = nil,
-        firstSound: PendingInterval = .firstSound, diagnostics: OutputDiagnostics
+        firstSound: PendingInterval = .firstSound, diagnostics: OutputDiagnostics,
+        control: ControlSeam = ControlSeam()
     ) throws {
         self.choice = choice
+        self.control = control
         self.fileLatency = fileLatency
         self.firstSound = firstSound
         self.diagnostics = diagnostics
@@ -209,6 +215,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         (signalPaths, signalContinuation) = AsyncStream.makeStream(of: SignalPath.self)
         (returns, returnContinuation) = AsyncStream.makeStream(of: String.self)
         try watch(choice.provider)
+        guard control.startThread else { return }
         let thread = Thread { [self] in run() }
         thread.name = "DeviceOutput"
         thread.qualityOfService = .userInteractive
@@ -257,10 +264,12 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     public func close() {
         let done = DispatchSemaphore(value: 0)
         guard post(.close(done)) else { return }
+        // Without a thread of its own, the closing pass runs here.
+        if !control.startThread { step() }
         done.wait()
     }
 
-    private enum Command {
+    enum Command {
         case load(OutputItem, startSeconds: Double, playing: Bool)
         case setNext(OutputItem?)
         case play, pause, stop
@@ -285,53 +294,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
     }
 
-    private func run() {
-        while true {
-            condition.lock()
-            if pending.isEmpty {
-                if let interval = tickSeconds {
-                    _ = condition.wait(until: Date(timeIntervalSinceNow: interval))
-                } else {
-                    condition.wait()
-                }
-            }
-            let batch = pending
-            pending = []
-            condition.unlock()
-
-            for (command, generation) in batch {
-                passGeneration = generation
-                if case .close(let done) = command {
-                    unload()
-                    closeDevice()
-                    provider.stopWatching()
-                    returnTo?.provider.stopWatching()
-                    publishPosition()
-                    continuation.finish()
-                    signalContinuation.finish()
-                    returnContinuation.finish()
-                    done.signal()
-                    return
-                }
-                perform(command)
-            }
-            passGeneration = firstSound.generation
-            service()
-            if returnDue {
-                returnDue = false
-                checkReturn()
-            }
-            publishSignal()
-        }
-    }
-
-    private var tickSeconds: Double? {
+    var tickSeconds: Double? {
         guard let stream else { return nil }
         let fillDue = (feeding != nil || stream.hasTailToWrite) && stream.isHalfEmpty
         return controlTickSeconds(running: running, fillDue: fillDue)
     }
 
-    private func perform(_ command: Command) {
+    func perform(_ command: Command) {
         switch command {
         case .load(let item, let startSeconds, let playing):
             loadTrack(item, startSeconds: startSeconds, playing: playing)
@@ -369,7 +338,16 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             if case .connected(let signal) = state { knownFormats = signal.formats }
             signalDirty = true
         case .use(let choice): use(choice, remembering: true)
-        case .close: preconditionFailure("close is handled by the run loop")
+        case .close(let done):
+            unload()
+            closeDevice()
+            provider.stopWatching()
+            returnTo?.provider.stopWatching()
+            publishPosition()
+            continuation.finish()
+            signalContinuation.finish()
+            returnContinuation.finish()
+            done.signal()
         }
     }
 
@@ -635,7 +613,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         // it hasn't played of it, so the new next track follows the audio without a gap.
         if item != nil, let tailStart = stream.tailStart {
             let from = tailDiscardStart(
-                tailStart: tailStart, consumed: HALRenderConsumedBytes(stream.render),
+                tailStart: tailStart, consumed: consumedBytes(stream),
                 pairBytes: UInt64(2 * stream.bytesPerFrame))
             HALRenderDiscard(stream.render, from, stream.produced)
             stream.clearTail()
@@ -702,6 +680,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                     queuedSeconds: queued, wroteSeconds: stream.seconds(ofBytes: UInt64(written)),
                     tookSeconds: uptime() - started))
             if count == 0 { return }
+            control.afterChunk?()
             // The pass publishes the position only once the refill is done, which on a NAS is
             // hundreds of milliseconds after a seek's audio, fading in, has started to play. A
             // gapless boundary the IO proc passed meanwhile goes first, or the position would read
@@ -799,7 +778,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         return ahead
     }
 
-    private func service() {
+    func service() {
         guard let stream else {
             publishPosition()
             return
@@ -807,7 +786,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         if stream.isHalfEmpty { fill(stream) }
         if pausing { finishPause(stream) }
         announceBoundaries(stream)
-        let consumed = HALRenderConsumedBytes(stream.render)
+        let consumed = consumedBytes(stream)
         // The IO proc has taken a sample of what the last load or seek queued; it can't end the
         // interval itself.
         if let target = firstSoundTarget, consumed > target.byte {
@@ -827,7 +806,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     /// Ends the tracks whose last byte the IO proc has taken and starts the ones after them.
     private func announceBoundaries(_ stream: RenderStream) {
-        let consumed = HALRenderConsumedBytes(stream.render)
+        let consumed = consumedBytes(stream)
         while segments.count > 1, consumed >= segments[1].startByte {
             let ended = segments.removeFirst()
             emit(.trackEnded(ended.item.id))
@@ -838,7 +817,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// The IO proc has taken everything. Once the device has had time to play it, end the track
     /// and either switch format for the next one or finish.
     private func drained(_ stream: RenderStream) {
-        let now = uptime()
+        let now = control.now()
         guard let since = drainedAt else {
             drainedAt = now
             return
@@ -846,7 +825,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         guard now - since >= stream.format.latencySeconds else { return }
         drainedAt = nil
         // The old track's last sample has now played: the switch is timed from here.
-        let playedOut = now
+        let playedOut = uptime()
         let last = segments.first?.item
         if let last { emit(.trackEnded(last.id)) }
         guard let track = pendingSwitch else {
@@ -954,7 +933,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// play the fade, which a stop straight away would cut off.
     private func finishPause(_ stream: RenderStream) {
         guard running, HALRenderIsSilent(stream.render) else { return }
-        let now = uptime()
+        let now = control.now()
         guard let since = silentAt else {
             silentAt = now
             return
@@ -1056,7 +1035,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     /// Goes back to the device that went away, now that it's here, unless this output is playing
     /// on the one chosen since.
-    private func checkReturn() {
+    func checkReturn() {
         guard let returnTo, returnTo.provider.isConnected(), !(playing && !segments.isEmpty)
         else { return }
         let uid = returnTo.provider.deviceUID
@@ -1144,11 +1123,16 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     private func positionSeconds() -> Double? {
         guard let stream, let segment = segments.first else { return nil }
-        let consumed = HALRenderConsumedBytes(stream.render)
+        let consumed = consumedBytes(stream)
         let played =
             consumed > segment.startByte
             ? (consumed - segment.startByte) / UInt64(stream.bytesPerFrame) : 0
         return segment.startSeconds + Double(played) / stream.sampleRateHz
+    }
+
+    /// The IO proc's count of bytes taken, or the one a test sets.
+    private func consumedBytes(_ stream: RenderStream) -> UInt64 {
+        control.consumed?() ?? HALRenderConsumedBytes(stream.render)
     }
 
     private func publishPosition() {
@@ -1169,7 +1153,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private func emit(_ event: OutputEvent) { continuation.yield(event) }
 
     /// Runs after every pass of the control thread, and builds a path only when its sources moved.
-    private func publishSignal() {
+    func publishSignal() {
         guard signalDirty, let deviceState else { return }
         signalDirty = false
         condition.withLock { signalBuilds += 1 }
