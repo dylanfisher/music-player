@@ -19,7 +19,9 @@ which mustn't cover a scan's progress.
   gives each rating of a mixed selection the mixed mark. The dispatcher takes an `isMixed` rule
   beside `isOn`, so a menu item can say it. The browser reads the selection's ratings once per
   change of the selection or of the index's change stamp, so validating the submenu's six items
-  reads them once.
+  reads them once. That holds with a Get Info window key too, as for Like and Dislike: its
+  tracks may not be the selection, so the menu's tick can differ from its stars, and the
+  window is rated from its own stars.
 - **⌘⌥⇧0 clears and ⌘⌥⇧1 to ⌘⌥⇧5 rate.** No default had ⌘⌥⇧ with a digit, and macOS's own
   digit shortcuts (⌘⇧3 to ⌘⇧5) don't hold ⌥. AppKit matches the menu item "1" with ⌘⌥⇧
   against the real key event, whose `charactersIgnoringModifiers` is "!" on a US layout.
