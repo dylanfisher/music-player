@@ -63,6 +63,8 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 8. Phases 74 to 76, the owner's feedback of 2026-11-10, are done.
 9. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
+10. Phase 77, asked by the owner on 2026-11-10, waits until the owner starts it.
+11. Phase 78, asked by the owner on 2026-11-10, runs next.
 
 ## Waiting on the owner
 
@@ -689,6 +691,69 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       0140", the number before the renumbering. It can change only together with
       music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
       repos in one step.
+
+### 77. Faster whole-file tag rewrites
+
+Asked by the owner on 2026-11-10, during a Discogs tagger Apply with covers over 15,435 files
+on the NAS. Its undo journal showed 8,104 of the first 14,376 files (56%) rewritten through the
+temp file, since the new cover didn't fit the tag's padding: 169 GB of originals, at about 75
+files a minute over the whole batch, or about 15 MB/s of audio. A rewrite runs inside
+`prepare` (`Core/TagWriter/TagWriter.swift`), one file at a time, and reads the original about
+three times, in `fileHashes`, in `writeTemp`'s copy and in `checkEdited`'s read-back, and
+writes it once. Only a chunk's writes in place run `writesAtOnce` (4) at a time (ADR 0108).
+Don't start until the owner asks.
+
+- [ ] **Several rewrites at once.** Files that go through the temp file are written a few at a
+      time, as a chunk's writes in place are, each touching only its own file and its own temp
+      file. Each file's journal steps keep today's order (the temp file written and read back,
+      then its record and old bytes, then the rename), and journal appends stay one at a time.
+      How many at once scales with the Mac, with the 2015 MacBook Pro as the floor, as
+      `filesReadAtOnce` does (ADR 0074); memory stays bounded, since each copy moves 4 MB at a
+      time. Results stay in the batch's order. A failure that stops the batch, such as a full
+      disk or a journal that can't be written, starts no new file, and the ones in flight finish
+      or are put back as today.
+- [ ] **Hash while copying.** `writeTemp` computes the original's whole-file and payload hashes
+      from the bytes it copies, on the descriptor whose identity it checks, instead of
+      `fileHashes` reading the file in a pass of its own first. The temp file's read-back still
+      has to give the payload's hash, and the record still carries `originalSHA256` for undo.
+      A file changed during the copy is caught as it is today, by the identity checks before
+      the rename.
+- [ ] **Bench.** A `tagBatchBenchmarks` row for an art change too large for the padding, so
+      every file is rewritten: the batch's time before and after, on the slow simulated NAS if
+      `SimulatedNAS` can stand in for writes, else on a local folder with a latency the plan
+      says. A budget row beside it in [Performance budgets](#performance-budgets).
+- [ ] **Tests.** A batch mixing writes in place and rewrites gives each file its result, in
+      order; a crash injected at each step (`WriteFaults`) with several rewrites in flight
+      recovers every file as today; a batch that stops leaves no temp file and no record
+      without its file; the recorded `originalSHA256` equals a separate hash of the original.
+- [ ] **ADR 0196**, amending ADRs 0107 and 0108: the rewrites' concurrency and where the hashes
+      come from.
+- [ ] **Owner check:** the next large art or tag change on the NAS, or one on a scratch copy of
+      a few albums of large FLACs whose tags have no padding: files a minute, compared with this
+      batch's 75.
+
+### 78. Staying awake while playing to a renderer
+
+Asked by the owner on 2026-11-10. Playing to the Denon from the 2015 MacBook Pro on battery
+stops a minute after the display sleeps: its battery profile has `displaysleep 5` and `sleep 1`,
+and `pmset -g log` shows an `Idle Sleep` each time. Playing to a local device keeps the Mac awake
+because CoreAudio holds an assertion while its IO runs, but a renderer pulls the stream from the
+app's HTTP server, so nothing does, and `Sources/` holds no power assertion of its own.
+
+- [ ] **The assertion.** While a renderer is playing, `RendererSession` holds a
+      `PreventUserIdleSystemSleep` assertion (`IOPMAssertionCreateWithName`, macOS 12), named
+      for the app and the renderer, and releases it on pause, stop, a lost renderer and close.
+      The display still sleeps. One assertion per session, never two; a failed create is logged
+      as an error, not swallowed. Lid closed, a user's Sleep and a low battery still sleep the
+      Mac, as for local playback.
+- [ ] **Tests.** Through a stand-in for the assertion calls: play takes it once, pause, stop, a
+      lost renderer and close release it, a resume takes it again, and a session never leaves
+      one held.
+- [ ] **ADR 0197**: why the app holds its own assertion for a renderer and not for a local
+      device, and why system sleep only, not display sleep.
+- [ ] **Owner check:** on the 2015 MacBook Pro on battery, play to the Denon and leave it past
+      the display's sleep; it plays on, and `pmset -g assertions` lists the app's assertion
+      while it plays and not after Pause.
 
 ### 10. Web remote
 
