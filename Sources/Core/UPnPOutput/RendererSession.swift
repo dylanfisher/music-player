@@ -160,7 +160,7 @@ actor RendererSession {
         if shared.wantTicks(current != nil || lost) { startTicker() }
         // The Mac stays awake while the engine says the track plays: a pause, a stop, a lost
         // renderer or the queue's end lets it sleep (ADR 0197).
-        awake.hold(current?.playing == true)
+        awake.hold(current?.playing == true, as: "\(appDisplayName) playing to \(renderer.name)")
     }
 
     /// The path as it stands, for the panel.

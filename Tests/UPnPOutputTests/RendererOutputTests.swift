@@ -1080,6 +1080,33 @@ private final class ShiftedClock: @unchecked Sendable {
     #expect(moved.fetched.map(\.status) == [206], "\(moved.fetched.map(\.status)) \(moved.actions)")
 }
 
+@Test func aRendererFoundAgainUnderANewNameNamesTheSleepAssertionAfterIt() async throws {
+    let first = try await FakeRenderer.denon()
+    let renamed = try await FakeRenderer(
+        description: try captured("denon-description.xml")
+            .replacingOccurrences(of: "Denon AVR-X1800H", with: "Living Room"),
+        scpd: try captured("denon-avtransport-scpd.xml"),
+        protocolInfo: try captured("denon-protocolinfo.xml"))
+    let renamedRenderer = try await discovered(renamed)
+    let sleep = FakeSleepAssertions()
+    let (output, log) = try await output(first, timeout: 2, sleep: sleep) { [renamedRenderer] in
+        [renamedRenderer]
+    }
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the assertion") { sleep.held == 1 }
+    first.vanish()
+    await log.wait(for: ["started 1", "lost 1"], seconds: 10)
+    output.load(item(2), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1", "lost 1", "started 2"])
+    await eventually("the assertion again") { sleep.held == 1 }
+    #expect(
+        sleep.created == [
+            "Music Player playing to Denon AVR-X1800H", "Music Player playing to Living Room",
+        ])
+}
+
 @Test func aFailedNetworkSearchStillListsAndSaysWhy() {
     struct Down: Error, CustomStringConvertible { var description: String { "no interfaces" } }
     #expect(

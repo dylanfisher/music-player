@@ -73,8 +73,7 @@ public final class RendererOutput: Output, @unchecked Sendable {
         self.work = work
         let shared = RendererShared(now: now)
         self.shared = shared
-        let awake = SleepAssertion(
-            name: "\(appDisplayName) playing to \(renderer.name)", calls: sleepAssertions)
+        let awake = SleepAssertion(calls: sleepAssertions)
         self.awake = awake
         let ticker = ticker
         // Runs only while the session wants polls, and ends when it stops wanting them.

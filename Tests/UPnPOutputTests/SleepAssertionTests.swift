@@ -2,18 +2,20 @@ import Testing
 
 @testable import UPnPOutput
 
+private let den = "Music Player playing to Den"
+
 @Test func anAssertionIsTakenOncePerChangeToWantedAndReleasedOnTheChangeBack() {
     let fake = FakeSleepAssertions()
-    let assertion = SleepAssertion(name: "Music Player playing to Den", calls: fake.calls)
-    assertion.hold(false)
+    let assertion = SleepAssertion(calls: fake.calls)
+    assertion.hold(false, as: den)
     #expect(fake.created == [])
-    for _ in 0..<3 { assertion.hold(true) }
-    #expect(fake.created == ["Music Player playing to Den"])
+    for _ in 0..<3 { assertion.hold(true, as: den) }
+    #expect(fake.created == [den])
     #expect(fake.held == 1)
-    assertion.hold(false)
-    assertion.hold(false)
+    assertion.hold(false, as: den)
+    assertion.hold(false, as: den)
     #expect(fake.held == 0)
-    assertion.hold(true)
+    assertion.hold(true, as: den)
     #expect(fake.created.count == 2)
     #expect(fake.most == 1)
     #expect(fake.badReleases == 0)
@@ -22,26 +24,26 @@ import Testing
 @Test func aFailedCreateHoldsNothingAndIsTriedAgainOnlyWhenWantedAgain() {
     let fake = FakeSleepAssertions()
     fake.failCreatesWith = Int32(bitPattern: 0xE000_02C2)
-    let assertion = SleepAssertion(name: "Music Player playing to Den", calls: fake.calls)
-    assertion.hold(true)
-    assertion.hold(true)
+    let assertion = SleepAssertion(calls: fake.calls)
+    assertion.hold(true, as: den)
+    assertion.hold(true, as: den)
     #expect(fake.created.count == 1)
     #expect(fake.held == 0)
     fake.failCreatesWith = nil
-    assertion.hold(false)
+    assertion.hold(false, as: den)
     #expect(fake.badReleases == 0)
-    assertion.hold(true)
+    assertion.hold(true, as: den)
     #expect(fake.created.count == 2)
     #expect(fake.held == 1)
 }
 
 @Test func nothingIsHeldAfterClose() {
     let fake = FakeSleepAssertions()
-    let assertion = SleepAssertion(name: "Music Player playing to Den", calls: fake.calls)
-    assertion.hold(true)
+    let assertion = SleepAssertion(calls: fake.calls)
+    assertion.hold(true, as: den)
     assertion.close()
     #expect(fake.held == 0)
-    assertion.hold(true)
+    assertion.hold(true, as: den)
     assertion.close()
     #expect(fake.held == 0)
     #expect(fake.created.count == 1)
@@ -64,9 +66,9 @@ import Testing
             return fake.calls.create(name)
         },
         release: fake.calls.release)
-    let assertion = SleepAssertion(name: "Music Player playing to Den", calls: calls)
+    let assertion = SleepAssertion(calls: calls)
     box.assertion = assertion
-    assertion.hold(true)
+    assertion.hold(true, as: den)
     #expect(fake.created.count == 1)
     #expect(fake.held == 0)
     #expect(fake.badReleases == 0)
@@ -74,9 +76,8 @@ import Testing
 
 @Test func aHolderDroppedWithoutCloseReleasesWhatItHolds() {
     let fake = FakeSleepAssertions()
-    var assertion: SleepAssertion? = SleepAssertion(
-        name: "Music Player playing to Den", calls: fake.calls)
-    assertion?.hold(true)
+    var assertion: SleepAssertion? = SleepAssertion(calls: fake.calls)
+    assertion?.hold(true, as: den)
     #expect(fake.held == 1)
     assertion = nil
     #expect(fake.held == 0)
