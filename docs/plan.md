@@ -457,6 +457,40 @@ Asked by the owner on 2026-11-10.
       window's layout and selection.
 - [ ] **Owner check:** enter focus mode while playing, play another row from it, and leave.
 
+Plan (ADR 0204):
+
+- **Which tracks:** the current view's, which is clearly right: the phase makes it the track
+  table with "the same rows, sort, selection", and leaving restores the selection, which only
+  reads for the list already on screen. What's playing's source would be another list, and
+  Show Current Track already goes there. The command is off while the timeline shows in the
+  table's place (History, Plays), and a source change to it while focused leaves focus mode.
+- **In place, not a second window.** Focus mode changes the main window and puts it back, so
+  the rows, sort, selection, playing row, double-click and keys are the track table's own, not
+  a copy. Nothing it changes is saved: not the toolbar, sidebar, queue or status bar
+  visibility, the widths, the frame, nor the focus columns.
+- 82.1 `appearance.focusFontSize` in `AppSettings`, an `Int` in points, default 30 (2.5 times
+  the Regular row's 12-point text), range 16 to 96, in the Track Table section of Settings.
+  `TableAppearance` carries it, so a change while focused applies at once through the existing
+  `TableAppearance.keys` path. Row height is 1.5 times the size, rounded, as Regular's 18 for
+  12. Tests: `GeneralModelTests` for the section, `TrackTableControllerTests` for the metrics.
+- 82.2 `TrackTableController.enterFocus()` / `leaveFocus()`: shows Title, Artist and Album in
+  equal widths that resize with the table, at the focus font and row height, keeping the sort
+  and selection; the layout it reports stays the saved one, its header menu is empty and its
+  column moves and resizes aren't reported. Leaving shows the saved columns, font and height.
+  `LibraryBrowser` hides the panel slot and the status bar around it, and leaves when the
+  timeline would show. Tests: columns, row height from the setting, the layout reported
+  unchanged, leaving restoring columns and selection.
+- 82.3 `.focusMode` in `Core/Commands` ("Enter Focus Mode", ⌥⌘F, "Leave Focus Mode" while on),
+  in the View menu after Distraction-Free Mode, and so in the palette. `MainWindow.toggleFocus`
+  hides the toolbar, sidebar, queue and signal path without saving, sets the window's
+  appearance to `darkAqua`, gives the table the keys and enters full screen unless already in
+  it; Escape (the window's own Escape, which otherwise does nothing), the command again, or
+  leaving full screen leaves it, putting all of it back. The other View toggles are off while
+  focused. Tests in `MainWindowTests`: the appearance, the chrome hidden, and leaving restoring
+  the window's layout, selection, first responder and saved state; the full-screen call is
+  injected so no test animates it.
+- 82.4 ADR 0204.
+
 ### 83. Automatic lossless upgrades
 
 Asked by the owner on 2026-11-10. Builds on Upgrades… (`upgradeCandidates`, phase 64) and
