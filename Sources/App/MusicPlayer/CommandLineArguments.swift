@@ -1,3 +1,4 @@
+import CommandLineErrors
 import DisplayText
 import Foundation
 import LibraryBrowser
@@ -66,9 +67,9 @@ private let snapshotChoices = SnapshotTarget.allCases.map(\.rawValue).joined(sep
 
 /// Each flag that takes a value, and what the value is.
 private let valueFlags: [(Flag, String)] = [
-    (.play, "a file or folder"), (.device, "part of a device name"), (.scan, "a folder"),
+    (.play, "a file or folder"), (.device, "part of a device name"), (.scan, FlagMessage.folder),
     (.db, "a database file"), (.readers, "a number of files to read at once"),
-    (.scanIOHints, ioHintsChoices), (.settings, "a config file"), (.home, "a folder"),
+    (.scanIOHints, ioHintsChoices), (.settings, "a config file"), (.home, FlagMessage.folder),
     (.snapshot, "a PNG file to write"), (.snapshotOf, snapshotChoices),
     (.captureRenderers, "a folder to write to"), (.measureScroll, scrollChoices),
     (.artDelayMs, "milliseconds"), (.rescanConfirmed, rescanConfirmedChoices),
@@ -88,16 +89,16 @@ func argumentProblem(_ arguments: [String]) -> String? {
     let given = { (flag: Flag) in arguments.contains(flag.rawValue) }
     let known = Set((valueFlags.map(\.0) + modeFlags + windowFlags).map(\.rawValue))
     if let unknown = arguments.first(where: { $0.hasPrefix("--") && !known.contains($0) }) {
-        return "\(unknown) isn't an option"
+        return FlagMessage.unknown(unknown)
     }
     for (flag, what) in valueFlags where given(flag) && value(after: flag, in: arguments) == nil {
-        return "\(flag.rawValue) needs \(what)"
+        return FlagMessage.missingValue(flag.rawValue, what)
     }
     if let flag = scanOnlyFlags.first(where: given), !given(.scan) {
-        return "\(flag.rawValue) only goes with \(Flag.scan.rawValue)"
+        return FlagMessage.onlyWith(flag.rawValue, Flag.scan.rawValue)
     }
     if given(.snapshotOf), !given(.snapshot) {
-        return "\(Flag.snapshotOf.rawValue) only goes with \(Flag.snapshot.rawValue)"
+        return FlagMessage.onlyWith(Flag.snapshotOf.rawValue, Flag.snapshot.rawValue)
     }
     if let text = value(after: .snapshotOf, in: arguments), SnapshotTarget(rawValue: text) == nil {
         return choiceProblem(.snapshotOf, snapshotChoices, text)
@@ -113,7 +114,7 @@ func argumentProblem(_ arguments: [String]) -> String? {
         return "\(measurements[1].rawValue) can't go with \(measurements[0].rawValue)"
     }
     if given(.artDelayMs), !given(.measureScroll) {
-        return "\(Flag.artDelayMs.rawValue) only goes with \(Flag.measureScroll.rawValue)"
+        return FlagMessage.onlyWith(Flag.artDelayMs.rawValue, Flag.measureScroll.rawValue)
     }
     if let text = value(after: .artDelayMs, in: arguments), artDelaySeconds(text) == nil {
         return "\(Flag.artDelayMs.rawValue) needs a number of milliseconds, not \(text)"

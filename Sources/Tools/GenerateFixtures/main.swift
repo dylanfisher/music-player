@@ -1,3 +1,4 @@
+import CommandLineErrors
 import Fixtures
 import Foundation
 
@@ -10,11 +11,6 @@ func value(after flag: String) -> String? {
         return nil
     }
     return arguments[index + 1]
-}
-
-func fail(_ message: String) -> Never {
-    FileHandle.standardError.write(Data("error: \(message)\n".utf8))
-    exit(1)
 }
 
 var count = fullLibraryFileCount

@@ -1,3 +1,4 @@
+import CommandLineErrors
 import Commands
 import Foundation
 import Settings
@@ -56,9 +57,9 @@ public func parseScriptArguments(
         switch ScriptFlag(rawValue: word) {
         case .home:
             guard index < arguments.count, !arguments[index].hasPrefix("--") else {
-                throw fail("\(word) needs a folder")
+                throw fail(FlagMessage.missingValue(word, FlagMessage.folder))
             }
-            guard home == nil else { throw fail("\(word) is given twice") }
+            guard home == nil else { throw fail(FlagMessage.givenTwice(word)) }
             home = arguments[index]
             index += 1
         case .json:
@@ -67,14 +68,14 @@ public func parseScriptArguments(
             guard index < arguments.count, !arguments[index].hasPrefix("--") else {
                 throw fail("\(word) needs a period: \(StatsPeriod.textHelp)")
             }
-            guard period == nil else { throw fail("\(word) is given twice") }
+            guard period == nil else { throw fail(FlagMessage.givenTwice(word)) }
             guard StatsPeriod(text: arguments[index]) != nil else {
                 throw fail("\(word) takes \(StatsPeriod.textHelp), not \(arguments[index])")
             }
             period = arguments[index]
             index += 1
         case nil:
-            throw fail("\(word) isn't an option")
+            throw fail(FlagMessage.unknown(word))
         }
     }
     guard let name = words.first else {
@@ -119,7 +120,7 @@ public func parseScriptArguments(
         if period != nil {
             guard command.id == .showStats else {
                 throw fail(
-                    "\(ScriptFlag.period.rawValue) only goes with \(names.name(of: .showStats))")
+                    FlagMessage.onlyWith(ScriptFlag.period.rawValue, names.name(of: .showStats)))
             }
             guard rest.isEmpty else { throw fail("\(shown) takes a period once") }
         }
@@ -136,15 +137,16 @@ public func parseScriptArguments(
                 [CommandNames.Builtin.status.rawValue]
                 + names.commands.filter(\.replies).map { names.name(of: $0.id) }
             throw fail(
-                "\(ScriptFlag.json.rawValue) only goes with "
-                    + replying.dropLast().joined(separator: ", ") + " and " + replying.last!)
+                FlagMessage.onlyWith(
+                    ScriptFlag.json.rawValue,
+                    replying.dropLast().joined(separator: ", ") + " and " + replying.last!))
         }
     }
     if action == .help, json || period != nil {
         throw fail(ScriptMessage.takesNoArgument(CommandNames.Builtin.help.rawValue))
     }
     if period != nil, case .request(.status) = action {
-        throw fail("\(ScriptFlag.period.rawValue) only goes with \(names.name(of: .showStats))")
+        throw fail(FlagMessage.onlyWith(ScriptFlag.period.rawValue, names.name(of: .showStats)))
     }
     return ScriptInvocation(action: action, json: json, home: home, replySeconds: replySeconds)
 }

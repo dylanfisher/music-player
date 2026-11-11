@@ -1,3 +1,4 @@
+import CommandLineErrors
 import Foundation
 
 /// What the drill does on one run, from its arguments, with every folder checked as one the
@@ -34,7 +35,9 @@ enum DrillCommand {
 
     init(_ arguments: [String]) throws {
         guard let text = arguments.first else { throw DrillError("needs a command") }
-        guard let name = Name(rawValue: text) else { throw DrillError("\(text) isn't a command") }
+        guard let name = Name(rawValue: text) else {
+            throw DrillError(FlagMessage.notACommand(text))
+        }
         var rest = Array(arguments.dropFirst())
         var operation: DrillOperation?
         if name == .run {
@@ -55,14 +58,14 @@ enum DrillCommand {
                 throw DrillError("\(text) isn't an option of \(name.rawValue)")
             }
             guard rest.count > 1, !rest[1].hasPrefix("--") else {
-                throw DrillError("\(text) needs a folder")
+                throw DrillError(FlagMessage.missingValue(text, FlagMessage.folder))
             }
-            guard values[flag] == nil else { throw DrillError("\(text) is given twice") }
+            guard values[flag] == nil else { throw DrillError(FlagMessage.givenTwice(text)) }
             values[flag] = try drillFolder(rest[1])
             rest.removeFirst(2)
         }
         if let missing = name.flags.first(where: { values[$0] == nil }) {
-            throw DrillError("\(name.rawValue) needs \(missing.rawValue)")
+            throw DrillError(FlagMessage.missingValue(name.rawValue, missing.rawValue))
         }
         let music = values[.scan].map { MusicFolders(scan: $0, tags: values[.tags]!) }
         switch name {

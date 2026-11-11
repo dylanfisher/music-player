@@ -1,3 +1,4 @@
+import CommandLineErrors
 import Foundation
 
 /// The command line's name, as the bundle installs it and help prints it.
@@ -30,6 +31,6 @@ public enum ScriptLimits {
 
 /// What the parser, the link check and the router say alike.
 enum ScriptMessage {
-    static func notACommand(_ name: String) -> String { "\(name) isn't a command" }
+    static func notACommand(_ name: String) -> String { FlagMessage.notACommand(name) }
     static func takesNoArgument(_ name: String) -> String { "\(name) takes no argument" }
 }

@@ -58,6 +58,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "CommandLineErrors",
+            path: "Sources/Primitives/CommandLineErrors",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "StrictKeys",
             path: "Sources/Primitives/StrictKeys",
             swiftSettings: strictSwift
@@ -198,7 +203,9 @@ let package = Package(
         .target(
             name: "Scripting",
             dependencies: [
-                "Commands", "DisplayText", "LocalSocket", "Playback", "Settings", "StrictKeys",
+                "CommandLineErrors", "Commands", "DisplayText", "LocalSocket", "Playback",
+                "Settings",
+                "StrictKeys",
             ],
             path: "Sources/Core/Scripting",
             swiftSettings: strictSwift
@@ -284,7 +291,8 @@ let package = Package(
         .executableTarget(
             name: "MusicPlayer",
             dependencies: [
-                "Analysis", "Artwork", "Commands", "Discogs", "DiscogsTagger", "DisplayText",
+                "Analysis", "Artwork", "CommandLineErrors", "Commands", "Discogs", "DiscogsTagger",
+                "DisplayText",
                 "Downloads", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Recommender",
@@ -311,25 +319,31 @@ let package = Package(
         ),
         .executableTarget(
             name: "GenerateFixtures",
-            dependencies: ["Fixtures"],
+            dependencies: ["CommandLineErrors", "Fixtures"],
             path: "Sources/Tools/GenerateFixtures",
             swiftSettings: strictSwift
         ),
         .executableTarget(
             name: "TagCorpus",
-            dependencies: ["Discogs", "Fixtures", "Library", "Metadata", "Settings", "TagWriter"],
+            dependencies: [
+                "CommandLineErrors", "Discogs", "Fixtures", "Library", "Metadata", "Settings",
+                "TagWriter",
+            ],
             path: "Sources/Tools/TagCorpus",
             swiftSettings: strictSwift
         ),
         .executableTarget(
             name: "DiscogsImport",
-            dependencies: ["Discogs", "Library", "Settings"],
+            dependencies: ["CommandLineErrors", "Discogs", "Library", "Settings"],
             path: "Sources/Tools/DiscogsImport",
             swiftSettings: strictSwift
         ),
         .executableTarget(
             name: "FailureDrill",
-            dependencies: ["Fixtures", "Library", "Log", "SQLite", "Settings", "TagWriter"],
+            dependencies: [
+                "CommandLineErrors", "Fixtures", "Library", "Log", "SQLite", "Settings",
+                "TagWriter",
+            ],
             path: "Sources/Tools/FailureDrill",
             swiftSettings: strictSwift
         ),
@@ -341,7 +355,8 @@ let package = Package(
         .executableTarget(
             name: "Fuzz",
             dependencies: [
-                "Discogs", "Fixtures", "FuzzCoverage", "HALOutput", "Library", "LocalNetwork",
+                "CommandLineErrors", "Discogs", "Fixtures", "FuzzCoverage", "HALOutput", "Library",
+                "LocalNetwork",
                 "Log", "Metadata", "Receiver", "Recommender", "SQLite", "Settings", "TagWriter",
                 "UPnP",
             ],

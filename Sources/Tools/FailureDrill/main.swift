@@ -1,3 +1,4 @@
+import CommandLineErrors
 import Foundation
 
 // Drives the Core APIs the way the app does, for scripts/kill-test and scripts/full-disk
@@ -17,11 +18,6 @@ import Foundation
 // fills the disk image at <mount> under the database, the state file, the config file and the
 // tag journal in turn, and checks each failure is reported and nothing else changed.
 let arguments = Array(CommandLine.arguments.dropFirst())
-
-func fail(_ message: String) -> Never {
-    FileHandle.standardError.write(Data("error: \(message)\n".utf8))
-    exit(1)
-}
 
 do {
     let command = try DrillCommand(arguments)

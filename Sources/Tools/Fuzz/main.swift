@@ -1,3 +1,4 @@
+import CommandLineErrors
 import Foundation
 
 // A coverage-guided fuzzer for the parsers and the tag writer (ADR 0027). scripts/fuzz builds it
@@ -8,9 +9,9 @@ import Foundation
 // `run` supervises workers (`Fuzz worker`, which it starts itself) and saves each crash,
 // minimised, under <folder>/crashes. It exits 1 if it found any.
 
+/// Exits 2, apart from the 1 that `run` exits with when it found a crash.
 func fail(_ message: String) -> Never {
-    printError("error: " + message)
-    exit(2)
+    CommandLineErrors.fail(message, exitCode: 2)
 }
 
 /// The value after `flag`, which must be there and not be another flag.
@@ -47,7 +48,7 @@ let until = value(FuzzFlag.until, in: &arguments).map { text in
     guard let seconds = Double(text) else { fail("--until needs a time, not \(text)") }
     return Date(timeIntervalSince1970: seconds)
 }
-if let flag = arguments.first(where: { $0.hasPrefix("--") }) { fail("\(flag) isn't an option") }
+if let flag = arguments.first(where: { $0.hasPrefix("--") }) { fail(FlagMessage.unknown(flag)) }
 
 do {
     switch mode {

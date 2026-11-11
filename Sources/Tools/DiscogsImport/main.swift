@@ -1,3 +1,4 @@
+import CommandLineErrors
 import Discogs
 import Foundation
 import Library
@@ -20,11 +21,6 @@ import Settings
 let reportSeconds = 10.0
 // A line at a time, as its output goes to a log file while it runs.
 setvbuf(stdout, nil, _IOLBF, 0)
-
-func fail(_ message: String) -> Never {
-    FileHandle.standardError.write(Data("error: \(message)\n".utf8))
-    exit(1)
-}
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 

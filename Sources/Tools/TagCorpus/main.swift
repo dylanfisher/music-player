@@ -1,3 +1,4 @@
+import CommandLineErrors
 import Foundation
 import Settings
 
@@ -17,11 +18,6 @@ import Settings
 // matches the survey's albums that carry a release id, with the ids hidden, against the catalog
 // (Application Support's discogs.sqlite by default), and writes .build/discogs-tuning/report.txt (ADR 0131).
 let arguments = Array(CommandLine.arguments.dropFirst())
-
-func fail(_ message: String) -> Never {
-    FileHandle.standardError.write(Data("error: \(message)\n".utf8))
-    exit(1)
-}
 
 do {
     if let problem = argumentProblem(arguments) { fail(problem) }

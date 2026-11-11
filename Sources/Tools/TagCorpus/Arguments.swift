@@ -1,3 +1,5 @@
+import CommandLineErrors
+
 let roundTripFlag = "--round-trip"
 let fullDiskFlag = "--full-disk"
 let pathsFlag = "--paths"
@@ -15,7 +17,7 @@ func argumentProblem(_ arguments: [String]) -> String? {
                 catalogFlag,
             ].contains($0)
     }) {
-        return "\(unknown) isn't an option"
+        return FlagMessage.unknown(unknown)
     }
     if let index = arguments.firstIndex(of: discogsTuningFlag) {
         guard index == 0 else { return "\(discogsTuningFlag) goes first" }
@@ -25,7 +27,7 @@ func argumentProblem(_ arguments: [String]) -> String? {
         return nil
     }
     if arguments.contains(catalogFlag) {
-        return "\(catalogFlag) only goes with \(discogsTuningFlag)"
+        return FlagMessage.onlyWith(catalogFlag, discogsTuningFlag)
     }
     if let index = arguments.firstIndex(of: discogsSurveyFlag) {
         guard index == 0 else { return "\(discogsSurveyFlag) goes first" }
@@ -33,7 +35,7 @@ func argumentProblem(_ arguments: [String]) -> String? {
     }
     if let index = arguments.firstIndex(of: fullDiskFlag) {
         guard arguments.first == roundTripFlag else {
-            return "\(fullDiskFlag) only goes with \(roundTripFlag)"
+            return FlagMessage.onlyWith(fullDiskFlag, roundTripFlag)
         }
         guard index + 1 < arguments.count, !arguments[index + 1].hasPrefix("--") else {
             return "\(fullDiskFlag) needs a mount point"
