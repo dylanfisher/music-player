@@ -1110,6 +1110,41 @@ private final class Heard: @unchecked Sendable {
             == .exact)
 }
 
+/// Among releases none of which fits the tracklist, those ranked as high as the best, by the
+/// tie's margin, are tied; one ranked lower isn't.
+@Test func releasesThatDontFitTieOnlyWhenRankedTheSame() throws {
+    let titles = ["Östermalm", "Gamla Stan", "Something Else Entirely"]
+    let lengthOff = [
+        track("1", "Östermalm", "2:00"), track("2", "Gamla Stan", "6:10"),
+        track("3", "Kungsholmen", "5:00"),
+    ]
+    let lower = try match(
+        album(titles),
+        releases: release(10, tracks: stockholm) + release(11, catno: "A 1", tracks: lengthOff))
+    #expect(lower.releaseID == 10)
+    #expect(!lower.reasons.contains(.tiedAfterTieBreak))
+    let same = try match(
+        album(titles),
+        releases: release(10, tracks: stockholm) + release(11, catno: "A 1", tracks: stockholm))
+    #expect(same.releaseID == 10)
+    #expect(same.reasons.contains(.tiedAfterTieBreak))
+}
+
+/// Both asks the API about a Matched album only when the catalog lacks the release its tracks
+/// carry.
+@Test func aMatchedAlbumWhoseReleaseIsInTheCatalogNeedsNoAPI() throws {
+    let matched = try match(
+        album(stockholmTitles, releaseIDs: ["10", "10", "10"]),
+        releases: release(10, tracks: stockholm))
+    #expect(matched.tier == .matched)
+    #expect(!needsAPI(matched, choosing: nil))
+    let missing = try match(
+        album(stockholmTitles, releaseIDs: ["99", "99", "99"]),
+        releases: release(10, tracks: stockholm))
+    #expect(missing.tier == .matched)
+    #expect(needsAPI(missing, choosing: nil))
+}
+
 /// The other candidates are listed best first, and those that score the same in the order found.
 @Test func otherCandidatesAreBestFirstAndEqualOnesInTheOrderFound() throws {
     let one = [
