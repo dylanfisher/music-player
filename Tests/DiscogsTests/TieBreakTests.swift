@@ -175,6 +175,19 @@ private func pick(_ album: DiscogsAlbum, _ releases: [CatalogRelease]) -> (id: I
         samePressing(
             release(1, numbers: ["SK 032"], released: "1999"),
             release(2, numbers: ["sk-032"], released: "2004")))
+    // Another number, or none, is another pressing unless the month says otherwise.
+    #expect(
+        !samePressing(
+            release(1, numbers: ["SK 032"], released: "1999"),
+            release(2, numbers: ["SK 033"], released: "2004")))
+    #expect(
+        !samePressing(
+            release(1, numbers: ["SK 032"], released: "1999"), release(2, released: "2004"))
+    )
+    #expect(
+        !samePressing(
+            release(1, released: "1999"), release(2, numbers: ["SK 032"], released: "2004"))
+    )
 }
 
 @Test func datesFitAsFarAsBothSay() {
