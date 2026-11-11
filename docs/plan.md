@@ -65,6 +65,9 @@ Set by the owner on 2026-11-06. Earlier run orders are in the archive.
    they're stored first (AGENTS.md).
 10. Phase 77, asked by the owner on 2026-11-10, waits until the owner starts it.
 11. Phase 78, asked by the owner on 2026-11-10, runs next.
+12. Phases 79 to 83, the owner's feedback of 2026-11-10 (second list), run after 78: 79, 81 and
+    82 in parallel, each on its own branch and worktree, then 80, which builds on 79, then 83,
+    after its music-recommender change lands.
 
 ## Waiting on the owner
 
@@ -191,6 +194,13 @@ that phase's Result line, and delete its line here.
 
 ### Answers
 
+- **83 Automatic lossless upgrades** (2026-11-10): the candidates are Upgrades…'s; the priority
+  is plays times quality gap, with a boost for a loved or highly rated album; FLAC only, 24-bit
+  and 16/44.1 both fine, no lossy-to-better-lossy; 3 in flight, no daily cap; a miss is retried
+  after 1, 7 and 30 days, then set aside with a Not Found list to queue again from; it runs
+  only while the app is open; approving follows Approve Safe Matches Automatically, and a
+  download that isn't clean is rejected and searched again from another peer; albums can be
+  marked Never Upgrade.
 - **38.11 Tag-write error** ([phase](plan-archive.md#38b-table-navigation-and-palette-adr-0088)):
   the error text.
 - **39** ([phase](plan-archive.md#39-owner-feedback-2026-11-03-evening)): whether selected rows
@@ -754,6 +764,140 @@ app's HTTP server, so nothing does, and `Sources/` holds no power assertion of i
 - [ ] **Owner check:** on the 2015 MacBook Pro on battery, play to the Denon and leave it past
       the display's sleep; it plays on, and `pmset -g assertions` lists the app's assertion
       while it plays and not after Pause.
+
+### 79. Rating: the menu's mark, Get Info's stars, shortcuts and a message
+
+Asked by the owner on 2026-11-10. The Rating submenu (`AppMenus`, `CommandID.rate`) shows no
+rating as chosen, Get Info shows none, and its commands have no default chords.
+
+- [ ] **The menu's mark.** The Rating submenu, in the menu bar and the track table's context
+      menu, ticks the item for the rating of the tracks the commands act on; Clear Rating for
+      none. Tracks rated differently show the mixed mark on each rating they have.
+- [ ] **Get Info's stars.** The Info tab shows five empty stars at the right end of the title's
+      row, the pattern of the track table's Rating column (`TrackColumnText.stars`,
+      `RatingClick`). Hovering fills them up to the star under the pointer; a click sets that
+      rating, and a click on the current rating clears it, as in the table. It sets the rating at
+      once, as the table does, not on Save, since a rating is the index's, not the file's: no tag
+      is written. For several tracks rated differently it shows the mixed state until clicked.
+- [ ] **Shortcuts.** ⌘⌥⇧1 to ⌘⌥⇧5 rate one to five stars and ⌘⌥⇧0 clears, as default chords of
+      `CommandID.rate`, shown in the menus and changeable as other chords are. Check they clash
+      with no default chord first.
+- [ ] **The message.** Rating by a shortcut or the menu shows "Rated “Title” ★★★★" (or "Rated 3
+      tracks ★★★★", or "Cleared the rating of “Title”") at the status bar's bottom left, and it
+      fades after about 3 seconds; another rating replaces it. It doesn't cover the scan's
+      progress; the plan says where it goes while a scan runs.
+- [ ] **Tests.** The submenu's marks for one track, several alike and several mixed; the
+      default chords; Get Info's click and hover mapping, through `RatingClick`; the message's
+      text and that a second one replaces the first.
+- [ ] **Owner check:** rate the playing track with ⌘⌥⇧4, see the message, the menu's tick and
+      Get Info's four stars; set it to two from Get Info.
+
+### 80. The rating in the status bar and the toolbar
+
+Asked by the owner on 2026-11-10, with phase 79, which it follows.
+
+- [ ] **A Rating part.** `StatusPart` and `HeaderPart` gain `rating`: the playing track's stars
+      in the status bar's layout editor (phase 76) and the toolbar's Now Playing and Custom
+      Status builders. Empty stars for an unrated track, nothing while nothing plays. It updates
+      when the rating changes from anywhere, a sync from another Mac included. Clickable to
+      rate, as Get Info's stars are, if the plan finds it fits the bar's hit areas; else shown
+      only, and the plan says which.
+- [ ] **Tests.** Each layout decodes and encodes the part; its text for 0 to 5 stars; it changes
+      on a rating set while playing.
+- [ ] **Owner check:** add Rating to the status bar and to Custom Status 1, and rate the
+      playing track with a shortcut: both follow.
+
+### 81. Downloads: approving unasked without a dialog, and no offer for one track
+
+Asked by the owner on 2026-11-10. With Approve Safe Matches Automatically on, an upgrade
+approved unasked still stops on a dialog saying its old files will be deleted, which defeats
+approving unasked. The likely source: `moveToTrash` (`LibraryBrowser/MoveToTrash.swift`) calls
+`NSWorkspace.recycle`, and on a share with no Trash, such as the NAS, the Finder asks before
+deleting at once. The plan confirms where the dialog comes from before changing anything.
+
+- [ ] **No second question.** On a volume with no Trash, the old files an approved import
+      replaces are deleted by the import itself, one by one, with no dialog, as AGENTS.md
+      already allows; on a volume with a Trash they still go to it. This holds for the sheet's
+      Approve too, whose sheet already says the old files are deleted permanently
+      (`ApproveSheet`), so the owner isn't asked twice. Remove… keeps the Finder's dialog, since
+      nothing before it says the files are deleted for good. A file that can't be deleted is a
+      failure the job reports, as today.
+- [ ] **No offer for one track.** Opening Downloads with a single track selected doesn't offer
+      From Library Selection for its album (`offerSelection`, `queueFromSelection(asked:
+      false)`); two or more tracks still do. Library Selection… from the window's menu still
+      queues one track's album when asked.
+- [ ] **Tests.** Through the `trash` stand-in in `Downloads.Setup`: an unasked upgrade on a
+      volume with no Trash deletes its old files and raises no alert; one with a Trash moves
+      them there; a failed delete is reported. Opening with one track selected offers nothing,
+      with two it offers their albums.
+- [ ] **ADR 0199**, amending ADR 0147: how an approved import removes the files it replaces on
+      a share with no Trash.
+- [ ] **Owner check:** with Approve Safe Matches Automatically on, an upgrade of an album on the
+      NAS lands with no dialog, and its old files are gone.
+
+### 82. Focus mode
+
+Asked by the owner on 2026-11-10.
+
+- [ ] **The view.** A command, Enter Focus Mode, in the View menu and the palette, shows the
+      track table full screen with only Title, Artist and Album, in a much larger font and
+      always dark (`NSAppearance.darkAqua`, whatever the app's appearance). Otherwise it is the
+      track table: the same rows, sort, selection, playing row, double-click to play and
+      keyboard. No sidebar, browser, toolbar or status bar. Escape or the command again leaves
+      it, back to the window as it was.
+- [ ] **Its font size** is a setting, `appearance.focusFontSize`, with a default the plan picks
+      (about 2.5 times the table's), and row heights follow it.
+- [ ] **Which tracks.** The plan says whether it shows the current playlist or view, or what's
+      playing's source, and asks the owner if neither is clearly right.
+- [ ] **Tests.** Its columns, appearance and row height from the setting; leaving restores the
+      window's layout and selection.
+- [ ] **Owner check:** enter focus mode while playing, play another row from it, and leave.
+
+### 83. Automatic lossless upgrades
+
+Asked by the owner on 2026-11-10; the owner's answers are under [Answers](#answers). Builds on
+Upgrades… (`upgradeCandidates`, phase 64) and Approve Safe Matches Automatically (ADRs 0193 and
+0195). While it's on and the app is open, it keeps a few FLAC upgrades in flight on
+music-recommender, most-played and lowest quality first, and lands the clean ones.
+
+- [ ] **The setting.** Upgrade to FLAC Automatically, a checkbox in the Downloads window beside
+      Approve Safe Matches Automatically, and `downloads.autoUpgradesInFlight` (default 3). It
+      runs only while the app is open and can tag (staging on the library's share, as Upgrades…
+      needs), and stops queuing the moment it's turned off; jobs already queued carry on.
+- [ ] **Candidates.** The rule of `upgradeCandidates`: lossy albums whose every track carries one
+      Discogs release id. Not an album marked Never Upgrade, one set aside as not found, or one
+      with a job already on the service from either Mac, so two Macs never queue the same
+      release; the service's job list is the source of truth for that.
+- [ ] **Priority.** One score, written once in Core: the album's plays (summed over its tracks)
+      times its quality gap, lower bit rates scoring higher (128 kbps well above 320), with a
+      boost for a loved album or one rated 4 stars or more. The plan gives the formula and a
+      table of worked examples in the ADR.
+- [ ] **In flight.** At most N of its own jobs at once, counted from the service's jobs with
+      source `upgrade` that it queued (the plan says how they're told apart from Upgrades…'s).
+      When one lands, is rejected or set aside, the next candidate is queued. Format policy
+      `flac` only; 24-bit and 16/44.1 are both accepted.
+- [ ] **Not found.** A job the service finds nothing for is retried after 1 day, then 7, then
+      30; after the third miss the album is set aside. A Not Found list, from the Downloads
+      window, shows those albums with their misses, and Queue Again clears the count.
+- [ ] **Not clean.** Approving follows Approve Safe Matches Automatically as today. A job of its
+      own that lands left for review because it isn't clean (the tagger's verdict or the
+      plan's lossy-origin check, not a failure of the share or the service) is rejected, its
+      staged folder deleted by the service, and searched again from a different peer. That needs
+      the service to skip peers a job already tried: a change in music-recommender, planned
+      there first (a job's tried peers kept and left out of `rank`), then used here. A release
+      with no clean copy from any peer counts as a miss.
+- [ ] **Never Upgrade.** A mark per album, from the track table's context menu and the Upgrades
+      sheet, kept in the index by release id. The plan says whether it goes in the sync log, as
+      ratings do; it should, so both Macs honor it.
+- [ ] **Tests.** The score's order for the worked examples; candidates leave out marked, set
+      aside and already-queued albums; never more than N in flight; the 1, 7, 30 day backoff
+      and setting aside; an unclean job is rejected and searched again excluding its peer;
+      turning it off queues nothing more. Through the stand-in transport, never the real
+      service.
+- [ ] **ADR 0200**, amending ADRs 0193 and 0195: what the app queues unasked, its priority, the
+      in-flight limit, and rejecting an unclean download unasked.
+- [ ] **Owner check:** turn it on with a handful of candidates; three jobs queue, the
+      most-played lowest-quality first, clean ones land, and a fourth queues as one finishes.
 
 ### 10. Web remote
 
