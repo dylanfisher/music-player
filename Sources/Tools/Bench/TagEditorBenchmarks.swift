@@ -216,7 +216,8 @@ private let nasBytesPerSecond = 57.0 * 1024 * 1024
 
 /// A title saved to every track of an album of hi-res FLACs at once, as Save does on a
 /// selection: in place, as when the title fits the padding, and through the temp file, as when
-/// it doesn't; on this Mac's disk and on the slow simulated NAS.
+/// it doesn't; on this Mac's disk and on the slow simulated NAS. Then a cover too large for the
+/// padding, as a Discogs Apply with covers saves, rewriting every file on the slow simulated NAS.
 let tagBatchBenchmarks = [
     Benchmark(
         name: "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, in place",
@@ -245,12 +246,33 @@ let tagBatchBenchmarks = [
     ) {
         try batchWrite(inPlace: false, nas: true)
     },
+    Benchmark(
+        name:
+            "tag write: \(batchFileCount) 40 MB FLACs' covers, too large for their padding, in one batch, slow simulated NAS",
+        budget: Budget(appleSilicon: 100, oldMac: 120, unit: .seconds)
+    ) {
+        try batchWrite(
+            TagEdit(art: .replace(oversizedCover(), mimeType: pngMIMEType)), inPlace: true,
+            nas: true)
+    },
 ]
 
-/// One batch write of a title to `batchFileCount` copies of a fixture FLAC grown to
+/// A cover of about the size of a 3000 px scan, too large for the room a fixture FLAC's tags
+/// have, so each file it's saved to is rewritten through its temp file. Only its signature is
+/// a PNG's; the writer doesn't decode it.
+private func oversizedCover() -> Data {
+    var bytes: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    var generator = SystemRandomNumberGenerator()
+    bytes += (0..<2 * 1024 * 1024).map { _ in UInt8.random(in: 0...255, using: &generator) }
+    return Data(bytes)
+}
+
+/// One batch write of `edit`, a title unless given, to `batchFileCount` copies of a fixture FLAC grown to
 /// `batchFileBytes` with audio bytes, in seconds. On the NAS every file system call the writer
 /// makes on a music file is priced as `SimulatedLink` says; the journal stays on this Mac.
-private func batchWrite(inPlace: Bool, nas: Bool) throws -> Measured {
+private func batchWrite(
+    _ edit: TagEdit = TagEdit(values: [.title: "Batch"]), inPlace: Bool, nas: Bool
+) throws -> Measured {
     let directory = try emptyCacheDirectory("bench-tag-batch")
     let album = directory.appendingPathComponent("batch", isDirectory: true)
     try FileManager.default.createDirectory(at: album, withIntermediateDirectories: true)
@@ -272,10 +294,10 @@ private func batchWrite(inPlace: Bool, nas: Bool) throws -> Measured {
     if nas { writer.faults.fileCall = { link.price($0) } }
     var report: TagWriteReport?
     let elapsed = seconds {
-        report = writer.write(TagEdit(values: [.title: "Batch"]), to: paths)
+        report = writer.write(edit, to: paths)
     }
     guard let report, report.changed == paths else {
-        throw BenchError.expected("every title written: \(report?.failures ?? [])")
+        throw BenchError.expected("every file written: \(report?.failures ?? [])")
     }
     try FileManager.default.removeItem(at: directory)
     let perFile = String(format: "%.2f s a file", elapsed / Double(paths.count))
