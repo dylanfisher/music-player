@@ -176,6 +176,44 @@ private let newAlbumReports = ["approved", "importing", "imported"]
     #expect(try setup.reports() == newAlbumReports)
 }
 
+/// On a share with no Trash the import deletes the old files itself, one by one, asking
+/// nothing, as the app wires it (ADR 0199).
+@Test func anUpgradeOnAShareWithNoTrashDeletesTheOldFiles() async throws {
+    let setup = try ImportFolders()
+    let asked = Rescans()
+    let noTrash = setup.run(trash: { urls in
+        await trashOrDelete(urls) { url in
+            asked.add([url.lastPathComponent])
+            throw CocoaError(.featureUnsupported)
+        }
+    })
+    let outcome = await noTrash.run(try setup.job(upgrade: true))
+    #expect(outcome == .imported(setup.folders.destinations))
+    try setup.expectUpgraded()
+    #expect(asked.all == ImportFolders.oldNames.map { [$0] }, "each offered to the Trash first")
+}
+
+/// On a volume with a Trash the old files go to it.
+@Test func anUpgradeOnAVolumeWithATrashMovesTheOldFilesThere() async throws {
+    let setup = try ImportFolders()
+    let trashFolder = FileManager.default.temporaryDirectory.appendingPathComponent(
+        UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: trashFolder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: trashFolder) }
+    let toTrash = setup.run(trash: { urls in
+        await trashOrDelete(urls) { url in
+            try FileManager.default.moveItem(
+                at: url, to: trashFolder.appendingPathComponent(url.lastPathComponent))
+        }
+    })
+    let outcome = await toTrash.run(try setup.job(upgrade: true))
+    #expect(outcome == .imported(setup.folders.destinations))
+    try setup.expectUpgraded()
+    #expect(
+        try FileManager.default.contentsOfDirectory(atPath: trashFolder.path).sorted()
+            == ImportFolders.oldNames)
+}
+
 /// An album found by its artist and title carries another release id, or none: its files
 /// are held to the one each carried when the owner approved (ADR 0169).
 @Test(arguments: ["12", nil])

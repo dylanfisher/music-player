@@ -101,7 +101,7 @@ extension AppDelegate {
             catalog: paths.discogsCatalogFile(settings[\.discogsCatalogPath]),
             mapping: settings[\.discogsMapping], share: staging?.share,
             places: { try await importPlaces(staging: staging, libraryFolder: libraryFolder) },
-            trash: { urls in await moveToTrash(urls).failure },
+            trash: { urls in await trashOrDelete(urls) },
             carry: { [weak self] lines in
                 guard let watcher = await self?.watcher else {
                     throw DownloadsSetupProblem("the library isn't watched, so no stats moved")

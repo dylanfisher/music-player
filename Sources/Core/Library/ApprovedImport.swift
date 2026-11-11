@@ -85,8 +85,8 @@ package enum ImportOutcome: Equatable, Sendable {
 package struct ImportRun {
     let index: LibraryIndex
     let move: LibraryFolderMove
-    /// `moveToTrash`, giving its failure: the files it was given that are still there count
-    /// as refused, whatever it says.
+    /// `trashOrDelete`, giving its failure: the files it was given that are still there count
+    /// as not removed, whatever it says.
     let trash: @Sendable ([URL]) async -> String?
     /// `LibraryWatcher.importMoves(lines:)`.
     let carry: @Sendable ([(from: String, to: String)]) async throws -> MoveListImport
@@ -311,9 +311,9 @@ package struct ImportRun {
         return OldFiles(steps: steps, asides: asides, held: held)
     }
 
-    /// Gives the old files still there to the Trash, a set-aside one from its hidden name. A
-    /// file counts as gone when it's no longer at its path (ADR 0125), which on a share with
-    /// no Trash is a permanent delete. Each one not set aside must still be a track in the index
+    /// Gives the old files still there to `trash`, a set-aside one from its hidden name, which
+    /// moves each to its volume's Trash or, on a share with no Trash, deletes it (ADR 0199). A
+    /// file counts as gone when it's no longer at its path (ADR 0125). Each one not set aside must still be a track in the index
     /// carrying the release id it's held to; a set-aside one was checked before it was. Nil
     /// when they're all gone.
     private func delete(_ old: OldFiles, _ job: ApprovedImport) async -> String? {
@@ -332,7 +332,7 @@ package struct ImportRun {
         let failure = await trash(left.map { URL(fileURLWithPath: $0, isDirectory: false) })
         let refused = left.filter(pathExists)
         guard refused.isEmpty else {
-            return "the Trash refused " + refused.joined(separator: ", ")
+            return "these weren't removed: " + refused.joined(separator: ", ")
                 + (failure.map { ": \($0)" } ?? "")
         }
         return nil

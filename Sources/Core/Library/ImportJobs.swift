@@ -5,10 +5,10 @@ struct ImportStep: Equatable, Sendable {
         /// A staged file's rename into the library folder, recorded for every file of the album
         /// before the first is renamed.
         case moved
-        /// An upgrade's old file given to `moveToTrash`.
+        /// An upgrade's old file given to `trashOrDelete`.
         case trashed
         /// An upgrade's old file at the path its new file takes, renamed beside itself under a
-        /// hidden name first, which scans skip, and given to `moveToTrash` from there.
+        /// hidden name first, which scans skip, and given to `trashOrDelete` from there.
         case setAside
         /// An upgrade's old file's stats carried to its new one.
         case carried

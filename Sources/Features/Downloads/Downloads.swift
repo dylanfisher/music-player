@@ -34,7 +34,7 @@ package final class Downloads {
         package var share: String?
         /// Finds the staging and library folders where they are now.
         package var places: @Sendable () async throws -> ImportPlaces
-        /// `moveToTrash`, giving its failure.
+        /// `trashOrDelete`, giving its failure: how the old files an upgrade replaces go.
         package var trash: @Sendable ([URL]) async -> String?
         /// `LibraryWatcher.importMoves(lines:)`.
         package var carry: @Sendable ([(from: String, to: String)]) async throws -> MoveListImport
