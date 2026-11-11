@@ -935,6 +935,13 @@ private extension Array where Element == Machine {
     try b.scanned("x.flac")
     try syncAll([a, b])
     #expect(try b.track("x.flac")?.rating == 1)
+    // Cleared later, it's cleared there too.
+    a.nowMs += 60_000
+    try a.index.setRating(0, trackIDs: [try #require(try a.track("x.flac")).id])
+    try syncAll([a, b])
+    #expect(try b.track("x.flac")?.rating == 0)
+    #expect(
+        try b.index.database.prepare("SELECT count(*) FROM ratings").map { try $0.int(0) } == [0])
 }
 
 /// A move onto a path this Mac has stats for keeps the later rating and opinion, which here
