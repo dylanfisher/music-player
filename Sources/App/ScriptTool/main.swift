@@ -86,7 +86,9 @@ func launchAndWait() async -> ScriptReply {
         if let reply = exchange(timeoutSeconds: left + readingSeconds, starting: true) {
             return reply
         }
+        // The sleep throws only when the task is cancelled, which the check after it reports.
         try? await Task.sleep(nanoseconds: UInt64(retrySeconds * 1e9))
+        if Task.isCancelled { fail("stopped waiting for the app to start") }
     }
     fail("the app didn't answer at \(socket) within \(Int(launchWaitSeconds)) s of starting")
 }
