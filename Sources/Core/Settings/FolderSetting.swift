@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// A folder setting stored as a path, or on a network share as the share's URL and the path
 /// inside it, found wherever the share is mounted, as a watched folder is (ADR 0028). Its JSON
 /// is `{"path": …, "share": …}`, with `share` left out for a folder stored by path.

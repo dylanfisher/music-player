@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// Where one Discogs field is written, and how (ADR 0132).
 public struct DiscogsFieldRule: Codable, Equatable, Sendable {
     public enum Mode: String, Codable, Sendable {

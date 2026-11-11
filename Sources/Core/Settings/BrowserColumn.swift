@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// One column of the browser: what it groups by, and the entry selected in it by name, since
 /// IDs change when the index is rebuilt. A nil selection is All.
 public struct BrowserColumn: SettingValue {

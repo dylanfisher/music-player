@@ -1,5 +1,6 @@
 import Foundation
 import Settings
+import StrictKeys
 
 /// How every reply is decoded: strictly, each object with exactly its own keys. A field that
 /// may be null is still there; a missing one, an unknown one or a wrong type fails the reply.

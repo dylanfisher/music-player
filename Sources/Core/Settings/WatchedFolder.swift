@@ -1,4 +1,5 @@
 import Foundation
+import StrictKeys
 
 /// A folder the library scans, and how it learns about changes in it.
 public struct WatchedFolder: SettingValue {

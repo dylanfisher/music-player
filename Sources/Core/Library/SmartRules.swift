@@ -1,6 +1,7 @@
 import Foundation
 import SQLite
 import Settings
+import StrictKeys
 
 /// A smart playlist's rules: which tracks it holds, as the rule editor sets them. Stored as JSON
 /// in `playlists.rules` and compiled to SQL each time the playlist is listed, so it follows the

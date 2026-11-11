@@ -1,4 +1,5 @@
 import Metadata
+import StrictKeys
 import TagWriter
 
 /// A mapping with a name: a preset the app has, or one the user saved.

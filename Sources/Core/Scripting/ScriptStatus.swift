@@ -2,6 +2,7 @@ import DisplayText
 import Foundation
 import Playback
 import Settings
+import StrictKeys
 
 /// What `music-player status` reports. Its JSON, from `status --json`, is a stable shape for
 /// scripts: every key is always there, `null` when it has no value, and keys are only ever

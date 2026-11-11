@@ -1,4 +1,5 @@
 import Metadata
+import StrictKeys
 import TagWriter
 
 /// A tag a Discogs field is written to: a field the tag editor knows, the same in every format,

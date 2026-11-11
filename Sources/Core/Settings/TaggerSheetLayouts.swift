@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// How the user left each of the Discogs tagger's sheets (ADR 0136): its size and its table's
 /// columns and sort, by kind of sheet; and the window's album list, its pane's width and its
 /// columns and sort (ADR 0176). Nil for one never changed, which opens at its own.

@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// The play timeline's columns: Played, always first, with its width, and the track columns
 /// after it, left to right, with theirs.
 public struct TimelineLayout: SettingValue {

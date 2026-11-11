@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// One column of a `BarLayout`: its parts, left to right or top to bottom when it stacks, how
 /// wide it is and where its parts sit in it.
 public struct BarColumn<Part: Codable & Hashable & Sendable>: Codable, Equatable, Sendable {

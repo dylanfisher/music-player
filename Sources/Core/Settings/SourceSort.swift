@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// The sort chosen in a source that opens in a sort of its own, such as a manual playlist or
 /// History, kept with that source: the table's own sort is the track table layout's.
 public struct SourceSort: SettingValue {

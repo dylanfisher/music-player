@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// How often and how recently each palette item was chosen or played, by its key, for ranking
 /// by frecency. Sorted by key, each key once, at most `capacity` of them.
 public struct VisitLog: SettingValue {

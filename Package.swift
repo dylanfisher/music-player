@@ -58,6 +58,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "StrictKeys",
+            path: "Sources/Primitives/StrictKeys",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SQLite",
             path: "Sources/Primitives/SQLite",
             swiftSettings: strictSwift,
@@ -79,6 +84,7 @@ let package = Package(
             name: "HALOutput",
             dependencies: [
                 "DisplayText", "HALRender", "Log", "Metadata", "Playback", "RingBuffer",
+                "StrictKeys",
             ],
             path: "Sources/Core/HALOutput",
             swiftSettings: strictSwift
@@ -98,7 +104,7 @@ let package = Package(
         .target(
             name: "Library",
             dependencies: [
-                "DisplayText", "Log", "Metadata", "Recommender", "Settings", "SQLite",
+                "DisplayText", "Log", "Metadata", "Recommender", "Settings", "SQLite", "StrictKeys",
             ],
             path: "Sources/Core/Library",
             swiftSettings: strictSwift
@@ -135,13 +141,16 @@ let package = Package(
         ),
         .target(
             name: "Recommender",
-            dependencies: ["DisplayText", "LocalNetwork", "Settings"],
+            dependencies: ["DisplayText", "LocalNetwork", "Settings", "StrictKeys"],
             path: "Sources/Core/Recommender",
             swiftSettings: strictSwift
         ),
         .target(
             name: "Settings",
-            dependencies: ["KeyChord", "LocalNetwork", "Log", "Metadata", "Playback", "TagWriter"],
+            dependencies: [
+                "KeyChord", "LocalNetwork", "Log", "Metadata", "Playback", "StrictKeys",
+                "TagWriter",
+            ],
             path: "Sources/Core/Settings",
             swiftSettings: strictSwift
         ),
@@ -188,7 +197,9 @@ let package = Package(
         ),
         .target(
             name: "Scripting",
-            dependencies: ["Commands", "DisplayText", "LocalSocket", "Playback", "Settings"],
+            dependencies: [
+                "Commands", "DisplayText", "LocalSocket", "Playback", "Settings", "StrictKeys",
+            ],
             path: "Sources/Core/Scripting",
             swiftSettings: strictSwift
         ),
@@ -196,7 +207,7 @@ let package = Package(
             name: "LibraryBrowser",
             dependencies: [
                 "Analysis", "Artwork", "BarView", "Commands", "DisplayText", "KeyChord", "Library",
-                "Log", "Metadata", "Playback", "Settings", "WindowPlacement",
+                "Log", "Metadata", "Playback", "Settings", "StrictKeys", "WindowPlacement",
             ],
             path: "Sources/Features/LibraryBrowser",
             swiftSettings: strictSwift
@@ -582,6 +593,11 @@ let package = Package(
         .testTarget(
             name: "SnapshotTests",
             dependencies: ["Fixtures", "Library", "Settings", "Snapshot", "SQLite"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "StrictKeysTests",
+            dependencies: ["StrictKeys"],
             swiftSettings: strictSwift
         ),
         .testTarget(

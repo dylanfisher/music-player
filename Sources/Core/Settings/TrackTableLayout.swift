@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// The track table's visible columns, left to right, with their widths, and its sort.
 public struct TrackTableLayout: SettingValue {
     public static let widthRange = 20.0...2000.0

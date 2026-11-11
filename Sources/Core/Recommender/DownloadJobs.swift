@@ -1,4 +1,4 @@
-import Settings
+import StrictKeys
 
 /// The player's copy of the service's jobs, and where its paging through `downloads/list` got
 /// to. A job that changed comes whole and replaces its row; nothing is sent as a difference.

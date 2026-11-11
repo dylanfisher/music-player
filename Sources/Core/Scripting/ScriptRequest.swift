@@ -1,5 +1,6 @@
 import Commands
 import Settings
+import StrictKeys
 
 /// What the tool asks the app, as JSON on the socket.
 public enum ScriptRequest: Equatable, Sendable {

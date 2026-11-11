@@ -1,4 +1,5 @@
 import Metadata
+import StrictKeys
 
 /// How a Discogs field's value is turned into text (ADR 0132). Every part is optional in JSON;
 /// one left out takes the first case named below.

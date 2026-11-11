@@ -1,5 +1,6 @@
 import Foundation
 import Log
+import StrictKeys
 
 private let logger = moduleLogger()
 

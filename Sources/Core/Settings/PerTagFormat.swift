@@ -1,4 +1,5 @@
 import Metadata
+import StrictKeys
 
 /// A value that can differ between tag formats, as YATE spells some keys one way in FLAC and
 /// another in MP4 and ID3 (ADR 0128). In JSON it is the value, when every format has the same

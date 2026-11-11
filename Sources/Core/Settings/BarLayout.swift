@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// A bar's parts in columns, like a row of flexbox items: columns on the leading side, one in
 /// the center that the bar centers on the window, and columns on the trailing side (ADR 0085).
 /// Generic over the parts, so each bar the builder edits has its own; the settings window holds

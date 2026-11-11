@@ -1,5 +1,6 @@
 import Log
 import Playback
+import StrictKeys
 
 private let logger = moduleLogger()
 

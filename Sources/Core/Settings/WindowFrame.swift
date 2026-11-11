@@ -1,4 +1,5 @@
 import CoreGraphics
+import StrictKeys
 
 /// Where a window sits on screen, in AppKit screen coordinates (origin bottom left).
 public struct WindowFrame: SettingValue {

@@ -1,4 +1,5 @@
 import Settings
+import StrictKeys
 
 /// The app's answer to a `ScriptRequest`.
 public enum ScriptReply: Equatable, Sendable {
@@ -48,7 +49,7 @@ extension ScriptReply: Codable {
     }
 }
 
-/// Throws when `container` has a key its kind doesn't take, as `rejectUnknownKeys` does for
+/// Throws when `container` has a key its kind doesn't take, as `strictContainer` does for
 /// keys no kind takes.
 func onlyKeys<Key: CodingKey & Hashable>(
     _ container: KeyedDecodingContainer<Key>, _ allowed: Set<Key>

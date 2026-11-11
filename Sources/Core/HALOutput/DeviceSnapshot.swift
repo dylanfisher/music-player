@@ -1,5 +1,6 @@
 import CoreAudio
 import Foundation
+import StrictKeys
 
 /// How a device and the system's default outputs were before playback changed them, by UID, since
 /// a device's object ID changes when it is plugged back in.
@@ -27,8 +28,7 @@ struct DeviceSnapshot: Codable, Equatable {
     }
 
     init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(in: decoder, known: CodingKeys.allCases)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         deviceUID = try container.decode(String.self, forKey: .deviceUID)
         sampleRateHz = try container.decode(Double.self, forKey: .sampleRateHz)
         physicalFormat = try container.decode(StoredFormat.self, forKey: .physicalFormat)
@@ -97,8 +97,7 @@ struct StoredFormat: Codable, Equatable {
     }
 
     init(from decoder: any Decoder) throws {
-        try rejectUnknownKeys(in: decoder, known: CodingKeys.allCases)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         sampleRate = try container.decode(Double.self, forKey: .sampleRate)
         formatID = try container.decode(UInt32.self, forKey: .formatID)
         formatFlags = try container.decode(UInt32.self, forKey: .formatFlags)
@@ -116,22 +115,4 @@ struct StoredFormat: Codable, Equatable {
             mBytesPerFrame: bytesPerFrame, mChannelsPerFrame: channelsPerFrame,
             mBitsPerChannel: bitsPerChannel, mReserved: 0)
     }
-}
-
-/// Fails on a key outside `known`, so a record from another build is discarded instead of half
-/// read.
-private func rejectUnknownKeys<Key: CodingKey>(in decoder: any Decoder, known: [Key]) throws {
-    let names = Set(known.map(\.stringValue))
-    let raw = try decoder.container(keyedBy: AnyKey.self)
-    if let key = raw.allKeys.map(\.stringValue).sorted().first(where: { !names.contains($0) }) {
-        throw DecodingError.dataCorruptedError(
-            forKey: AnyKey(stringValue: key)!, in: raw, debugDescription: "unknown key")
-    }
-}
-
-private struct AnyKey: CodingKey {
-    let stringValue: String
-    let intValue: Int? = nil
-    init?(stringValue: String) { self.stringValue = stringValue }
-    init?(intValue: Int) { nil }
 }

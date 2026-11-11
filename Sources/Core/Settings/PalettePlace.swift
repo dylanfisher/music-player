@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// Where the palette was dragged, kept relative to a screen: the share of the room the panel
 /// leaves across and down the visible area, each from 0 to 1, so it always lands wholly on
 /// whichever screen opens it next.

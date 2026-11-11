@@ -1,7 +1,6 @@
 import Foundation
+import StrictKeys
 import Testing
-
-@testable import Settings
 
 private struct Pair: Decodable, Equatable {
     var left: Int

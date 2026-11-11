@@ -1,5 +1,6 @@
 import Foundation
 import Settings
+import StrictKeys
 
 /// What the track table scrolls through for `MusicPlayer --measure-scroll` (ADR 0073).
 public enum ScrollCase: String, CaseIterable, Sendable {

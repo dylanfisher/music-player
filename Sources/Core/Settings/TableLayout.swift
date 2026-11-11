@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// How the user left a table's columns: their widths in points and their order, by column
 /// name, and the column it sorts by. A column the table no longer has is ignored when it opens,
 /// and one not listed keeps its own width and place after those that are.

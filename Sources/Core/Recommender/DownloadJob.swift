@@ -1,4 +1,4 @@
-import Settings
+import StrictKeys
 
 /// A download job as the service reports it, whole, as it is now. Times are seconds since 1970.
 package struct DownloadJob: Equatable, Sendable, Decodable {
