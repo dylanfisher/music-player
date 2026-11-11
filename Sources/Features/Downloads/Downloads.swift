@@ -934,11 +934,7 @@ package final class Downloads {
         let setup = session.setup
         switch addition {
         case .upgrades:
-            guard let share = setup.share else {
-                return alert(
-                    "Upgrades need the staging folder on the library's share",
-                    ["An upgrade's old files are kept by their path on the share."])
-            }
+            guard let share = upgradeShare(setup) else { return }
             Task {
                 let found = await blockingFileWork {
                     Result { () throws -> ([UpgradeCandidate], Set<Int>) in
@@ -971,11 +967,7 @@ package final class Downloads {
                 }
             }
         case .notFound:
-            guard let share = setup.share else {
-                return alert(
-                    "Upgrades need the staging folder on the library's share",
-                    ["An upgrade's old files are kept by their path on the share."])
-            }
+            guard let share = upgradeShare(setup) else { return }
             Task {
                 let found = await blockingFileWork {
                     Result { () throws -> [QueueChoice] in
@@ -1052,6 +1044,18 @@ package final class Downloads {
                 note: "The albums of the selected tracks, each downloaded as its release.",
                 choices, upgrade: false, tickingAll: true)
         }
+    }
+
+    /// The library's share, which an upgrade's old files are kept by; nil, with an alert, when
+    /// the staging folder isn't on it.
+    private func upgradeShare(_ setup: Setup) -> String? {
+        guard let share = setup.share else {
+            alert(
+                "Upgrades need the staging folder on the library's share",
+                ["An upgrade's old files are kept by their path on the share."])
+            return nil
+        }
+        return share
     }
 
     /// Not Found's button.
