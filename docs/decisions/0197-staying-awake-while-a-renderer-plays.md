@@ -23,10 +23,12 @@ app's HTTP server instead, so no IO runs, and the app held no assertion of its o
   it at once, without waiting on the session, and no later hold takes one.
 - **A renderer that never starts a track fails it.** Before a renderer has said it plays a
   track, the app's clock doesn't run, so a renderer that stays `TRANSITIONING`, or in a state
-  the app doesn't know, would keep `playing` true, and the Mac awake, for good. After
-  `notStartingTransitionPolls` such polls in a row (30, half a minute) the session sends Stop
-  and reports the track as never started, as it does for one that stops without playing. Once
-  a track has started, the clock runs and its deadline ends any wait.
+  the app doesn't know, would keep `playing` true, and the Mac awake, for good. Once such polls
+  in a row have run `notStartingSeconds` (two minutes) by the clock, not by their count, the
+  session sends Stop and reports the track as never started, as it does for one that stops
+  without playing. Two minutes is generous, so a renderer buffering a slow share or a hi-res
+  file isn't cut off; a poll that finds it stopped, a failed poll or a Pause starts the wait
+  again. Once a track has started, the clock runs and its deadline ends any wait.
 - **One assertion, taken on a change.** `SleepAssertion` creates one only when the want turns
   true and releases it when it turns false, so a poll each second can't take a second one. A
   failed create is logged as an error with its IOReturn and tried again only at the next change,

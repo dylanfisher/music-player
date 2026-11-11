@@ -448,6 +448,11 @@ failed track and a lost renderer, since each of those either clears `playing` or
   again, Stop, a lost renderer, a played-out track and close release it, a load paused takes
   none, and no test ever sees two held. The other tests pass the stand-in too, so no test takes
   a real assertion.
+  A renderer that stays transitioning, or in a state the app doesn't know, for two minutes
+  after Play, before it has started the track, fails it as never started and the session sends
+  Stop, so it can't keep the Mac awake for good (ADR 0197); the wait is timed by the clock, and
+  a stopped or failed poll or a Pause starts it again. Test: a fake renderer that never leaves
+  transitioning, its clock moved on, fails the track and releases the assertion.
 - 78.3 ADR 0197: CoreAudio holds an assertion while a local device's IO runs and nothing does
   for a renderer that pulls over HTTP; `PreventUserIdleSystemSleep`, not
   `PreventUserIdleDisplaySleep`, because the display has nothing to show and on battery should

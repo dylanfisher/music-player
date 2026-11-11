@@ -1088,12 +1088,20 @@ private final class ShiftedClock: @unchecked Sendable {
     let fake = try await FakeRenderer.denon()
     fake.staysTransitioning()
     let sleep = FakeSleepAssertions()
-    let (output, log) = try await output(fake, sleep: sleep)
+    let clock = ShiftedClock()
+    let output = try RendererOutput(
+        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
+        timeoutSeconds: 1, sleepAssertions: sleep.calls, now: clock.now)
+    let log = EventLog(output)
     defer { output.close() }
     output.load(item(1), startSeconds: 0, playing: true)
     await log.wait(for: ["started 1"])
     await eventually("the assertion") { sleep.held == 1 }
-    await log.wait(for: ["started 1", "trackFailed 1", "finished 1"], seconds: 20)
+    // More polls than a count of 30 would allow, though the clock has barely moved.
+    await eventually("the renderer seen transitioning") { fake.transportPolls > 30 }
+    #expect(log.error(1) == nil, "a renderer still starting isn't failed")
+    clock.advance(by: RendererSession.notStartingSeconds)
+    await log.wait(for: ["started 1", "trackFailed 1", "finished 1"])
     #expect(log.error(1)?.contains("never started playing") == true)
     #expect(fake.commands.last == "Stop")
     await eventually("the release") { sleep.held == 0 }
