@@ -680,5 +680,8 @@ private final class HeldList: @unchecked Sendable {
     #expect(changes == 1, "the same reason again")
     downloads.forgetLeftForReview()
     #expect(changes == 2)
+    downloads.took(job(1, .approved))
+    #expect(changes == 3, "a job a call answered with")
+    #expect(downloads.rows.first?.state == "Approved")
     #expect(downloads.rows.first?.stateDetail != left)
 }

@@ -414,7 +414,9 @@ private final class Reads: @unchecked Sendable {
 @MainActor
 @Test func aJobItCouldntCancelHoldsOneSlot() async throws {
     let fake = FakeService()
-    let library = Library([candidate(1, plays: 9), candidate(2, plays: 5), candidate(3)])
+    let library = Library([
+        candidate(1, plays: 9), candidate(2, plays: 5), candidate(3, plays: 1), candidate(4),
+    ])
     let (downloads, session) = try await upgrading(fake, library, inFlight: 2)
     downloads.autoUpgrade = true
     await eventually("two queued") { fake.created.count == 2 }
@@ -428,6 +430,28 @@ private final class Reads: @unchecked Sendable {
     await eventually("the third queued") { fake.created.count == 3 }
     #expect(fake.created.last?.release == 3)
     await settled(downloads)
+    #expect(fake.created.count == 3, "the job still held holds one slot")
+    downloads.stop()
+}
+
+private struct NoSnapshot: Error {}
+
+/// A release with no snapshot isn't asked about again this session; the next is queued.
+@MainActor
+@Test func aReleaseThatCantBeQueuedIsSkippedForTheSession() async throws {
+    let fake = FakeService()
+    let (downloads, _) = try await upgrading(
+        fake, Library([candidate(1, plays: 9), candidate(2)]), inFlight: 1)
+    let snapshot = downloads.releaseSnapshot
+    downloads.releaseSnapshot = { release, catalog in
+        guard release != 1 else { throw NoSnapshot() }
+        return try await snapshot(release, catalog)
+    }
+    downloads.autoUpgrade = true
+    await eventually("the next queued") { fake.created.count == 1 }
+    #expect(fake.created.last?.release == 2)
+    await settled(downloads)
+    #expect(downloads.unqueueable == [1])
     downloads.stop()
 }
 
