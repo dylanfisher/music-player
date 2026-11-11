@@ -85,29 +85,33 @@ if [ ! -e "$clear" ] || [ scripts/clear-windows.m -nt "$clear" ]; then
   clang -dynamiclib -fobjc-arc -framework AppKit -o "$clear" scripts/clear-windows.m
 fi
 
-# run_tests <bin> <log> <comma-separated test targets> — runs each target's bundle, as
-# scripts/test does, under a time limit of 4 minutes that stock macOS can set, and prints
+# run_tests <bin> <log> <seconds> <comma-separated test targets> — runs each target's bundle,
+# as scripts/test does, each under a time limit of that many seconds, and prints
 # `passed`, `failed` (a run printed a failing summary), `crashed` (a run started and never
 # printed one), `timed out`, or `didn't run` (no run started: the tests never ran, so a
 # failure says nothing about the mutant).
 run_tests() {
-  local bin=$1 log=$2 target status executable runlog started failing outcome=passed
+  local bin=$1 log=$2 limit=$3 target status executable runlog started failing outcome=passed
   runlog="$log.run"
-  for target in ${3//,/ }; do
+  for target in ${4//,/ }; do
     executable=$bin/$target.xctest/Contents/MacOS/$target
     status=0
-    # Perl runs the bundle in a child and kills it at the time limit: the test helper doesn't
-    # die of an alarm of its own. It sets the DYLD_ variables itself, since /usr/bin/perl is
-    # protected by SIP, which drops them from its environment.
-    NO_COLOR=1 perl -e '
+    # Perl runs the bundle in a child and kills it at the time limit, polling rather than
+    # waiting on an alarm, which neither the test helper nor a perl blocked in waitpid is sure
+    # to act on. It sets the DYLD_ variables itself, since /usr/bin/perl is protected by SIP,
+    # which drops them from its environment.
+    NO_COLOR=1 perl -MPOSIX=:sys_wait_h -e '
       @ENV{qw(DYLD_INSERT_LIBRARIES DYLD_FRAMEWORK_PATH DYLD_LIBRARY_PATH)} = splice @ARGV, 0, 3;
+      my $limit = shift;
       my $pid = fork // die "fork: $!";
       if (!$pid) { exec @ARGV or die "exec: $!" }
-      $SIG{ALRM} = sub { kill "KILL", $pid; waitpid $pid, 0; exit 142 };
-      alarm 240;
-      waitpid $pid, 0;
+      my $end = time + $limit;
+      while (waitpid($pid, WNOHANG) == 0) {
+        if (time >= $end) { kill "KILL", $pid; waitpid $pid, 0; exit 142 }
+        select undef, undef, undef, 0.2;
+      }
       exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' -- \
-      "$clear" "$platform/Library/Frameworks" "$platform/usr/lib" \
+      "$clear" "$platform/Library/Frameworks" "$platform/usr/lib" "$limit" \
       "$helper" --test-bundle-path "$executable" "$executable" --testing-library swift-testing \
       > "$runlog" 2>&1 || status=$?
     cat "$runlog" >> "$log"
@@ -129,7 +133,7 @@ stop="$out/stop"
 rm -f "$stop"
 run_job() {
   local job=$1 tree="$out/tree-$1" build="$out/build-$1" results="$out/results-$1.tsv"
-  local log="$out/job-$1.log" bin product tests
+  local log="$out/job-$1.log" bin product tests limit
   : > "$results"
   : > "$log"
   local flags=(--scratch-path "$build")
@@ -141,7 +145,18 @@ run_job() {
     }
   done
   bin=$(cd "$tree" && swift build "${flags[@]}" --show-bin-path)
-  tests=$(run_tests "$bin" "$log" "$(tr '\n' , <<< "$targets")")
+  # Each target's unmutated run sets the time limit of its mutants' runs: three times as
+  # long, and at least 4 minutes, since a loaded machine runs the tests several times slower
+  # than an idle one.
+  local seconds="$out/seconds-$job" start
+  : > "$seconds"
+  tests=passed
+  for product in $targets; do
+    start=$SECONDS
+    tests=$(run_tests "$bin" "$log" 1800 "$product")
+    [ "$tests" = passed ] || break
+    echo "$product $((SECONDS - start))" >> "$seconds"
+  done
   if [ "$tests" != passed ]; then
     echo "error: job $job's unmutated tests $tests, so no mutant can be scored; see $log" >&2
     touch "$stop"
@@ -159,7 +174,9 @@ run_job() {
     if [ "$built" -eq 0 ]; then
       outcome=uncompilable
     else
-      tests=$(run_tests "$bin" "$log" "$target")
+      limit=$(awk -v targets=",$target," 'index(targets, "," $1 ",") { sum += 3 * $2 }
+        END { print (sum > 240 ? sum : 240) }' "$seconds")
+      tests=$(run_tests "$bin" "$log" "$limit" "$target")
       case "$tests" in
         passed) outcome=survived ;;
         failed|crashed|"timed out") outcome=killed ;;
