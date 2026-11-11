@@ -247,7 +247,7 @@ private final class Failures: @unchecked Sendable {
 }
 
 /// A name that would climb out of the snapshot folder, or name a file in another, is no
-/// snapshot's, so a restore never reads it or a copy beside it (ADR 0025, row 74).
+/// snapshot's, so a restore never reads it or a copy beside it (ADR 0025, row 75).
 @Test func aSnapshotNameHasNoPathInIt() {
     #expect(SnapshotName(fileName: "library-2026-11-01.sqlite.gz") != nil)
     for name in [

@@ -54,7 +54,7 @@ extension LibraryIndex {
 
     /// Writes `libraryProfile()` to `url` as JSON, in place of any file there, and returns how
     /// many albums it holds. A link, or a file the index holds, at `url` is refused, so a slip
-    /// in the save panel can't replace a music file or a file a link names (ADR 0025, row 75).
+    /// in the save panel can't replace a music file or a file a link names (ADR 0025, row 76).
     package func writeLibraryProfile(to url: URL) throws -> Int {
         var info = stat()
         if lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFLNK {

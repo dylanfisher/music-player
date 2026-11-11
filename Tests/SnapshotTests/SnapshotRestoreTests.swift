@@ -261,7 +261,7 @@ private struct Refused: Error {}
     #expect(try counts(library.index()).plays == before.plays + 1)
 }
 
-// What a restore reads and where it writes (ADR 0025, row 74).
+// What a restore reads and where it writes (ADR 0025, row 75).
 
 /// Yesterday's snapshot of a fresh library, with its state and config copies.
 private func yesterdaysSnapshot() throws -> (SnapshotTestLibrary, URL) {

@@ -15,7 +15,7 @@ private let logger = moduleLogger()
 /// nothing replaced. The current index's snapshot has a name of its own, so it never replaces
 /// the day's, which may be the one chosen. The snapshot must be in a folder on a local volume,
 /// as the snapshot folder must, and it and its copies regular files with one name each; it
-/// may unpack to 4 GiB at most (ADR 0025, row 74).
+/// may unpack to 4 GiB at most (ADR 0025, row 75).
 public func prepareRestore(
     of snapshot: URL, paths: AppPaths, snapshotFolder: URL, now: Date
 ) throws {

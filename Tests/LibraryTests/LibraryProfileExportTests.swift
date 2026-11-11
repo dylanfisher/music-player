@@ -90,7 +90,7 @@ import Testing
     #expect(try Data(contentsOf: url) == index.libraryProfile().json())
 }
 
-// What the export holds and where it may write (ADR 0198; ADR 0025, row 75).
+// What the export holds and where it may write (ADR 0198; ADR 0025, row 76).
 
 @Test func eachAlbumHoldsADR0198sNineKeysAndNoPathOrRating() throws {
     let index = try craftedIndex([
