@@ -429,3 +429,19 @@ private func waitUntil(_ condition: () -> Bool) async throws {
         #expect(browser.timeline.table.intercellSpacing.height == 0)
     }
 }
+
+/// Focus Mode is the track table's, so the timeline taking its place ends it, and says so.
+@MainActor @Test func theTimelineShowingLeavesFocusMode() async throws {
+    let (browser, index, rows) = try timelineBrowser()
+    try index.recordPlay(rows[0].path, at: 1)
+    await browser.load(BrowserState(source: nil))
+    var left = 0
+    browser.focusLeft = { left += 1 }
+    browser.enterFocus()
+    #expect(browser.isFocused)
+    browser.show(.timeline)
+    try await waitUntil { browser.showsTimeline && browser.timelineModel.isLoaded }
+    try await waitUntil { !browser.isFocused }
+    #expect(left == 1)
+    #expect(!browser.canFocus)
+}
