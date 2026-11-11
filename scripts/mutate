@@ -2,17 +2,20 @@
 # Mutation testing of the core state machines (ADR 0027). Not part of ./scripts/check.
 #   ./scripts/mutate [--jobs <n>] [<part of a file path>]
 # Lists the mutants of each entry in scripts/mutate-files.txt with scripts/mutate.swift, then
-# runs them in git worktrees of HEAD under .build/mutate, one per job: each mutant is applied,
-# its entry's test target is built and run, and the file is checked out again. A mutant the
-# tests fail on is killed; one they pass survives; one that doesn't build isn't counted. The
-# main checkout is never written. Results are in .build/mutate/results.tsv, and each file's
-# score and survivors are printed. The worktrees are removed on exit; their builds are kept in
-# .build/mutate/build-<n>, so a second run builds less.
+# runs them in git worktrees of HEAD under .build/mutate, one per job (3 by default, and no more
+# than there are mutants): each job builds the entries' test targets and runs them unmutated,
+# then for each mutant applies it, builds its entry's test targets, runs their bundles and
+# checks the file out again. A mutant the tests fail on, crash on or time out on is killed; one
+# they pass survives; one that doesn't build isn't counted. The run refuses to score, and stops,
+# when the unmutated tests fail or a mutant's tests never start, since then a failure says
+# nothing about the mutant. The main checkout is never written. Results are in
+# .build/mutate/results.tsv, and each file's score and survivors are printed. The worktrees are
+# removed on exit; their builds are kept in .build/mutate/build-<n>, so a second run builds less.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 repo=$(pwd)
 
-jobs=4
+jobs=3
 only=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -43,7 +46,7 @@ cleanup() {
     kill "$pid" 2> /dev/null || true
   done
   pkill -f "swift-(build|test|frontend).*$out/build-" 2> /dev/null || true
-  pkill -f "swiftpm-testing-helper.*--scratch-path $out/build-" 2> /dev/null || true
+  pkill -f "swiftpm-testing-helper.*$out/build-" 2> /dev/null || true
   for pid in "${pids[@]+"${pids[@]}"}"; do wait "$pid" 2> /dev/null || true; done
   for tree in "${worktrees[@]+"${worktrees[@]}"}"; do
     git -C "$repo" worktree remove --force "$tree" 2> /dev/null || rm -rf "$tree"
@@ -69,34 +72,98 @@ grep -v '^#' scripts/mutate-files.txt | grep -v '^ *$' | while read -r file line
 done >> "$plan"
 total=$(wc -l < "$plan" | tr -d ' ')
 [ "$total" -gt 0 ] || { echo "error: no mutants${only:+ in files matching $only}" >&2; exit 1; }
+[ "$jobs" -le "$total" ] || jobs=$total
 echo "$total mutants in $jobs jobs" >&2
 
+# The test targets of every entry run, once each.
+targets=$(cut -f5 "$plan" | tr ',' '\n' | sort -u)
+helper=$(dirname "$(xcrun --find swift)")/../libexec/swift/pm/swiftpm-testing-helper
+[ -x "$helper" ] || { echo "error: no Swift Testing helper at $helper" >&2; exit 1; }
+platform=$(xcrun --show-sdk-platform-path)/Developer
+clear="$repo/.build/clear-windows.dylib"
+if [ ! -e "$clear" ] || [ scripts/clear-windows.m -nt "$clear" ]; then
+  clang -dynamiclib -fobjc-arc -framework AppKit -o "$clear" scripts/clear-windows.m
+fi
+
+# run_tests <bin> <log> <comma-separated test targets> — runs each target's bundle, as
+# scripts/test does, under a time limit stock macOS has (an alarm outlives exec), and prints
+# `passed`, `failed` (a run printed a failing summary), `crashed` (a run started and never
+# printed one), `timed out`, or `didn't run` (no run started: the tests never ran, so a
+# failure says nothing about the mutant).
+run_tests() {
+  local bin=$1 log=$2 target status executable runlog started failing outcome=passed
+  runlog="$log.run"
+  for target in ${3//,/ }; do
+    executable=$bin/$target.xctest/Contents/MacOS/$target
+    status=0
+    # Perl sets the DYLD_ variables itself: /usr/bin/perl is protected by SIP, which drops them
+    # from its environment.
+    NO_COLOR=1 perl -e '
+      @ENV{qw(DYLD_INSERT_LIBRARIES DYLD_FRAMEWORK_PATH DYLD_LIBRARY_PATH)} = splice @ARGV, 0, 3;
+      alarm 240;
+      exec @ARGV or die "exec: $!"' -- \
+      "$clear" "$platform/Library/Frameworks" "$platform/usr/lib" "$helper" --test-bundle-path "$executable" "$executable" --testing-library swift-testing \
+      > "$runlog" 2>&1 || status=$?
+    cat "$runlog" >> "$log"
+    [ "$status" -ne 0 ] || continue
+    started=$(grep -c '^◇ Test run started\.$' "$runlog" || true)
+    failing=$(grep -c '^✘ Test run with ' "$runlog" || true)
+    if [ "$status" -eq 142 ]; then outcome="timed out"
+    elif [ "$started" -eq 0 ]; then outcome="didn't run"
+    elif [ "$failing" -gt 0 ]; then outcome=failed
+    else outcome=crashed
+    fi
+    break
+  done
+  rm -f "$runlog"
+  echo "$outcome"
+}
+
+stop="$out/stop"
+rm -f "$stop"
 run_job() {
   local job=$1 tree="$out/tree-$1" build="$out/build-$1" results="$out/results-$1.tsv"
+  local log="$out/job-$1.log" bin product tests
   : > "$results"
+  : > "$log"
   local flags=(--scratch-path "$build")
-  (cd "$tree" && swift build --build-tests "${flags[@]}" > "$out/job-$job.log" 2>&1) || {
-    echo "error: job $job's unmutated build failed; see $out/job-$job.log" >&2
+  for product in $targets; do
+    (cd "$tree" && swift build "${flags[@]}" --product "$product" >> "$log" 2>&1) || {
+      echo "error: job $job's unmutated build failed; see $log" >&2
+      touch "$stop"
+      return 1
+    }
+  done
+  bin=$(cd "$tree" && swift build "${flags[@]}" --show-bin-path)
+  tests=$(run_tests "$bin" "$log" "$(tr '\n' , <<< "$targets")")
+  if [ "$tests" != passed ]; then
+    echo "error: job $job's unmutated tests $tests, so no mutant can be scored; see $log" >&2
+    touch "$stop"
     return 1
-  }
+  fi
   awk -v jobs="$jobs" -v job="$job" 'NR % jobs == job' "$plan" | while IFS=$'\t' read -r file id line summary target; do
+    [ ! -e "$stop" ] || return 1
     local outcome
     (cd "$tree" && "$tool" apply "$file" "$id")
-    local built=1 product
+    local built=1
     for product in ${target//,/ }; do
-      (cd "$tree" && swift build "${flags[@]}" --product "$product" >> "$out/job-$job.log" 2>&1) \
+      (cd "$tree" && swift build "${flags[@]}" --product "$product" >> "$log" 2>&1) \
         || { built=0; break; }
     done
     if [ "$built" -eq 0 ]; then
       outcome=uncompilable
-    elif (cd "$tree" && /usr/bin/timeout -k 5 180 swift test "${flags[@]}" --skip-build \
-      --filter "^(${target//,/|})\." >> "$out/job-$job.log" 2>&1); then
-      outcome=survived
     else
-      outcome=killed
+      tests=$(run_tests "$bin" "$log" "$target")
+      case "$tests" in
+        passed) outcome=survived ;;
+        failed|crashed|"timed out") outcome=killed ;;
+        *)
+          echo "error: $file mutant $id (line $line): the tests $tests; see $log" >&2
+          touch "$stop"
+          git -C "$tree" checkout -q -- "$file"
+          return 1 ;;
+      esac
     fi
-    # The time limit ends swift test, not the test helper it started for a mutant that hangs.
-    pkill -f "swiftpm-testing-helper.*--scratch-path $build " || true
     git -C "$tree" checkout -q -- "$file"
     printf '%s\t%s\t%s\t%s\t%s\n' "$file" "$id" "$line" "$summary" "$outcome" >> "$results"
   done
