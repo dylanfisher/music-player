@@ -2292,7 +2292,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     // MARK: Focus Mode
 
     /// Whether Focus Mode shows the track table alone, in its larger text (ADR 0204).
-    public private(set) var isFocused = false
+    public var isFocused: Bool { table.isFocused }
     /// Whether the status bar showed as Focus Mode began, while it's on.
     private var statusBarShownBeforeFocus = false
     /// Called after the browser left Focus Mode itself, as when the timeline took the track
@@ -2306,18 +2306,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// status bar below, in Focus Mode's columns and text, and gives it the keys.
     public func enterFocus() {
         guard !isFocused, canFocus else { return }
-        isFocused = true
         statusBarShownBeforeFocus = isStatusBarVisible
         if isStatusBarVisible { toggleStatusBar() }
-        fillPanelSlot()
         table.enterFocus()
+        fillPanelSlot()
         focusTracks()
     }
 
     /// Puts back what Focus Mode hid, and the track table's columns and text.
     public func leaveFocus() {
         guard isFocused else { return }
-        isFocused = false
         table.leaveFocus()
         fillPanelSlot()
         if statusBarShownBeforeFocus != isStatusBarVisible { toggleStatusBar() }
