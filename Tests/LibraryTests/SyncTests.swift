@@ -912,6 +912,22 @@ private extension Array where Element == Machine {
     #expect(counts == [[0, 1]], "a skip adds no play")
 }
 
+/// A move onto a path this Mac only skipped adds the skip and no play.
+@Test func aMoveOntoAPathOnlySkippedAddsNoPlay() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let old = try a.scanned("x.flac", title: "Song")
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
+    try a.index.remove([old])
+    try a.scanned("renamed.flac", title: "Song")
+    #expect(try a.index.matchMoves().count == 1)
+    try b.scanned("renamed.flac", title: "Song")
+    try b.index.recordSkip(b.path("renamed.flac"))
+    try a.sync()
+    #expect(try b.sync().problems.isEmpty)
+    #expect(try b.counts("renamed.flac") == [1, 1])
+}
+
 @Test func aOneStarRatingReachesTheOtherMachine() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair
