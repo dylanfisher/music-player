@@ -50,8 +50,11 @@ public final class RatingStars: NSView {
     }
 
     /// A bar in the title bar, or under a glass window's full-size content view, drags the
-    /// window from a view that lets it; a click on the stars rates instead.
-    override public var mouseDownCanMoveWindow: Bool { false }
+    /// window from a view that lets it; a click on the stars rates instead, while they take one.
+    override public var mouseDownCanMoveWindow: Bool { !isEnabled }
+
+    /// A click in a window that isn't active rates too, as one on the seek bar seeks.
+    override public func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     /// How many stars show filled now.
     var filled: Int { hovered ?? rating ?? 0 }

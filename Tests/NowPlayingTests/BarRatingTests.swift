@@ -131,8 +131,9 @@ private func stars(of bar: NowPlayingBar) -> [RatingStars] {
 }
 
 /// The stars sit where a mouse down on a view that allows it drags the window, the title bar
-/// and with glass a full-size content view; a mouse down on them rates instead.
-@MainActor @Test func aMouseDownOnTheStarsNeverMovesTheWindow() throws {
+/// and with glass a full-size content view; a mouse down on them rates instead, even the first
+/// one in a window that isn't active, unless they take no click.
+@MainActor @Test func aMouseDownOnTheStarsMovesTheWindowOnlyWhileTheyreOff() throws {
     let bar = bar(Index())
     bar.apply(playing(0))
     bar.header.apply(
@@ -147,5 +148,7 @@ private func stars(of bar: NowPlayingBar) -> [RatingStars] {
     let hit = try #require(status.hitTest(NSPoint(x: frame.midX, y: frame.midY)))
     #expect(hit === stars)
     #expect(!hit.mouseDownCanMoveWindow)
-    #expect(!bar.statusBar.rating.mouseDownCanMoveWindow)
+    #expect(hit.acceptsFirstMouse(for: nil))
+    bar.apply(playing(nil))
+    #expect(stars.mouseDownCanMoveWindow && bar.statusBar.rating.mouseDownCanMoveWindow)
 }
