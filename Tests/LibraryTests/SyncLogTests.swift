@@ -28,6 +28,8 @@ private let everyEvent: [SyncEvent] = [
     .playlistEntries(playlist: playlist, paths: ["music/a.flac", "music/b.flac"]),
     .playlistEntries(playlist: playlist, paths: []),
     .playlistDelete(playlist: playlist),
+    .neverUpgrade(release: 4242, never: true),
+    .neverUpgrade(release: 1, never: false),
 ]
 
 @Test func everyEventReadsBackAsWritten() throws {

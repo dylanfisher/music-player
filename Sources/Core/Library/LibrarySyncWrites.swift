@@ -15,10 +15,11 @@ let syncPlaylistSQL = "SELECT playlist_id FROM \(syncPlaylistsTable) WHERE id = 
 let insertSyncPlaylistSQL = "INSERT INTO \(syncPlaylistsTable) (id, playlist_id) VALUES (?, ?)"
 
 /// A field whose latest change wins (ADR 0038): a path's rating, opinion (`loved`, which
-/// `disliked` events share) or hand-set play count (ADR 0162), keyed by path ID, or a
-/// playlist's name, rules or entries, keyed by playlist ID.
+/// `disliked` events share) or hand-set play count (ADR 0162), keyed by path ID, a
+/// playlist's name, rules or entries, keyed by playlist ID, or a release's Never Upgrade mark
+/// (ADR 0200), keyed by its Discogs release id.
 enum SyncField: String {
-    case rating, loved, playlistName, playlistRules, playlistEntries, playCount
+    case rating, loved, playlistName, playlistRules, playlistEntries, playCount, neverUpgrade
 }
 
 /// A scan batch's new sync paths, which the log takes as one `addedFiles` event a folder, in

@@ -32,6 +32,8 @@ enum SyncEvent: Equatable, Sendable {
     /// The whole list, in order.
     case playlistEntries(playlist: String, paths: [String])
     case playlistDelete(playlist: String)
+    /// A Discogs release marked Never Upgrade, or cleared (ADR 0200). The latest wins.
+    case neverUpgrade(release: Int, never: Bool)
 }
 
 /// The highest play count, imported or set by hand, that a log carries.
@@ -59,6 +61,8 @@ package struct SyncRecord: Equatable, Sendable {
     static let maximumPathBytes = 4096
     /// Entries one playlist event lists at most; a longer playlist isn't synced.
     static let maximumEntries = 100_000
+    /// What a Discogs release id may be.
+    static let releaseRange: ClosedRange<Int64> = 1...(1 << 53)
     /// Names one `addedFiles` event lists at most: a scan batch's, so a line of names as long
     /// as a path may be stays under `maximumLineBytes`.
     static let maximumAddedNames = 500
@@ -134,6 +138,7 @@ extension SyncEvent {
         case .playlistRules: .playlistRules
         case .playlistEntries: .playlistEntries
         case .playlistDelete: .playlistDelete
+        case .neverUpgrade: .neverUpgrade
         }
     }
 
@@ -170,6 +175,8 @@ extension SyncEvent {
         case .playlistEntries(let playlist, let paths):
             [(.playlist, .string(playlist)), (.paths, .strings(paths))]
         case .playlistDelete(let playlist): [(.playlist, .string(playlist))]
+        case .neverUpgrade(let release, let never):
+            [(.release, .integer(Int64(release))), (.never, .bool(never))]
         }
     }
 }
@@ -181,6 +188,7 @@ enum SyncKey: String {
     case playlist
     case name, rules, paths
     case folder, names
+    case release, never
 }
 
 /// What `event` names in a log line.
@@ -190,6 +198,7 @@ enum SyncEventName: String {
     /// What an import added, which earlier builds logged and this one skips (`retiredCounts`).
     case counts
     case playlistRules, playlistEntries, playlistDelete, playCount
+    case neverUpgrade
 }
 
 /// A line's keys not yet decoded.
@@ -289,6 +298,11 @@ extension SyncEvent {
             for path in paths { checked.append(try SyncJSON.string(path).path(.paths)) }
             self = .playlistEntries(playlist: try fields.playlist(), paths: checked)
         case .playlistDelete: self = .playlistDelete(playlist: try fields.playlist())
+        case .neverUpgrade:
+            self = .neverUpgrade(
+                release: Int(
+                    try fields.take(.release).integer(.release, in: SyncRecord.releaseRange)),
+                never: try fields.take(.never).bool(.never))
         }
     }
 }

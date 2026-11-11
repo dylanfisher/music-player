@@ -71,6 +71,13 @@ enum SchemaPart: String, CaseIterable {
     /// (ADR 0164), by absolute path, so a carry that failed runs again. A hint: every move can
     /// be told again from the files.
     case layoutMoves
+    /// The releases marked Never Upgrade (ADR 0200), by Discogs release id, so an index rebuild
+    /// keeps them. Synced, the latest mark winning, so both Macs leave them out.
+    case neverUpgrade
+    /// What Upgrade to FLAC Automatically did on this Mac (ADR 0200): the jobs it queued, by
+    /// the service's epoch and job id, and each release's misses. Keyed by release and job, so
+    /// an index rebuild keeps them; not synced, since each Mac counts its own.
+    case autoUpgrades
 
     /// The part's SQL, the index's built with Separate Releases as given (ADR 0143); the other
     /// parts don't depend on it.
@@ -95,6 +102,8 @@ enum SchemaPart: String, CaseIterable {
         case .importJobs: importJobsSchema
         case .discogsCache: discogsCacheSchema
         case .layoutMoves: layoutMovesSchema
+        case .neverUpgrade: neverUpgradeSchema
+        case .autoUpgrades: autoUpgradesSchema
         }
     }
 
@@ -151,6 +160,8 @@ enum SchemaPart: String, CaseIterable {
         case .importJobs: [importOutboxTable, importStepsTable]
         case .discogsCache: [discogsCacheTable]
         case .layoutMoves: [layoutMovesTable]
+        case .neverUpgrade: [neverUpgradeTable]
+        case .autoUpgrades: [autoUpgradeJobsTable, upgradeMissesTable]
         }
     }
 }
@@ -183,6 +194,9 @@ let importOutboxTable = "import_outbox"
 let importStepsTable = "import_steps"
 let discogsCacheTable = "discogs_cache"
 let layoutMovesTable = "layout_moves"
+let neverUpgradeTable = "never_upgrade"
+let autoUpgradeJobsTable = "auto_upgrade_jobs"
+let upgradeMissesTable = "upgrade_misses"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
@@ -539,6 +553,30 @@ private let analysisRunSchema = """
         size_bytes INTEGER NOT NULL,
         modified_seconds REAL NOT NULL
     ) WITHOUT ROWID;
+    """
+
+private let neverUpgradeSchema = """
+    -- A row for each Discogs release marked Never Upgrade; none means it may be upgraded.
+    CREATE TABLE \(neverUpgradeTable) (
+        release_id INTEGER PRIMARY KEY
+    );
+    """
+
+private let autoUpgradesSchema = """
+    -- The jobs Upgrade to FLAC Automatically queued, as the service numbers them in its epoch.
+    CREATE TABLE \(autoUpgradeJobsTable) (
+        epoch TEXT NOT NULL,
+        job_id INTEGER NOT NULL,
+        release_id INTEGER NOT NULL,
+        PRIMARY KEY (epoch, job_id)
+    );
+    -- Each release's misses, and when it may be queued again, in seconds since 1970; NULL once
+    -- it's set aside.
+    CREATE TABLE \(upgradeMissesTable) (
+        release_id INTEGER PRIMARY KEY,
+        misses INTEGER NOT NULL,
+        retry_seconds REAL
+    );
     """
 
 private let lovedSchema = """

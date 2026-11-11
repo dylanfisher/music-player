@@ -170,6 +170,20 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try a.index.opinion(of: onA) == nil)
 }
 
+@Test func aNeverUpgradeMarkReachesTheOtherMacAndTheLatestWins() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    try a.index.setNeverUpgrade(true, releases: [4242, 7])
+    try syncAll([a, b])
+    #expect(try b.index.neverUpgradeReleases() == [4242, 7])
+    b.nowMs += 1000
+    try b.index.setNeverUpgrade(false, releases: [4242])
+    try a.index.setNeverUpgrade(true, releases: [4242])
+    try syncAll([a, b])
+    #expect(try a.index.neverUpgradeReleases() == [7], "B's clear was later")
+    #expect(try b.index.neverUpgradeReleases() == [7])
+}
+
 @Test func aTieOnTheClockGoesToTheHigherMachineID() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair

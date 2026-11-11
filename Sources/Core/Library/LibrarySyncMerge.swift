@@ -147,6 +147,9 @@ extension LibraryIndex {
                 try statement(deletePlaylistSQL).run(id)
                 try deleteStamps(ofPlaylist: id)
             }
+        case .neverUpgrade(let release, let never):
+            guard try wins(stamp, .neverUpgrade, Int64(release)) else { return nil }
+            try setNeverUpgrade(never, release: release)
         }
         merge.changed = true
         return nil
