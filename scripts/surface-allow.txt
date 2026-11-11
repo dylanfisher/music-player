@@ -14,9 +14,8 @@ TagEditorWindow.tabView | NSTabViewDelegate
 TagEditorWindow.tableViewSelectionDidChange | NSTableViewDelegate
 TagEditorWindow.windowDidBecomeKey | NSWindowDelegate
 # The standard library calls this: CustomReflectable's requirement, which keeps the token out of
-# dump and mirrors (ADR 0137).
-DiscogsToken.customMirror | CustomReflectable
-ServiceToken.customMirror | CustomReflectable
+# dump and mirrors of both tokens (ADR 0137).
+Secret.customMirror | CustomReflectable
 # Called through a typealias, which the check doesn't follow: TitleTemplate("…") outside
 # Settings constructs a TokenTemplate.
 TokenTemplate.init | TitleTemplate
