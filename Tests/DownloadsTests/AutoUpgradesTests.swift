@@ -221,6 +221,24 @@ private func settled(_ downloads: Downloads) async {
 }
 
 @MainActor
+@Test func aJobThatMovedOnBeforeItsCancelIsKeptWithNoMiss() async throws {
+    let fake = FakeService()
+    let (downloads, session) = try await upgrading(fake, Library([candidate(1)]), inFlight: 1)
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    // Retried and approved on the other Mac since the poll that listed it unfound.
+    fake.put(listed(1, release: 1, .approved))
+    session.model.took(listed(1, release: 1, .notFound))
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    let index = try LibraryIndex(at: session.setup.databaseURL)
+    #expect(try index.upgradeMisses().isEmpty)
+    #expect(try index.autoUpgradeJobs().map(\.jobID) == [1], "still its own")
+    downloads.stop()
+}
+
+@MainActor
 @Test func aCopyTaggedWithADiscrepancyIsRequeuedButNotAnUpgradeQueuedByHand() async throws {
     let discrepancy = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
     let byHand = listed(1, release: 99, .staged) { $0.tagging = discrepancy }

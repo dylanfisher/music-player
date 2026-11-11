@@ -114,12 +114,17 @@ extension Downloads {
             do throws(RecommenderError) {
                 session.model.took(try await service.cancel(job.jobID))
             } catch {
-                // Ended already, by the owner or the other Mac: a miss all the same. Only an
-                // illegal transition carries the job's state.
-                guard case .refused(let refusal) = error.kind, refusal.state != nil else {
+                // Only an illegal transition carries the job's state. Rejected or imported
+                // since the poll, by the owner or the other Mac, it ended as any other; moved
+                // on, retried and approved, it's kept, and the next poll says where it is.
+                guard case .refused(let refusal) = error.kind,
+                    let state = refusal.state.flatMap(JobState.init(rawValue:)),
+                    AutoUpgrades.terminal.contains(state)
+                else {
                     logger.info("job \(job.jobID), which found nothing, wasn't cancelled: \(error)")
                     return true
                 }
+                if state == .imported { return await take(.forget(job), session) }
             }
             await miss(job, database)
             return false

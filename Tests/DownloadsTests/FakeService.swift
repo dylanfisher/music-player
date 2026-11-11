@@ -189,8 +189,21 @@ final class FakeService: @unchecked Sendable {
         }
     }
 
+    /// As music-recommender's transitions: refused, with the job's state, once it's approved,
+    /// imported, rejected, or failed past its tagging.
     private func cancel(_ id: Int) throws(RecommenderError) -> DownloadJob {
-        try change(id, "/v1/downloads/cancel") { $0.state = .cancelled }
+        try change(id, "/v1/downloads/cancel") { job throws(RecommenderError) in
+            let past: Set<DownloadJob.FailedStage> = [.move, .delete, .carry]
+            if [.approved, .importing, .imported, .rejected].contains(job.state)
+                || (job.state == .failed && job.failedStage.map(past.contains) == true)
+            {
+                var refusal = ServiceRefusal(
+                    code: .illegalTransition, message: "illegal_transition")
+                refusal.state = job.state.rawValue
+                throw RecommenderError(service: "fake", kind: .refused(refusal))
+            }
+            job.state = .cancelled
+        }
     }
 
     /// Every job requeued, in order.
