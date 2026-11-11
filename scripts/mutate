@@ -200,6 +200,8 @@ run_job() {
   done
 }
 
+# A run with fewer jobs than the last would otherwise score that run's results too.
+rm -f "$out"/results-*.tsv
 for job in $(seq 0 $((jobs - 1))); do
   tree="$out/tree-$job"
   git -C "$repo" worktree remove --force "$tree" 2> /dev/null || rm -rf "$tree"
