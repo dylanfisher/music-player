@@ -64,3 +64,60 @@ private func index(_ files: [ScannedFile]) throws -> LibraryIndex {
     #expect(try index.upgradeCandidates(onShare: share).map(\.title) == ["Kept"])
     #expect(try index.upgradeCandidates(onShare: "smb://HAL9000/other").isEmpty)
 }
+
+@Test func aCandidateCarriesItsPlaysLikesAndRatings() throws {
+    let index = try index([
+        track("A/Played/1.mp3", album: "Played", number: 1, kbps: 128),
+        track("A/Played/2.mp3", album: "Played", number: 2, kbps: 128),
+        track("A/Liked/1.mp3", album: "Liked", number: 1),
+        track("A/Liked/2.mp3", album: "Liked", number: 2),
+        track("A/Rated/1.mp3", album: "Rated", number: 1),
+        track("A/Rated/2.mp3", album: "Rated", number: 2),
+        track("A/Plain/1.mp3", album: "Plain", number: 1),
+        track("A/Plain/2.mp3", album: "Plain", number: 2),
+    ])
+    let ids = { (album: String) in
+        try index.trackIDs(atPaths: ["\(root)/A/\(album)/1.mp3", "\(root)/A/\(album)/2.mp3"])
+            .map { try #require($0) }
+    }
+    try index.setPlayCount(5, trackIDs: ids("Played"))
+    try index.toggle(.liked, trackIDs: [ids("Liked")[0]])
+    try index.setRating(5, trackIDs: [ids("Rated")[0]])
+    try index.setRating(3, trackIDs: [ids("Rated")[1]])
+    try index.setRating(3, trackIDs: [ids("Plain")[1]])
+    let candidates = Dictionary(
+        uniqueKeysWithValues: try index.upgradeCandidates(onShare: share).map { ($0.title, $0) })
+    #expect(candidates["Played"]?.plays == 10)
+    #expect(candidates["Played"]?.kbps == 128)
+    #expect(candidates["Played"]?.boosted == false)
+    #expect(candidates["Liked"]?.boosted == true, "half its tracks liked")
+    #expect(candidates["Rated"]?.boosted == true, "its rated tracks average 4 stars")
+    #expect(candidates["Plain"]?.boosted == false, "3 stars doesn't")
+}
+
+/// ADR 0200's worked examples, in the order they're queued.
+@Test func theScoreQueuesTheMostPlayedLowestQualityFirst() {
+    let examples: [(name: String, plays: Int, kbps: Int, boosted: Bool, score: Double)] = [
+        ("200 plays at 256", 200, 256, false, 251.25),
+        ("50 plays at 128", 50, 128, false, 127.5),
+        ("50 plays at 320, liked", 50, 320, true, 102),
+        ("50 plays at 320", 50, 320, false, 51),
+        ("10 plays at 192, rated", 10, 192, true, 36.67),
+        ("never played at 128", 0, 128, false, 2.5),
+        ("never played at 320", 0, 320, false, 1),
+    ]
+    let candidates = examples.enumerated().map { offset, example in
+        UpgradeCandidate(
+            albumID: Int64(examples.count - offset), title: example.name, artist: nil,
+            releaseID: offset, sharePaths: [], quality: "", kbps: example.kbps,
+            plays: example.plays, boosted: example.boosted)
+    }
+    for (candidate, example) in zip(candidates, examples) {
+        #expect(abs(candidate.priority - example.score) < 0.01, "\(example.name)")
+    }
+    #expect(
+        candidates.shuffled().sorted { $0.precedes($1) }.map(\.title) == examples.map(\.name))
+    var tied = candidates[3]
+    tied.albumID = 100
+    #expect(candidates[3].precedes(tied), "a tie goes to the lower album id")
+}
