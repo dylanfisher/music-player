@@ -2,6 +2,7 @@ import AppKit
 import Settings
 import Testing
 
+@testable import LibraryBrowser
 @testable import MusicPlayer
 
 /// Column spacing and a vertical scroller, which the table adds to its columns' widths.
@@ -163,4 +164,76 @@ private final class RecordingWindow: SilentEscapeWindow {
     var saved = SavedVisibility(true)
     let changes = [true, false, false, true].map { saved.change(to: $0) }
     #expect(changes == [false, true, false, true])
+}
+
+/// Focus Mode shows the track table alone, dark and full screen, saving none of what it hides;
+/// Escape puts the window back as it was, with the same rows selected.
+@MainActor @Test func focusModeHidesTheWindowAroundTheTableAndEscapePutsItBack() async throws {
+    let fixture = try await MainWindowFixture(fillsWindow: true)
+    defer { fixture.close() }
+    let main = fixture.window
+    let window = main.window
+    var fullScreenToggles = 0
+    main.toggleFullScreen = { _ in fullScreenToggles += 1 }
+    let table = fixture.browser.table.table
+    table.selectRowIndexes([2, 4], byExtendingSelection: false)
+    let sidebar = fixture.browser.focusAreas[0]
+    window.makeFirstResponder(sidebar)
+    /// What the window saves of what Focus Mode changes.
+    func saved() -> String {
+        fixture.saver.flush()
+        let state = fixture.state
+        return "\(state[\.toolbarVisible]) \(state[\.sidebarVisible]) \(state[\.queueVisible])"
+            + " \(state[\.statusBarVisible]) \(state[\.signalPathVisible])"
+            + " \(state[\.sidebarWidth]) \(state[\.queueWidth]) \(state[\.trackTable])"
+            + " \(String(describing: state[\.windowFrame]))"
+    }
+    let savedBefore = saved()
+    let layoutBefore = fixture.layout
+    let statusBarBefore = fixture.browser.isStatusBarVisible
+
+    main.toggleFocus()
+    #expect(main.isFocused)
+    #expect(window.appearance?.name == .darkAqua)
+    #expect(!main.isToolbarVisible && !main.isSidebarVisible && !main.isQueueVisible)
+    #expect(!fixture.browser.isStatusBarVisible)
+    #expect(window.firstResponder === table)
+    #expect(fullScreenToggles == 1)
+    // As AppKit reports it once the window is full screen.
+    main.windowWillEnterFullScreen(
+        Notification(name: NSWindow.willEnterFullScreenNotification, object: window))
+    window.layoutIfNeeded()
+
+    window.cancelOperation(nil)
+    #expect(!main.isFocused)
+    #expect(fullScreenToggles == 2)
+    main.windowDidExitFullScreen(
+        Notification(name: NSWindow.didExitFullScreenNotification, object: window))
+    window.layoutIfNeeded()
+    #expect(window.appearance == nil)
+    #expect(main.isToolbarVisible && main.isSidebarVisible)
+    #expect(fixture.browser.isStatusBarVisible == statusBarBefore)
+    #expect(fixture.layout == layoutBefore)
+    #expect(table.selectedRowIndexes == [2, 4])
+    #expect(window.firstResponder === sidebar)
+    fixture.saver.flush()
+    #expect(saved() == savedBefore)
+}
+
+/// Leaving full screen by the window's own control ends Focus Mode too.
+@MainActor @Test func leavingFullScreenLeavesFocusMode() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    let main = fixture.window
+    var fullScreenToggles = 0
+    main.toggleFullScreen = { _ in fullScreenToggles += 1 }
+    main.toggleFocus()
+    let notification = Notification(
+        name: NSWindow.willEnterFullScreenNotification, object: main.window)
+    main.windowWillEnterFullScreen(notification)
+    main.windowDidExitFullScreen(notification)
+    #expect(!main.isFocused)
+    #expect(main.window.appearance == nil)
+    // Already out of full screen, it isn't toggled back in.
+    #expect(fullScreenToggles == 1)
 }

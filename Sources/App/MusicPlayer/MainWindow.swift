@@ -21,6 +21,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
     let window: NSWindow
     private let split: MainSplit
     private let signalPath: SignalPathPanel
+    /// The line under the signal path, over the split.
+    private let topLine = NSBox()
     private let browser: LibraryBrowser
     let queue: QueuePanel
     private let saver: LayoutSaver
@@ -30,6 +32,10 @@ final class MainWindow: NSObject, NSWindowDelegate {
     private var isFullScreen = false
     /// What Distraction-Free Mode hid, while it's on.
     private var hidden: ChromeVisibility?
+    /// What Focus Mode changed, to put back as it ends, while it's on.
+    private var unfocused: Unfocused?
+    /// Enters or leaves full screen, which tests replace so that none animates.
+    var toggleFullScreen: (NSWindow) -> Void = { $0.toggleFullScreen(nil) }
     private var toolbarObservation: NSKeyValueObservation?
     private var savedToolbar: SavedVisibility
     private var glass: WindowGlass?
@@ -86,6 +92,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
         }
         // New columns' tables come without the glass.
         browser.panesRemade = { [weak self] in self?.glass?.refresh() }
+        browser.focusLeft = { [weak self] in self?.leaveFocus() }
         browser.stateChanged = { [weak self] state in
             saver.set(\.browserColumns, state.columns)
             saver.set(\.sourceSort, state.sourceSort)
@@ -93,13 +100,12 @@ final class MainWindow: NSObject, NSWindowDelegate {
             self?.browserStateChanged()
         }
 
-        let line = NSBox()
-        line.boxType = .separator
+        topLine.boxType = .separator
         signalPath.view.isHidden = !settings.signalPathVisible
-        let stack = NSStackView(views: [banner, signalPath.view, line, split.view])
+        let stack = NSStackView(views: [banner, signalPath.view, topLine, split.view])
         stack.orientation = .vertical
         stack.spacing = 0
-        for view in [banner, signalPath.view, line, split.view] {
+        for view in [banner, signalPath.view, topLine, split.view] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
@@ -183,7 +189,10 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     /// Saves whether the toolbar shows, when that changed since the last save.
     func saveToolbarVisibility() {
-        guard !restoring, savedToolbar.change(to: isToolbarVisible) else { return }
+        // Focus Mode's hidden toolbar is its own.
+        guard !restoring, unfocused == nil, savedToolbar.change(to: isToolbarVisible) else {
+            return
+        }
         saver.set(\.toolbarVisible, isToolbarVisible)
     }
 
@@ -211,6 +220,65 @@ final class MainWindow: NSObject, NSWindowDelegate {
         if next.statusBar != current.statusBar { toggleStatusBar() }
     }
 
+    // MARK: Focus Mode
+
+    /// What Focus Mode puts back as it ends.
+    private struct Unfocused {
+        var toolbar: Bool
+        var sidebar: Bool
+        var queue: Bool
+        var signalPath: Bool
+        var appearance: NSAppearance?
+        weak var firstResponder: NSResponder?
+        /// Whether Focus Mode put the window in full screen, which it then takes it out of.
+        var enteredFullScreen: Bool
+    }
+
+    /// Whether Focus Mode shows the track table alone.
+    var isFocused: Bool { unfocused != nil }
+
+    func toggleFocus() { if isFocused { leaveFocus() } else { enterFocus() } }
+
+    /// Shows the track table alone, full screen and dark, in Focus Mode's columns and text,
+    /// saving none of what it hides (ADR 0204). Escape, the command again, or leaving full
+    /// screen ends it.
+    func enterFocus() {
+        guard unfocused == nil, browser.canFocus else { return }
+        unfocused = Unfocused(
+            toolbar: isToolbarVisible, sidebar: isSidebarVisible, queue: isQueueVisible,
+            signalPath: isSignalPathVisible, appearance: window.appearance,
+            firstResponder: window.firstResponder, enteredFullScreen: !isFullScreen)
+        window.toolbar?.isVisible = false
+        split.keepingWidths {
+            if isSidebarVisible { split.toggleSidebar() }
+            if isQueueVisible { split.toggleQueue() }
+        }
+        signalPath.view.isHidden = true
+        topLine.isHidden = true
+        browser.enterFocus()
+        window.appearance = NSAppearance(named: .darkAqua)
+        (window as? SilentEscapeWindow)?.escaped = { [weak self] in self?.leaveFocus() }
+        if !isFullScreen { toggleFullScreen(window) }
+    }
+
+    /// Puts the window back as Focus Mode found it.
+    func leaveFocus() {
+        guard let was = unfocused else { return }
+        unfocused = nil
+        (window as? SilentEscapeWindow)?.escaped = nil
+        browser.leaveFocus()
+        window.appearance = was.appearance
+        topLine.isHidden = false
+        signalPath.view.isHidden = !was.signalPath
+        split.keepingWidths {
+            if was.sidebar != isSidebarVisible { split.toggleSidebar() }
+            if was.queue != isQueueVisible { split.toggleQueue() }
+        }
+        window.toolbar?.isVisible = was.toolbar
+        if let responder = was.firstResponder { window.makeFirstResponder(responder) }
+        if was.enteredFullScreen, isFullScreen { toggleFullScreen(window) }
+    }
+
     /// Puts the window's content on glass, or takes it off. The frame that puts back is no move
     /// of the user's, so it isn't saved, and nor are the dividers on the way back.
     func setGlass(_ on: Bool) {
@@ -232,6 +300,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     func windowDidExitFullScreen(_ notification: Notification) {
         isFullScreen = false
+        // Left by the window's own control or menu item, full screen takes Focus Mode with it.
+        leaveFocus()
         restoring = true
         split.keepingWidths { glass?.matchStyleMask() }
         restoring = false
@@ -252,20 +322,28 @@ final class MainWindow: NSObject, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) { saveFrame() }
 
     private func saveFrame() {
-        guard !restoring, !isFullScreen else { return }
+        // Focus Mode's frame, the toolbar hidden on the way to full screen, isn't one to open at.
+        guard !restoring, !isFullScreen, unfocused == nil else { return }
         saver.set(\.windowFrame, WindowFrame(window.frame))
     }
 }
 
-/// A window where Esc that no view takes does nothing. AppKit would beep, which flashes the
-/// screen when the system's "Flash the screen when an alert sound occurs" is on.
+/// A window where Esc that no view takes runs `escaped`, else does nothing. AppKit would beep,
+/// which flashes the screen when the system's "Flash the screen when an alert sound occurs" is
+/// on.
 class SilentEscapeWindow: NSWindow {
+    /// What Esc does, while something sets it.
+    var escaped: (() -> Void)?
+
     override func keyDown(with event: NSEvent) {
-        if KeyChord(event: event) == KeyChord(.escape) { return }
+        if KeyChord(event: event) == KeyChord(.escape) {
+            escaped?()
+            return
+        }
         super.keyDown(with: event)
     }
 
-    override func cancelOperation(_ sender: Any?) {}
+    override func cancelOperation(_ sender: Any?) { escaped?() }
 }
 
 /// The index of the area after `current` among `count`, or before it when not `forward`,

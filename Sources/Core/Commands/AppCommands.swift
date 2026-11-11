@@ -40,6 +40,8 @@ extension CommandID {
     public static let toggleToolbar = CommandID("view.toggleToolbar")
     /// Hides the toolbar, the sidebar and the status bar, then shows what showed.
     public static let distractionFree = CommandID("view.distractionFree")
+    /// Shows the track table alone, full screen, dark and in larger text, then the window back.
+    public static let focusMode = CommandID("view.focusMode")
     public static let toggleBrowser = CommandID("view.toggleBrowser")
     public static let toggleQueue = CommandID("view.toggleQueue")
     public static let toggleSignalPath = CommandID("view.toggleSignalPath")
@@ -242,6 +244,7 @@ public enum AppCommands {
             Command(.toggleStatusBar, state.statusBarVisible.title, [.init("/", cmd)]),
             Command(.toggleToolbar, state.toolbarVisible.title, [.init("t", [opt, cmd])]),
             Command(.distractionFree, "Distraction-Free Mode", [.init("f", [cmd, shift])]),
+            Command(.focusMode, "Enter Focus Mode", [.init("f", [opt, cmd])]),
             Command(.toggleQueue, state.queueVisible.title, [.init("u", [opt, cmd])]),
             Command(.toggleBrowser, state.browserVisible.title, [.init("b", cmd)]),
             Command(

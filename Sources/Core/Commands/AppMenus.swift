@@ -168,7 +168,7 @@ public enum AppMenus {
                     .command(.showPalette), .command(.goToItem), .separator,
                     .command(.toggleToolbar), .command(.toggleSidebar), .command(.toggleBrowser),
                     .command(.toggleStatusBar), .command(.toggleQueue), .command(.toggleSignalPath),
-                    .command(.distractionFree),
+                    .command(.distractionFree), .command(.focusMode),
                     .separator, .command(.focusSidebar), .command(.focusNextPane),
                     .command(.focusPreviousPane), .command(.focusNextArea),
                     .command(.focusPreviousArea), .separator,
