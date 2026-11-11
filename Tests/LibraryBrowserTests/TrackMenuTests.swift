@@ -372,3 +372,18 @@ private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
     try await waitFor("the second rating") { changes == 2 }
     #expect(try index.rows(ids: [id]).first?.rating == 1)
 }
+
+/// A rating by path that fails still says the ratings changed, so Get Info, which showed the
+/// click's rating, shows the index's again.
+@MainActor @Test func aFailedRatingByPathStillSaysTheRatingsChanged() async throws {
+    let (browser, index) = try await browser(selecting: [2])
+    var changes = 0
+    browser.ratingsChanged = { changes += 1 }
+    let id = try #require(try browser.selectedTrackIDs().first)
+    let path = try #require(try index.paths(ids: [id])[id])
+    try index.database.execute(
+        "CREATE TRIGGER no_rating BEFORE INSERT ON ratings BEGIN SELECT RAISE(ABORT, 'no'); END")
+    browser.setRating(3, paths: [path])
+    try await waitFor("the failure") { changes == 1 }
+    #expect(try index.rows(ids: [id]).first?.rating != 3)
+}

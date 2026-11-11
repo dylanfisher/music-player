@@ -2156,8 +2156,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Rates the tracks at `paths`, from Get Info's stars.
     public func setRating(_ stars: Int, paths: [String]) {
         edit("couldn't rate the tracks") {
+            // Get Info shows the click's rating already, so a failed write tells it too, to
+            // show the index's again.
+            defer { self.ratingsChanged() }
             try await self.model.setRating(stars, paths: paths)
-            self.ratingsChanged()
         }
     }
 
