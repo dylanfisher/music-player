@@ -2070,11 +2070,22 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Rates the selected tracks, then says so in the status bar.
     public func rateSelection(_ stars: Int) {
         guard let ids = selectedTrackIDs(else: "couldn't rate the tracks") else { return }
+        let title = ids.count == 1 ? selectedTitle(ids[0]) : nil
         edit("couldn't rate the tracks") {
             try await self.model.rate(ids, stars: stars)
             self.ratingsChanged()
-            let title = ids.count == 1 ? try self.index.rows(ids: ids).first?.title : nil
             self.showRatingMessage(ratingMessage(stars: stars, count: ids.count, title: title))
+        }
+    }
+
+    /// The title of the track `id`, for the rating message; nil when it can't be read, which is
+    /// logged, since the rating itself goes ahead and the message counts the track instead.
+    private func selectedTitle(_ id: Int64) -> String? {
+        do {
+            return try index.rows(ids: [id]).first?.title
+        } catch {
+            logger.error("couldn't read the title of the track rated: \(error)")
+            return nil
         }
     }
 

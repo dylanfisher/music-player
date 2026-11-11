@@ -348,6 +348,7 @@ private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
     #expect(ratingMessage(stars: 4, count: 3, title: nil) == "Rated 3 tracks ★★★★")
     #expect(ratingMessage(stars: 0, count: 1, title: "Song") == "Cleared the rating of “Song”")
     #expect(ratingMessage(stars: 0, count: 2, title: nil) == "Cleared the rating of 2 tracks")
+    #expect(ratingMessage(stars: 4, count: 1, title: "") == "Rated 1 track ★★★★")
 }
 
 @MainActor @Test func ratingFromTheMenuSaysSoAndANewerMessageOutlivesTheOldersFade() async throws {
