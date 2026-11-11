@@ -36,6 +36,7 @@ let httpsBenchmarks = [
 ]
 
 /// Answers every request with `bodyBytes` bytes, in 64 KB pieces as a network delivers them.
+/// It adds no stored state, and URLProtocol's request and client are set once, at init.
 private final class StandInServer: URLProtocol, @unchecked Sendable {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }

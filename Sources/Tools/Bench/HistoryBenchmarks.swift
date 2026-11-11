@@ -92,6 +92,7 @@ let historyBenchmarks = [
 
 /// A copy of the scanned fixture library with `syntheticPlayCount` plays logged, beside the
 /// fixtures, so the generated data stays out of git and the user's folders.
+/// Set once per run, then only read.
 struct PlayedLibrary: @unchecked Sendable {
     var index: LibraryIndex
     /// A second connection, for what `LibraryIndex` doesn't offer, such as page sizes.

@@ -339,8 +339,8 @@ private enum Rescanned {
 }
 
 /// What `rescan(files:)` read of each file, by position, filled in from several threads.
+/// `results` is guarded by `lock`.
 private final class RescanResults: @unchecked Sendable {
-    // `results` is guarded by `lock`.
     private let lock = NSLock()
     private var results: [Rescanned?]
 

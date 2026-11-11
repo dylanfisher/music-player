@@ -23,6 +23,7 @@ struct OutputDiagnostics: Sendable {
 /// answering, or a HAL call the device doesn't return from. Neither can be timed out or cancelled
 /// (ADR 0081), so the watch only names the call: one still running after `thresholdSeconds` is
 /// reported, and reported again when it returns (ADR 0121). It wakes only while a call runs.
+/// Its state is guarded by `lock`.
 final class StepWatch: @unchecked Sendable {
     enum Step {
         case opening(URL)

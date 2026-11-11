@@ -222,8 +222,8 @@ private func concurrently<T: Sendable>(
 }
 
 /// What `concurrently` hands out and gets back, from several threads.
+/// `results` and `next` are guarded by `lock`.
 private final class Slots<T>: @unchecked Sendable {
-    // `results` and `next` are guarded by `lock`.
     private let lock = NSLock()
     private var results: [T?]
     private var next = 0

@@ -172,6 +172,7 @@ final class RepeatedAnalysis: Sendable {
     private let runs: Task<Int, any Error>
     private let stopping = Stopping()
 
+    // `stopped` is guarded by `lock`.
     private final class Stopping: @unchecked Sendable {
         private let lock = NSLock()
         private var stopped = false
@@ -225,8 +226,8 @@ final class RepeatedAnalysis: Sendable {
 
 /// Rescans every file of `folder` into the database at `databaseURL` on a thread of its own,
 /// again and again until stopped, as a scan of a changed library writes it.
+/// `running` and `failure` are guarded by `lock`.
 private final class RepeatedScan: @unchecked Sendable {
-    // `running` and `failure` are guarded by `lock`.
     private let lock = NSLock()
     private var running = true
     private var failure: (any Error)?

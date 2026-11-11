@@ -13,6 +13,7 @@ import Playback
 /// them different names. A session takes a format from what it reports, as a CoreAudio device
 /// does, converting when none carries the track. Benchmarks can give its HAL steps the time a
 /// real device takes, and time the first IO cycle that carries sound.
+/// Its state is guarded by `lock`.
 public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     public let deviceName: String
     public var deviceUID: String { deviceName }

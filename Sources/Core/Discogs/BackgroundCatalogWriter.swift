@@ -4,13 +4,13 @@ import Foundation
 /// before them are encoded and inserted (ADR 0130). Records go over in batches, and at most
 /// `batchesInFlight` wait at once, so memory stays flat however fast the parser runs ahead; a
 /// checkpoint commits them (ADR 0134).
+/// `writer` is used only on `queue`; `pending` only on the thread that adds records; `failure`
+/// only under `lock`.
 final class BackgroundCatalogWriter: @unchecked Sendable {
     /// Records a batch holds: few enough that the batches waiting hold a few tens of MB.
     static let recordsPerBatch = 2000
     static let batchesInFlight = 2
 
-    // `writer` is used only on `queue`; `pending` only on the thread that adds records;
-    // `failure` only under `lock`.
     private let writer: CatalogWriter
     private let queue = DispatchQueue(label: "Discogs.CatalogWriter", qos: .utility)
     private let slots = DispatchSemaphore(value: BackgroundCatalogWriter.batchesInFlight)

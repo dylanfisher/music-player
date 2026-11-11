@@ -211,6 +211,7 @@ public enum RendererCapture {
 
 /// Passes a search through and keeps every datagram it got back, the ones discovery ignores
 /// included.
+/// `kept` is guarded by `lock`.
 private final class RecordingTransport: SSDPTransport, @unchecked Sendable {
     private let base: any SSDPTransport
     private let lock = NSLock()
@@ -230,6 +231,7 @@ private final class RecordingTransport: SSDPTransport, @unchecked Sendable {
 }
 
 /// The raw bytes one renderer's fetches got back.
+/// Its fields are guarded by `lock`.
 private final class FetchLog: @unchecked Sendable {
     private let lock = NSLock()
     private var description: [UInt8]?

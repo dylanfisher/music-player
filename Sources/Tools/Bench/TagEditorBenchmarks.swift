@@ -317,6 +317,7 @@ private func batchWrite(
 /// A NAS for the writer's file system calls: each is a round trip, and the bytes reads and
 /// writes move share one link, so files written at once wait on each other's transfers but
 /// not on each other's round trips. A clone is a copy, which SMB can't do on the server.
+/// Its link's state is guarded by `lock`.
 private final class SimulatedLink: @unchecked Sendable {
     private let roundTripSeconds: Double
     private let bytesPerSecond: Double

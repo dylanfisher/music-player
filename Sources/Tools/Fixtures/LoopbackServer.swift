@@ -4,6 +4,7 @@ import Network
 
 /// A TCP server on 127.0.0.1 that plays a device, or a client's far end, in network tests, so
 /// no test reaches past loopback. Each connection goes to `handler` on a task of its own.
+/// Its fields are immutable; `accepted` has a lock of its own.
 final class LoopbackServer: @unchecked Sendable {
     let port: UInt16
     private let listener: NWListener
@@ -47,6 +48,7 @@ final class LoopbackServer: @unchecked Sendable {
     static let refusingPort: UInt16 = 1
 }
 
+// `connections` is guarded by `lock`.
 private final class LoopbackAccepted: @unchecked Sendable {
     private let lock = NSLock()
     private var connections: [LoopbackConnection] = []
@@ -57,6 +59,7 @@ private final class LoopbackAccepted: @unchecked Sendable {
 }
 
 /// One end of a loopback TCP connection, as a test drives it.
+/// Its buffer is guarded by `lock`; the connection's handlers run on `queue`.
 final class LoopbackConnection: @unchecked Sendable {
     let connection: NWConnection
     private let queue = DispatchQueue(label: "LoopbackConnection")

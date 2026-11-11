@@ -71,8 +71,8 @@ private func blocking<T: Sendable>(_ body: @escaping @Sendable () async throws -
 }
 
 /// Hands a result from a task to the thread waiting for it.
+/// `result` is guarded by `lock`.
 final class LockedResult<T: Sendable>: @unchecked Sendable {
-    // `result` is guarded by `lock`.
     private let lock = NSLock()
     private var result: Result<T, any Error>?
 

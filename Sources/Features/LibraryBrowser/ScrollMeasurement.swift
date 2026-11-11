@@ -170,6 +170,7 @@ final class ScrollMeasurement {
 }
 
 /// Counts art reads and adds a delay to each, as a NAS's latency.
+/// `reads` is guarded by `lock`.
 final class SlowArtReads: @unchecked Sendable {
     private let lock = NSLock()
     private var reads = 0

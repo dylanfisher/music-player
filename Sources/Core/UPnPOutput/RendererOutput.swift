@@ -157,6 +157,7 @@ public final class RendererOutput: Output, @unchecked Sendable {
 }
 
 /// The ticker's task, so `close()` can cancel whichever one runs.
+/// `task` is guarded by `lock`.
 private final class TickerTask: @unchecked Sendable {
     private let lock = NSLock()
     private var task: Task<Void, Never>?

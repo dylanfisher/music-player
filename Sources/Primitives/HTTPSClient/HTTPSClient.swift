@@ -125,6 +125,7 @@ public final class HTTPSClient: Sendable {
 
 /// Collects each task's body in the chunks the network delivers it, and cancels a task whose
 /// body passes its cap. It answers every redirect with nil, so the 3xx is the response.
+/// `pending` is guarded by `lock`.
 private final class BodyReader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private struct Pending {
         let cap: Int

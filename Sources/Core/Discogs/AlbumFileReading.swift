@@ -44,8 +44,8 @@ private struct ReadProblem: Error {
 }
 
 /// The files `readAlbumFiles` has handed out, and what each read returned.
+/// Every field is guarded by `lock`.
 private final class AlbumFileResults: @unchecked Sendable {
-    // Every field is guarded by `lock`.
     private let lock = NSLock()
     private var claimed = 0
     private var finished = 0

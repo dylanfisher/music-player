@@ -484,8 +484,8 @@ package func readEditableTracks(
 }
 
 /// The files `readEditableTracks` has handed out, and what each read returned.
+/// Every field is guarded by `lock`.
 private final class ReadResults: @unchecked Sendable {
-    // Every field is guarded by `lock`.
     private let lock = NSLock()
     private var claimed = 0
     private var results: [Result<EditableTrack, any Error>?]

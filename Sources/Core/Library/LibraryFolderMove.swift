@@ -361,6 +361,7 @@ func listedPath(_ relative: String, in listings: LibraryFolderListings) throws -
 /// folder it makes, renames or removes, so a later file finds them as the volume lists them.
 /// Another Mac's changes meanwhile aren't seen, as they weren't between one file's listings
 /// and its rename; the renames refuse a name that's taken all the same.
+/// Its listings are guarded by `lock`.
 public final class LibraryFolderListings: @unchecked Sendable {
     let libraryFolder: String
     private let lock = NSLock()

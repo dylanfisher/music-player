@@ -159,6 +159,7 @@ struct IntervalSpan: Equatable, Sendable {
 
 /// The intervals open now and the last few that ended, for the stall detector to name what ran
 /// during a stall. Safe to use from any thread.
+/// Its intervals are guarded by `lock`.
 final class IntervalLog: @unchecked Sendable {
     static let shared = IntervalLog()
     /// Ended intervals kept: enough for a stall's worth of page fetches and queries.

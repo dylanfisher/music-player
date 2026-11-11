@@ -228,12 +228,12 @@ public final class LocalSocketServer: Sendable {
 
 /// The way back to one client. `send` writes the reply and closes the connection; a reply
 /// dropped unsent closes it with nothing.
+/// `isSent` is guarded by `lock`.
 public final class LocalSocketReply: @unchecked Sendable {
     private let fd: Int32
     private let timeoutSeconds: Double
     private let slot: PendingReplies.Slot
     private let lock = NSLock()
-    /// Guarded by `lock`.
     private var isSent = false
 
     init(fd: Int32, timeoutSeconds: Double, slot: PendingReplies.Slot) {
@@ -265,27 +265,27 @@ public final class LocalSocketReply: @unchecked Sendable {
 }
 
 /// Whether the server's thread still runs, which decides whether `stop` may write to its pipe.
+/// `isRunning` is guarded by `lock`.
 private final class ServerState: @unchecked Sendable {
     let lock = NSLock()
-    /// Guarded by `lock`.
     var isRunning = true
 }
 
 /// Counts replies handed out and not yet sent, so clients that never read can't hold
 /// descriptors without bound.
+/// `count` is guarded by `lock`.
 final class PendingReplies: @unchecked Sendable {
     let cap: Int
     private let lock = NSLock()
-    /// Guarded by `lock`.
     private var count = 0
 
     init(cap: Int) { self.cap = cap }
 
     /// One reply's place, given back once.
+    /// `isReleased` is guarded by `lock`.
     final class Slot: @unchecked Sendable {
         private let owner: PendingReplies
         private let lock = NSLock()
-        /// Guarded by `lock`.
         private var isReleased = false
 
         init(_ owner: PendingReplies) { self.owner = owner }

@@ -1,8 +1,10 @@
 import Foundation
 
 /// The terminal settings from before `enterKeyMode`, global so the `atexit` handler can reach them.
+/// Set once, by `enterKeyMode`, before the signal handlers that read it start.
 nonisolated(unsafe) private var savedTerminal: termios?
 /// The settings `enterKeyMode` set, to put back after the shell resumes the process.
+/// Set once, by `enterKeyMode`, before the signal handlers that read it start.
 nonisolated(unsafe) private var keyTerminal: termios?
 
 /// Turns off line buffering and echo, so each key press arrives as it happens, and puts the

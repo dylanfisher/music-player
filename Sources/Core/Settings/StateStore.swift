@@ -8,6 +8,7 @@ private let logger = moduleLogger()
 /// doesn't match, is logged and dropped, and the rest of the file is kept; a file that isn't a JSON
 /// object is dropped whole. The next save writes over what was dropped: stored data has one shape
 /// before release, but one stale key mustn't cost the whole layout. Safe to use from any thread.
+/// Its overrides are guarded by `lock`.
 public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
     public let schema: Schema
     public let fileURL: URL

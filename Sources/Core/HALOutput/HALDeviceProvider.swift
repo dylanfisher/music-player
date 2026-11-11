@@ -30,6 +30,7 @@ enum HALDeviceProviderError: PlaybackFailure {
 /// that snapshot, so a device that was unplugged and came back is still put back the way it was
 /// before playback. The snapshot is also written to `restoreRecordURL` until a session restores
 /// it, so `recoverAfterCrash` can restore it after a run that never got to.
+/// The listener fields are guarded by `lock`; `queue` serializes `signalListeners`.
 public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     public let deviceUID: String
     public let deviceName: String

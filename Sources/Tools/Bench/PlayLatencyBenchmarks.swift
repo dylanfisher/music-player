@@ -32,6 +32,7 @@ private func threadCPUSeconds() -> Double {
 }
 
 /// When the first update that a track started arrived.
+/// `nanoseconds` is guarded by `lock`.
 private final class FirstFrame: @unchecked Sendable {
     private let lock = NSLock()
     private var nanoseconds: UInt64?

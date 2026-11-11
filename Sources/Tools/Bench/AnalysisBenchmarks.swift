@@ -65,6 +65,8 @@ private func passLibrary(in directory: URL) throws -> URL {
 /// and the benchmarks, which aren't async.
 func waited<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) throws -> T {
     let done = DispatchSemaphore(value: 0)
+    // Written by the task before `done.signal()` and read after `done.wait()`: the semaphore
+    // orders the handoff.
     nonisolated(unsafe) var result: Result<T, any Error>?
     Task.detached {
         do {

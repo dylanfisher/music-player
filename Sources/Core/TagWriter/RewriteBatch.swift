@@ -25,8 +25,8 @@ let rewritesAtOnce = max(writesAtOnce, min(filesReadAtOnce, 8))
 
 /// The rewrites of one batch under way, each on a thread of its own, at most `rewritesAtOnce`
 /// at a time, and what each came to.
+/// `finished` and `stopped` are guarded by `lock`.
 final class Rewrites: @unchecked Sendable {
-    // `finished` and `stopped` are guarded by `lock`.
     private let lock = NSLock()
     private var finished: [Int: JobResult] = [:]
     private var stopped = false

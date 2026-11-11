@@ -10,6 +10,7 @@ import Metadata
 /// flight. Each file can also wait a `FileDelay` on the NAS's disks, which is what makes one
 /// file's cost vary so much on spinning disks. It tells the scanner the volume is a network one, so the scan tunes its readers as it
 /// would on the NAS.
+/// Its state is guarded by `lock`.
 public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
     /// Extra seconds per file, log-normal around `medianSeconds`: most files cost little more,
     /// and a few in a hundred cost ten times the median, as a seek behind other requests does.

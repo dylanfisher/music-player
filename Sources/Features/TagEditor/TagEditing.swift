@@ -717,8 +717,8 @@ public final class TagEditing {
 
 /// Set when an info window closes or reads its files again, so the read it started stops
 /// starting files and its result is dropped.
+/// `stopped` is guarded by `lock`.
 private final class ReadStop: @unchecked Sendable {
-    // `stopped` is guarded by `lock`.
     private let lock = NSLock()
     private var stopped = false
 

@@ -27,9 +27,9 @@ public struct TagWriteProgress: Equatable, Sendable {
 
 /// A batch's progress, counted from the threads that write its files, each change handed to
 /// `report` in order.
+/// `progress` is guarded by `lock`, which is held while `report` runs, so values arrive in
+/// order.
 final class WriteProgressCounter: @unchecked Sendable {
-    // `progress` is guarded by `lock`, which is held while `report` runs, so values arrive in
-    // order.
     private let lock = NSLock()
     private var progress: TagWriteProgress
     private let report: @Sendable (TagWriteProgress) -> Void

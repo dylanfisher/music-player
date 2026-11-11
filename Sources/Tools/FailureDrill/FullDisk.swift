@@ -183,6 +183,8 @@ private func tagJournal(on mount: URL, music: MusicFolders) throws -> [String] {
 }
 
 /// Standard error, for `print(_:to:)`.
+/// Immutable in effect: `StandardError` holds nothing, so a write from any thread changes
+/// nothing.
 nonisolated(unsafe) var standardError = StandardError()
 
 struct StandardError: TextOutputStream {

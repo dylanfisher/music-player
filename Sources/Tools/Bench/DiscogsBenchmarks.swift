@@ -141,6 +141,7 @@ private let shapedAlbumCount = 1_741
 
 /// The fixture library's albums the shaped dump is made for, and that dump imported into a
 /// catalog of its own, in the caches beside the fixtures.
+/// Set once per run, then only read.
 private struct ShapedCatalog: @unchecked Sendable {
     var albums: [DiscogsAlbum]
     var shaped: DiscogsDumpFixture.Shaped
@@ -522,8 +523,8 @@ extension Optional {
 }
 
 /// A value an import's progress sets from its thread, read once the import is done.
+/// `stored` is guarded by `lock`.
 private final class LockedValue<T: Sendable>: @unchecked Sendable {
-    // `stored` is guarded by `lock`.
     private let lock = NSLock()
     private var stored: T
 

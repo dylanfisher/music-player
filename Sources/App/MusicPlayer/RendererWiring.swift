@@ -101,6 +101,8 @@ func rendererListing() -> String {
     return RendererChoice.listing(box.result)
 }
 
+// Written by the task before `done.signal()` and read after `done.wait()`: the semaphore
+// orders the handoff.
 private final class ListingBox: @unchecked Sendable {
     var result: Result<[Renderer], any Error> = .success([])
 }

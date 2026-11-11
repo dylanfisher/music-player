@@ -84,8 +84,8 @@ private let launchSyncDeadlineSeconds = 300.0
 
 /// When a watcher's first scan started and its merge of the other machine's plays ended, from
 /// its events.
+/// Every field but `ended` is guarded by `lock`.
 private final class LaunchEvents: @unchecked Sendable {
-    // Every field but `ended` is guarded by `lock`.
     private let lock = NSLock()
     private var scanStarted: UInt64?
     private var merged: UInt64?

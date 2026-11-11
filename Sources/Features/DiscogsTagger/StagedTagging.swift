@@ -173,8 +173,8 @@ struct StagedRejectRefused: Error, CustomStringConvertible {
 }
 
 /// The release a staged job's tagger matches, which Other Releases… and Look Up… change.
+/// `chosen` is guarded by `lock`.
 private final class StagedChoice: @unchecked Sendable {
-    // `chosen` is guarded by `lock`.
     private let lock = NSLock()
     private var chosen: Int
 

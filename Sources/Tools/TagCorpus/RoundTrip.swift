@@ -368,6 +368,8 @@ private func describe(_ tags: AVTags) -> String {
 }
 
 /// Progress goes to standard error, so the summary on standard output stays short.
+/// Immutable in effect: `StandardError` holds nothing, so a write from any thread changes
+/// nothing.
 nonisolated(unsafe) var standardError = StandardError()
 
 struct StandardError: TextOutputStream {

@@ -304,8 +304,8 @@ private func catalogState(at url: URL) async -> TaggerModel.CatalogState {
 }
 
 /// Set when a read is stopped, so it starts no more files.
+/// `stopped` is guarded by `lock`.
 private final class StopFlag: @unchecked Sendable {
-    // `stopped` is guarded by `lock`.
     private let lock = NSLock()
     private var stopped = false
 

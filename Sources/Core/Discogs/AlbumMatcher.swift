@@ -155,6 +155,7 @@ private func matchWithAPI(
 }
 
 /// Sends a run's progress from any thread, with the rate-limit wait the API reports.
+/// `last` is guarded by `lock`.
 private final class ProgressReporter: @unchecked Sendable {
     private let lock = NSLock()
     private var last = AlbumMatchProgress(albumsDone: 0, albumCount: 0)

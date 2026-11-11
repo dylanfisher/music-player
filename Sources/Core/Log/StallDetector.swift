@@ -15,6 +15,8 @@ public final class StallDetector {
 
     private var clock = StallClock(thresholdNanos: thresholdNanos)
     /// Removed when the detector goes, which only tests' detectors do.
+    /// Set once, by `start` on the main actor; deinit reads it once the last reference is
+    /// gone, so nothing touches it at the same time.
     nonisolated(unsafe) private var observer: CFRunLoopObserver?
     private var lastCommand: String?
     private let event: () -> String?

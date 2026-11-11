@@ -42,6 +42,8 @@ func captureRenderersCommand(folder: String) throws {
     guard report.capturedAnything else { throw CaptureCommandError.nothingCaptured }
 }
 
+// Written by the task before `done.signal()` and read after `done.wait()`: the semaphore
+// orders the handoff.
 private final class ReportBox: @unchecked Sendable {
     var report = NetworkCapture.Report()
 }

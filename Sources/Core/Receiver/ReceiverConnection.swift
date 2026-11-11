@@ -11,6 +11,7 @@ import Network
 /// waiting, so a dragged slider sends a level per gap and ends on the last. Lines in are cut at `lineCap` bytes
 /// without a carriage return, past which the connection is dropped. A refused, failed or
 /// closed connection ends it, and it never connects again on its own.
+/// Its state is touched only on `queue`, where the connection's handlers run.
 final class ReceiverConnection: @unchecked Sendable {
     static let port: UInt16 = 23
     /// Most bytes a line may have before its carriage return: the spec's message cap.
@@ -69,7 +70,6 @@ final class ReceiverConnection: @unchecked Sendable {
         }
     }
 
-    // Everything below is touched only on `queue`.
     private let queue = DispatchQueue(label: "ReceiverConnection")
     private let connection: NWConnection
     private let updates: @Sendable (Update) -> Void

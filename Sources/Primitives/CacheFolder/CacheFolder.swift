@@ -5,6 +5,7 @@ import Foundation
 /// folder holds more than `capacityBytes` or `capacityFiles`; a trim runs after each
 /// `trimEveryBytes` written. A file that can't be read, written or removed is handed to
 /// `report`, up to `reportedFailures` a session. Safe to use from any thread.
+/// Its counts are guarded by `lock`.
 public final class CacheFolder: @unchecked Sendable {
     /// The most failures reported a session.
     static let reportedFailures = 20

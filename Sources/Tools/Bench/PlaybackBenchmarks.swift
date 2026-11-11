@@ -11,6 +11,7 @@ import Settings
 
 /// How long the soak plays. `scripts/bench --soak <seconds>` sets it; the hour the budget is for
 /// is too long for every run.
+/// Set once, from the arguments, before any benchmark runs.
 nonisolated(unsafe) var soakSeconds = 20.0
 
 /// How often the soak scans the fixture library, from its start.
@@ -170,6 +171,7 @@ private final class SoakLoad: @unchecked Sendable {
     /// Runs `body` on its own thread at 0, `interval`, 2 × `interval` and so on, until stopped.
     private func loop(every interval: Double, _ body: @escaping () throws -> Void) {
         done.enter()
+        // Called only on the one thread it's handed to.
         nonisolated(unsafe) let body = body
         Thread.detachNewThread { [self] in
             var next = 0.0
@@ -382,6 +384,7 @@ private func cpuTimeSeconds() -> Double {
 }
 
 /// An engine playing through `DeviceOutput` on a null device, and every update it published.
+/// `updates` is guarded by `lock`.
 private final class Session: @unchecked Sendable {
     let device: NullDevice
     private let lock = NSLock()

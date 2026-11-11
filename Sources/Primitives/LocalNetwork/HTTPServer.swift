@@ -25,6 +25,7 @@ public struct HTTPServedFile: Sendable, Equatable {
 ///
 /// 9b's UPnP output is its caller: it starts a server when a renderer is chosen and stops it
 /// when none is in use.
+/// Its state is touched only on `queue`, where the listener's and connections' handlers run.
 public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     public typealias Resolve = @Sendable (Key) -> HTTPServedFile?
 
@@ -36,7 +37,6 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     static var tokenLifetimeSeconds: Double { 24 * 60 * 60 }
     static var chunkBytes: Int { 64 * 1024 }
 
-    // Everything below is touched only on `queue`.
     private let queue = DispatchQueue(label: "HTTPServer")
     private let listener: NWListener
     private let interface: NetworkInterface

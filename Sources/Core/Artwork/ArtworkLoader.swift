@@ -8,6 +8,7 @@ import Metadata
 /// size. The file's full-size image is never decoded: ImageIO scales while it decodes, so only the
 /// compressed bytes and the thumbnail exist, and only the thumbnail outlives the call. Safe to use
 /// from any thread.
+/// The cache's fields are guarded by `lock`.
 public final class ArtworkLoader: @unchecked Sendable {
     /// The longest side of each thumbnail, in pixels.
     public let maxPixelSize: Int

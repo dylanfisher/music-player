@@ -142,6 +142,7 @@ private func progress(_ line: String) {
 }
 
 /// The records of one batch, set from the threads that read them.
+/// `slots` is guarded by `lock`.
 private final class SurveyResults: @unchecked Sendable {
     private let lock = NSLock()
     private var slots: [SurveyRecord?]

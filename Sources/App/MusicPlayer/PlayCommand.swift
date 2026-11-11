@@ -77,6 +77,8 @@ private func uid(ofDeviceNamed name: String) throws -> String {
 }
 
 /// Runs the queue: prints what happens, turns keys into engine calls, and quits once.
+/// `quitting` is guarded by `lock`, `signals` is set once by `start`, and only the one task
+/// that runs the keys touches `volumeDecibels`.
 private final class Player: @unchecked Sendable {
     private let engine: PlaybackEngine
     private let output: DeviceOutput

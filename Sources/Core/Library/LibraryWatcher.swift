@@ -11,6 +11,7 @@ private let logger = moduleLogger()
 ///
 /// Idle, it costs nothing but FSEvents' own delivery and one one-shot timer for the next poll;
 /// no timer fires more often than a folder's `pollIntervalMinutes`.
+/// Its state is touched only on `queue`.
 public final class LibraryWatcher: @unchecked Sendable {
     /// How long FSEvents collects changes before reporting them, so copying an album in causes
     /// one rescan of its folder rather than one per file.

@@ -7,6 +7,7 @@ import Settings
 
 /// The fixture library scanned into a fresh database once per run, which every library
 /// benchmark then measures against.
+/// Set once per run, then only read.
 struct ScannedLibrary: @unchecked Sendable {
     var folder: WatchedFolder
     var databaseURL: URL
@@ -308,8 +309,8 @@ func typedQueries(_ index: LibraryIndex) throws -> [String] {
 private func format(_ milliseconds: Double) -> String { String(format: "%.2f", milliseconds) }
 
 /// Samples the footprint every 10 ms on its own thread until stopped.
+/// Every field but `done` is guarded by `lock`.
 final class PeakFootprint: @unchecked Sendable {
-    // Every field but `done` is guarded by `lock`.
     private let lock = NSLock()
     private var peakMB = 0.0
     private var running = true
