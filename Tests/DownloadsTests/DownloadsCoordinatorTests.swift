@@ -134,7 +134,11 @@ private final class Setup {
 
     var index: LibraryIndex { get throws { try LibraryIndex(at: databaseURL) } }
 
-    func coordinator(catalog: Bool = true, failingAfterClaim: Int = 0) -> DownloadsCoordinator {
+    /// A coordinator on `service`'s calls, or `calls` in their place.
+    func coordinator(
+        catalog: Bool = true, failingAfterClaim: Int = 0,
+        calls serviceCalls: DownloadsService? = nil
+    ) -> DownloadsCoordinator {
         let calls = calls
         let verdict = verdict
         let clock = service.clock
@@ -146,7 +150,7 @@ private final class Setup {
         return DownloadsCoordinator(
             machine: FakeService.machine, databaseURL: url,
             effects: DownloadsCoordinator.Effects(
-                service: service.service, sleep: { try await clock.sleep($0) },
+                service: serviceCalls ?? service.service, sleep: { try await clock.sleep($0) },
                 autoTag: catalog
                     ? { @Sendable job in
                         calls.tag(job)
@@ -379,6 +383,30 @@ func aStagedJobIsTaggedWhenNoRunHoldsIt(
     #expect(setup.calls.imports.isEmpty)
     #expect(setup.service.eventTypes == ["claim", "release"])
     #expect(setup.service.job(1)?.review == nil)
+}
+
+/// When the claim on a job the sheet showed stale can't be given back, the refusal says so, as
+/// the job stays held by this Mac until its claim expires.
+@Test func aClaimNotGivenBackAfterAStaleSheetIsSaid() async throws {
+    let setup = try Setup([job(1)])
+    var calls = setup.service.service
+    let handoff = calls.handoff
+    let service = setup.service
+    calls.handoff = { id, event throws(RecommenderError) in
+        if case .release = event { service.failHandoffs(1) }
+        return try await handoff(id, event)
+    }
+    let outcome = await setup.coordinator(calls: calls).approve(approved(1))
+    guard case .refused(let why) = outcome else {
+        Issue.record("\(outcome)")
+        return
+    }
+    #expect(
+        why.hasPrefix(
+            "the job is staged, tagged none, not clean; the review claim wasn't given back: "))
+    #expect(setup.service.eventTypes == ["claim", "release"])
+    #expect(setup.service.job(1)?.review?.machine == FakeService.machine)
+    #expect(setup.calls.imports.isEmpty)
 }
 
 @Test func aJobAnotherMacApprovedSinceThePollIsNotApprovedAgain() async throws {

@@ -417,7 +417,11 @@ actor DownloadsCoordinator {
         }
         // The sheet may be old: the job is the service's answer now.
         if let stale = Self.stale(claimed, for: job, takingOver: takingOver) {
-            _ = try? await effects.service.handoff(job.jobID, .release)
+            do {
+                _ = try await effects.service.handoff(job.jobID, .release)
+            } catch {
+                return .refused("\(stale); the review claim wasn't given back: \(error)")
+            }
             return .refused(stale)
         }
         let outcome = await effects.importRun(job) { [self] in await deliver(job.jobID) }
