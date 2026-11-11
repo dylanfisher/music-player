@@ -101,6 +101,3 @@ final class RatingStars: NSView {
         needsDisplay = true
     }
 }
-
-/// An unfilled star, as Get Info draws the stars a rating doesn't reach.
-let emptyStar = "☆"
