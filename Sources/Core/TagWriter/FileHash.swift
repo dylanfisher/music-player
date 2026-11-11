@@ -46,6 +46,8 @@ struct FileHasher {
     mutating func hash(
         _ descriptor: Int32, upTo end: Int?, _ path: String, faults: WriteFaults
     ) throws(TagWriteError) {
+        // A copy asks for the bytes before each range it keeps, most often none.
+        if let end, end <= offset { return }
         // Not zeroed: only the bytes a read fills are hashed, and a write hashes more than once,
         // so a small file would otherwise pay to zero all of it each time.
         var buffer = [UInt8](unsafeUninitializedCapacity: hashReadBytes) { _, count in
