@@ -12134,3 +12134,113 @@ recorded.
 **Owner checks:** turn Upgrade to FLAC Automatically on with a handful of candidates: three jobs
 queue, the most-played lowest-quality first, clean ones land, and a fourth queues as one
 finishes. And the window benchmark rows on this Mac.
+
+### 80. The rating in the status bar and the toolbar
+
+Asked by the owner on 2026-11-10, with phase 79, which it follows.
+
+- [x] **A Rating part.** `StatusPart` and `HeaderPart` gain `rating`: the playing track's stars
+      in the status bar's layout editor (phase 76) and the toolbar's Now Playing and Custom
+      Status builders. Empty stars for an unrated track, nothing while nothing plays. It updates
+      when the rating changes from anywhere, a sync from another Mac included. Clickable to
+      rate, as Get Info's stars are, if the plan finds it fits the bar's hit areas; else shown
+      only, and the plan says which.
+- [x] **Tests.** Each layout decodes and encodes the part; its text for 0 to 5 stars; it changes
+      on a rating set while playing.
+- [ ] **Owner check:** add Rating to the status bar and to Custom Status 1, and rate the
+      playing track with a shortcut: both follow.
+
+Implementation plan, phase 80 (ADR 0203):
+
+What exists, found by search (map.md recipes): `StatusPart` and `HeaderPart` (`Core/Settings`)
+are `BarPart`s, coded by raw value, which the builder (`Features/SettingsWindow`) lists from
+`allCases`. `StatusBarParts` and `HeaderStatus` (`Features/NowPlaying`) give each part's view,
+and `NowPlayingBar.show()` fills them from `NowPlayingModel.track`, the index's `TrackRow`, whose
+`rating` the bar doesn't show yet. The app lays the status bar out from
+`StatusBarParts.view(for:)` (`applyStatusBar`). Get Info's `RatingStars` view
+(`Features/TagEditor`, phase 79) draws ☆/★, hovers and clicks through `RatingClick`
+(`Core/Library`). Every rating the app writes calls `LibraryBrowser.ratingsChanged` (a table
+click, `rateSelection` for the menu and the shortcuts, `setRating` for Get Info), which the app
+passes to `TagEditing.ratingsChanged`; a sync that changed the index refreshes the browser,
+whose `libraryRefreshed` already calls `NowPlayingBar.libraryChanged`, which reads the playing
+track's row again.
+
+The plan's answers:
+
+- **Clickable, as Get Info's stars are.** Both bars already take clicks in their parts: the seek
+  bar, the status bar's art and format line. The stars are a view of their own, sized to their
+  five glyphs, so a click on them is theirs alone and nothing else in the bar has a hit area
+  there. Like the seek bar they say `mouseDownCanMoveWindow` false, since the toolbar and a
+  glass window's status bar drag the window from a view that allows it. A click rates the
+  playing track by path at once, as Get Info's does, and shows no message, as a table click
+  shows none: the stars change in place.
+- **Nothing while nothing plays:** the stars keep their place unseen (alpha 0) and take no
+  click, as the art does, so the parts beside them don't move when a track starts and a stack's
+  height doesn't change. A playing file the index doesn't have (not yet scanned) shows five
+  dimmed empty stars that take no click, as Get Info's do for such a file.
+- **From anywhere:** the app adds `NowPlayingBar.ratingsChanged()` to `ratingsChanged`, which
+  reads the row again and shows it without loading the art again; a sync goes through
+  `libraryChanged` as now.
+- **Where the view lives:** `RatingStars` moves to `Core/BarView` (its own commit, map.md
+  Promotion), the lowest module both Get Info and the bars import, with the font size an
+  argument: Get Info's system size, the status bar's 11 points, the toolbar's small size.
+
+Order, each step its own commit:
+
+- 80.1 Promote `RatingStars` to `Core/BarView` (refactor): `BarView` gains `DisplayText` and
+  `Library`, `TagEditor` gains `BarView`; `init(fontPoints:)`; `mouseDownCanMoveWindow` false;
+  a `text` the view draws, filled then empty stars, which `draw` reads. Its tests stay in
+  `TagEditorTests`.
+- 80.2 The part (`Core/Settings`): `StatusPart.rating` and `HeaderPart.rating`, titled as the
+  track table's Rating column. Tests in `BarLayoutTests` and `HeaderPartTests`: a layout with
+  the part decodes and encodes, for each.
+- 80.3 The views (`Features/NowPlaying`): `StatusBarParts.view(for: .rating)` and
+  `HeaderStatus.view(for: .rating)` give their stars; `show()` sets each from
+  `model.track?.rating`, hidden and off with nothing playing, dimmed and off for a file the
+  index doesn't have; a click calls `NowPlayingBar.ratingClicked(stars, path)`; the
+  customization sheet's drawing shows four stars. `ratingsChanged()`. Tests in
+  `NowPlayingBarTests`: the text for 0 to 5 stars, nothing while nothing plays, the stars
+  change on a rating set while playing (`ratingsChanged` and `libraryChanged`), a click
+  reports the playing path, and a mouse down on them never moves the window.
+- 80.4 The app (`App/MusicPlayer`): `ratingClicked` goes to `LibraryBrowser.setRating(_:paths:)`
+  and `ratingsChanged` to the bar too. Test in `MusicPlayerTests`: a rating set through the
+  browser shows in the status bar's stars.
+- 80.5 ADR 0203: the stars clickable in both bars, unseen while nothing plays, no message on a
+  click, and the view promoted to `BarView`.
+
+Result, phase 80: shipped a Rating part for the status bar and the toolbar (ADR 0203). Get
+Info's `RatingStars` moved to `Core/BarView`, taking its font size (Get Info's system size, the
+status bar's 11 points, the toolbar's small size), with a `text` it draws and
+`mouseDownCanMoveWindow` false; `mixedPlaceholder` moved to `DisplayText`. `StatusPart.rating`
+and `HeaderPart.rating`, in both builders, the customization sheet drawing four stars.
+`NowPlayingBar` fills the stars from the playing track's row: unseen and off while nothing
+plays, dimmed empty stars and off for a file the index doesn't have. The stars are clickable, a
+view of their own that nothing else in either bar has a hit area over; a click rates the playing
+track by path through `LibraryBrowser.setRating`, wired by `connectRatings` in
+`App/MusicPlayer/RatingWiring.swift`, and the bars keep the click's rating until its write is
+done. `ratingsChanged()` rerates the playing track without reading the art again; a sync arrives
+through `libraryChanged`. Tests in `NowPlayingTests/BarRatingTests` (0 to 5 stars, nothing while
+nothing plays, following `ratingsChanged` and `libraryChanged`, a click's path, the window not
+moved), round trips in `BarLayoutTests` and `HeaderPartTests`, and `MusicPlayerTests/
+BarRatingTests` (a click writes the index, a browser rating shows in both bars). Bench: no budget
+miss, no regression over 10 percent, nothing rerun: search keystroke through the browser model
+5.45 ms (20 ms; phase 79 6.46), Stats period change 229 ms (250 ms, the tightest), library scan
+43k 1.13 s, sync merge 1M plays 8.33 s, tag write through the temp file on the NAS 56.60 s (100
+s), window idle CPU 0.00 percent and 0 wakeups. Window rows that hang in an agent session not
+run. Gate: three review rounds; the fixes, in their own commits: the stars rate on a first click
+and let the window drag while off, a rating out of range kept to zero to five stars, the bars
+rerate only the playing track without a read, the unseen stars left out for VoiceOver, a click's
+rating kept until its write is done, and a rating by path naming only the tracks it rated; round
+2 two findings above low and four low, round 3 nothing above low (one low). The bars' doc comments
+were rewrapped to 100 columns. Architecture found nothing high: tiers and dependencies hold, the empty
+star and `mixedPlaceholder` defined once, "Rating" in the dupes allowlist since Settings can't
+import Library's column title; map.md now says a core view is one two features share.
+Real-time path untouched. Full `./scripts/check` passed but for `theGlassHeadersAreFrosted`.
+Deferred: nothing.
+
+Cost: implementer (Opus) 70 tool calls, 45 min; simplify 5 tool calls; the reviews', fixes',
+architecture audit's and bench's costs weren't recorded.
+
+**Owner checks:** add Rating to the status bar and to Custom Status 1, and rate the playing
+track with a shortcut: both follow. A launch and a live resize with the part in both bars, and
+the window benchmark rows on this Mac.
