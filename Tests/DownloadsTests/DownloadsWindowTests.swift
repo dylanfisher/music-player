@@ -172,18 +172,23 @@ private func rows() -> [DownloadRow] {
     downloads.window?.close()
 
     selection = [7]
+    downloads.show(offeringSelection: true)
+    #expect(downloads.offeredTracks == nil, "one track isn't an album to offer")
+    downloads.window?.close()
+
+    selection = [7, 8]
     downloads.show()
     #expect(downloads.offeredTracks == nil, "only File > Downloads… offers it")
     downloads.window?.close()
 
     // No catalog on this Mac: it can't queue, so the offer waits, until the window closes.
     downloads.show(offeringSelection: true)
-    #expect(downloads.offeredTracks == [7])
+    #expect(downloads.offeredTracks == [7, 8])
     // The selection changes; the offer keeps the tracks selected when the window opened, and a
     // click on the status item, which offers nothing, leaves it waiting.
-    selection = [9]
+    selection = [9, 10]
     downloads.statusItem.clicked()
-    #expect(downloads.offeredTracks == [7])
+    #expect(downloads.offeredTracks == [7, 8])
     downloads.window?.close()
     #expect(downloads.offeredTracks == nil)
 

@@ -324,8 +324,8 @@ package final class Downloads {
     // MARK: - The window
 
     /// Shows the window, making it the first time, where it was left (ADR 0158). With
-    /// `offeringSelection`, File > Downloads…, the library tracks selected now open From
-    /// Library Selection for them once the window can queue. Without it, an offer waiting
+    /// `offeringSelection`, File > Downloads…, two or more library tracks selected now open
+    /// From Library Selection for them once the window can queue. Without it, an offer waiting
     /// stays.
     package func show(offeringSelection: Bool = false) {
         let making = self.controller == nil
@@ -373,11 +373,12 @@ package final class Downloads {
     private var sheetsBegun = 0
     private var sheetObserver: (any NSObjectProtocol)?
 
-    /// The tracks selected in the library; nil for none, or a selection that can't be read.
+    /// The tracks selected in the library; nil for none or one, which is a track picked to play
+    /// rather than an album to download, or a selection that can't be read.
     private func currentSelection() -> [Int64]? {
         do {
             let tracks = try selectedTracks()
-            return tracks.isEmpty ? nil : tracks
+            return tracks.count < 2 ? nil : tracks
         } catch {
             logger.notice("the library's selection couldn't be read: \(error)")
             return nil
