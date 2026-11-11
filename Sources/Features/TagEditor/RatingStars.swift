@@ -12,8 +12,12 @@ final class RatingStars: NSView {
     var rating: Int? = 0 {
         didSet { show() }
     }
+    /// Turning it off drops a hover, which shows only while the stars can be clicked.
     var isEnabled = false {
-        didSet { show() }
+        didSet {
+            if !isEnabled { hovered = nil }
+            show()
+        }
     }
     /// Called with the stars a click gives, 0 to clear.
     var clicked: (Int) -> Void = { _ in }
@@ -81,10 +85,12 @@ final class RatingStars: NSView {
         show()
     }
 
-    /// A click at `x`: the star there, or none on the rating the tracks have.
+    /// A click at `x`: the star there, or none on the rating the tracks have. The stars then
+    /// show the rating the click gave until the pointer moves.
     func click(atX x: CGFloat) {
         guard isEnabled else { return }
         let stars = RatingClick.stars(at: x, starWidth: starWidth, current: rating)
+        hovered = nil
         rating = stars
         clicked(stars)
     }

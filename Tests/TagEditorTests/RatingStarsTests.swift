@@ -50,9 +50,15 @@ private func track(_ path: String, rating: Int?) -> EditableTrack {
     #expect(rated == [4], "a click over mixed ratings sets the star's")
     #expect(editor.model?.tracks.map(\.rating) == [4, 4])
     #expect(stars.rating == 4)
+    stars.hover(atX: width * 3.5)
     stars.click(atX: width * 3.5)
     #expect(rated == [4, 0])
     #expect(stars.rating == 0)
+    #expect(stars.filled == 0, "a click that clears shows no star under the pointer")
+    stars.hover(atX: width * 1.5)
+    stars.isEnabled = false
+    #expect(stars.filled == 0, "the stars turned off drop the hover")
+    stars.isEnabled = true
     #expect(try editor.model?.edit().isEmpty == true, "no tag is written")
     // A rating set elsewhere shows.
     editor.showRatings([1, 1])
