@@ -64,8 +64,10 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
     expectChanged(writer.undoLast(), [url])
 }
 
-@Test func aJournalThatCantBeWrittenStopsTheBatchAfterThatFile() throws {
-    let urls = try [Sample.mp4, .mp3v24, .flac].map { try $0.copy() }
+/// A journal that can't be written stops the batch: the rewrites in flight finish, and no
+/// file after them starts (ADR 0196).
+@Test func aJournalThatCantBeWrittenStopsTheBatch() throws {
+    let urls = try (0..<3 * rewritesAtOnce).map { _ in try Sample.flac.copy() }
     var writer = scratchWriter()
     // A write in place also has to confirm its record afterwards, which this folder refuses.
     writer.faults.writesInPlace = false
@@ -75,14 +77,17 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
         let folder = try newestEntry(journal)
         chmod(folder.path, 0o500)
     }
-    let originals = try urls.dropFirst().map { try Data(contentsOf: $0) }
+    let originals = try urls.map { try Data(contentsOf: $0) }
     let report = writer.write(TagEdit(values: [.album: "Stopped"]), to: urls.map(\.path))
     chmod(try newestEntry(journal).path, 0o700)
-    #expect(report.changed == [urls[0].path])
-    #expect(report.failures.map(\.kind) == [.journal])
-    #expect(report.failures.map(\.path) != [])
-    #expect(report.notWritten == [urls[2].path])
-    #expect(try urls.dropFirst().map { try Data(contentsOf: $0) } == originals)
+    #expect(!report.changed.isEmpty)
+    #expect(!report.failures.isEmpty)
+    #expect(report.failures.allSatisfy { $0.kind == .journal })
+    #expect(!report.notWritten.isEmpty)
+    #expect(report.notWritten == Array(urls.map(\.path).suffix(report.notWritten.count)))
+    for (url, original) in zip(urls, originals) where !report.changed.contains(url.path) {
+        #expect(try Data(contentsOf: url) == original)
+    }
 }
 
 @Test func undoComparesTheInodeToo() throws {

@@ -25,7 +25,8 @@ public struct TagWriter: Sendable {
     /// in place an earlier call left unfinished is finished first.
     ///
     /// Files whose new tags fit are read and planned first, a chunk at a time, then written in
-    /// place together (ADR 0108); any other file goes through its temp file when it's reached.
+    /// place together (ADR 0108); any other file goes through its temp file once it's read,
+    /// several at once (ADR 0196). Each file's result keeps its place in the batch.
     /// `progress` is told of each file read and each written, from the threads writing them.
     /// The journal keeps `origin` with the edit, for `newestEdit()`.
     public func write(
@@ -59,25 +60,32 @@ public struct TagWriter: Sendable {
         let unclear = removeLeftoverTemps(for: paths, faults)
         var results = [JobResult?](repeating: nil, count: paths.count)
         var chunk: [(index: Int, job: InPlaceJob)] = []
+        let rewrites = Rewrites()
+        // Waits for the rewrites under way and takes their results.
+        func collectRewrites() {
+            for (index, result) in rewrites.finish() { results[index] = result }
+        }
         // Writes the planned chunk; returns whether the batch stops after it, and whether as a
         // crash would, which leaves the journal as it is.
         func writeChunk() -> (stop: Bool, crashed: Bool) {
             guard !chunk.isEmpty else { return (false, false) }
+            // So the chunk's journal steps don't run beside a rewrite's.
+            collectRewrites()
             let (written, stop, crashed) = writeInPlace(
                 chunk.map(\.job), entry: entry, progress: counter)
             for (item, result) in zip(chunk, written) { results[item.index] = result }
             chunk = []
             return (stop, crashed)
         }
-        // The files up to where the batch stopped.
-        var reached = paths.count
         files: for (index, path) in paths.enumerated() {
+            // A rewrite that stopped the batch starts no new file.
+            if rewrites.hasStopped { break }
             // A batch can run over an album of large files; each file's buffers go before the
             // next, but for a chunk's plans.
             let prepared = autoreleasepool { () -> Result<Prepared, TagWriteError> in
                 do throws(TagWriteError) {
                     if let error = unclear[path] { throw error }
-                    return .success(try prepare(files[index].edit, path, entry: entry))
+                    return .success(try prepare(files[index].edit, path))
                 } catch {
                     logger.error("\(error.description)")
                     return .failure(error)
@@ -94,22 +102,30 @@ public struct TagWriter: Sendable {
                 else { continue }
                 let (stop, crashed) = writeChunk()
                 if crashed { return report }
-                if stop {
-                    reached = index + 1
-                    break files
+                if stop { break files }
+            case .success(.rewrite(let job)):
+                rewrites.start(index) { [self] in
+                    defer { counter.written() }
+                    return autoreleasepool { () -> JobResult in
+                        do throws(TagWriteError) {
+                            return .success(try rewrite(job, entry: entry, rewrites))
+                        } catch {
+                            logger.error("\(error.description)")
+                            return .failure(error)
+                        }
+                    }
                 }
             case .failure(let error):
                 results[index] = .failure(error)
                 counter.written()
-                if error.stopsBatch {
-                    reached = index + 1
-                    break files
-                }
+                if error.stopsBatch { break files }
             }
         }
-        // The chunk's files come before any file that stopped the batch.
+        // A chunk already read is written, as are the rewrites under way, whatever stopped the
+        // batch.
         if writeChunk().crashed { return report }
-        for (index, result) in results.prefix(reached).enumerated() {
+        collectRewrites()
+        for (index, result) in results.enumerated() {
             switch result {
             case .success(.unchanged): report.unchanged.append(paths[index])
             case .success(.changed(let parsed, let problem)):
@@ -117,10 +133,9 @@ public struct TagWriter: Sendable {
                 report.parsed[paths[index]] = parsed
                 if let problem { report.failures.append(problem) }
             case .failure(let error): report.failures.append(error)
-            case nil: preconditionFailure("every file up to the stop has a result")
+            case nil: report.notWritten.append(paths[index])
             }
         }
-        report.notWritten = Array(paths[reached...])
         if !report.notWritten.isEmpty {
             logger.error("stopped the batch; \(report.notWritten.count) files weren't written")
         }
@@ -247,15 +262,18 @@ public struct TagWriter: Sendable {
 
     /// What one file of a batch needs once it's read.
     private enum Prepared {
-        /// Left alone, or written through the temp file.
+        /// Left alone.
         case done(Outcome)
         /// To be written in place with the rest of its chunk.
         case inPlace(InPlaceJob)
+        /// To be written through its temp file, beside other files' (ADR 0196).
+        case rewrite(RewriteJob)
     }
 
     /// Reads one file and plans its edit. One that fits is checked on its planned file and
-    /// handed back to be written in place; any other is written through the temp file now.
-    private func prepare(_ edit: TagEdit, _ path: String, entry: TagUndoJournal.Entry)
+    /// handed back to be written in place; any other is handed back with the old bytes its
+    /// undo needs, to be written through its temp file.
+    private func prepare(_ edit: TagEdit, _ path: String)
         throws(TagWriteError) -> Prepared
     {
         let before = try identity(path)
@@ -329,56 +347,10 @@ public struct TagWriter: Sendable {
         }
         let (restore, oldBytes) = try restoreSegments(
             segments, from: source, path: path, size: before.size)
-        let temp = try writeTemp(
-            segments, from: path, identity: before, hashing: file.payload, faults: faults)
-        guard let hashes = temp.originalHashes else {
-            preconditionFailure("a temp file asked for the hashes has them")
-        }
-        var handle: TagUndoJournal.Handle?
-        var record: TagUndoJournal.FileRecord
-        let parsed: ParsedFile
-        do throws(TagWriteError) {
-            parsed = try checkEdited(
-                temp.path, original: file, path: path, hashes: hashes, expected: expected)
-            record = TagUndoJournal.FileRecord(
-                path: path, edited: try identity(temp.path), original: before,
-                originalSHA256: Data(hashes.full), restore: restore)
-            handle = try journal.append(record, oldBytes: oldBytes, to: entry)
-            try finish(path, temp: temp, before: before)
-        } catch {
-            // A crash leaves the temp file and the journal as they are.
-            if error.detail == crashDetail { throw error }
-            unlink(temp.path)
-            if let handle {
-                do throws(TagWriteError) {
-                    try journal.remove(handle)
-                } catch let journalError {
-                    logger.error("\(journalError.description)")
-                }
-            }
-            throw error
-        }
-        logger.notice("wrote tags to \(path)")
-        // Undo compares against the file as it is now; a volume may round the mtime or change
-        // the inode on the rename.
-        do throws(TagWriteError) {
-            let final = try identity(path)
-            if !record.isEdited(final) {
-                record.setEdited(final)
-                try journal.update(record, at: handle!)
-            }
-            // Stamped as the renamed file is, so a rescan that stats it finds the same.
-            return .done(.changed(final.stamp(parsed), problem: nil))
-        } catch {
-            logger.error("\(error.description)")
-            return .done(
-                .changed(
-                    temp.identity.stamp(parsed),
-                    problem: TagWriteError(
-                        path: path, kind: .journal,
-                        detail: "written, but its undo record couldn't be updated: \(error.detail)")
-                ))
-        }
+        return .rewrite(
+            RewriteJob(
+                path: path, segments: segments, restore: restore, oldBytes: oldBytes,
+                original: file, before: before, expected: expected))
     }
 
     /// Finishes each write in place that a crash or a failure left unconfirmed (ADR 0107): a
@@ -550,12 +522,15 @@ public struct TagWriter: Sendable {
 
     /// The last steps: the injected faults, the checks that nothing else wrote the file or
     /// swapped the temp file, then the rename.
-    private func finish(_ path: String, temp: TempFile, before: FileIdentity)
+    func finish(_ path: String, temp: TempFile, before: FileIdentity)
         throws(TagWriteError)
     {
         if let hook = faults.beforeReplacing {
             do {
                 try hook(path, temp.path)
+            } catch let error as TagWriteError {
+                // As a full disk, which the tests inject here.
+                throw error
             } catch {
                 throw TagWriteError(path: path, kind: .writeFailed, detail: "\(error)")
             }
@@ -602,7 +577,7 @@ public struct TagWriter: Sendable {
 
     /// Reads the temp file `edited` back with the reader and checks it against what was meant,
     /// its audio payload by hash. Returns what the reader read.
-    private func checkEdited(
+    func checkEdited(
         _ edited: String, original: TagFile, path: String, hashes: FileHashes,
         expected: Expected
     ) throws(TagWriteError) -> ParsedFile {

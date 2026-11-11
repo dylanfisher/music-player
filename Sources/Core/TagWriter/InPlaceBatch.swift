@@ -34,7 +34,7 @@ enum BatchStep: CaseIterable, Sendable {
 
 /// Files a batch writes and reads back at once: SMB is bound by round trips, so a few in
 /// flight hide each other's (ADR 0108). Its journal steps stay one at a time.
-private let writesAtOnce = 4
+let writesAtOnce = 4
 /// The most files, and the most of their tag bytes, a chunk of a batch plans before it writes,
 /// so a change to a thousand files' art doesn't hold every plan at once.
 let chunkFiles = 32

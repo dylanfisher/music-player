@@ -215,7 +215,7 @@ private final class FlushCount: @unchecked Sendable {
 }
 
 /// How many writes were under way at once, at most.
-private final class InFlight: @unchecked Sendable {
+final class InFlight: @unchecked Sendable {
     // `now` and `peak` are guarded by `lock`.
     private let lock = NSLock()
     private var now = 0
@@ -230,6 +230,7 @@ private final class InFlight: @unchecked Sendable {
 
     func leave() { lock.withLock { now -= 1 } }
     var most: Int { lock.withLock { peak } }
+    var current: Int { lock.withLock { now } }
 }
 
 /// Each file of a batch gets its own edit, in place or through the temp file, and one undo puts
