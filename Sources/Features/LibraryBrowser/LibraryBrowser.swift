@@ -91,8 +91,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Called after the track table's selection changed, which the play state keeps.
     public var selectionChanged: () -> Void = {}
     /// Called after the browser rated tracks, from the menus, a shortcut or the Rating column,
-    /// so the info windows show it.
-    public var ratingsChanged: () -> Void = {}
+    /// so the info windows show it; nil after a rating by path that failed.
+    public var ratingsChanged: (RatedTracks?) -> Void = { _ in }
     /// Called after each refresh for a library change, so other views can read their rows again.
     public var libraryRefreshed: () -> Void = {}
     /// The sidebar's context menu: ask before deleting this playlist, and open its rules.
@@ -285,7 +285,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         table.rateClicked = { id, stars in
             owner?.edit("couldn't rate the track") {
                 try await model.rate([id], stars: stars)
-                owner?.ratingsChanged()
+                owner?.ratingsChanged(RatedTracks(stars: stars, trackIDs: [id], paths: []))
             }
         }
         let timelineModel = TimelineModel(reader: reader) { ids in try index.playedTracks(ids: ids)
@@ -2074,7 +2074,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let title = ids.count == 1 ? selectedTitle(ids[0]) : nil
         edit("couldn't rate the tracks") {
             try await self.model.rate(ids, stars: stars)
-            self.ratingsChanged()
+            self.ratingsChanged(RatedTracks(stars: stars, trackIDs: ids, paths: []))
             self.showRatingMessage(ratingMessage(stars: stars, count: ids.count, title: title))
         }
     }
@@ -2175,10 +2175,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Rates the tracks at `paths`, from Get Info's stars.
     public func setRating(_ stars: Int, paths: [String]) {
         edit("couldn't rate the tracks") {
-            // Get Info shows the click's rating already, so a failed write tells it too, to
-            // show the index's again.
-            defer { self.ratingsChanged() }
-            try await self.model.setRating(stars, paths: paths)
+            // Get Info and the bars show the click's rating already, so a failed write tells
+            // them too, to show the index's again.
+            do {
+                try await self.model.setRating(stars, paths: paths)
+            } catch {
+                self.ratingsChanged(nil)
+                throw error
+            }
+            self.ratingsChanged(RatedTracks(stars: stars, trackIDs: [], paths: paths))
         }
     }
 

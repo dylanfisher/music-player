@@ -88,6 +88,11 @@ public final class NowPlayingModel {
         lookUpTrack()
     }
 
+    /// The current file was rated `stars`, as the index now has it.
+    func rated(_ stars: Int) {
+        track?.rating = stars
+    }
+
     private func lookUpTrack() {
         track = nil
         guard let url = currentURL else { return }

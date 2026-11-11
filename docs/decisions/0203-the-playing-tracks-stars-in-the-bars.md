@@ -28,8 +28,11 @@ clickable to rate if that fits the bars' hit areas.
   starts. A playing file the index doesn't have shows five dimmed empty stars that take no
   click, since it can't be rated, as Get Info's are for such a file.
 - **They follow every rating** through the browser's `ratingsChanged`, which the app now also
-  sends to the bar; it reads the playing track's row again without loading its art again. A sync
-  that changed the index refreshes the library, which reads the row again already.
+  sends to the bar, with the tracks rated and their stars. The bar changes the playing track's
+  rating only if it's one of them, without reading the index, so a rating of another track
+  costs nothing and leaves the bar's message alone; after a write that failed, the stars show
+  the track's rating again. A sync that changed the index refreshes the library, which reads
+  the row again already.
 - **`RatingStars` moved from Get Info to the bar views' module,** the lowest that Get Info and
   the bars both import, with the font size an argument: Get Info's system size, the status
   bar's 11 points in both styles, and the toolbar's small size, its artist and album's.

@@ -370,32 +370,39 @@ private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
     try await waitFor("the fade") { browser.ratingMessageText == nil }
 }
 
-/// Get Info rates by path; every rating the browser sets tells the info windows.
+/// Get Info rates by path; every rating the browser sets tells the info windows and the bars
+/// which tracks it rated, and how.
 @MainActor @Test func ratingByPathRatesTheTracksAndSaysTheRatingsChanged() async throws {
     let (browser, index) = try await browser(selecting: [2])
-    var changes = 0
-    browser.ratingsChanged = { changes += 1 }
+    var changes: [RatedTracks?] = []
+    browser.ratingsChanged = { changes.append($0) }
     let id = try #require(try browser.selectedTrackIDs().first)
     let path = try #require(try index.paths(ids: [id])[id])
-    browser.setRating(3, paths: [path, "/not/in/the/index.flac"])
-    try await waitFor("the rating") { changes == 1 }
+    let paths = [path, "/not/in/the/index.flac"]
+    browser.setRating(3, paths: paths)
+    try await waitFor("the rating") { changes.count == 1 }
     #expect(try index.rows(ids: [id]).first?.rating == 3)
     browser.rateSelection(1)
-    try await waitFor("the second rating") { changes == 2 }
+    try await waitFor("the second rating") { changes.count == 2 }
     #expect(try index.rows(ids: [id]).first?.rating == 1)
+    #expect(
+        changes == [
+            RatedTracks(stars: 3, trackIDs: [], paths: paths),
+            RatedTracks(stars: 1, trackIDs: [id], paths: []),
+        ])
 }
 
 /// A rating by path that fails still says the ratings changed, so Get Info, which showed the
 /// click's rating, shows the index's again.
 @MainActor @Test func aFailedRatingByPathStillSaysTheRatingsChanged() async throws {
     let (browser, index) = try await browser(selecting: [2])
-    var changes = 0
-    browser.ratingsChanged = { changes += 1 }
+    var changes: [RatedTracks?] = []
+    browser.ratingsChanged = { changes.append($0) }
     let id = try #require(try browser.selectedTrackIDs().first)
     let path = try #require(try index.paths(ids: [id])[id])
     try index.database.execute(
         "CREATE TRIGGER no_rating BEFORE INSERT ON ratings BEGIN SELECT RAISE(ABORT, 'no'); END")
     browser.setRating(3, paths: [path])
-    try await waitFor("the failure") { changes == 1 }
+    try await waitFor("the failure") { changes == [nil] }
     #expect(try index.rows(ids: [id]).first?.rating != 3)
 }

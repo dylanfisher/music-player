@@ -12,16 +12,18 @@ import Testing
 private let path = "/m/a.flac"
 
 /// The index's rating of the playing file, which a test changes; nil when the index doesn't
-/// have the file.
+/// have the file. `reads` counts the bar's lookups.
 @MainActor
 private final class Index {
     var rating: Int? = 0
+    var reads = 0
 }
 
 @MainActor
 private func bar(_ index: Index) -> NowPlayingBar {
     let model = NowPlayingModel { path in
-        index.rating.map { rating in
+        index.reads += 1
+        return index.rating.map { rating in
             var row = TrackRow(
                 id: 1, path: path, title: "Song", artist: nil, album: nil, albumID: 1,
                 albumArtist: nil, genre: nil, date: nil, trackNumber: nil, discNumber: nil,
@@ -65,8 +67,7 @@ private func stars(of bar: NowPlayingBar) -> [RatingStars] {
     bar.apply(playing(0))
     let texts = ["☆☆☆☆☆", "★☆☆☆☆", "★★☆☆☆", "★★★☆☆", "★★★★☆", "★★★★★"]
     for (rating, text) in texts.enumerated() {
-        index.rating = rating
-        bar.ratingsChanged()
+        bar.ratingsChanged(rating) { _ in true }
         for view in stars(of: bar) {
             #expect(view.text == text, "\(rating) stars")
             #expect(view.isEnabled && view.alphaValue == 1)
@@ -92,24 +93,40 @@ private func stars(of bar: NowPlayingBar) -> [RatingStars] {
     }
 }
 
-/// A rating set while the track plays shows in every bar: from the app, a shortcut, the menu,
-/// a table click or Get Info, and from a sync, which refreshes the library.
+/// A rating set on the playing track shows in every bar, without reading the index: from the
+/// app, a shortcut, the menu, a table click or Get Info. Another track's changes nothing, and a
+/// sync shows through the library's refresh, which reads the index.
 @MainActor @Test func theStarsFollowARatingSetWhilePlaying() {
     let index = Index()
     index.rating = 2
     let bar = bar(index)
     bar.apply(playing(0))
     #expect(stars(of: bar).allSatisfy { $0.rating == 2 })
-    index.rating = 4
-    #expect(stars(of: bar).allSatisfy { $0.rating == 2 }, "the bar reads the index only when told")
-    bar.ratingsChanged()
+    let reads = index.reads
+    bar.ratingsChanged(4) { $0.path == "/m/b.flac" }
+    #expect(stars(of: bar).allSatisfy { $0.rating == 2 }, "another track's rating")
+    bar.ratingsChanged(4) { $0.path == path }
     #expect(stars(of: bar).allSatisfy { $0.rating == 4 })
+    bar.ratingsChanged(0) { $0.path == path }
+    #expect(stars(of: bar).allSatisfy { $0.text == "☆☆☆☆☆" })
+    #expect(index.reads == reads)
     index.rating = 1
     bar.libraryChanged()
     #expect(stars(of: bar).allSatisfy { $0.rating == 1 })
-    index.rating = 0
-    bar.ratingsChanged()
-    #expect(stars(of: bar).allSatisfy { $0.text == "☆☆☆☆☆" })
+}
+
+/// The stars clicked show the click's rating at once; after a write that failed they show the
+/// track's rating again.
+@MainActor @Test func theStarsClickedGoBackAfterAFailedWrite() {
+    let index = Index()
+    index.rating = 2
+    let bar = bar(index)
+    bar.apply(playing(0))
+    let width = bar.header.rating.intrinsicContentSize.width / 5
+    bar.header.rating.click(atX: width * 3.5)
+    #expect(bar.header.rating.rating == 4)
+    bar.ratingsChanged(nil) { _ in true }
+    #expect(stars(of: bar).allSatisfy { $0.rating == 2 })
 }
 
 /// A click on any bar's stars rates the playing track by its path, and a click on its rating

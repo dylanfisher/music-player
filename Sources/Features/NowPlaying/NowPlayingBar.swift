@@ -145,11 +145,12 @@ public final class NowPlayingBar: NSObject {
         show()
     }
 
-    /// A rating was set, here or anywhere else in the app, so the playing track's may have
-    /// changed. Its art hasn't, so it isn't loaded again.
-    public func ratingsChanged() {
-        model.libraryChanged()
-        show()
+    /// A rating was set, here or anywhere else in the app: `stars` on the tracks `includes`
+    /// picks out, or nil after a write that failed. The stars show the playing track's new
+    /// rating, if it's one of them, or its rating again, without reading the index.
+    public func ratingsChanged(_ stars: Int?, includes: (TrackRow) -> Bool) {
+        if let stars, let track = model.track, includes(track) { model.rated(stars) }
+        showRating()
     }
 
     /// No output could be opened, so nothing can play. Says why in the format line.
@@ -282,8 +283,8 @@ public final class NowPlayingBar: NSObject {
         }
     }
 
-    /// A click on the stars of the track `ratingClicked` is told; they show the click's rating
-    /// until the index answers.
+    /// A click on the stars of the track `ratingClicked` is told. The stars clicked show the
+    /// click's rating, the others the old one, until `ratingsChanged` says how the write went.
     private func rate(_ stars: Int) {
         guard let path = model.track?.path else { return }
         ratingClicked(stars, path)

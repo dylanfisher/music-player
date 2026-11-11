@@ -9,9 +9,9 @@ import NowPlaying
 func connectRatings(
     _ browser: LibraryBrowser, _ nowPlaying: NowPlayingBar, alsoChanged: @escaping () -> Void
 ) {
-    browser.ratingsChanged = { [weak nowPlaying] in
+    browser.ratingsChanged = { [weak nowPlaying] rated in
         alsoChanged()
-        nowPlaying?.ratingsChanged()
+        nowPlaying?.ratingsChanged(rated?.stars) { rated?.includes($0) == true }
     }
     nowPlaying.ratingClicked = { [weak browser] stars, path in
         browser?.setRating(stars, paths: [path])
