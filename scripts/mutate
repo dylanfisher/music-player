@@ -5,12 +5,13 @@
 # runs them in git worktrees of HEAD under .build/mutate, one per job (3 by default, and no more
 # than there are mutants): each job builds the entries' test targets and runs them unmutated,
 # then for each mutant applies it, builds its entry's test targets, runs their bundles and
-# checks the file out again. A mutant the tests fail on, crash on or time out on is killed; one
-# they pass survives; one that doesn't build isn't counted. The run refuses to score, and stops,
-# when the unmutated tests fail or a mutant's tests never start, since then a failure says
-# nothing about the mutant. The main checkout is never written. Results are in
-# .build/mutate/results.tsv, and each file's score and survivors are printed. The worktrees are
-# removed on exit; their builds are kept in .build/mutate/build-<n>, so a second run builds less.
+# checks the file out again. A mutant the tests fail on (twice: a failing run is run again),
+# crash on or time out on is killed; one they pass survives; one that doesn't build isn't
+# counted. The run refuses to score, and stops, when the unmutated tests fail or a mutant's
+# tests never start, since then a failure says nothing about the mutant. The main checkout is
+# never written. Results are in .build/mutate/results.tsv, and each file's score and survivors
+# are printed. The worktrees are removed on exit; their builds are kept in
+# .build/mutate/build-<n>, so a second run builds less.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 repo=$(pwd)
@@ -85,47 +86,54 @@ if [ ! -e "$clear" ] || [ scripts/clear-windows.m -nt "$clear" ]; then
   clang -dynamiclib -fobjc-arc -framework AppKit -o "$clear" scripts/clear-windows.m
 fi
 
-# run_tests <bin> <log> <seconds> <comma-separated test targets> — runs each target's bundle,
-# as scripts/test does, each under a time limit of that many seconds, and prints
-# `passed`, `failed` (a run printed a failing summary), `crashed` (a run started and never
-# printed one), `timed out`, or `didn't run` (no run started: the tests never ran, so a
-# failure says nothing about the mutant).
+# run_bundle <executable> <log> <seconds> — runs one test target's bundle, as scripts/test
+# does, under a time limit of that many seconds, and prints `passed`, `failed` (it printed a
+# failing summary), `crashed` (it started a run and never printed one), `timed out`, or `didn't
+# run` (no run started: the tests never ran, so a failure says nothing about the mutant).
+run_bundle() {
+  local executable=$1 log=$2 limit=$3 runlog="$2.run" status=0 started failing
+  # Perl runs the bundle in a child and kills it at the time limit, polling rather than
+  # waiting on an alarm, which neither the test helper nor a perl blocked in waitpid is sure
+  # to act on. It sets the DYLD_ variables itself, since /usr/bin/perl is protected by SIP,
+  # which drops them from its environment.
+  NO_COLOR=1 perl -MPOSIX=:sys_wait_h -e '
+    @ENV{qw(DYLD_INSERT_LIBRARIES DYLD_FRAMEWORK_PATH DYLD_LIBRARY_PATH)} = splice @ARGV, 0, 3;
+    my $limit = shift;
+    my $pid = fork // die "fork: $!";
+    if (!$pid) { exec @ARGV or die "exec: $!" }
+    my $end = time + $limit;
+    while (waitpid($pid, WNOHANG) == 0) {
+      if (time >= $end) { kill "KILL", $pid; waitpid $pid, 0; exit 142 }
+      select undef, undef, undef, 0.2;
+    }
+    exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' -- \
+    "$clear" "$platform/Library/Frameworks" "$platform/usr/lib" "$limit" \
+    "$helper" --test-bundle-path "$executable" "$executable" --testing-library swift-testing \
+    > "$runlog" 2>&1 || status=$?
+  cat "$runlog" >> "$log"
+  started=$(grep -c '^◇ Test run started\.$' "$runlog" || true)
+  failing=$(grep -c '^✘ Test run with ' "$runlog" || true)
+  rm -f "$runlog"
+  if [ "$status" -eq 0 ]; then echo passed
+  elif [ "$status" -eq 142 ]; then echo "timed out"
+  elif [ "$started" -eq 0 ]; then echo "didn't run"
+  elif [ "$failing" -gt 0 ]; then echo failed
+  else echo crashed
+  fi
+}
+
+# run_tests <bin> <log> <seconds> <comma-separated test targets> — runs each target's bundle
+# until one doesn't pass, and prints how the last went, as run_bundle does. A bundle that
+# fails is run once more and fails only when it fails again: on a loaded machine a test that
+# waits on timing fails now and then.
 run_tests() {
-  local bin=$1 log=$2 limit=$3 target status executable runlog started failing outcome=passed
-  runlog="$log.run"
+  local bin=$1 log=$2 limit=$3 target executable outcome=passed
   for target in ${4//,/ }; do
     executable=$bin/$target.xctest/Contents/MacOS/$target
-    status=0
-    # Perl runs the bundle in a child and kills it at the time limit, polling rather than
-    # waiting on an alarm, which neither the test helper nor a perl blocked in waitpid is sure
-    # to act on. It sets the DYLD_ variables itself, since /usr/bin/perl is protected by SIP,
-    # which drops them from its environment.
-    NO_COLOR=1 perl -MPOSIX=:sys_wait_h -e '
-      @ENV{qw(DYLD_INSERT_LIBRARIES DYLD_FRAMEWORK_PATH DYLD_LIBRARY_PATH)} = splice @ARGV, 0, 3;
-      my $limit = shift;
-      my $pid = fork // die "fork: $!";
-      if (!$pid) { exec @ARGV or die "exec: $!" }
-      my $end = time + $limit;
-      while (waitpid($pid, WNOHANG) == 0) {
-        if (time >= $end) { kill "KILL", $pid; waitpid $pid, 0; exit 142 }
-        select undef, undef, undef, 0.2;
-      }
-      exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' -- \
-      "$clear" "$platform/Library/Frameworks" "$platform/usr/lib" "$limit" \
-      "$helper" --test-bundle-path "$executable" "$executable" --testing-library swift-testing \
-      > "$runlog" 2>&1 || status=$?
-    cat "$runlog" >> "$log"
-    [ "$status" -ne 0 ] || continue
-    started=$(grep -c '^◇ Test run started\.$' "$runlog" || true)
-    failing=$(grep -c '^✘ Test run with ' "$runlog" || true)
-    if [ "$status" -eq 142 ]; then outcome="timed out"
-    elif [ "$started" -eq 0 ]; then outcome="didn't run"
-    elif [ "$failing" -gt 0 ]; then outcome=failed
-    else outcome=crashed
-    fi
-    break
+    outcome=$(run_bundle "$executable" "$log" "$limit")
+    [ "$outcome" != failed ] || outcome=$(run_bundle "$executable" "$log" "$limit")
+    [ "$outcome" = passed ] || break
   done
-  rm -f "$runlog"
   echo "$outcome"
 }
 
