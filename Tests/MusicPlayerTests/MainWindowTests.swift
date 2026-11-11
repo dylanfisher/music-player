@@ -237,3 +237,28 @@ private final class RecordingWindow: SilentEscapeWindow {
     // Already out of full screen, it isn't toggled back in.
     #expect(fullScreenToggles == 1)
 }
+
+/// Quitting or closing in Focus Mode saves the window as it was before it.
+@MainActor @Test func quittingInFocusModeSavesTheWindowAsItWasBefore() async throws {
+    let fixture = try await MainWindowFixture(fillsWindow: true)
+    defer { fixture.close() }
+    let main = fixture.window
+    let window = main.window
+    main.toggleFullScreen = { _ in }
+    func saved() -> String {
+        fixture.saver.flush()
+        let state = fixture.state
+        return "\(state[\.toolbarVisible]) \(state[\.sidebarVisible]) \(state[\.queueVisible])"
+            + " \(state[\.statusBarVisible]) \(String(describing: state[\.windowFrame]))"
+    }
+    let savedBefore = saved()
+
+    main.toggleFocus()
+    window.setFrame(window.frame.insetBy(dx: 20, dy: 20), display: false)
+    main.windowDidResize(Notification(name: NSWindow.didResizeNotification, object: window))
+    // As applicationWillTerminate and the window's close do.
+    main.saveToolbarVisibility()
+    main.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: window))
+    #expect(main.isFocused)
+    #expect(saved() == savedBefore)
+}
