@@ -430,6 +430,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.fail("Couldn't change whether safe matches are approved", error)
             }
         }
+        downloads.autoUpgradesInFlight = settings[\.autoUpgradesInFlight]
+        downloads.autoUpgrade = settings[\.autoUpgrade]
+        downloads.autoUpgradeChosen = { [weak self] on in
+            do {
+                try settings.set(\.autoUpgrade, to: on)
+            } catch {
+                self?.fail("Couldn't change whether albums are upgraded automatically", error)
+            }
+        }
         browser.statusTotals = layout.statusTotals
         browser.totalsFormats = layout.totalsFormats
         browser.statusTotalsChanged = { saver.set(\.statusTotals, $0) }

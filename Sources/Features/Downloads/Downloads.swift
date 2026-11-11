@@ -188,6 +188,48 @@ package final class Downloads {
             ).checked(places: places)
         }
 
+    /// Upgrade to FLAC Automatically, `downloads.autoUpgrade` (ADR 0200): keeps up to
+    /// `autoUpgradesInFlight` upgrades of its own on the service while the app is open.
+    /// Turning it off stops a pass before its next call; the jobs queued carry on.
+    package var autoUpgrade = false {
+        didSet {
+            guard autoUpgrade != oldValue else { return }
+            refresh()
+            upgradeAutomatically()
+        }
+    }
+    /// `downloads.autoUpgradesInFlight`.
+    package var autoUpgradesInFlight = AppSettings().autoUpgradesInFlight.defaultValue {
+        didSet { upgradeAutomatically() }
+    }
+    /// Hears the window's box for it turned on or off, to save it.
+    package var autoUpgradeChosen: (Bool) -> Void = { _ in }
+    /// The pass running, and whether a poll or a change came during it, which runs another.
+    var upgrading: Task<Void, Never>?
+    var upgradeAgain = false
+    /// The jobs Approve Safe Matches Automatically found a lossy-origin finding in, which the
+    /// upgrader requeues when they're its own.
+    var notClean: Set<Int> = []
+    /// The releases whose snapshot couldn't be built, left until the next launch.
+    var unqueueable: Set<Int> = []
+    /// The clock the misses are dated by; tests stand in for it.
+    var now: () -> Date = Date.init
+    /// The albums the upgrader may queue, read from the index off the main thread; tests
+    /// stand in for it.
+    var upgradeCandidates: @Sendable (URL, String) async throws -> [UpgradeCandidate] = {
+        database, share in
+        try await blockingFileWork {
+            Result { try LibraryIndex(at: database).upgradeCandidates(onShare: share) }
+        }.get()
+    }
+    /// Builds a release's snapshot from the catalog off the main thread; tests stand in for it.
+    var releaseSnapshot: @Sendable (Int, URL) async throws -> ReleaseSnapshot = {
+        release, catalog in
+        try await blockingFileWork {
+            Result { try ReleaseSnapshot.queueable(releaseID: release, catalogAt: catalog) }
+        }.get()
+    }
+
     package init() {
         statusItem.clicked = { [weak self] in self?.show() }
         statusItem.styleChosen = { [weak self] in self?.styleChosen($0) }
@@ -242,6 +284,7 @@ package final class Downloads {
                     // Changes the rows, and calls `changed`, only when it's new.
                     model.setTagged(tagged)
                     self.approveSafe()
+                    self.upgradeAutomatically()
                     // The poll refreshed the rows; only a new problem changes what shows.
                     guard problems != session.problems else { return }
                     session.problems = problems
@@ -262,6 +305,8 @@ package final class Downloads {
         cancelReview()
         approving?.task.cancel()
         approving = nil
+        upgrading?.cancel()
+        upgrading = nil
         session?.model.stop()
         session = nil
         refresh()
@@ -407,6 +452,10 @@ package final class Downloads {
             // The box shows the setting, which a save that failed left as it was.
             self?.refresh()
         }
+        made.autoUpgradeChanged = { [weak self] on in
+            self?.autoUpgradeChosen(on)
+            self?.refresh()
+        }
         made.columnsResized = { [weak self] widths in
             self?.columnWidths = widths
             self?.columnWidthsChanged(widths)
@@ -439,6 +488,7 @@ package final class Downloads {
         defer { offerSelection() }
         controller.showSlskd(session?.slskdPage)
         controller.showAutoApprove(autoApprove)
+        controller.showAutoUpgrade(autoUpgrade)
         guard let session else {
             return controller.show([], status: Self.notSet, canAdd: false)
         }
@@ -819,6 +869,11 @@ package final class Downloads {
         case .left(let why):
             await giveBack()
             leave(why)
+        case .notClean(let why):
+            await giveBack()
+            leave(why)
+            notClean.insert(id)
+            upgradeAutomatically()
         case .approved(let approved):
             let outcome = await importing(DownloadRow.album(job.release)) {
                 await coordinator.approve(approved)

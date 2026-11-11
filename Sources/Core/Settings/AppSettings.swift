@@ -99,6 +99,12 @@ public struct AppSettings: SettingsSchema {
         "import.autoApproveSafeMatches", title: "Approve Safe Matches Automatically",
         default: false,
         "Approve clean downloads that leave nothing to review.")
+    public let autoUpgrade = Setting(
+        "downloads.autoUpgrade", title: "Upgrade to FLAC Automatically", default: false,
+        "Download FLAC copies of the most-played lossy albums while open.")
+    public let autoUpgradesInFlight = Setting(
+        "downloads.autoUpgradesInFlight", title: "Upgrades at Once", default: 3,
+        range: 1...10, "How many automatic upgrades music-recommender works on at a time.")
     public let discogsArtwork = Setting(
         "discogs.artwork", title: "Discogs Artwork", default: DiscogsArtworkMode.off,
         "The Discogs tagger writes the release's cover: never, where none, or always.")

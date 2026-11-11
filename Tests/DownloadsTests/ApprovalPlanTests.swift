@@ -116,7 +116,19 @@ private let lossy = StagedOrigin(
 private func unasked(_ plan: ApprovalPlan) -> (ApprovedImport?, String?) {
     switch plan.unasked {
     case .approved(let approved): (approved, nil)
-    case .left(let why): (nil, why)
+    case .left(let why), .notClean(let why): (nil, why)
+    }
+}
+
+@Test func onlyALossyOriginFindingMakesTheCopyNotClean() {
+    guard case .notClean = plan(origins: [lossy]).unasked else {
+        Issue.record("a finding")
+        return
+    }
+    let unread = StagedOrigin(path: "/s/job-5/01 First Song.flac", verdicts: [], failure: "EIO")
+    guard case .left = plan(origins: [unread]).unasked else {
+        Issue.record("a file the check couldn't read")
+        return
     }
 }
 

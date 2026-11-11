@@ -16,7 +16,7 @@ private struct NoFolder: Error {}
 /// there only if `places` says so.
 @MainActor
 func started(
-    _ service: DownloadsService, statusBarShown: Bool = false,
+    _ service: DownloadsService, statusBarShown: Bool = false, share: String? = nil,
     places: @escaping @Sendable () async throws -> ImportPlaces
 ) async throws -> (Downloads, Downloads.Session) {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -30,7 +30,7 @@ func started(
         Downloads.Setup(
             machine: FakeService.machine, service: service, databaseURL: database,
             dataDirectory: folder, catalog: folder.appendingPathComponent("none.sqlite"),
-            mapping: DiscogsPreset.oneToOne.mapping, share: nil, places: places,
+            mapping: DiscogsPreset.oneToOne.mapping, share: share, places: places,
             trash: { _ in nil }, carry: { _ in MoveListImport(problems: []) }, rescan: { _ in }))
     let session = try #require(downloads.session)
     await eventually("the coordinator") { session.coordinator != nil }

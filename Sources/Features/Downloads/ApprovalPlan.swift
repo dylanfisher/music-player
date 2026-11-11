@@ -142,6 +142,10 @@ struct ApprovalPlan: Sendable {
         case approved(ApprovedImport)
         /// Left for the owner to review, saying why.
         case left(String)
+        /// Left, saying why, with a lossy-origin finding among the reasons: a copy that isn't
+        /// what it claims, which Upgrade to FLAC Automatically throws away when it's its own
+        /// (ADR 0200).
+        case notClean(String)
     }
 
     /// The import Approve makes with nothing ticked, acknowledged or kept, when the plan leaves
@@ -158,7 +162,11 @@ struct ApprovalPlan: Sendable {
         }
         if let notReplaced { return .left(notReplaced) }
         let blockers = blockers(ticked: [], acknowledgedOrigins: false)
-        if !blockers.isEmpty { return .left(blockers.joined(separator: " ")) }
+        if !blockers.isEmpty {
+            let why = blockers.joined(separator: " ")
+            // A finding, not a file the check couldn't read.
+            return origins.contains { !$0.verdicts.isEmpty } ? .notClean(why) : .left(why)
+        }
         guard let approved = approved(ticked: [], acknowledgedOrigins: false) else {
             return .left("the service listed the job with no staged folder")
         }

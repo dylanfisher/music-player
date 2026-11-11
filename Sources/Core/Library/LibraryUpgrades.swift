@@ -1,13 +1,13 @@
 import Foundation
 
 /// A job Upgrade to FLAC Automatically queued on music-recommender, as the service numbers it.
-struct AutoUpgradeJob: Equatable, Hashable, Sendable {
+package struct AutoUpgradeJob: Equatable, Hashable, Sendable {
     /// The service's epoch when it was queued; ids of another epoch name other jobs.
-    var epoch: String
-    var jobID: Int
-    var releaseID: Int
+    package var epoch: String
+    package var jobID: Int
+    package var releaseID: Int
 
-    init(epoch: String, jobID: Int, releaseID: Int) {
+    package init(epoch: String, jobID: Int, releaseID: Int) {
         self.epoch = epoch
         self.jobID = jobID
         self.releaseID = releaseID
@@ -15,12 +15,12 @@ struct AutoUpgradeJob: Equatable, Hashable, Sendable {
 }
 
 /// A release's misses, the jobs that found no clean copy (ADR 0200).
-struct UpgradeMiss: Equatable, Sendable {
-    var misses: Int
+package struct UpgradeMiss: Equatable, Sendable {
+    package var misses: Int
     /// When it may be queued again, in seconds since 1970; nil once it's set aside.
-    var retryAt: Double?
+    package var retryAt: Double?
 
-    var isSetAside: Bool { retryAt == nil }
+    package var isSetAside: Bool { retryAt == nil }
 }
 
 /// How long a release waits after each miss before it's queued again; the miss after the last
@@ -31,7 +31,7 @@ let upgradeRetryDays = [1, 7, 30]
 /// and this Mac's own jobs and misses, by release and job, never by album or path ID.
 extension LibraryIndex {
     /// The releases marked Never Upgrade.
-    func neverUpgradeReleases() throws -> Set<Int> {
+    package func neverUpgradeReleases() throws -> Set<Int> {
         Set(try statement("SELECT release_id FROM \(neverUpgradeTable)").map { try $0.int(0) })
     }
 
@@ -77,7 +77,7 @@ extension LibraryIndex {
 
     // MARK: This Mac's jobs and misses
 
-    func autoUpgradeJobs() throws -> [AutoUpgradeJob] {
+    package func autoUpgradeJobs() throws -> [AutoUpgradeJob] {
         try statement(
             "SELECT epoch, job_id, release_id FROM \(autoUpgradeJobsTable) ORDER BY epoch, job_id"
         ).map {
@@ -85,20 +85,20 @@ extension LibraryIndex {
         }
     }
 
-    func recordAutoUpgradeJob(_ job: AutoUpgradeJob) throws {
+    package func recordAutoUpgradeJob(_ job: AutoUpgradeJob) throws {
         try statement(
             "INSERT OR REPLACE INTO \(autoUpgradeJobsTable) (epoch, job_id, release_id)"
                 + " VALUES (?, ?, ?)"
         ).run(job.epoch, job.jobID, job.releaseID)
     }
 
-    func forgetAutoUpgradeJob(_ job: AutoUpgradeJob) throws {
+    package func forgetAutoUpgradeJob(_ job: AutoUpgradeJob) throws {
         try statement("DELETE FROM \(autoUpgradeJobsTable) WHERE epoch = ? AND job_id = ?").run(
             job.epoch, job.jobID)
     }
 
     /// Each release's misses, by release.
-    func upgradeMisses() throws -> [Int: UpgradeMiss] {
+    package func upgradeMisses() throws -> [Int: UpgradeMiss] {
         Dictionary(
             uniqueKeysWithValues: try statement(
                 "SELECT release_id, misses, retry_seconds FROM \(upgradeMissesTable)"
@@ -114,7 +114,7 @@ extension LibraryIndex {
     /// the release waits 1, 7 or 30 days after its first three, and the fourth sets it aside.
     /// Gives the release's misses now.
     @discardableResult
-    func recordUpgradeMiss(_ job: AutoUpgradeJob, at seconds: Double) throws
+    package func recordUpgradeMiss(_ job: AutoUpgradeJob, at seconds: Double) throws
         -> UpgradeMiss
     {
         try database.transaction {

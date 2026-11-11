@@ -62,6 +62,14 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         + " wasn't queued to replace, unless that album is tagged with its release and the"
         + " download is clearly higher quality. Upgrades replace the old files as Approve does."
         + " The rest stay staged for review."
+    /// Upgrade to FLAC Automatically (ADR 0200).
+    let autoUpgradeBox = NSButton(
+        checkboxWithTitle: AppSettings().autoUpgrade.title, target: nil, action: nil)
+    static let autoUpgradeHelp =
+        "While the app is open, keep a few FLAC upgrades on their way, the most-played,"
+        + " lowest-quality albums first. A copy that isn't clean is thrown away and searched"
+        + " for again from another peer; approving the clean ones is Approve Safe Matches"
+        + " Automatically's."
     private(set) var buttons: [DownloadAction: NSButton] = [:]
     /// The rows shown, in the window's order.
     private(set) var rows: [DownloadRow] = []
@@ -76,6 +84,8 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     var openSlskd: () -> Void = {}
     /// Hears Approve Safe Matches Automatically turned on or off.
     var autoApproveChanged: (Bool) -> Void = { _ in }
+    /// Hears Upgrade to FLAC Automatically turned on or off.
+    var autoUpgradeChanged: (Bool) -> Void = { _ in }
     /// Hears the window open and close, for the polling's pace.
     var visibilityChanged: (Bool) -> Void = { _ in }
     /// Hears the columns' widths after one changes, once `keepWidths` has set them.
@@ -133,6 +143,11 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         autoApproveBox.target = self
         autoApproveBox.action = #selector(autoApproveClicked)
         autoApproveBox.toolTip = Self.autoApproveHelp
+        autoUpgradeBox.target = self
+        autoUpgradeBox.action = #selector(autoUpgradeClicked)
+        autoUpgradeBox.toolTip = Self.autoUpgradeHelp
+        let boxes = NSStackView(views: [autoApproveBox, autoUpgradeBox])
+        boxes.spacing = 20
 
         for column in DownloadColumn.allCases {
             table.addColumn(
@@ -149,7 +164,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         empty.textColor = .secondaryLabelColor
-        let page = NSStackView(views: [autoApproveBox, bar, scroll, empty, statusLabel])
+        let page = NSStackView(views: [boxes, bar, scroll, empty, statusLabel])
         page.orientation = .vertical
         page.alignment = .leading
         page.spacing = 10
@@ -198,6 +213,12 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     }
 
     @objc private func autoApproveClicked() { autoApproveChanged(autoApproveBox.state == .on) }
+
+    func showAutoUpgrade(_ on: Bool) {
+        autoUpgradeBox.state = on ? .on : .off
+    }
+
+    @objc private func autoUpgradeClicked() { autoUpgradeChanged(autoUpgradeBox.state == .on) }
 
     var selectedRow: DownloadRow? {
         let row = table.selectedRow

@@ -4,7 +4,7 @@ package struct DownloadJobs: Equatable, Sendable {
     /// Every job the service has, by id, as of the last page taken.
     package var rows: [Int: DownloadJob] = [:]
     /// The store's epoch from the last reply; nil before the first.
-    var epoch: String?
+    package internal(set) var epoch: String?
     /// The revision of the last job taken, 0 before any.
     package var after = 0
 

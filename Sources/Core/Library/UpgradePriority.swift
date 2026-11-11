@@ -18,7 +18,7 @@ extension UpgradeCandidate {
     }
 
     /// Whether `self` is queued before `other`: the higher score, then the lower album id.
-    func precedes(_ other: UpgradeCandidate) -> Bool {
+    package func precedes(_ other: UpgradeCandidate) -> Bool {
         priority != other.priority ? priority > other.priority : albumID < other.albumID
     }
 }

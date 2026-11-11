@@ -144,6 +144,12 @@ extension AppDelegate {
         if keys.contains(schema.autoApproveSafeMatches.key) {
             downloads.autoApprove = settings[\.autoApproveSafeMatches]
         }
+        if keys.contains(schema.autoUpgradesInFlight.key) {
+            downloads.autoUpgradesInFlight = settings[\.autoUpgradesInFlight]
+        }
+        if keys.contains(schema.autoUpgrade.key) {
+            downloads.autoUpgrade = settings[\.autoUpgrade]
+        }
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
             schema.pausePollingDuringPlayback.key, schema.syncFolder.key,

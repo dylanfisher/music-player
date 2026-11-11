@@ -128,7 +128,7 @@ public final class GeneralModel {
             case .database: [schema.snapshotFolder.key]
             case .sync: ["sync."]
             case .receiver: ["receiver."]
-            case .downloads: ["recommender.", "import."]
+            case .downloads: ["recommender.", "import.", "downloads."]
             case .folderChanges: [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key]
             case .libraryFolder:
                 [
