@@ -20,8 +20,10 @@ private final class Folder {
     }
 }
 
-/// A file a share with no Trash won't let go of is reported, and stays.
-@Test func aFileThatCantBeDeletedOnAShareWithNoTrashIsReported() async throws {
+/// A file a share with no Trash won't let go of is reported, and stays. Root writes into a
+/// read-only folder, so the test needs another user.
+@Test(.enabled(if: geteuid() != 0, "root ignores a read-only folder"))
+func aFileThatCantBeDeletedOnAShareWithNoTrashIsReported() async throws {
     let folder = try Folder()
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.url.path)
     let failure = await trashOrDelete([folder.file]) { _ in throw CocoaError(.featureUnsupported) }
@@ -46,5 +48,20 @@ private final class Folder {
     let folder = try Folder()
     #expect(
         await trashOrDelete([folder.file]) { _ in throw CocoaError(.featureUnsupported) } == nil)
+    #expect(!FileManager.default.fileExists(atPath: folder.file.path))
+}
+
+/// The share's no-Trash error may come as POSIX `ENOTSUP`, given as is or underlying a Cocoa
+/// error; each deletes the file.
+@Test(arguments: [
+    POSIXError(.ENOTSUP) as NSError,
+    NSError(
+        domain: NSCocoaErrorDomain, code: CocoaError.fileWriteUnknown.rawValue,
+        userInfo: [NSUnderlyingErrorKey: POSIXError(.ENOTSUP) as NSError]),
+])
+func aShareWithNoTrashSayingSoAnotherWayDeletesTheFile(_ noTrash: NSError) async throws {
+    let folder = try Folder()
+    let failure = await trashOrDelete([folder.file]) { _ in throw noTrash }
+    #expect(failure == nil)
     #expect(!FileManager.default.fileExists(atPath: folder.file.path))
 }
