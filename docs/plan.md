@@ -503,6 +503,202 @@ states (`Features/Downloads`) are to be measured when their entries are added.
 - [ ] **Owner check:** none beyond a normal session's use, since nothing the user sees changes.
       The window rows go to the owner's Mac if any window code moved.
 
+#### Triage, phase 84
+
+Eight Sonnet auditors (splits, deviceoutput, mutation, checks, map, dupes, security, perf)
+read main at 5fb2cabe, read only. Phases 78, 79, 81 and 82 have landed; 77, 80 and 83 haven't,
+so only what is on main was reviewed, and `TagWriter.prepare` and `FileReplace.writeTemp` stay
+untouched. Each finding is fixed, deferred with a reason, or dropped. A lane owns its files: no
+two lanes edit the same file, and a test a lane adds for a file another lane owns goes in a new
+test file. The splits lane runs last, on the merged branch, and may touch any file.
+
+Two corrections to the Before numbers. Every mutation score above is false:
+`scripts/mutate` calls `/usr/bin/timeout`, which macOS doesn't have, so `swift test` never ran
+and every mutant that built counted as killed (84.1 reruns them). And the `try?` count with a
+word-boundary grep, `\btry\?`, is 53, not 56: the plain pattern matched `Entry?`. The After
+row uses `\btry\?`.
+
+Fix:
+
+- 84.1 `scripts/mutate` runs its tests: a time limit that exists on stock macOS (`perl -e
+  'alarm 240; exec @ARGV' --`), and it refuses to score when the unmutated tests fail, or when a
+  killed mutant's log has no failing test run. The unmutated build builds only the entry's test
+  products, and the default is `--jobs 3`, with no more jobs than mutants. Rerun the seven
+  existing entries for real Before scores, and correct ADR 0027's. Lane `mutation`.
+- 84.2 TieBreak entry and tests that kill its survivors that matter: the empty-barcode match
+  (line 28), a number on another label and barcode plus number (33, 34, 41), exact country
+  against a fitting region and an unset country (62, 68), and `samePressing`/`datesFit`'s
+  boundaries (94, 96, 138, 164, 168). About 40 survivors are binary step weights (`1 to 2`)
+  that don't change the order: equivalent, left. Lane `mutation`.
+- 84.3 AlbumMatcher entry and tests: the tie flag `tiedAcrossMastersAndTitles` (one master, one
+  title, two of each, at `MatchThreshold.tie` and beyond, lines 414-423), the artist-only cap,
+  gate and cache (252-312), the rematch's foundBy, the `.matched` tier and equal-score order
+  (336-380), cancellation and the restored waiting state. `reserveCapacity` and the reporter's
+  throttle constants are equivalent, left. Lane `mutation`.
+- 84.4 Entries, runs and killing tests for `LibrarySyncMerge`, the Downloads job states
+  (`DownloadJob.swift` with the transitions in `DownloadsModel.swift` and
+  `Downloads+AutoUpgrade.swift`) and `BrowserModel`'s selection and sort ranges. Lane
+  `mutation`.
+- 84.5 `DeviceOutput`'s control thread becomes one steppable machine: an internal
+  `ControlSeam` init parameter (`startThread`, `consumed`, `now`, `afterChunk`), `run()` is
+  `wait(); step()`, and tests step it. It cures the largest group of its fix commits, about 10
+  of 29: the control pass, the caller's posts and the IO proc's consumed count were ordered only
+  by wall-clock timing. The machine goes in a file of its own, so `DeviceOutput.swift` ends no
+  longer than its 1,657 lines. Nothing reachable from the IO proc changes. Lane
+  `deviceoutput`.
+- 84.6 Regression tests for the two bugs of that group with none, f4f43bbf (a boundary is
+  announced before the in-refill position) and 6144577a (position published after each chunk).
+  Lane `deviceoutput`.
+- 84.7 The group's other regression tests (246364e1, 6d416c06, 7b935bd0, 8e308a5d, 2c77214f,
+  7ddef2df) rewritten on the stepped machine, with one wall-clock smoke test kept per area.
+  Lane `deviceoutput`.
+- 84.8 `DeviceOutput`'s mutation entries, by ranges of about 150 mutants, run after 84.5 lands,
+  with tests for the survivors that matter. Its lines move in 84.5, so this runs on the merged
+  branch: the splits lane's first commits.
+- 84.9 Check step `size`: a `.swift` file in `Sources/` over 1,000 lines fails unless
+  `scripts/size-allow.txt` lists it with a ceiling, which only goes down, and an entry at or
+  under 1,000 fails. Today's nine files, at their current lines. With `scripts/size-test`.
+  Lane `checks`.
+- 84.10 Check step for `try?`: each needs a why-comment on its line or the `//` run above;
+  allowlist by file and count, not line. Comment every site in Core, Features and App; in
+  `Sources/Tools` comment or allow by file. ScriptTool's retry sleep (`main.swift:89`) checks
+  `Task.isCancelled` after it, and `TaggerModel.swift:700` says why its read's error is
+  reported elsewhere or reads it. Sites in files another lane owns are allowlisted here and
+  cleared by that lane (see the splits lane). Lane `checks`.
+- 84.11 Check step for `@unchecked Sendable` and `nonisolated(unsafe)`: the comment on the line or
+  the `//` block above names the guard (lock, queue, condition, serial, main actor, one thread,
+  set once, immutable). Fix the 44 comments that name none and the 9 with no comment;
+  `ReportBox` (CaptureCommand) and `ListingBox` (RendererWiring) are read first, and replaced by
+  a Sendable type if their handoff has no lock or semaphore. Lane `checks`.
+- 84.12 The `map` step checks every backticked path in `docs/map.md` that starts with
+  `Sources/`, `Tests/`, `scripts/`, `docs/` or `Support/` (placeholders with `<`, `>`, `*` or
+  `{` skipped) and its `decisions/` links. For modules it keeps the map free of an inventory
+  and checks it against the package instead: a folder `Sources/<Tier>/<Name>` that no target
+  path names, a tier folder that no Tiers row names, or a row that `arch.swift`'s `allowed`
+  doesn't have, fails. This replaces the phase text's "a module folder isn't in the map", which
+  would make map.md a hand-kept list; ADR 0201 says why. The `<!-- paths: -->` comment goes,
+  derived from the table. `steps` picks `map` for `Package.swift` and a new module folder, with
+  `check-test` cases. Lane `checks`.
+- 84.13 map.md's prose: the Tiers intro says the tiers are fixed by `arch.swift` and
+  `Package.swift`; the features row drops "later remote control" and the Core row names what it
+  holds; tests exist "where a module has logic to test"; the main-actor file-system rule is
+  marked a convention, apart from what `arch.swift` enforces. Lane `checks`.
+- 84.14 A `strictContainer(_:_:)` helper beside `rejectUnknownKeys`, used by every strict
+  decoder, so the nine strict-decode block entries go (b013e447 and its siblings), and the
+  NamedDiscogsMapping and PalettePlace advisory with them. With a StrictKeys test. Lane `dupes`.
+- 84.15 The strict-key check moves to a primitive that Settings and HALOutput import, and
+  `DeviceSnapshot`'s private copy and its `AnyKey` go, with the `literal "unknown key"` entry.
+  Lane `dupes`.
+- 84.16 One shared tools helper for `fail(_:)` and the flag messages (unknown, missing value,
+  given twice, only goes with), in a target every tier that has a copy may import (a primitive,
+  if `arch.swift` allows), used by DiscogsImport, Fuzz, FailureDrill, TagCorpus and
+  GenerateFixtures. The entries it clears go; an entry that still holds for the app's or
+  `ScriptArguments`' copy keeps a reason naming the tier. `App/ScriptTool/main.swift` is the
+  checks lane's file and is left. Lane `dupes`.
+- 84.17 `ServiceToken` and `DiscogsToken` share one redacting secret type, so a leak fixed in one
+  is fixed in both, with a test that both print redacted through `String(describing:)`, `dump`
+  and `Mirror`. Lane `dupes`.
+- 84.18 The three folder settings (a757a385) share `FolderSetting`'s shape if they can; if their
+  fields differ in a way that matters, the entry keeps a reason that says how. Lane `dupes`.
+- 84.19 An upgrade's old files and its set-aside names pass to the Trash or a delete only as
+  regular files (lstat), and a set-aside name only as `.upgrade-<job>-<n>` inside the library
+  folder; anything else fails the step at `.delete` with nothing removed. Lane `security`.
+- 84.20 Staged file names are validated once, where `DownloadJob` decodes them, with the one
+  shared `isRelativeInside`; `ApprovalPlan.checked` and `sizesOnDisk` take only validated names,
+  and `StagedAlbum`'s private copy goes. Tests for `..` and absolute names, and a `..` move.
+  Lane `security`.
+- 84.21 Approve Safe Matches Automatically also needs the staged files' release id tag, read by
+  the player, to equal the job's release, so a spoofed "clean" reply alone (row 65) can't
+  approve. Lane `security`.
+- 84.22 Restore refuses a snapshot outside a local folder, a copy that isn't a regular file, and
+  a gzip that expands past a cap (4 GiB); tests that a snapshot name with `..` or `/` isn't
+  accepted and that restore writes only in the app's folders. Lane `security`.
+- 84.23 The snapshot writer's close is checked in its success path, so a failed close (a full
+  disk) fails the snapshot; `try?` stays only in the cleanup after an earlier throw. Lane
+  `security`.
+- 84.24 A failed release of the review claim after a stale sheet is reported in the refusal's
+  text (`DownloadsCoordinator.swift:420`). Lane `security`.
+- 84.25 The profile export refuses an indexed file or a link as its destination, and tests pin
+  ADR 0198's nine keys, no path or rating, and hostile title text staying a JSON string. Lane
+  `security`.
+- 84.26 `LibraryFolderLayout` passes the extension through the same safe-name rule, with tests
+  for `..`, `../..` and `/etc/passwd` as artist, album and title, and a symlinked artist folder.
+  Lane `security`.
+- 84.27 `old_paths` entries are checked with `isRelativeInside` where they are decoded, with
+  tests at Approve's level. Lane `security`.
+- 84.28 ADR 0201, amending ADR 0025: rows 66 to about 75 (staged names, old paths, staged tag
+  writes, Approve's moves, Trash and delete, approving unasked, Organize's tag-derived names,
+  snapshot write and restore, profile export) with "a Soulseek peer, through the service" in
+  Who attacks, each with its test; and the sections on the new check steps' limits and on what
+  `DeviceOutput`'s fixes had in common, written from this list. Lane `security`.
+- 84.29 `AppCommands` and `AppMenus` split per area into extension files in `Core/Commands`,
+  joined in the current order in the one file that lists the areas, with a test that the ID
+  list and order are unchanged. Each feature then owns its declarations, still defined once,
+  and `CommandRegistry` still checks uniqueness once. The splits lane.
+- 84.30 The four file splits, as the auditor drew them. The splits lane.
+- 84.31 Performance: the loaded run (load 42 to 116) is inconclusive. In the gate, once the
+  lanes are done and the machine is quieter, rerun alone, alternating with a freshly built
+  main: Analyze 1741 first (35.7 s against 4.45 s in phase 73; bisect and profile if it holds),
+  then Approve local (lossy-origin check 6.72 s) and Apply to All (13.73 s), then the rest of
+  the over-budget list and the tight rows (History, tag journal, sync merge), and the playback
+  rows, which weren't reached. The orchestrator.
+
+Deferred:
+
+- `DeviceOutput`'s other fix groups: device lost and return (7), format and DoP (7), file ended
+  early (3). They already have tests through the null device's step failures. One
+  `ControlState` enum for `returnTo`, `returnDue`, `pausing`, `running`, `drainedAt` and the
+  first-sound target is the next candidate, after 84.5 shows the stepped machine holds.
+- A test that every command has a handler: handlers are registered on the app's launch path,
+  which no test builds without the app, and menu-only actions would need listing first. The
+  launch order list stays the one place that shows registration order.
+- The size step for `Tests/`: the phase scopes it to `Sources/`, and six test files are over
+  1,000 lines. The owner can widen it.
+- Shared constants for button titles ("Cancel" in 26 files, "Save", "Reveal in Finder",
+  "Rating"): they are AppKit's standard titles, and the edit would touch files every lane and
+  the splits touch. Their entries keep their reasons.
+- An `old_paths` file outside the library folder: requiring it inside would refuse an upgrade
+  of an album the owner keeps in another watched folder, which ADR 0147 allows. The owner
+  decides.
+- A wider `/simplify` across the modules phases 54 to 83 touched, for copies under the dupes
+  tool's 20-line threshold: its edits would overlap every lane. The gate's `/simplify` covers
+  the phase's own diff.
+- The window rows of the bench, for the owner's Mac, since window code moves.
+
+Dropped:
+
+- The `NetworkTargets` advisory block: a fuzzer's two targets, advisory only.
+- The `standardError` declaration in `FullDisk.swift` and `RoundTrip.swift`: two copies, under
+  principle 3's third.
+- A grep check that Recommender never reads `LibraryProfile`: 84.25's key-set test pins what the
+  export holds, and nothing in the request code sends a file.
+- A nested or unknown key holding a secret in a snapshot's config copy: the token's only place is
+  its own key, which the copy strips. The index copy's 0644 mode is in 84.28's row: it's a
+  listing, not a secret.
+
+Lanes, each on its own branch from `phase/84-agent-health`, with Opus implementers:
+
+- `mutation` (84.1 to 84.4): `scripts/mutate`, `scripts/mutate-files.txt`, ADR 0027,
+  `Tests/DiscogsTests/AlbumMatcherTests.swift`, a new `TieBreakTests.swift`,
+  `Tests/LibraryTests/SyncTests.swift`, `Tests/RecommenderTests/JobTests.swift`, `DownloadsModelTests.swift`,
+  `AutoUpgradesTests.swift`, `BrowserModelTests.swift`. Tests only, no `Sources`.
+- `deviceoutput` (84.5 to 84.7): `DeviceOutput.swift` and the new file its machine goes in,
+  `DeviceOutputTests.swift` and a new stepped test file.
+- `checks` (84.9 to 84.13): `scripts/check`, `scripts/check-test`, the new step scripts, tests
+  and allowlists, `scripts/arch.swift`, `docs/map.md`, and the `try?` and unchecked comment
+  sites in files no other lane owns.
+- `dupes` (84.14 to 84.18): `scripts/dupes-allow.txt`, `Package.swift`, the strict decoders in
+  `Core/Settings`, `Core/Scripting`, `Core/Library/SmartRules.swift`,
+  `Core/Recommender/ServiceReply.swift`, `Core/HALOutput/DeviceSnapshot.swift` and
+  `Features/LibraryBrowser/ScrollReport.swift`, the two tokens, the folder settings, the
+  `main.swift`, `DrillCommand.swift` and `Arguments.swift` of DiscogsImport, Fuzz, FailureDrill,
+  TagCorpus and GenerateFixtures, and the `try?` and unchecked comments in all of these.
+- `security` (84.19 to 84.28): `TrashOrDelete`, `ApprovedImport`, `ImportJobs`, `DownloadJob`,
+  `StagedAlbum`, `ApprovalPlan`, `DownloadsCoordinator`, `SnapshotRestore`, `GzipFile`,
+  `IndexSnapshot`, `LibraryProfileExport`, `LibraryFolderLayout`, `UpgradeMapping`, their test
+  files and new ones, ADR 0025 and ADR 0201.
+- The splits lane last (84.8, 84.29, 84.30), on the merged branch.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
