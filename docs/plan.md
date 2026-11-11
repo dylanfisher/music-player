@@ -416,6 +416,46 @@ app's HTTP server, so nothing does, and `Sources/` holds no power assertion of i
       the display's sleep; it plays on, and `pmset -g assertions` lists the app's assertion
       while it plays and not after Pause.
 
+Implementation plan, phase 78 (ADR 0197):
+
+What exists, found by search (map.md recipes): no IOKit power call anywhere in `Sources/`.
+`RendererOutput` (`Core/UPnPOutput`) starts one `RendererSession` actor and feeds it commands
+and polls; `close()` is synchronous and doesn't wait on the session, so it stops the server
+through `RendererShared`, the lock-guarded state both sides reach. At the end of each `run` the
+session already settles one derived want, the ticker's (`shared.wantTicks`); whether the
+assertion is wanted is the same kind of fact: `current?.playing == true`. That one test covers
+play, a resume, Pause (also one queued while the renderer starts), a pause or play on the
+renderer's own remote once the session follows it, Stop, a played-out queue, a refused or
+failed track and a lost renderer, since each of those either clears `playing` or calls
+`release()`, which drops `current`. `appDisplayName` (`Core/Log`) names the app.
+
+- 78.1 The assertion (`Core/UPnPOutput`): `SleepAssertionCalls`, the two IOKit calls as
+  closures (`IOPMAssertionCreateWithName` with `kIOPMAssertPreventUserIdleSystemSleep`, and
+  `IOPMAssertionRelease`), with `.system`, the seam tests replace. `SleepAssertion`, a small
+  lock-guarded holder: `hold(_ wanted:)` takes one assertion only on a change from not wanted to
+  wanted and releases it on the change back, so repeated polls never take a second; a failed
+  create is logged as an error with its IOReturn and not retried until the next change to
+  wanted; `close()` releases and refuses every later hold, for a `run` still going when the
+  output closes. One holder per output, named "Music Player playing to <renderer>". It stays in
+  `UPnPOutput`, not a primitive: it has one caller (principle 3). Tests in
+  `SleepAssertionTests`: once per change, released on the change back, a failed create neither
+  held nor retried until wanted again, nothing after close.
+- 78.2 The session (`Core/UPnPOutput`): `RendererOutput`'s internal init takes the calls, the
+  public one passes `.system`; the session calls `hold(current?.playing == true)` at the end of
+  each `run`, beside the ticker's want, and `close()` calls the holder's `close()`. Tests in
+  `RendererOutputTests` against the fake renderer and a recording stand-in, which also counts the
+  most held at once: play takes it once over several polls, Pause releases, a resume takes it
+  again, Stop, a lost renderer, a played-out track and close release it, a load paused takes
+  none, and no test ever sees two held. The other tests pass the stand-in too, so no test takes
+  a real assertion.
+- 78.3 ADR 0197: CoreAudio holds an assertion while a local device's IO runs and nothing does
+  for a renderer that pulls over HTTP; `PreventUserIdleSystemSleep`, not
+  `PreventUserIdleDisplaySleep`, because the display has nothing to show and on battery should
+  sleep, and lid close, Sleep and low battery still sleep the Mac as for local playback; held
+  while the engine says playing, so a paused session lets the Mac sleep.
+
+Not touched: the real-time path (no change reachable from the IO proc) and the HTTP server.
+
 ### 79. Rating: the menu's mark, Get Info's stars, shortcuts and a message
 
 Asked by the owner on 2026-11-10. The Rating submenu (`AppMenus`, `CommandID.rate`) shows no
