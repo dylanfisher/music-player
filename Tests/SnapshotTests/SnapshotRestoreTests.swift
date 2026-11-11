@@ -260,3 +260,138 @@ private struct Refused: Error {}
     #expect(try applyPendingRestore(paths: library.paths) == .none)
     #expect(try counts(library.index()).plays == before.plays + 1)
 }
+
+// What a restore reads and where it writes (ADR 0025, row 74).
+
+/// Yesterday's snapshot of a fresh library, with its state and config copies.
+private func yesterdaysSnapshot() throws -> (SnapshotTestLibrary, URL) {
+    let library = try SnapshotTestLibrary()
+    let snapshot = try writeSnapshot(
+        of: library.index(), keeping: library.paths, into: library.snapshotFolder,
+        on: Date().addingTimeInterval(-86_400))
+    return (library, snapshot)
+}
+
+/// `prepareRestore` as the app calls it, but with `isLocal` and `unpackLimit` given.
+private func restore(
+    _ snapshot: URL, _ library: SnapshotTestLibrary, isLocal: Bool? = true,
+    unpackLimit: Int = GzipFile.maxUnpackedBytes
+) throws {
+    try prepareRestore(
+        of: snapshot, paths: library.paths, snapshotFolder: library.snapshotFolder, now: Date(),
+        isLocal: { _ in isLocal }, unpackLimit: unpackLimit)
+}
+
+/// Expects nothing waiting for the next launch, and no unpacked file or copy left.
+private func expectNothingPending(_ library: SnapshotTestLibrary) throws {
+    #expect(!(try names(in: library.directory)).contains { $0.hasSuffix(".restoring") })
+    #expect(try applyPendingRestore(paths: library.paths) == .none)
+}
+
+@Test func aSnapshotOnANetworkVolumeIsntRestored() throws {
+    let (library, snapshot) = try yesterdaysSnapshot()
+    for isLocal in [false, nil] {
+        #expect(throws: SnapshotError.networkFolder(library.snapshotFolder.path)) {
+            try restore(snapshot, library, isLocal: isLocal)
+        }
+    }
+    try expectNothingPending(library)
+}
+
+/// A link, a folder or a second name for another file, in place of the snapshot or one of its
+/// copies, is refused before anything is read.
+@Test func onlyRegularFilesWithOneNameAreRestored() throws {
+    let (library, snapshot) = try yesterdaysSnapshot()
+    let elsewhere = library.directory.appendingPathComponent("elsewhere.sqlite.gz")
+    try FileManager.default.moveItem(at: snapshot, to: elsewhere)
+    try FileManager.default.createSymbolicLink(at: snapshot, withDestinationURL: elsewhere)
+    #expect(
+        throws: SnapshotError.file(
+            snapshot.path, "it isn't a regular file with one name, so it isn't restored")
+    ) {
+        try restore(snapshot, library)
+    }
+    try FileManager.default.removeItem(at: snapshot)
+    try FileManager.default.moveItem(at: elsewhere, to: snapshot)
+
+    let name = try #require(SnapshotName(fileName: snapshot.lastPathComponent))
+    for part in SnapshotPart.allCases {
+        let kept = library.snapshotFolder.appendingPathComponent(name.fileName(of: part))
+        let original = library.directory.appendingPathComponent("original-\(part).json")
+        try FileManager.default.moveItem(at: kept, to: original)
+        try FileManager.default.createSymbolicLink(at: kept, withDestinationURL: original)
+        #expect(
+            throws: SnapshotError.file(
+                kept.path, "it isn't a regular file with one name, so it isn't restored")
+        ) {
+            try restore(snapshot, library)
+        }
+        try FileManager.default.removeItem(at: kept)
+        try FileManager.default.linkItem(at: original, to: kept)
+        #expect(
+            throws: SnapshotError.file(
+                kept.path, "it isn't a regular file with one name, so it isn't restored")
+        ) {
+            try restore(snapshot, library)
+        }
+        try FileManager.default.removeItem(at: original)
+        try expectNothingPending(library)
+    }
+    try restore(snapshot, library)
+}
+
+/// A snapshot that unpacks past the cap is refused, and what it unpacked so far is deleted.
+@Test func aSnapshotThatUnpacksPastTheCapIsRefused() throws {
+    let (library, snapshot) = try yesterdaysSnapshot()
+    let unpacked = library.directory.appendingPathComponent("unpacked.sqlite")
+    try GzipFile.decompress(snapshot, to: unpacked)
+    let size = try #require(
+        try FileManager.default.attributesOfItem(atPath: unpacked.path)[.size] as? Int)
+    #expect(
+        throws: SnapshotError.file(
+            snapshot.path, "it's too large: it unpacks to over \(size - 1) bytes")
+    ) {
+        try restore(snapshot, library, unpackLimit: size - 1)
+    }
+    try expectNothingPending(library)
+    try restore(snapshot, library, unpackLimit: size)
+}
+
+/// Every file a restore makes or changes is in the app's data folder, which holds the config
+/// file here too, or in the snapshot folder: none in the music, and none beside the snapshot
+/// restored, which here is another folder.
+@Test func aRestoreWritesOnlyInTheAppsFolders() throws {
+    let (library, written) = try yesterdaysSnapshot()
+    let other = library.directory.appendingPathComponent("Other", isDirectory: true)
+    try FileManager.default.createDirectory(at: other, withIntermediateDirectories: false)
+    let name = try #require(SnapshotName(fileName: written.lastPathComponent))
+    for file in [name.fileName] + SnapshotPart.allCases.map(name.fileName(of:)) {
+        try FileManager.default.moveItem(
+            at: library.snapshotFolder.appendingPathComponent(file),
+            to: other.appendingPathComponent(file))
+    }
+    /// Each file under the library's folder, by its path from there, with its size and date.
+    func listing() throws -> [String: [String]] {
+        let walker = try #require(FileManager.default.enumerator(atPath: library.directory.path))
+        var found: [String: [String]] = [:]
+        while let path = walker.nextObject() as? String {
+            let attributes = try FileManager.default.attributesOfItem(
+                atPath: library.directory.path + "/" + path)
+            found[path] = ["\(attributes[.size] ?? "")", "\(attributes[.modificationDate] ?? "")"]
+        }
+        return found
+    }
+    let before = try listing()
+    try restore(other.appendingPathComponent(name.fileName), library)
+    let changed = try listing().filter { before[$0.key] != $0.value }.map(\.key)
+    #expect(!changed.isEmpty)
+    let dataFolder = library.paths.dataDirectory.standardizedFileURL.path
+    #expect(
+        library.paths.configFile.deletingLastPathComponent().standardizedFileURL.path == dataFolder)
+    for path in changed {
+        let folder = (path as NSString).deletingLastPathComponent
+        #expect(
+            folder.isEmpty || folder == library.snapshotFolder.lastPathComponent,
+            "\(path) is outside the app's folders")
+    }
+}

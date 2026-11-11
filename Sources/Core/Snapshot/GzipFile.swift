@@ -7,6 +7,9 @@ import zlib
 enum GzipFile {
     /// How much is read from a file, and written, at a time.
     static let chunkBytes = 1 << 20
+    /// The most a snapshot may unpack to, 4 GiB: about forty times this library's index, and
+    /// short of filling the disk with a few kilobytes that expand without end.
+    static let maxUnpackedBytes = 4 << 30
     /// zlib's default level: most of the size of level 9 at a fraction of the time.
     private static let level: Int32 = 6
     /// 15 + 16: the largest window, with gzip's header and trailer rather than zlib's.
@@ -45,9 +48,11 @@ enum GzipFile {
     }
 
     /// Writes `source`, a gzip file, uncompressed to a new file at `destination`. zlib checks
-    /// the trailer's CRC and length; a file that ends early, or has bytes after its trailer,
-    /// throws.
-    static func decompress(_ source: URL, to destination: URL) throws(SnapshotError) {
+    /// the trailer's CRC and length; a file that ends early, has bytes after its trailer, or
+    /// unpacks to more than `limit` bytes throws, and the caller deletes what was written.
+    static func decompress(
+        _ source: URL, to destination: URL, limit: Int = maxUnpackedBytes
+    ) throws(SnapshotError) {
         var stream = z_stream()
         let started = inflateInit2_(
             &stream, gzipWindowBits, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size))
@@ -56,6 +61,7 @@ enum GzipFile {
         let name = source.lastPathComponent
         let files = try FilePair(source, destination)
         var ended = false
+        var written = 0
         while true {
             var input = try files.read()
             if input.isEmpty { break }
@@ -74,7 +80,13 @@ enum GzipFile {
                         let reason = stream.msg.map { String(cString: $0) }
                         throw .gzip(name, reason ?? "inflate returned \(result)")
                     }
-                    try files.write(chunkBytes - Int(stream.avail_out))
+                    let count = chunkBytes - Int(stream.avail_out)
+                    written += count
+                    guard written <= limit else {
+                        throw .file(
+                            source.path, "it's too large: it unpacks to over \(limit) bytes")
+                    }
+                    try files.write(count)
                 } while stream.avail_out == 0 && !ended
                 if ended, stream.avail_in > 0 { throw .gzip(name, "it has data after its end") }
             }

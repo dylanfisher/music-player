@@ -13,14 +13,34 @@ private let logger = moduleLogger()
 /// launch puts them all in place before any is read (ADR 0142, 0181). A snapshot that doesn't
 /// unpack, or unpacks damaged, or a config file whose secrets can't be kept, throws with
 /// nothing replaced. The current index's snapshot has a name of its own, so it never replaces
-/// the day's, which may be the one chosen.
+/// the day's, which may be the one chosen. The snapshot must be in a folder on a local volume,
+/// as the snapshot folder must, and it and its copies regular files with one name each; it
+/// may unpack to 4 GiB at most (ADR 0025, row 74).
 public func prepareRestore(
     of snapshot: URL, paths: AppPaths, snapshotFolder: URL, now: Date
+) throws {
+    try prepareRestore(
+        of: snapshot, paths: paths, snapshotFolder: snapshotFolder, now: now,
+        isLocal: { try $0.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal },
+        unpackLimit: GzipFile.maxUnpackedBytes)
+}
+
+/// `prepareRestore(of:paths:snapshotFolder:now:)` with `isLocal` saying whether a folder is on
+/// a local volume, and `unpackLimit` the most bytes the snapshot may unpack to, which tests
+/// set.
+func prepareRestore(
+    of snapshot: URL, paths: AppPaths, snapshotFolder: URL, now: Date,
+    isLocal: (URL) throws -> Bool?, unpackLimit: Int
 ) throws {
     let databaseURL = libraryFileURL(in: paths.dataDirectory)
     let restoring = restoringFileURL(databaseURL)
     guard let name = SnapshotName(fileName: snapshot.lastPathComponent) else {
         throw SnapshotError.file(snapshot.path, "it isn't named as a snapshot is")
+    }
+    let folder = snapshot.deletingLastPathComponent()
+    try requireLocal(folder, isLocal: try isLocal(folder))
+    guard try isRegularFile(snapshot) else {
+        throw SnapshotError.file(snapshot.path, "it isn't there")
     }
     // An earlier restore's marker goes first: left beside no unpacked file, it would read as
     // a restore made at the next launch. Its copies go too, so a snapshot without one
@@ -35,12 +55,11 @@ public func prepareRestore(
     }
     try removeRestoringCopies(paths)
     do {
-        try GzipFile.decompress(snapshot, to: restoring)
+        try GzipFile.decompress(snapshot, to: restoring, limit: unpackLimit)
         try checkWhole(restoring, name: snapshot.lastPathComponent)
         for part in SnapshotPart.allCases {
-            let kept = snapshot.deletingLastPathComponent().appendingPathComponent(
-                name.fileName(of: part), isDirectory: false)
-            guard let data = try readIfThere(kept) else { continue }
+            let kept = folder.appendingPathComponent(name.fileName(of: part), isDirectory: false)
+            guard try isRegularFile(kept), let data = try readIfThere(kept) else { continue }
             // Here as well as at launch, so a config file that can't keep its secrets stops
             // the restore before the app quits for it.
             if part == .config { _ = try keepingSecrets(data, of: paths.configFile) }
@@ -239,6 +258,21 @@ private func keepingSecrets(_ restored: Data, of live: URL) throws -> Data {
 private func restoreMarkerURL(_ databaseURL: URL) -> URL {
     databaseURL.deletingLastPathComponent().appendingPathComponent(
         "restore.pending", isDirectory: false)
+}
+
+/// Whether a file is at `url`, as `lstat` says, without following a link. Throws for anything
+/// there but a regular file with one name: a link, a folder, a device or a hard link could
+/// make a restore read a file other than the snapshot's.
+private func isRegularFile(_ url: URL) throws(SnapshotError) -> Bool {
+    var info = stat()
+    guard lstat(url.path, &info) == 0 else {
+        if errno == ENOENT { return false }
+        throw .file(url.path, String(cString: strerror(errno)))
+    }
+    guard info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1 else {
+        throw .file(url.path, "it isn't a regular file with one name, so it isn't restored")
+    }
+    return true
 }
 
 /// Throws unless SQLite's integrity check of the database at `url` passes.

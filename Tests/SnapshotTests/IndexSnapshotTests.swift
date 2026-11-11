@@ -245,3 +245,17 @@ private final class Failures: @unchecked Sendable {
     try Data("x".utf8).write(to: gone)
     #expect(try modificationDate(gone) != nil)
 }
+
+/// A name that would climb out of the snapshot folder, or name a file in another, is no
+/// snapshot's, so a restore never reads it or a copy beside it (ADR 0025, row 74).
+@Test func aSnapshotNameHasNoPathInIt() {
+    #expect(SnapshotName(fileName: "library-2026-11-01.sqlite.gz") != nil)
+    for name in [
+        "library-../../x.sqlite.gz", "library-2026-11-01/../../x.sqlite.gz",
+        "../library-2026-11-01.sqlite.gz", "library-2026-11-01-before-restore-../x.sqlite.gz",
+        "library-/etc/passwd.sqlite.gz", "library-2026-11-01-before-restore-12/345.sqlite.gz",
+        "/library-2026-11-01.sqlite.gz",
+    ] {
+        #expect(SnapshotName(fileName: name) == nil, "\(name)")
+    }
+}
