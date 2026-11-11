@@ -1,8 +1,9 @@
 import AppKit
 import Settings
 
-/// How the track table draws: the `appearance.` settings for its lines, rows and art, and
-/// whether the window's glass is on, which draws the alternating rows translucent.
+/// How the track table draws: the `appearance.` settings for its lines, rows and art, its text
+/// in Focus Mode, and whether the window's glass is on, which draws the alternating rows
+/// translucent.
 public struct TableAppearance: Equatable, Sendable {
     public var columnLines: Bool
     public var rowLines: Bool
@@ -16,11 +17,14 @@ public struct TableAppearance: Equatable, Sendable {
     public var rowHeight: RowHeight
     public var artSize: ArtSize
     public var glass: Bool
+    /// The text's size in Focus Mode, in points, which its rows' height follows.
+    public var focusFontSize: Int
 
     public init(
         columnLines: Bool, rowLines: Bool, albumLines: Bool, rowLineColor: HexColor?,
         albumLineColor: HexColor?, playingRowColor: HexColor?, alternatingRows: Bool,
-        rowHeight: RowHeight, artSize: ArtSize, glass: Bool
+        rowHeight: RowHeight, artSize: ArtSize, glass: Bool,
+        focusFontSize: Int = AppSettings().focusFontSize.defaultValue
     ) {
         self.columnLines = columnLines
         self.rowLines = rowLines
@@ -32,6 +36,7 @@ public struct TableAppearance: Equatable, Sendable {
         self.rowHeight = rowHeight
         self.artSize = artSize
         self.glass = glass
+        self.focusFontSize = focusFontSize
     }
 
     var rowLine: NSColor { rowLineColor.map(NSColor.init) ?? .gridColor }
@@ -48,6 +53,15 @@ extension NSColor {
         }
         self.init(srgbRed: parts.red, green: parts.green, blue: parts.blue, alpha: parts.alpha)
     }
+}
+
+/// The track table's rows in Focus Mode: text of `fontSize` points, in rows half as tall again,
+/// as Regular's 12-point text has 18-point rows.
+struct FocusRows {
+    let fontSize: Int
+
+    var points: CGFloat { (CGFloat(fontSize) * 1.5).rounded() }
+    var font: NSFont { .systemFont(ofSize: CGFloat(fontSize)) }
 }
 
 extension RowHeight {

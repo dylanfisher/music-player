@@ -151,6 +151,9 @@ public struct AppSettings: SettingsSchema {
     public let artSize = Setting(
         "appearance.artSize", title: "Album Art", default: ArtSize.fit,
         "Scaled to its album's rows, or always the column's width.")
+    public let focusFontSize = Setting(
+        "appearance.focusFontSize", title: "Focus Mode Text Size", default: 30, range: 16...96,
+        "Focus Mode's text size, in points; its rows grow to fit.")
     public let glass = Setting(
         "appearance.glass", title: "Window Glass", default: false,
         "Translucent windows, with the desktop showing through.")

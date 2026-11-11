@@ -957,6 +957,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Shows the timeline, or the panes and the track table, keeping the keys in the list.
     private func swapTimeline(in shows: Bool) {
         guard timeline.view.isHidden == shows else { return }
+        // Focus Mode is the track table's, which the timeline replaces.
+        if shows, isFocused {
+            leaveFocus()
+            focusLeft()
+        }
         let hadKeys = focusedList != nil
         split.isHidden = shows
         timeline.view.isHidden = !shows
@@ -2157,8 +2162,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Shows the panel or else the columns, as Show Browser says, in the slot, at the saved
     /// height; hides the slot and its divider when neither shows.
     private func fillPanelSlot() {
-        panes.view.isHidden = shownPanel != nil || !isBrowserVisible
-        let shows = shownPanel != nil || isBrowserVisible
+        panes.view.isHidden = isFocused || shownPanel != nil || !isBrowserVisible
+        let shows = !isFocused && (shownPanel != nil || isBrowserVisible)
         let height = slotHeight
         guard shows == panelSlot.isHidden || (shows && placedHeight != height) else { return }
         panelSlot.isHidden = !shows
@@ -2282,6 +2287,40 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusArea.isHidden.toggle()
         insetListsUnderStatusBar()
         showScanProgress()
+    }
+
+    // MARK: Focus Mode
+
+    /// Whether Focus Mode shows the track table alone, in its larger text (ADR 0204).
+    public private(set) var isFocused = false
+    /// Whether the status bar showed as Focus Mode began, while it's on.
+    private var statusBarShownBeforeFocus = false
+    /// Called after the browser left Focus Mode itself, as when the timeline took the track
+    /// table's place.
+    public var focusLeft: () -> Void = {}
+
+    /// Whether Focus Mode can begin: the track table shows, not the timeline in its place.
+    public var canFocus: Bool { !showsTimeline }
+
+    /// Shows the track table alone, without the columns or a source's panel above it or the
+    /// status bar below, in Focus Mode's columns and text, and gives it the keys.
+    public func enterFocus() {
+        guard !isFocused, canFocus else { return }
+        isFocused = true
+        statusBarShownBeforeFocus = isStatusBarVisible
+        if isStatusBarVisible { toggleStatusBar() }
+        fillPanelSlot()
+        table.enterFocus()
+        focusTracks()
+    }
+
+    /// Puts back what Focus Mode hid, and the track table's columns and text.
+    public func leaveFocus() {
+        guard isFocused else { return }
+        isFocused = false
+        table.leaveFocus()
+        fillPanelSlot()
+        if statusBarShownBeforeFocus != isStatusBarVisible { toggleStatusBar() }
     }
 
     /// Lets the track table and the timeline scroll their last rows clear of the bar.

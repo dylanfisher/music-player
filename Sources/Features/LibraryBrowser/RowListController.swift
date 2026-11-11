@@ -241,6 +241,15 @@ class RowListController: NSViewController {
         anchor = selection.anchor
     }
 
+    /// Reads every row again, keeping the selection, the cursor and the anchor, which
+    /// `reloadData` drops.
+    func reloadKeepingSelection() {
+        let selection = ListSelection(
+            rows: table.selectedRowIndexes, cursor: cursor, anchor: anchor)
+        table.reloadData()
+        select(selection)
+    }
+
     /// Whole rows on screen between the header and the status bar.
     private var pageRows: Int {
         guard let clip else { return 1 }

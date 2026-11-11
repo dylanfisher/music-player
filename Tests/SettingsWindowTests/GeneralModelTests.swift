@@ -328,6 +328,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
             schema.columnLines.key, schema.rowLines.key, schema.albumLines.key,
             schema.rowLineColor.key, schema.albumLineColor.key, schema.playingRowColor.key,
             schema.alternatingRows.key, schema.rowHeight.key, schema.artSize.key,
+            schema.focusFontSize.key,
         ])
     #expect(keys(.titles) == [schema.windowTitle.key, schema.headerTitleFormat.key])
     #expect(

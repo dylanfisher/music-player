@@ -33,6 +33,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     private var artSize = ArtSize.fit
     /// The text cells' font, which follows the row height.
     private var font = RowHeight.regular.font
+    /// The columns shown before Focus Mode, in their order and widths, while it's on.
+    private var unfocused: TrackTableLayout?
     private var art: RowArt
     /// How the Album Art column reads art from a file, which the scroll measurement replaces.
     var readArt: ArtRead = readArtBytes {
@@ -170,8 +172,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             tableColumn.minWidth = TrackTableLayout.widthRange.lowerBound
             tableColumn.maxWidth = TrackTableLayout.widthRange.upperBound
             tableColumn.isHidden = !shown.contains(column)
-            tableColumn.resizingMask =
-                column == .title ? [.autoresizingMask, .userResizingMask] : .userResizingMask
+            tableColumn.resizingMask = resizingMask(column)
             if column.isSortable {
                 tableColumn.sortDescriptorPrototype = NSSortDescriptor(
                     key: column.rawValue, ascending: true)
@@ -196,14 +197,73 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         }
         table.usesAlternatingRowBackgroundColors = appearance.alternatingRows && !appearance.glass
         table.drawsTranslucentRows = appearance.alternatingRows && appearance.glass
-        let rowHeight = appearance.rowHeight.points
-        guard appearance.artSize != artSize || rowHeight != table.rowHeight else { return }
-        table.rowHeight = rowHeight
-        font = appearance.rowHeight.font
+        let artChanged = appearance.artSize != artSize
         artSize = appearance.artSize
+        fitRows(reloading: artChanged)
+    }
+
+    /// Sets the rows' height and text, Focus Mode's while it's on, and reloads when they
+    /// changed or `reloading` says to.
+    private func fitRows(reloading: Bool = false) {
+        let focus =
+            unfocused == nil ? nil : appearance.map { FocusRows(fontSize: $0.focusFontSize) }
+        let height = appearance?.rowHeight ?? .regular
+        let points = focus?.points ?? height.points
+        let text = focus?.font ?? height.font
+        guard reloading || points != table.rowHeight || text != font else { return }
+        table.rowHeight = points
+        font = text
         hideArtHover()
         // The art's rows and size, and the text's size, change.
-        table.reloadData()
+        reloadKeepingSelection()
+    }
+
+    // MARK: Focus Mode
+
+    /// The columns Focus Mode shows, left to right.
+    static let focusColumns: [TrackColumn] = [.title, .artist, .album]
+
+    /// Whether Focus Mode shows only `focusColumns`, in its larger text.
+    var isFocused: Bool { unfocused != nil }
+
+    /// Shows only `focusColumns`, sharing the table's width and growing with it, in Focus
+    /// Mode's text, keeping the sort and the selection. The columns as they were stay the
+    /// layout reported, and nothing done to these columns is reported.
+    func enterFocus() {
+        guard unfocused == nil else { return }
+        unfocused = layout
+        let width = min(
+            max(Double(table.visibleRect.width) / Double(Self.focusColumns.count), 100),
+            TrackTableLayout.widthRange.upperBound)
+        showColumns(
+            TrackTableLayout(
+                columns: Self.focusColumns.map { ColumnLayout(column: $0, width: width) },
+                sortColumn: model.tableSort.column, sortAscending: model.tableSort.ascending))
+        for column in Self.focusColumns {
+            table.tableColumn(withIdentifier: columnIdentifier(column))?.resizingMask = [
+                .autoresizingMask, .userResizingMask,
+            ]
+        }
+        table.sizeToFit()
+        fitRows()
+    }
+
+    /// Shows the columns, text and rows Focus Mode replaced.
+    func leaveFocus() {
+        guard let shown = unfocused else { return }
+        unfocused = nil
+        for column in Self.focusColumns {
+            table.tableColumn(withIdentifier: columnIdentifier(column))?.resizingMask =
+                resizingMask(column)
+        }
+        showColumns(shown)
+        fitRows()
+        centerSelection()
+    }
+
+    /// Title alone takes the table's width as it changes.
+    private func resizingMask(_ column: TrackColumn) -> NSTableColumn.ResizingOptions {
+        column == .title ? [.autoresizingMask, .userResizingMask] : .userResizingMask
     }
 
     // MARK: Model to view
@@ -819,7 +879,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     func tableViewColumnDidMove(_ notification: Notification) {
         hideArtHover()
         redrawRowViews()
-        guard !applyingColumns else { return }
+        guard !applyingColumns, unfocused == nil else { return }
         actions.layoutChanged(layout)
         // A drag moves the column a place at a time; the selection is centered once it's off
         // screen, not at every place.
@@ -828,7 +888,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     func tableViewColumnDidResize(_ notification: Notification) {
         hideArtHover()
-        if !applyingColumns { actions.layoutChanged(layout) }
+        if !applyingColumns, unfocused == nil { actions.layoutChanged(layout) }
         let resized = notification.userInfo?["NSTableColumn"] as? NSTableColumn
         if resized?.identifier == columnIdentifier(.art) { refitArt() }
         redrawRowViews()
@@ -862,26 +922,30 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         centerSelection()
     }
 
-    /// The visible columns as they stand, and the model's table sort.
+    /// The visible columns as they stand, or as they stood before Focus Mode, and the model's
+    /// table sort.
     var layout: TrackTableLayout {
         let widths = TrackTableLayout.widthRange
         return TrackTableLayout(
-            columns: table.tableColumns.filter { !$0.isHidden }.compactMap { tableColumn in
-                TrackColumn(rawValue: tableColumn.identifier.rawValue).map {
-                    // Clamped, since Settings refuses a width outside the range.
-                    ColumnLayout(
-                        column: $0,
-                        width: min(
-                            max(Double(tableColumn.width.rounded()), widths.lowerBound),
-                            widths.upperBound))
-                }
-            }, sortColumn: model.tableSort.column, sortAscending: model.tableSort.ascending)
+            columns: unfocused?.columns
+                ?? table.tableColumns.filter { !$0.isHidden }.compactMap { tableColumn in
+                    TrackColumn(rawValue: tableColumn.identifier.rawValue).map {
+                        // Clamped, since Settings refuses a width outside the range.
+                        ColumnLayout(
+                            column: $0,
+                            width: min(
+                                max(Double(tableColumn.width.rounded()), widths.lowerBound),
+                                widths.upperBound))
+                    }
+                }, sortColumn: model.tableSort.column, sortAscending: model.tableSort.ascending)
     }
 
     // MARK: Header menu: one item per column, checked when shown
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        // Focus Mode's columns are its own.
+        guard unfocused == nil else { return }
         let visible = table.tableColumns.filter { !$0.isHidden }.count
         for column in TrackColumn.allCases {
             guard let tableColumn = table.tableColumn(withIdentifier: columnIdentifier(column))

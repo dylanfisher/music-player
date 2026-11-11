@@ -100,7 +100,7 @@ extension TableAppearance {
         AppSettings().rowLineColor.key, AppSettings().albumLineColor.key,
         AppSettings().playingRowColor.key,
         AppSettings().alternatingRows.key, AppSettings().rowHeight.key, AppSettings().artSize.key,
-        AppSettings().glass.key,
+        AppSettings().glass.key, AppSettings().focusFontSize.key,
     ]
 
     @MainActor init(_ settings: ConfigStore<AppSettings>) {
@@ -110,6 +110,7 @@ extension TableAppearance {
             albumLineColor: settings[\.albumLineColor],
             playingRowColor: settings[\.playingRowColor],
             alternatingRows: settings[\.alternatingRows], rowHeight: settings[\.rowHeight],
-            artSize: settings[\.artSize], glass: settings[\.glass])
+            artSize: settings[\.artSize], glass: settings[\.glass],
+            focusFontSize: settings[\.focusFontSize])
     }
 }

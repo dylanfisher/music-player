@@ -145,7 +145,7 @@ public final class GeneralModel {
                     schema.columnLines.key, schema.rowLines.key, schema.albumLines.key,
                     schema.rowLineColor.key, schema.albumLineColor.key,
                     schema.playingRowColor.key, schema.alternatingRows.key, schema.rowHeight.key,
-                    schema.artSize.key,
+                    schema.artSize.key, schema.focusFontSize.key,
                 ]
             case .titles: [schema.windowTitle.key, schema.headerTitleFormat.key]
             case .toolbarStatus:
