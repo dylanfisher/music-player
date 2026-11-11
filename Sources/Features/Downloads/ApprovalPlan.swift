@@ -350,9 +350,6 @@ struct ApprovalPlan: Sendable {
         _ sharePaths: [String], release: Int, heldToRelease: Bool, places: ImportPlaces,
         databaseURL: URL, catalog: URL?
     ) async throws -> [UpgradeOldFile] {
-        guard let catalog else {
-            throw ReleaseSnapshot.Problem.notInCatalog(releaseID: release)
-        }
         let read = await blockingFileWork {
             Result { () throws -> ([UpgradeOldFile], DiscogsAlbum, [String: Int64]) in
                 let index = try LibraryIndex(at: databaseURL)
@@ -376,7 +373,11 @@ struct ApprovalPlan: Sendable {
                 return (old, album, ids)
             }
         }
+        // After the index's read, which refuses a path outside the share whatever the Mac.
         let (old, album, ids) = try read.get()
+        guard let catalog else {
+            throw ReleaseSnapshot.Problem.notInCatalog(releaseID: release)
+        }
         let positions = try await upgradePositions(of: album, release: release, catalogAt: catalog)
         return old.map { file in
             var file = file

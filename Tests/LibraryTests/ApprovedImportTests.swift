@@ -333,6 +333,31 @@ func anUpgradeOfAnAlbumOfAnotherReleaseReplacesIt(_ release: String?) async thro
     #expect(try setup.reports() == newAlbumReports)
 }
 
+/// An old file the job names outside the share, by `..` or as an absolute path, refuses the
+/// import before anything is reported, moved or given to the Trash, though a file is there
+/// (ADR 0025, row 68).
+@Test(arguments: ["library/../../elsewhere.flac", "/elsewhere.flac"])
+func anOldFileNamedOutsideTheShareIsRefusedUntouched(_ sharePath: String) async throws {
+    let setup = try ImportFolders()
+    let outside = (setup.folders.share as NSString).deletingLastPathComponent + "/elsewhere.flac"
+    #expect(FileManager.default.createFile(atPath: outside, contents: Data("flac".utf8)))
+    defer { try? FileManager.default.removeItem(atPath: outside) }
+    var job = try setup.job(upgrade: true)
+    job.upgrade?.old[1].sharePath = sharePath
+    job.upgrade?.old[1].path = outside
+    let offered = OfferedToTrash()
+    let outcome = await setup.run(trash: { urls in
+        for url in urls { offered.add(url.path) }
+        return nil
+    }).run(job)
+    #expect(outcome == .refused(UpgradeRefusal.notInsideShare(sharePath).description))
+    #expect(offered.all.isEmpty)
+    #expect(try setup.reports().isEmpty)
+    #expect(try setup.folders.staged() == ["01.flac", "02.flac"])
+    #expect(FileManager.default.fileExists(atPath: outside))
+    #expect(oldFilesThere(setup))
+}
+
 @Test func aDeleteRefusesAnOldFileNoLongerOfTheRelease() async throws {
     let setup = try ImportFolders()
     try setup.index.store([

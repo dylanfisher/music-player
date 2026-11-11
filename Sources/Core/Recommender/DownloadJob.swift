@@ -235,6 +235,8 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
 
     /// What an upgrade replaces: the old album's quality, for the window, and its files,
     /// relative to the library share, so they resolve on any Mac and after an index rebuild.
+    /// A path that isn't relative, or has an empty, `.` or `..` part, fails the decode: the
+    /// service makes these from the player's own index, which has none.
     package struct Upgrade: Equatable, Sendable, Codable {
         package var currentQuality: String
         package var oldPaths: [String]
@@ -253,6 +255,11 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             let container = try strictContainer(decoder, CodingKeys.self)
             currentQuality = try container.decode(String.self, forKey: .currentQuality)
             oldPaths = try container.decode([String].self, forKey: .oldPaths)
+            if let outside = oldPaths.first(where: { !isRelativeInside($0) }) {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .oldPaths, in: container,
+                    debugDescription: "\(outside.debugDescription) isn't a path inside the share")
+            }
         }
     }
 

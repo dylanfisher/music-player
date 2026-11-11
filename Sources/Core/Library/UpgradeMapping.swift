@@ -1,4 +1,5 @@
 import Foundation
+import Recommender
 
 /// One of an upgrade's old files, found in the index by its path on the share (ADR 0147).
 package struct UpgradeOldFile: Equatable, Sendable {
@@ -84,10 +85,15 @@ package enum UpgradeRefusal: Error, Equatable, CustomStringConvertible {
     /// The file no longer carries the release id it's held to, nil for none, so it may not
     /// be the album's.
     case otherRelease(String, found: String?, expected: String?)
+    /// The job lists a path that isn't relative to the share, or has an empty, `.` or `..`
+    /// part, so it could name a file outside it.
+    case notInsideShare(String)
 
     package var description: String {
         switch self {
         case .notInLibrary(let path): "\(path) isn't in the library"
+        case .notInsideShare(let path):
+            "the old file \(path.debugDescription) isn't a path inside the library's share"
         case .otherRelease(let path, let found, let expected):
             "\(path) is tagged with " + (found.map { "release \($0)" } ?? "no release")
                 + (expected.map { ", not release \($0)" } ?? ", and had no release when approved")
@@ -98,9 +104,13 @@ package enum UpgradeRefusal: Error, Equatable, CustomStringConvertible {
 extension LibraryIndex {
     /// The upgrade's old files `sharePaths`, relative to the share mounted at `shareRoot`, as
     /// the index has them, each with the release id its track carries and no position yet.
+    /// A path that could name a file outside the share is refused before the index is read.
     package func upgradeOldFiles(_ sharePaths: [String], shareRoot: String) throws
         -> [UpgradeOldFile]
     {
+        if let outside = sharePaths.first(where: { !isRelativeInside($0) }) {
+            throw UpgradeRefusal.notInsideShare(outside)
+        }
         let lookup = try statement(
             """
             SELECT f.id, t.discogs_release_id FROM files f JOIN tracks t ON t.file_id = f.id

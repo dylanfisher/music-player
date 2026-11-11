@@ -463,6 +463,23 @@ private func stagedShare() throws -> (places: ImportPlaces, index: LibraryIndex,
     #expect(after.moves.count == 2)
 }
 
+/// An upgrade's old path that could name a file outside the share, by `..` or as an absolute
+/// path, blocks Approve before anything is found or moved (ADR 0025, row 68).
+@Test(arguments: ["library/../../elsewhere.flac", "/etc/x"])
+func anOldPathOutsideTheShareBlocksTheUpgrade(_ path: String) async throws {
+    let (places, index, sizes) = try stagedShare()
+    var staged = stagedJob(sizes)
+    staged.source = .upgrade
+    staged.upgrade = DownloadJob.Upgrade(currentQuality: "MP3 320 kbps", oldPaths: [path])
+    let plan = await ApprovalPlan.build(
+        staged, places: places, databaseURL: index.fileURL, catalog: nil)
+    #expect(
+        plan.upgradeProblem
+            == "The old album's files: \(UpgradeRefusal.notInsideShare(path))")
+    #expect(plan.old.isEmpty)
+    #expect(plan.approved(ticked: [], acknowledgedOrigins: true) == nil)
+}
+
 /// A library album of two tracks under `folder` in the share's library folder, in the index
 /// only, tagged as `tags` says, for a job queued as a new album to find.
 private func libraryAlbum(

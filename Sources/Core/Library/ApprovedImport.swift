@@ -167,6 +167,9 @@ package struct ImportRun {
             return "the job is \(job.state.rawValue), not staged or approving"
         }
         guard let upgrade = job.upgrade else { return nil }
+        if let outside = upgrade.old.first(where: { !isRelativeInside($0.sharePath) }) {
+            return UpgradeRefusal.notInsideShare(outside.sharePath).description
+        }
         // Once the old files are in the ledger, it holds what the sheet chose.
         guard try index.importSteps(job: job.jobID).allSatisfy({ $0.kind != .trashed }) else {
             return nil

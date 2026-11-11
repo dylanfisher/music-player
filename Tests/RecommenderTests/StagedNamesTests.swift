@@ -3,8 +3,8 @@ import Testing
 
 @testable import Recommender
 
-// The paths the service names in a job, checked where the job is read (ADR 0025, rows 66 and
-// 67): a staged file's name inside the job's folder.
+// The paths the service names in a job, checked where the job is read (ADR 0025, rows 67 and
+// 68): a staged file's name inside the job's folder, an upgrade's old path inside the share.
 
 /// The contract's example job with its files named `names` and its folder `stagedPath`.
 private func job(names: [String], stagedPath: String? = "job-42") throws -> DownloadJob {
@@ -60,4 +60,18 @@ private func quoted(_ text: String) -> String {
     let outside = try job(names: ["01.flac"], stagedPath: "../library")
     #expect(outside.stagedFiles == nil)
     #expect(outside.stagedProblem == DownloadJob.notOneFolder("../library"))
+}
+
+@Test func anUpgradesOldPathOutsideTheShareFailsTheDecode() throws {
+    let upgrade = { (path: String) in
+        #"{"current_quality": "MP3 320", "old_paths": ["library/a.mp3", \#(quoted(path))]}"#
+    }
+    #expect(
+        try replyDecoder.decode(DownloadJob.Upgrade.self, from: Data(upgrade("library/b.mp3").utf8))
+            .oldPaths == ["library/a.mp3", "library/b.mp3"])
+    for path in ["../elsewhere.flac", "library/../../x.flac", "/Volumes/music/x.flac", ""] {
+        #expect(throws: DecodingError.self, "\(path)") {
+            try replyDecoder.decode(DownloadJob.Upgrade.self, from: Data(upgrade(path).utf8))
+        }
+    }
 }
