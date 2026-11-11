@@ -242,6 +242,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var isImportingMoves = false
     /// The selected tracks' ratings as last read, with the index's change stamp then.
     private var selectionRatingsRead: (ids: [Int64], stamp: [Int], ratings: Set<Int>)?
+    /// Whether the last read of the selected tracks' ratings failed, which was reported then.
+    private var selectionRatingsFailed = false
 
     /// `index` is a connection for the main thread, which fetches the table's rows a page at a
     /// time: a page is one primary-key lookup per row and takes well under a millisecond.
@@ -2052,9 +2054,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             }
             let ratings = try index.ratings(ids: ids)
             selectionRatingsRead = (ids, stamp, ratings)
+            selectionRatingsFailed = false
             return ratings
         } catch {
-            logger.error("couldn't read the selected tracks' ratings: \(error)")
+            // Reported at the first failure, not at each item's check. No item is marked, not
+            // even Clear Rating, since the ratings aren't known.
+            if !selectionRatingsFailed {
+                report("couldn't read the selected tracks' ratings: \(error)")
+            }
+            selectionRatingsFailed = true
             return []
         }
     }

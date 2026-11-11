@@ -332,6 +332,17 @@ private func ratingMarks(_ browser: LibraryBrowser) -> [RatingMark] {
     #expect(ratingMarks(browser) == [.off, .off, .off, .off, .off, .off])
 }
 
+/// Ratings that can't be read mark no item and say so once, not at every item's check.
+@MainActor @Test func ratingsThatCantBeReadMarkNothingAndSaySoOnce() async throws {
+    let (browser, index) = try await browser(selecting: [2])
+    try index.database.execute("DROP TABLE ratings")
+    #expect(ratingMarks(browser) == [.off, .off, .off, .off, .off, .off])
+    #expect(browser.statusText.hasPrefix("couldn't read the selected tracks' ratings"))
+    browser.report("a later failure")
+    _ = ratingMarks(browser)
+    #expect(browser.statusText == "a later failure")
+}
+
 @Test func theRatingMessageNamesOneTrackOrCountsSeveral() {
     #expect(ratingMessage(stars: 4, count: 1, title: "Song") == "Rated “Song” ★★★★")
     #expect(ratingMessage(stars: 4, count: 3, title: nil) == "Rated 3 tracks ★★★★")
