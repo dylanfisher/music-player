@@ -74,5 +74,8 @@ reported not written.
   files a minute.
 - An undo of a batch with several rewrites reports them in the order their records were
   appended, not the reverse of the batch's.
+- A batch that mixes the two loses the overlap at each chunk: the chunk waits for every
+  rewrite under way to finish before its writes in place start, and the next rewrite starts
+  only after the chunk is written.
 - A journal failure in one rewrite no longer stops the files after it that are already in
   flight; they finish, and only the files not yet started are left unwritten.
