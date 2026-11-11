@@ -76,6 +76,10 @@ struct ApprovalPlan: Sendable {
     var libraryFolder = ""
     /// The lossy-origin check is still reading the staged files.
     var checking = false
+    /// The release id tag of each staged file, as the player read it once the plan was
+    /// checked, in the files' order: nil for a file with none, or one whose tags don't read.
+    /// Empty until then.
+    var stagedReleases: [String?] = []
 
     var isUpgrade: Bool { job.upgrade != nil || replaced != nil }
 
@@ -152,8 +156,10 @@ struct ApprovalPlan: Sendable {
     /// the owner nothing to judge: a staged job's plan, checked, with no blockers that way,
     /// which says nothing of albums it can't replace. A library album it wasn't queued to
     /// upgrade it replaces, as Approve does with Keep Both off, only when it was found by its
-    /// release id and the staged files are clearly higher quality (ADR 0195). Holding the job
-    /// to its clean tagging is the caller's part.
+    /// release id and the staged files are clearly higher quality (ADR 0195). Every staged
+    /// file must carry the job's release id, as the player reads it, so a reply that calls
+    /// the tagging clean isn't enough on its own. Holding the job to its clean tagging is the
+    /// caller's part.
     var unasked: Unasked {
         if resuming { return .left("the import has started already") }
         if checking { return .left(ApproveSheet.checkingNote) }
@@ -169,6 +175,12 @@ struct ApprovalPlan: Sendable {
         }
         guard let approved = approved(ticked: [], acknowledgedOrigins: false) else {
             return .left("the service listed the job with no staged folder")
+        }
+        let release = String(job.release.releaseID)
+        guard !stagedReleases.isEmpty, stagedReleases.allSatisfy({ $0 == release }) else {
+            return .left(
+                "the staged files aren't all tagged with release \(release), as the player"
+                    + " reads them")
         }
         return .approved(approved)
     }
@@ -282,12 +294,13 @@ struct ApprovalPlan: Sendable {
     }
 
     /// The plan with the lossy-origin check of its staged files, under the staging folder of
-    /// `places`. Throws only when cancelled.
+    /// `places`, and their release id tags. Throws only when cancelled.
     func checked(places: ImportPlaces) async throws -> ApprovalPlan {
         var plan = self
         plan.checking = false
         guard let folder = job.stagedFolder, let files = job.stagedFiles else { return plan }
         let paths = files.map { places.stagingRoot + "/" + folder + "/" + $0.name }
+        plan.stagedReleases = await blockingFileWork { paths.map(releaseTag) }
         do {
             plan.origins = try await stagedOrigins(paths)
         } catch is CancellationError {
@@ -384,6 +397,18 @@ struct ApprovalPlan: Sendable {
             file.position = ids[file.path].flatMap { positions[$0] }
             return file
         }
+    }
+}
+
+/// The release id tag of the file at `path`, nil for none. A file whose tags don't read counts
+/// as having none: the lossy-origin check reports why, and an import unasked is left for the
+/// owner either way.
+private func releaseTag(_ path: String) -> String? {
+    do {
+        return try readMetadata(at: URL(fileURLWithPath: path, isDirectory: false))
+            .metadata.tags.custom[DiscogsKey.releaseID]
+    } catch {
+        return nil
     }
 }
 

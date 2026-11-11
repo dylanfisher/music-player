@@ -39,7 +39,8 @@ private func plan(_ job: DownloadJob, origins: [StagedOrigin] = []) -> ApprovalP
     ApprovalPlan(
         job: job, resuming: false, moves: job.files.map { ($0.name, "/l/A/\($0.name)") },
         movesProblem: nil, old: [], unmatched: [], upgradeProblem: nil, origins: origins,
-        originsProblem: nil)
+        originsProblem: nil,
+        stagedReleases: job.files.map { _ in String(job.release.releaseID) })
 }
 
 @Test func onlyAStagedCleanJobNoOtherMacReviewsIsLookedAt() {

@@ -48,7 +48,7 @@ private func plan(
             ? ApprovalPlan.KeepBoth(
                 moves: staged.files.map { ($0.name, "/Volumes/music/library/A (2)/\($0.name)") },
                 problem: nil) : nil,
-        checking: checking)
+        checking: checking, stagedReleases: staged.files.map { _ in "4242" })
 }
 
 private let lossy = StagedOrigin(
@@ -184,6 +184,18 @@ private func unasked(_ plan: ApprovalPlan) -> (ApprovedImport?, String?) {
     #expect(why == nil)
     #expect(approved?.upgrade?.old.count == 3)
     #expect(approved?.upgrade?.acknowledged == [])
+}
+
+/// A job the service calls clean whose staged files carry another release id, or none, isn't
+/// approved unasked: the player's own read of the tags decides (ADR 0025, row 72).
+@Test(arguments: [["4242", "1"], ["4242", nil], []] as [[String?]])
+func aCleanJobWhoseFilesCarryAnotherReleaseIsLeft(_ releases: [String?]) {
+    let clean = StagedOrigin(path: "/s/job-5/01 First Song.flac", verdicts: [], failure: nil)
+    var plan = plan(origins: [clean])
+    plan.stagedReleases = releases
+    let (approved, why) = unasked(plan)
+    #expect(approved == nil)
+    #expect(why == "the staged files aren't all tagged with release 4242, as the player reads them")
 }
 
 @Test func aPlanThatAsksTheOwnerAnythingIsLeftForReview() {
@@ -571,6 +583,7 @@ func aJobQueuedByHandReplacesTheLibrarysAlbumOfItsRelease(_ byName: Bool) async 
     #expect(plan.checking && plan.origins.isEmpty && plan.originsProblem == nil)
     let checked = try await plan.checked(places: places)
     #expect(!checked.checking)
+    #expect(checked.stagedReleases == [nil, nil], "the files carry no release id")
     #expect(
         checked.origins.map(\.path)
             == stagedOriginChoice(
