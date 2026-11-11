@@ -165,3 +165,16 @@ private func widthJSON(_ width: String) -> String {
     layout.leading[0].parts.append(.track)
     #expect(layout.problems == [.stackedPartFillsHeight("Art", .leading(0))])
 }
+
+/// The playing track's rating is a part, written by its name and read back.
+@Test func theRatingRoundTripsAsAPart() throws {
+    let layout = BarLayout<StatusPart>(
+        leading: [BarColumn(parts: [.track, .rating], width: .flexible, alignment: .leading)],
+        center: BarColumn(parts: [.totals], width: .flexible, alignment: .center))
+    let text = try #require(String(data: try JSONEncoder().encode(layout), encoding: .utf8))
+    #expect(text.contains(#""parts":["track","rating"]"#))
+    #expect(try decode(text).get() == layout)
+    let written = #"{"leading": [], "center": \#(column(#""rating""#)), "trailing": []}"#
+    #expect(try decode(written).get().center.parts == [.rating])
+    #expect(StatusPart.rating.title == "Rating" && !StatusPart.rating.fillsHeight)
+}

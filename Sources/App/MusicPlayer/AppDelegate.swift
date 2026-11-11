@@ -348,7 +348,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings: layout, banner: banner.view, browser: browser, toolbar: toolbar,
             signalPath: signalPath, queue: queue, saver: saver)
         self.browser = browser
-        browser.ratingsChanged = { [weak self] in self?.tagEditing.ratingsChanged() }
+        browser.ratingsChanged = { [weak self] in
+            self?.tagEditing.ratingsChanged()
+            nowPlaying.ratingsChanged()
+        }
+        nowPlaying.ratingClicked = { [weak browser] stars, path in
+            browser?.setRating(stars, paths: [path])
+        }
         self.nowPlaying = nowPlaying
         nowPlaying.follow(window.window)
         nowPlaying.problemOpened = { [weak self] in self?.showProblem($0) }

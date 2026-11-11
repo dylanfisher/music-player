@@ -1,7 +1,8 @@
 /// A part the status bar can show, as the user arranges them in its builder: the playing
-/// track's art, its title and artist, its format, a seek bar, and the list's totals.
+/// track's art, its title and artist, its format, a seek bar and its rating, and the list's
+/// totals.
 public enum StatusPart: String, BarPart {
-    case art, track, format, seek, totals
+    case art, track, format, seek, rating, totals
 
     public var title: String {
         switch self {
@@ -9,6 +10,7 @@ public enum StatusPart: String, BarPart {
         case .track: "Title and Artist"
         case .format: "Format and Bit Rate"
         case .seek: "Seek Bar"
+        case .rating: "Rating"
         case .totals: "Track Totals"
         }
     }

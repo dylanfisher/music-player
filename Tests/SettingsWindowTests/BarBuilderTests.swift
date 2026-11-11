@@ -38,7 +38,7 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     #expect(builder.title == AppSettings().statusBarLayout.title)
     #expect(builder.choices.map(\.rawValue) == StatusPart.allCases.map(\.rawValue))
     #expect(builder.layout.center.parts == ["totals"])
-    #expect(builder.unusedParts == ["art", "track", "format", "seek"])
+    #expect(builder.unusedParts == ["art", "track", "format", "seek", "rating"])
 }
 
 /// Each edit saves as it's made, a new column while it's still empty.

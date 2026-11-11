@@ -1,8 +1,9 @@
 import AppKit
+import BarView
 import Settings
 
-/// The playing track's parts of the status bar: art, title and artist, the format line and a
-/// seek bar with its times, one view each, which the browser lays out in the user's order. The
+/// The playing track's parts of the status bar: art, title and artist, the format line, a seek
+/// bar with its times and the rating's stars, one view each, which the browser lays out in the user's order. The
 /// minimal style puts the track on one line; the tall one gives it two, under a larger title.
 /// A playback problem in the format line has a question mark after it, and a click on either
 /// opens its details.
@@ -14,6 +15,8 @@ public final class StatusBarParts: NSObject {
 
     let art = NSImageView()
     let seekBox = SeekBox()
+    /// In the format line's size, which both styles keep.
+    let rating = RatingStars(fontPoints: minimalFontPoints)
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let formatLabel = NSTextField(labelWithString: "")
@@ -74,6 +77,7 @@ public final class StatusBarParts: NSObject {
         case .track: track
         case .format: format
         case .seek: seekBox
+        case .rating: rating
         case .totals: nil
         }
     }

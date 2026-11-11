@@ -46,6 +46,8 @@ extension NowPlayingBar {
         drawing.formatLabel.stringValue = format
         drawing.seekBox.bar.fraction = 0.35
         drawing.seekBox.showTimes(elapsed: "1:10", total: "3:20")
+        drawing.rating.rating = 4
+        drawing.rating.isEnabled = true
         // Drawn smaller, since the sheet's default set is about as tall as a button's row.
         // A layout of fixed columns is drawn at its own width, as a Custom Status item is sized.
         let width = HeaderStatus.fixedWidthPoints(of: layout) ?? drawingWidthPoints / drawingScale

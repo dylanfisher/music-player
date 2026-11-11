@@ -1,5 +1,6 @@
 import AppKit
 import Artwork
+import BarView
 import Commands
 import DisplayText
 import Library
@@ -35,6 +36,9 @@ public final class NowPlayingBar: NSObject {
     }
     /// The status bar's art, track, format and seek bar.
     public let statusBar = StatusBarParts()
+    /// Called with the stars a click on any of the bars' ratings gives the playing track, 0 to
+    /// clear, and the track's path.
+    public var ratingClicked: (Int, String) -> Void = { _, _ in }
     /// Called when the playback problem in the status bar is clicked.
     public var problemOpened: (ShownProblem) -> Void = { _ in }
     /// Called with a fix the user chose and the problem it fixes, whose track may play again.
@@ -90,6 +94,9 @@ public final class NowPlayingBar: NSObject {
             guard let self, let problem = model.problem else { return }
             problemOpened(problem)
         }
+        for stars in ratings {
+            stars.clicked = { [weak self] in self?.rate($0) }
+        }
         showDialog = { [weak self] in self?.present($0) }
         setEnabled(false)
         show()
@@ -135,6 +142,13 @@ public final class NowPlayingBar: NSObject {
     public func libraryChanged() {
         model.libraryChanged()
         loadArt()
+        show()
+    }
+
+    /// A rating was set, here or anywhere else in the app, so the playing track's may have
+    /// changed. Its art hasn't, so it isn't loaded again.
+    public func ratingsChanged() {
+        model.libraryChanged()
         show()
     }
 
@@ -243,6 +257,7 @@ public final class NowPlayingBar: NSObject {
         for art in headers.map(\.art) + [statusBar.art] {
             art.alphaValue = model.currentURL == nil ? 0 : 1
         }
+        showRating()
         statusBar.show(title: model.title, subtitle: model.subtitle)
         windowTitleChanged(model.windowTitle(windowTitle))
         statusBar.show(
@@ -255,6 +270,23 @@ public final class NowPlayingBar: NSObject {
             accessibilityDescription: title)
         playButton.toolTip = title
         enableSeekBars()
+    }
+
+    /// The playing track's stars, kept in place unseen with nothing playing, as the art is; a
+    /// file the index doesn't have shows them dimmed, since it can't be rated (ADR 0203).
+    private func showRating() {
+        for stars in ratings {
+            stars.alphaValue = model.currentURL == nil ? 0 : 1
+            stars.rating = model.track?.rating ?? 0
+            stars.isEnabled = model.track != nil
+        }
+    }
+
+    /// A click on the stars of the track `ratingClicked` is told; they show the click's rating
+    /// until the index answers.
+    private func rate(_ stars: Int) {
+        guard let path = model.track?.path else { return }
+        ratingClicked(stars, path)
     }
 
     private func startTimer() {
@@ -291,6 +323,9 @@ public final class NowPlayingBar: NSObject {
 
     /// The toolbar's status and its Custom Status items, which show the same track.
     private var headers: [HeaderStatus] { [header] + customStatuses }
+
+    /// The toolbar's and the status bar's.
+    private var ratings: [RatingStars] { headers.map(\.rating) + [statusBar.rating] }
 
     /// The toolbar's and the status bar's.
     private var seekBars: [SeekBar] { headers.map(\.seekBox.bar) + [statusBar.seekBox.bar] }

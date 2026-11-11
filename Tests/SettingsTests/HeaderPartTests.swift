@@ -78,3 +78,20 @@ private func decode(_ json: String) -> Result<BarLayout<HeaderPart>, SettingProb
             == BarColumn(
                 parts: [.titleLine, .seek], width: .flexible, alignment: .center, stacks: true))
 }
+
+/// The playing track's rating is a part of the status and of each Custom Status item, written
+/// by its name and read back.
+@Test func theRatingRoundTripsAsAHeaderPart() throws {
+    let layout = BarLayout<HeaderPart>(
+        center: BarColumn(
+            parts: [.titleLine, .rating, .seek], width: .flexible, alignment: .center,
+            stacks: true))
+    let text = try #require(String(data: try JSONEncoder().encode(layout), encoding: .utf8))
+    #expect(text.contains(#""parts":["titleLine","rating","seek"]"#))
+    #expect(try decode(text).get() == layout)
+    let custom = AppSettings().customStatus1Layout
+    let json = try JSONSerialization.jsonObject(with: Data(text.utf8))
+    #expect(try custom.decode(json: json).get() == layout)
+    #expect(HeaderPart.rating.title == "Rating" && !HeaderPart.rating.fillsHeight)
+    #expect(layout.problems.isEmpty)
+}

@@ -77,7 +77,7 @@ private func frame(_ view: NSView, in root: NSView) -> NSRect {
     let status = status()
     let (old, oldParts) = phase35Header(like: status)
     #expect(status.view.fittingSize.height == old.fittingSize.height)
-    for part in HeaderPart.allCases where part != .titleLine {
+    for part in HeaderPart.allCases where ![.titleLine, .rating].contains(part) {
         let now = frame(status.view(for: part), in: status.view)
         let before = frame(oldParts[part]!, in: old)
         #expect(now.minX == before.minX && now.minY == before.minY, "\(part): \(now) \(before)")

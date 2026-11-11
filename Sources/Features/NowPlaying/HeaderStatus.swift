@@ -3,7 +3,7 @@ import BarView
 import Settings
 
 /// The toolbar's now-playing status: the playing track's art, title, title line, artist and
-/// album, format line and seek bar, laid out in columns as `appearance.headerStatusLayout` says (ADR 0085).
+/// album, format line, seek bar and rating, laid out in columns as `appearance.headerStatusLayout` says (ADR 0085).
 /// A flexible center column takes the width the side columns leave, a stacked column always
 /// stacks, and the status is as tall as its tallest column.
 @MainActor
@@ -23,6 +23,8 @@ public final class HeaderStatus {
     let subtitleLabel = NSTextField(labelWithString: "")
     let formatLabel = NSTextField(labelWithString: "")
     let seekBox = SeekBox()
+    /// In the artist and album's size.
+    let rating = RatingStars(fontPoints: NSFont.smallSystemFontSize)
     private let leading = NSStackView()
     private let trailing = NSStackView()
     private let columns = BarColumns()
@@ -97,6 +99,7 @@ public final class HeaderStatus {
         case .subtitle: subtitleLabel
         case .format: formatLabel
         case .seek: seekBox
+        case .rating: rating
         }
     }
 
