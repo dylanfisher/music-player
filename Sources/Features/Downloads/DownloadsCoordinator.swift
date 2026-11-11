@@ -167,7 +167,9 @@ actor DownloadsCoordinator {
                 verdict = .error(["\(error)"])
             }
         } else {
-            verdict = .error(["the service listed the job with no staged folder or format"])
+            verdict = .error([
+                job.stagedProblem ?? "the service listed the job with no staged folder or format"
+            ])
         }
         renewal.cancel()
         guard !lostLeases.contains(job.id) else { return }

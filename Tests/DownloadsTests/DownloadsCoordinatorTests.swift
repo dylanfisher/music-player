@@ -260,6 +260,18 @@ func aStagedJobIsTaggedWhenNoRunHoldsIt(
     #expect(setup.service.eventTypes.last == "release_lease")
 }
 
+/// A staged file named outside the job's folder is never tagged, and the error says which.
+@Test func aStagedFileNamedOutsideItsFolderIsReportedAndNeverTagged() async throws {
+    let outside = job(1) { $0.files[1].name = "../x.flac" }
+    let setup = try Setup([outside])
+    await setup.coordinator().take([outside])
+    #expect(setup.calls.tags.isEmpty)
+    #expect(setup.calls.writes == 0)
+    #expect(
+        setup.service.job(1)?.tagging
+            == DownloadJob.Tagging(status: .error, reasons: [try #require(outside.stagedProblem)]))
+}
+
 @Test func aMacWithNoCatalogDoesntTag() async throws {
     let setup = try Setup([job(1)])
     await setup.coordinator(catalog: false).take([job(1)])
