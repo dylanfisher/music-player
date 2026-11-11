@@ -75,17 +75,24 @@ private func stars(of bar: NowPlayingBar) -> [RatingStars] {
     }
 }
 
-/// With nothing playing the stars keep their place unseen and take no click, as the art does;
-/// a file the index doesn't have shows them empty and off, since it can't be rated.
+/// With nothing playing the stars keep their place unseen, out of VoiceOver's reach, and take
+/// no click, as the art does; a file the index doesn't have shows them empty and off, since it
+/// can't be rated.
 @MainActor @Test func theStarsShowOnlyWhileATrackPlays() {
     let index = Index()
     index.rating = 3
     let bar = bar(index)
-    #expect(stars(of: bar).allSatisfy { $0.alphaValue == 0 && !$0.isEnabled })
+    let unseen = { (view: RatingStars) in
+        view.alphaValue == 0 && !view.isEnabled && !view.isAccessibilityElement()
+    }
+    #expect(stars(of: bar).allSatisfy(unseen))
     bar.apply(playing(0))
-    #expect(stars(of: bar).allSatisfy { $0.alphaValue == 1 && $0.isEnabled && $0.rating == 3 })
+    #expect(
+        stars(of: bar).allSatisfy {
+            $0.alphaValue == 1 && $0.isEnabled && $0.rating == 3 && $0.isAccessibilityElement()
+        })
     bar.apply(playing(nil))
-    #expect(stars(of: bar).allSatisfy { $0.alphaValue == 0 && !$0.isEnabled })
+    #expect(stars(of: bar).allSatisfy(unseen))
     index.rating = nil
     bar.apply(playing(0))
     for view in stars(of: bar) {

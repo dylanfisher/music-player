@@ -273,11 +273,13 @@ public final class NowPlayingBar: NSObject {
         enableSeekBars()
     }
 
-    /// The playing track's stars, kept in place unseen with nothing playing, as the art is; a
-    /// file the index doesn't have shows them dimmed, since it can't be rated (ADR 0203).
+    /// The playing track's stars, kept in place unseen with nothing playing, as the art is, and
+    /// left out for VoiceOver then; a file the index doesn't have shows them dimmed, since it
+    /// can't be rated (ADR 0203).
     private func showRating() {
         for stars in ratings {
             stars.alphaValue = model.currentURL == nil ? 0 : 1
+            stars.setAccessibilityElement(model.currentURL != nil)
             stars.rating = model.track?.rating ?? 0
             stars.isEnabled = model.track != nil
         }
