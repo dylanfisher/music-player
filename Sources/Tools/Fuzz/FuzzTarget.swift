@@ -243,6 +243,7 @@ private let journal = FuzzTarget(
         for file in stride(from: 0, to: files.count, by: max(1, files.count / 10)).map({ files[$0] }
         ) {
             let copy = work.appendingPathComponent("seed-" + file.lastPathComponent)
+            // Nothing to remove the first time.
             try? FileManager.default.removeItem(at: copy)
             try FileManager.default.copyItem(at: file, to: copy)
             _ = writer.write(TagEdit(values: [.title: "Seed"]), to: [copy.path])
@@ -336,6 +337,7 @@ private let rules = FuzzTarget(
             "UPDATE playlists SET rules = ? WHERE id = ?")
         return { input in
             let json = String(decoding: input, as: UTF8.self)
+            // Most inputs aren't rules; only one that decodes is checked.
             let decoded = try? SmartRules(json: json)
             if let decoded {
                 let again: SmartRules
@@ -489,11 +491,13 @@ private let syncLog = FuzzTarget(
             }
             var accepted = 0
             while let line = try! reader.next() {
+                // A line that isn't an event is skipped, as the merge skips it.
                 guard case .line(let bytes) = line,
                     let record = try? SyncRecord(line: bytes[...])
                 else { continue }
                 let written = record.line
                 precondition(!written.utf8.contains(0x0A), "a written line holds a line break")
+                // The failure is the finding, with the line in its message.
                 guard let again = try? SyncRecord(line: Array(written.utf8)[...]), again == record
                 else { preconditionFailure("an event doesn't survive being written: \(written)") }
                 // Foundation, apart from the log's own parser, must read the same paths.
@@ -527,6 +531,7 @@ private let swinsian = FuzzTarget(
     tokens: ["CREATE TABLE", "smartpredicate", "playlisttrack", "playcount", "favourite"],
     madeSeeds: { work, _ in
         let url = work.appendingPathComponent("seed.sqlite")
+        // Nothing to remove the first time.
         try? FileManager.default.removeItem(at: url)
         let database = try Database(at: url)
         // Swinsian's schema, with values of every type the reader checks for.
@@ -706,6 +711,7 @@ private let tagWriter = FuzzTarget(
             ]),
         ]
         return { input in
+            // Nothing to remove the first time.
             try? FileManager.default.removeItem(at: data)
             write(input, to: file)
             let written = writer.write(edits[input.count % edits.count], to: [file.path])

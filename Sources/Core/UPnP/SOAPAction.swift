@@ -106,6 +106,7 @@ package struct UPnPFault: Equatable, Sendable, CustomStringConvertible {
 
     /// Reads the fault from a reply's head and body; nil when the body isn't one.
     init?(_ raw: [UInt8]) {
+        // A body that isn't XML isn't a fault, the nil documented above.
         guard let end = raw.firstRange(of: Array("\r\n\r\n".utf8)),
             let envelope = try? XMLTree.parse(Array(raw[end.upperBound...])),
             let detail = envelope.child("Body")?.child("Fault")?.child("detail")?.child(

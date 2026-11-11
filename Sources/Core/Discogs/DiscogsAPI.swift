@@ -124,6 +124,7 @@ public actor DiscogsAPI {
     }
 
     private func cachedRelease(id: Int, maximumAgeDays: Double) async -> FetchedRelease? {
+        // A cache entry that doesn't decode is a miss, so the caller fetches the release again.
         guard let json = await cached(.release, id, maximumAgeDays: maximumAgeDays),
             let entry = try? JSONDecoder().decode(CachedRelease.self, from: Data(json.utf8)),
             entry.id == id
@@ -133,6 +134,7 @@ public actor DiscogsAPI {
 
     /// The main release of the master `id`, through the cache as a release is.
     func mainRelease(master id: Int) async throws(DiscogsAPIError) -> Int? {
+        // A cache entry that doesn't decode is a miss: the master is fetched again below.
         if let json = await cached(.master, id),
             let entry = try? JSONDecoder().decode(CachedMaster.self, from: Data(json.utf8))
         {

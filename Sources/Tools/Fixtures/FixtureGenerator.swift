@@ -66,6 +66,7 @@ private func isCurrent(_ manifest: FixtureManifest, in root: URL) throws -> Bool
     let sizesMatch = LockedArray(repeating: false, count: files.count)
     DispatchQueue.concurrentPerform(iterations: files.count) { index in
         let path = root.appendingPathComponent(files[index].path).path
+        // A file that's gone or unreadable doesn't match, so the fixtures are made again.
         let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int
         sizesMatch[index] = size == files[index].byteCount
     }

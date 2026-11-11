@@ -466,6 +466,7 @@ private func extendedHeaderSize(_ area: FrameArea, at cursor: Int, version: UInt
 /// for the tag writer to match a `TXXX` by; nil for an unknown encoding.
 package func id3Decoded(_ bytes: [UInt8], encoding byte: UInt8) -> String? {
     var warnings: [MetadataWarning] = []
+    // `encoding` throws only for an unknown encoding byte, which is the nil documented above.
     return (try? encoding(byte, at: 0))?.decode(bytes, at: 0, warnings: &warnings)
 }
 

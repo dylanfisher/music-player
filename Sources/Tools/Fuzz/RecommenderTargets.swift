@@ -36,14 +36,18 @@ let recommenderReply = FuzzTarget(
     prepare: { _ in
         { input in
             var read = false
+            // Most inputs aren't a reply of any kind; only one that decodes is checked.
             if (try? decodeReply(input, as: JobReply.self)) != nil { read = true }
+            // As above, for the downloads config.
             if let config = try? decodeReply(input, as: DownloadsConfig.self) {
                 read = true
                 _ = config.slskdPage(reachedAt: .v4([192, 168, 1, 20]))
             }
+            // As above, for a page of jobs.
             if let page = try? decodeReply(input, as: JobPage.self) {
                 read = true
                 var jobs = DownloadJobs()
+                // A page the jobs refuse is a normal input here; only one they take is checked.
                 if (try? jobs.take(page)) != nil {
                     precondition(
                         jobs.after == page.jobs.last?.revision ?? 0,

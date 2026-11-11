@@ -42,6 +42,7 @@ func audioFiles(in root: URL) -> [URL] {
         at: root, includingPropertiesForKeys: [.isRegularFileKey])
     return (enumerator?.allObjects as? [URL] ?? [])
         .filter { audioFileExtensions.contains($0.pathExtension.lowercased()) }
+        // A file that can't be read for its type isn't a seed.
         .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
         .sorted { $0.path < $1.path }
 }
@@ -49,6 +50,7 @@ func audioFiles(in root: URL) -> [URL] {
 /// Up to `maximumInputBytes` from the start of the file.
 func head(of url: URL) throws -> [UInt8] {
     let handle = try FileHandle(forReadingFrom: url)
+    // A failed close after a read loses nothing.
     defer { try? handle.close() }
     return [UInt8](try handle.read(upToCount: maximumInputBytes) ?? Data())
 }

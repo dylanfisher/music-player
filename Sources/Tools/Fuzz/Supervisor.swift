@@ -32,7 +32,9 @@ enum Outcome: Equatable {
     throws -> [URL]
 {
     let work = try fuzzCaches().appendingPathComponent(target.name)
+    // The last run's folders may not exist; the loop below makes them.
     try? FileManager.default.removeItem(at: work)
+    // Nor the last run's seeds.
     try? FileManager.default.removeItem(at: folders.seeds)
     for folder in [work, folders.seeds, folders.corpus, folders.crashes] {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -46,6 +48,7 @@ enum Outcome: Equatable {
     var crashes: [URL] = []
     var workerSeed = seed
     while Date() < deadline, crashes.count < maximumCrashes {
+        // The last worker's input may not exist.
         try? FileManager.default.removeItem(at: folders.pending)
         let outcome = try spawn(
             [
@@ -59,6 +62,7 @@ enum Outcome: Equatable {
         case .failed:
             throw FuzzError("the \(target.name) worker \(outcome.description)")
         case .crashed:
+            // The throw below names the crash without the input.
             guard let input = try? [UInt8](Data(contentsOf: folders.pending)) else {
                 throw FuzzError("the \(target.name) worker \(outcome.description) outside an input")
             }
@@ -89,6 +93,7 @@ private func save(
     try Data(minimised).write(to: file)
     let log = file.appendingPathExtension("log")
     let final = try replay(target, file, log: log)
+    // The crash file is saved already; a log that won't read only leaves its text out.
     let report = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
     printError(
         "\(target.name): saved \(file.path) (\(minimised.count) bytes, \(final.description))\n"

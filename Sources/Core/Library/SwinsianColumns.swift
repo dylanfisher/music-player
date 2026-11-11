@@ -152,6 +152,7 @@ public struct SwinsianColumns: Equatable, Sendable {
     /// list, as the smart playlists' are, never by `NSKeyedUnarchiver` (ADR 0033); every
     /// reference is checked before it's followed, and nothing is followed more than three deep.
     private static func firstSortKey(_ value: Any) -> (String, Bool)? {
+        // A sort key that isn't a property list leaves the column unsorted, as an absent one does.
         guard let data = value as? Data, data.count <= maximumSortBytes,
             let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
             let (objects, roots) = SwinsianArchive.objectTable(plist), roots.count == 1

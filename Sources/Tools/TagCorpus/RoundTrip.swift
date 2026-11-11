@@ -106,6 +106,7 @@ struct RoundTrip {
         // A custom key: replaced where the file has one, as a Discogs refresh does, else added.
         let custom =
             tags.custom.keys.sorted().first {
+                // A key the edit refuses isn't a candidate.
                 (try? TagEdit(custom: [$0: "Round trip"]).applied(to: tags)) != nil
             } ?? DiscogsKey.releaseID
         result.append(("custom key \(custom)", TagEdit(custom: [custom: "Round trip"])))

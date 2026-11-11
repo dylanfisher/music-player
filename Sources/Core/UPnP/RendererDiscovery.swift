@@ -151,6 +151,7 @@ public enum RendererDiscovery {
     private static func sonosPlayer(_ description: DeviceDescription, at location: LocalURL)
         -> (room: String, player: Renderer.Sonos)?
     {
+        // A control URL that leaves the device's host doesn't resolve: the nil documented above.
         guard let root = description.devices.first, let room = root.room, !room.isEmpty,
             root.udn.hasPrefix("uuid:"),
             let service = root.service(ofType: ZoneGroupTopology.serviceType),

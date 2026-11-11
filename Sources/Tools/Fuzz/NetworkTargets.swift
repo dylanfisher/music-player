@@ -137,6 +137,7 @@ let avTransportReply = FuzzTarget(
     prepare: { _ in
         { input in
             var read = false
+            // Most inputs aren't a reply; only one that reads is checked.
             if let info = try? AVTransport.transportInfo(fromReply: input) {
                 read = true
                 if case .other(let state) = info.state {
@@ -145,6 +146,7 @@ let avTransportReply = FuzzTarget(
                         "a control character in \(state.debugDescription)")
                 }
             }
+            // As above, for the position.
             if let position = try? AVTransport.positionInfo(fromReply: input) {
                 read = true
                 for seconds in [position.seconds, position.durationSeconds].compactMap({ $0 }) {
@@ -243,10 +245,12 @@ let didlLite = FuzzTarget(
             let document = track.document(
                 url: "http://192.0.2.1:1/" + String(repeating: "0", count: 32))
             let request = AVTransport.setURI("u", metadata: document)
+            // The failure is the finding; the message says which document.
             guard let sent = try? AVTransport.metadata(inSetURIRequest: request.body) else {
                 preconditionFailure("the request doesn't parse")
             }
             precondition(sent == document, "the metadata didn't survive the request")
+            // As above, for the DIDL-Lite.
             guard let read = try? DIDLTrack.tags(in: document) else {
                 preconditionFailure("the DIDL-Lite doesn't parse")
             }

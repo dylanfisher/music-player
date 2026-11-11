@@ -43,6 +43,7 @@ package struct RecommenderError: Error, Equatable, CustomStringConvertible {
                 Array(raw[$0.upperBound...])
             }
             let failure = body.flatMap {
+                // A body that isn't failure JSON still has its status, which the cases below use.
                 try? replyDecoder.decode(TransportFailure.self, from: Data($0))
             }
             switch status {

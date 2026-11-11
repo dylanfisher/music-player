@@ -16,6 +16,7 @@ struct MPEGFrameHeader {
     /// Nil unless `bytes` at `offset` hold a valid Layer III header: an 11-bit sync, a known
     /// version, and a bit rate and sample rate that aren't reserved or "free".
     init?(_ bytes: Bytes, at offset: Int) {
+        // A read past the end of `bytes` means there's no whole header at `offset`: nil.
         guard let b0 = try? bytes.uint8(offset), let b1 = try? bytes.uint8(offset + 1),
             let b2 = try? bytes.uint8(offset + 2), let b3 = try? bytes.uint8(offset + 3),
             b0 == 0xFF, b1 & 0xE0 == 0xE0

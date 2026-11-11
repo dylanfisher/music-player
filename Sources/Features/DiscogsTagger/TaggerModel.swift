@@ -697,7 +697,7 @@ final class TaggerModel {
     /// Returns once the work running has finished or stopped.
     func finished() async {
         await work?.value
-        _ = try? await reading?.value
+        _ = try? await reading?.value  // The apply that started the read reports its error.
     }
 
     private func finish(_ current: Int) {

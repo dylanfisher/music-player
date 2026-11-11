@@ -377,6 +377,7 @@ public struct TagUndoJournal: Sendable {
                 sequence: sequence, folder: directory.appendingPathComponent(name(sequence)))
             for number in try sequences(in: older.folder).reversed() {
                 let handle = Handle(entry: older, number: number)
+                // A record that doesn't read is reported by `latest`, as the doc comment says.
                 guard
                     let record = try? decodeExactly(
                         FileRecord.self, from: Data(contentsOf: handle.record)),
@@ -411,6 +412,7 @@ public struct TagUndoJournal: Sendable {
                 sequence: sequence, folder: directory.appendingPathComponent(name(sequence)))
             for number in try sequences(in: entry.folder) {
                 let handle = Handle(entry: entry, number: number)
+                // A record that doesn't read is left alone; `latest` reports it.
                 guard
                     var record = try? decodeExactly(
                         FileRecord.self, from: Data(contentsOf: handle.record)),

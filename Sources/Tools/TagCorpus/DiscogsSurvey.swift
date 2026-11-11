@@ -38,6 +38,7 @@ func discogsSurvey(_ folders: [URL], output: URL) throws -> Int {
         }
     }
     let handle = try FileHandle(forWritingTo: lines)
+    // The lines are written before the close, which loses nothing.
     defer { try? handle.close() }
     try handle.seekToEnd()
     let encoder = JSONEncoder()

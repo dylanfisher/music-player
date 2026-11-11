@@ -325,6 +325,7 @@ public final class GeneralModel {
         case let string as String: string
         case nil, is NSNull: ""
         case let other?:
+            // A value JSON can't write falls back to its description, which still shows it.
             (try? JSONSerialization.data(withJSONObject: other, options: [.sortedKeys]))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "\(other)"
         }
