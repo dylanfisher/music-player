@@ -592,7 +592,8 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
 
 /// The play-to-first-sample interval a play opens is ended by the control thread once the
 /// device has taken a sample, never by the IO proc. Other tests play at once, so this looks for
-/// any such interval that ended after its own play.
+/// any such interval that ended after its own play. The stepped tests cover which command and
+/// which audio may end or cancel it (`DeviceOutputStepTests`).
 @Test func aPlaysFirstSampleEndsItsInterval() async throws {
     let album = try album(44_100, 16)
     let rig = try await Rig(speed: 1)
@@ -604,88 +605,6 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
             $0.interval == .playToFirstSample && $0.start >= start && $0.end != nil
         }
     }
-}
-
-/// An interval begun while audio from an earlier load plays isn't ended by that audio: only the
-/// start of what the load queues, once the control thread has processed it, can end it.
-@Test func audioFromBeforeALoadDoesNotEndItsFirstSoundInterval() async throws {
-    let album = try album(44_100, 16)
-    let device = NullDevice(speed: 1)
-    let interval = PendingInterval(.playToFirstSample)
-    let output = try DeviceOutput(
-        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil),
-        firstSound: interval)
-    defer { output.close() }
-    output.load(OutputItem(id: 1, url: album.tracks[0]), startSeconds: 0, playing: true)
-    try await waitUntil { !interval.isOpen }
-
-    // A begin whose load the control thread hasn't processed yet, while track 1 plays on.
-    interval.begin()
-    try await Task.sleep(nanoseconds: 200_000_000)
-    #expect(interval.isOpen)
-
-    output.load(OutputItem(id: 2, url: album.tracks[1]), startSeconds: 0, playing: true)
-    try await waitUntil { !interval.isOpen }
-}
-
-/// A stop posted before a second play's begin doesn't cancel that play's interval. The first
-/// load's audio ending it is covered in `StallDetectorTests`: the null device takes its first
-/// buffer as soon as it starts, so a test can't hold that audio back.
-@Test func aNewerPlaysIntervalIsNotEndedOrCancelledByAnEarlierCommand() async throws {
-    let album = try album(44_100, 16)
-    let device = NullDevice(speed: 0.05)
-    let interval = PendingInterval(.playToFirstSample)
-    let output = try DeviceOutput(
-        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil),
-        firstSound: interval)
-    defer { output.close() }
-    output.load(OutputItem(id: 1, url: album.tracks[0]), startSeconds: 0, playing: true)
-    try await waitUntil { device.openedSessionCount == 1 }
-    interval.begin()
-    // The first load's audio is taken while the second play's interval is open; when the
-    // device takes it depends on the machine's load, so wait for the position to move.
-    try await waitUntil { (output.position()?.seconds ?? 0) > 0 }
-    #expect(interval.isOpen)
-
-    // A stop posted before the begin that follows must not cancel it: the interval ends, which
-    // the log records, and a cancelled one it doesn't. Whether the device takes the second
-    // load's first buffer before this looks again also depends on the load.
-    output.stop()
-    let start = DispatchTime.now().uptimeNanoseconds
-    output.load(OutputItem(id: 2, url: album.tracks[1]), startSeconds: 0, playing: true)
-    let loaded = DispatchTime.now().uptimeNanoseconds
-    try await waitUntil { !interval.isOpen }
-    #expect(
-        IntervalLog.shared.spans(from: start, to: .max).contains {
-            $0.interval == .playToFirstSample && $0.start >= start && $0.start <= loaded
-                && $0.end != nil
-        })
-}
-
-/// A load or seek that makes no sound cancels the interval, so a later play doesn't log the
-/// idle time.
-@Test func aPlayThatMakesNoSoundCancelsItsFirstSoundInterval() async throws {
-    let album = try album(44_100, 16)
-    let device = NullDevice(speed: 1)
-    let interval = PendingInterval(.playToFirstSample)
-    let output = try DeviceOutput(
-        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil),
-        firstSound: interval)
-    defer { output.close() }
-    let missing = FileManager.default.temporaryDirectory.appendingPathComponent("no-\(UUID()).flac")
-
-    output.load(OutputItem(id: 1, url: missing), startSeconds: 0, playing: true)
-    try await waitUntil { !interval.isOpen }
-
-    output.load(OutputItem(id: 2, url: album.tracks[0]), startSeconds: 0, playing: true)
-    try await waitUntil { !interval.isOpen }
-    output.load(OutputItem(id: 3, url: album.tracks[1]), startSeconds: 0, playing: true)
-    output.pause()
-    try await waitUntil { !interval.isOpen }
-
-    device.unplug()
-    output.load(OutputItem(id: 4, url: album.tracks[0]), startSeconds: 0, playing: true)
-    try await waitUntil { !interval.isOpen }
 }
 
 /// Polls `condition` every 5 ms for up to `waitLimit`.
