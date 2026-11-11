@@ -249,7 +249,7 @@ let tagBatchBenchmarks = [
     Benchmark(
         name:
             "tag write: \(batchFileCount) 40 MB FLACs' covers, too large for their padding, in one batch, slow simulated NAS",
-        budget: Budget(appleSilicon: 100, oldMac: 120, unit: .seconds)
+        budget: Budget(appleSilicon: 60, oldMac: 90, unit: .seconds)
     ) {
         try batchWrite(
             TagEdit(art: .replace(oversizedCover(), mimeType: pngMIMEType)), inPlace: true,

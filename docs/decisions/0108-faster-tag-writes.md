@@ -3,6 +3,8 @@
 - **Date:** 2026-11-06
 - **Status:** accepted
 - **Amends:** [0020](0020-tag-writing.md), [0107](0107-tags-written-in-place-within-the-padding.md)
+- **Amended by:** [0196](0196-faster-whole-file-rewrites.md): a batch's rewrites several at
+  once, the original hashed while it's copied.
 
 ## Context
 

@@ -329,6 +329,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | The same on the slow simulated NAS: 10 ms a file system call, 57 MB/s over one link (phase 47) | < 10 s | < 10 s |
 | The same batch through the temp file (phase 47); the old Mac figure is an estimate until its checkpoint | < 5 s | < 30 s |
 | The same through the temp file on the slow simulated NAS (phase 47) | < 100 s | < 120 s |
+| A 2 MB cover, too large for the padding, saved to the same 20 FLACs in one batch on the slow simulated NAS, every file rewritten (phase 77: 81.4 s and 3,482 MB over the link before, 47.5 s and 2,682 MB after); the old Mac figure is an estimate until its checkpoint | < 60 s | < 90 s |
 | Launch to the first scan's start with a 1M-event sync merge pending (phase 32d); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
 | Analyze a 5-minute 24/96 FLAC fixture, local, from the page cache (phase 45a); the old Mac figure is an estimate until its checkpoint | < 2 s | < 12 s |
 | The same on the slow simulated NAS: 23 ms to open, 10 ms a 1 MB block (phase 45a); the old Mac figure is an estimate until its checkpoint | < 6 s | < 20 s |

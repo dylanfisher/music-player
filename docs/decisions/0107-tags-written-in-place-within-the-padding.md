@@ -5,6 +5,8 @@
 - **Amends:** [0020](0020-tag-writing.md), [0100](0100-get-info-windows-and-smb-temp-files.md)
 - **Amended by:** [0108](0108-faster-tag-writes.md): no whole-file hashes, the journal on the
   region, two drive flushes a batch, four writes at once.
+- **Amended by:** [0196](0196-faster-whole-file-rewrites.md): a batch's rewrites several at
+  once, the original hashed while it's copied.
 
 ## Context
 
