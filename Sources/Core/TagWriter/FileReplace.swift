@@ -47,7 +47,8 @@ package struct WriteFaults: Sendable {
     var beforeWritingTemp: (@Sendable (_ original: String) throws -> Void)?
     /// Runs once the temp file is written and checked, or once a write in place is journaled,
     /// before the original is checked for changes and replaced or overwritten. `temp` is nil
-    /// for a write in place. A throw stops the write the way a failure there would.
+    /// for a write in place. A throw stops the write the way a failure there would: a
+    /// `TagWriteError`, such as a full disk, as it is; anything else as `.writeFailed`.
     package var beforeReplacing: (@Sendable (_ original: String, _ temp: String?) throws -> Void)?
     /// Runs right after the temp file is closed, where an SMB server sets the mtime of a file
     /// written through the handle. A throw stops the write the way a failure there would.
