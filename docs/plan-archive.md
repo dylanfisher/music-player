@@ -11531,3 +11531,97 @@ calls; bench 15 tool calls; the other stages' costs weren't recorded.
 lands with no dialog, and its old files are gone. If the job fails at its delete step instead,
 paste its error: the share throws something other than `featureUnsupported`, and the fallback
 needs it. And the Stats period change row on a quiet machine (257 ms under load).
+
+### 82. Focus mode
+
+Asked by the owner on 2026-11-10.
+
+- [x] **The view.** A command, Enter Focus Mode, in the View menu and the palette, shows the
+      track table full screen with only Title, Artist and Album, in a much larger font and
+      always dark (`NSAppearance.darkAqua`, whatever the app's appearance). Otherwise it is the
+      track table: the same rows, sort, selection, playing row, double-click to play and
+      keyboard. No sidebar, browser, toolbar or status bar. Escape or the command again leaves
+      it, back to the window as it was.
+- [x] **Its font size** is a setting, `appearance.focusFontSize`, with a default the plan picks
+      (about 2.5 times the table's), and row heights follow it.
+- [x] **Which tracks.** The plan says whether it shows the current playlist or view, or what's
+      playing's source, and asks the owner if neither is clearly right.
+- [x] **Tests.** Its columns, appearance and row height from the setting; leaving restores the
+      window's layout and selection.
+- [ ] **Owner check:** enter focus mode while playing, play another row from it, and leave.
+
+Plan (ADR 0204):
+
+- **Which tracks:** the current view's, which is clearly right: the phase makes it the track
+  table with "the same rows, sort, selection", and leaving restores the selection, which only
+  reads for the list already on screen. What's playing's source would be another list, and
+  Show Current Track already goes there. The command is off while the timeline shows in the
+  table's place (History, Plays), and a source change to it while focused leaves focus mode.
+- **In place, not a second window.** Focus mode changes the main window and puts it back, so
+  the rows, sort, selection, playing row, double-click and keys are the track table's own, not
+  a copy. Nothing it changes is saved: not the toolbar, sidebar, queue or status bar
+  visibility, the widths, the frame, nor the focus columns.
+- 82.1 `appearance.focusFontSize` in `AppSettings`, an `Int` in points, default 30 (2.5 times
+  the Regular row's 12-point text), range 16 to 96, in the Track Table section of Settings.
+  `TableAppearance` carries it, so a change while focused applies at once through the existing
+  `TableAppearance.keys` path. Row height is 1.5 times the size, rounded, as Regular's 18 for
+  12. Tests: `GeneralModelTests` for the section, `TrackTableControllerTests` for the metrics.
+- 82.2 `TrackTableController.enterFocus()` / `leaveFocus()`: shows Title, Artist and Album in
+  equal widths that resize with the table, at the focus font and row height, keeping the sort
+  and selection; the layout it reports stays the saved one, its header menu is empty and its
+  column moves and resizes aren't reported. Leaving shows the saved columns, font and height.
+  `LibraryBrowser` hides the panel slot and the status bar around it, and leaves when the
+  timeline would show. Tests: columns, row height from the setting, the layout reported
+  unchanged, leaving restoring columns and selection.
+- 82.3 `.focusMode` in `Core/Commands` ("Enter Focus Mode", ⌥⌘F, "Leave Focus Mode" while on),
+  in the View menu after Distraction-Free Mode, and so in the palette. `MainWindow.toggleFocus`
+  hides the toolbar, sidebar, queue and signal path without saving, sets the window's
+  appearance to `darkAqua`, gives the table the keys and enters full screen unless already in
+  it; Escape (the window's own Escape, which otherwise does nothing), the command again, or
+  leaving full screen leaves it, putting all of it back. The other View toggles are off while
+  focused. Tests in `MainWindowTests`: the appearance, the chrome hidden, and leaving restoring
+  the window's layout, selection, first responder and saved state; the full-screen call is
+  injected so no test animates it.
+- 82.4 ADR 0204.
+
+Result, phase 82: shipped the four items (ADR 0204). View > Enter Focus Mode (⌥⌘F, and the
+palette; "Leave Focus Mode" while on) changes the main window in place: it hides the toolbar,
+sidebar, queue, signal path, browser panes or source panel and status bar, sets the window to
+`darkAqua`, gives the table the keys and enters full screen unless already there. The table
+shows only Title, Artist and Album in equal widths that grow with it, at
+`appearance.focusFontSize` (default 30 points, 2.5 times the Regular row's 12, range 16 to 96,
+in Settings' Track Table section; a change applies at once), in rows 1.5 times the text, the
+ratio read from `RowHeight.regular`. Which tracks: the current view's, clearly right, since
+the phase keeps the same rows, sort and selection; the command is off while the timeline
+shows, and a source change to it leaves focus mode. Escape, the command again or leaving full
+screen another way puts back the appearance, the chrome, the view with the keys and windowed
+mode. Nothing it changes is saved (toolbar visibility, frame, the focus columns); a sort
+chosen in it is, and quitting in it saves the window as it was before. Found along the way:
+`NSTableView.reloadData` dropped the selection, so a row height change lost it;
+`RowListController.reloadKeepingSelection()` now keeps the selection, cursor and anchor. Found
+in review: a column layout shown while focused (an import's) replaced the three columns and was
+lost at the end, so the columns from before came back; it's now kept for leaving. Tests: 2
+new in `MainWindowTests` (entering and Escape restoring frames, selection, first responder and
+saved state; leaving full screen leaves focus mode) plus quitting while focused, 1 in
+`TrackTableControllerTests` (columns, row height from the setting and a live change, nothing
+reported, empty header menu, leaving restoring columns, height and selection), the timeline
+leaving focus mode, and `GeneralModelTests` and `StateStoreTests` updated for the key. The
+config problem banner, if showing, stays visible in focus mode. Real-time path untouched.
+Bench (every non-window row, under load from parallel phases): Stats period change read 405 ms
+in a rerun batch and 407 ms alone (budget 250 ms); an A/B against main's binary, alternately,
+gave main 263 and 270 ms and the branch 236 and 233 ms, and the branch touches no Stats code,
+so it's load, not a regression. Sync merge of 1M play events 19.59 s (20 s, phase 73 6.45 to
+7.8 s quiet); Get Info window 49.24 ms (50 ms) and the reader during Analyze Library 18.22 ms
+(20 ms) are tight; open Stats 106 ms (phase 73 84 ms, 400 ms budget). 15 rows errored with
+SQLite 6922 "disk I/O error" in the first full run and 4 needed the app built; all passed
+rerun alone. Window rows not run, and the memory row after scrolling every row timed out at
+300 s. Gate: two review rounds; round 1's findings fixed, round 2 nothing above low (2 low).
+Simplify took the rows' ratio from `RowHeight.regular` and has the browser ask the track table
+whether focus mode is on. Architecture found nothing (the ⌥⌘F shortcut conflicts with
+nothing). Full `./scripts/check` passed but for `theGlassHeadersAreFrosted`.
+
+Cost: implementer (Opus) 60 tool calls, 45 min; the other stages' costs weren't recorded.
+
+**Owner checks:** enter focus mode while playing, play another row from it, and leave; the
+window comes back as it was, windowed if it was. And the Stats period change and sync merge
+rows on a quiet machine (405 ms and 19.59 s under load).

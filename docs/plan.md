@@ -5,7 +5,7 @@ Agents work through it phase by phase, mostly unattended, and stop only at **har
 checkpoints**, where the owner has to try something on the DAC Mac, the Denon, a phone, or the
 2015 MacBook Pro.
 
-Finished phases, 1 to 76 apart from 10 and 13, 78 and 81, are in
+Finished phases, 1 to 76 apart from 10 and 13, 78, 81 and 82, are in
 [plan-archive.md](plan-archive.md), with their implementation plans, Result lines and the full
 text of each checkpoint.
 
@@ -181,6 +181,8 @@ that phase's Result line, and delete its line here.
   checks under its Result line, on the 2015 MacBook Pro on battery with the Denon.
 - **81** ([phase](plan-archive.md#81-downloads-approving-unasked-without-a-dialog-and-no-offer-for-one-track)):
   the owner checks under its Result line, an unasked upgrade on the NAS.
+- **82** ([phase](plan-archive.md#82-focus-mode)): the owner checks under its Result line,
+  focus mode while playing.
 - **Window benchmarks** ([51h's Result](plan-archive.md#51h-the-tagger-second-pass)): the 11
   window rows of `./scripts/bench` hang in an agent session; run them on this Mac.
 
@@ -209,7 +211,9 @@ Run after every phase, before ticking it off.
       line. In an agent session the window rows that quit the app (launch, scrolling, page
       down, resize, row height) hang in `terminate:`, each for its 300 s timeout: leave them out
       by name and list them for the owner's Mac. Rerun a row that misses alone before calling
-      it a miss; a full run's load can push a row past its budget. A row still slower alone is
+      it a miss; a full run's load can push a row past its budget. A row that errors with
+      SQLite's "disk I/O error" (6922) while other phases run is rerun alone the same way, and
+      the bench's app is built first for the rows that need it. A row still slower alone is
       run against main's binary, alternately, under the bench lock, before it's called a
       regression: in phase 73 four such rows read the same on main.
 - [ ] **Real-time audit**, if the phase touched playback: everything reachable from the IO proc
@@ -438,58 +442,6 @@ Asked by the owner on 2026-11-10, with phase 79, which it follows.
       on a rating set while playing.
 - [ ] **Owner check:** add Rating to the status bar and to Custom Status 1, and rate the
       playing track with a shortcut: both follow.
-
-### 82. Focus mode
-
-Asked by the owner on 2026-11-10.
-
-- [x] **The view.** A command, Enter Focus Mode, in the View menu and the palette, shows the
-      track table full screen with only Title, Artist and Album, in a much larger font and
-      always dark (`NSAppearance.darkAqua`, whatever the app's appearance). Otherwise it is the
-      track table: the same rows, sort, selection, playing row, double-click to play and
-      keyboard. No sidebar, browser, toolbar or status bar. Escape or the command again leaves
-      it, back to the window as it was.
-- [x] **Its font size** is a setting, `appearance.focusFontSize`, with a default the plan picks
-      (about 2.5 times the table's), and row heights follow it.
-- [x] **Which tracks.** The plan says whether it shows the current playlist or view, or what's
-      playing's source, and asks the owner if neither is clearly right.
-- [x] **Tests.** Its columns, appearance and row height from the setting; leaving restores the
-      window's layout and selection.
-- [ ] **Owner check:** enter focus mode while playing, play another row from it, and leave.
-
-Plan (ADR 0204):
-
-- **Which tracks:** the current view's, which is clearly right: the phase makes it the track
-  table with "the same rows, sort, selection", and leaving restores the selection, which only
-  reads for the list already on screen. What's playing's source would be another list, and
-  Show Current Track already goes there. The command is off while the timeline shows in the
-  table's place (History, Plays), and a source change to it while focused leaves focus mode.
-- **In place, not a second window.** Focus mode changes the main window and puts it back, so
-  the rows, sort, selection, playing row, double-click and keys are the track table's own, not
-  a copy. Nothing it changes is saved: not the toolbar, sidebar, queue or status bar
-  visibility, the widths, the frame, nor the focus columns.
-- 82.1 `appearance.focusFontSize` in `AppSettings`, an `Int` in points, default 30 (2.5 times
-  the Regular row's 12-point text), range 16 to 96, in the Track Table section of Settings.
-  `TableAppearance` carries it, so a change while focused applies at once through the existing
-  `TableAppearance.keys` path. Row height is 1.5 times the size, rounded, as Regular's 18 for
-  12. Tests: `GeneralModelTests` for the section, `TrackTableControllerTests` for the metrics.
-- 82.2 `TrackTableController.enterFocus()` / `leaveFocus()`: shows Title, Artist and Album in
-  equal widths that resize with the table, at the focus font and row height, keeping the sort
-  and selection; the layout it reports stays the saved one, its header menu is empty and its
-  column moves and resizes aren't reported. Leaving shows the saved columns, font and height.
-  `LibraryBrowser` hides the panel slot and the status bar around it, and leaves when the
-  timeline would show. Tests: columns, row height from the setting, the layout reported
-  unchanged, leaving restoring columns and selection.
-- 82.3 `.focusMode` in `Core/Commands` ("Enter Focus Mode", ⌥⌘F, "Leave Focus Mode" while on),
-  in the View menu after Distraction-Free Mode, and so in the palette. `MainWindow.toggleFocus`
-  hides the toolbar, sidebar, queue and signal path without saving, sets the window's
-  appearance to `darkAqua`, gives the table the keys and enters full screen unless already in
-  it; Escape (the window's own Escape, which otherwise does nothing), the command again, or
-  leaving full screen leaves it, putting all of it back. The other View toggles are off while
-  focused. Tests in `MainWindowTests`: the appearance, the chrome hidden, and leaving restoring
-  the window's layout, selection, first responder and saved state; the full-screen call is
-  injected so no test animates it.
-- 82.4 ADR 0204.
 
 ### 83. Automatic lossless upgrades
 

@@ -4,6 +4,39 @@ Where the time and tokens went over the last few phases, and what changed becaus
 newest entry is first. [plan.md](plan.md#retrospective) says when to write one and what goes in
 it.
 
+## 2026-11-10: phases 78, 81 and 82
+
+| Phase | Implementation | Reviews and bench | Fix rounds |
+|---|---|---|---|
+| 78 | 38 tool calls, 25 min | third review 3 min; the rest not recorded | 2 above low and 4 low, then 0 above low |
+| 81 | 40 calls, 25 min | simplify 10 calls, bench 15 calls | 1 above low and 3 low, then 0 above low |
+| 82 | 60 calls, 45 min | not recorded | round 1 fixed, then 0 above low (2 low) |
+
+The three ran side by side in their own worktrees, 79 and 83 alongside, and landed one at a
+time. Only the implementers' costs came through to the Result lines: the workflow reported
+tool calls and minutes for the implement stage and left the review, fix, simplify and bench
+stages empty, and no stage reported tokens, so where the gate's time went can't be read back
+for this run. What the Result lines do show is load. With five phases' builds, tests and
+benches on one Mac, the bench read rows over budget that weren't: Stats period change read
+257 ms in 81 and 405 ms alone in 82 (budget 250 ms), and an A/B against main's binary gave the
+branch 233 to 236 ms and main 263 to 270 ms; sync merge of 1M play events read 19.3 to 19.6 s
+(budget 20 s, 6.45 to 7.8 s quiet in phase 73). In 82's first full run 15 rows errored with
+SQLite's "disk I/O error" and 4 needed the app built; all passed rerun alone. Timing tests
+(`aSearchTypedDuringARefreshDoesNotWaitForItsQueries`, `aRootWithATrailingSlashIndexesEachFileOnce`)
+failed under the same load and passed rerun. Reviews found something real in each phase's
+first round (a renderer stuck in TRANSITIONING keeping the Mac awake, a fallback widened to
+ENOTSUP, focus mode losing an import's column layout) and nothing above low in the last.
+
+Changes: the phase gate's performance audit now says a row that errors with SQLite's disk I/O
+error while other phases run is rerun alone, like a miss, and that the bench's app is built
+first. The Stats period change and sync merge rows are owner checks on a quiet machine in 78,
+81 and 82's lines rather than misses. The workflow should pass every stage's tool calls,
+minutes and tokens to the landing step, so the next entry can say where the gate's time went;
+that's the workflow script's change, outside this repo. Cleanup: 78's and 81's worktrees were
+removed as they landed, and 82's goes with this commit; `../music-player-p77`, `-p79` and `-p83`
+belong to phases still running and stay; `../music-player-51gate` is still a leftover folder,
+not a worktree, for the owner to delete.
+
 ## 2026-11-10: phases 73 to 76
 
 | Phase | Implementation | Reviews and bench | Fix rounds |
