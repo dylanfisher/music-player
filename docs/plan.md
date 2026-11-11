@@ -386,6 +386,64 @@ Asked by the owner on 2026-11-10, with phase 79, which it follows.
 - [ ] **Owner check:** add Rating to the status bar and to Custom Status 1, and rate the
       playing track with a shortcut: both follow.
 
+Implementation plan, phase 80 (ADR 0203):
+
+What exists, found by search (map.md recipes): `StatusPart` and `HeaderPart` (`Core/Settings`)
+are `BarPart`s, coded by raw value, which the builder (`Features/SettingsWindow`) lists from
+`allCases`. `StatusBarParts` and `HeaderStatus` (`Features/NowPlaying`) give each part's view,
+and `NowPlayingBar.show()` fills them from `NowPlayingModel.track`, the index's `TrackRow`, whose
+`rating` the bar doesn't show yet. The app lays the status bar out from
+`StatusBarParts.view(for:)` (`applyStatusBar`). Get Info's `RatingStars` view
+(`Features/TagEditor`, phase 79) draws ☆/★, hovers and clicks through `RatingClick`
+(`Core/Library`). Every rating the app writes calls `LibraryBrowser.ratingsChanged` (a table
+click, `rateSelection` for the menu and the shortcuts, `setRating` for Get Info), which the app
+passes to `TagEditing.ratingsChanged`; a sync that changed the index refreshes the browser,
+whose `libraryRefreshed` already calls `NowPlayingBar.libraryChanged`, which reads the playing
+track's row again.
+
+The plan's answers:
+
+- **Clickable, as Get Info's stars are.** Both bars already take clicks in their parts: the seek
+  bar, the status bar's art and format line. The stars are a view of their own, sized to their
+  five glyphs, so a click on them is theirs alone and nothing else in the bar has a hit area
+  there. Like the seek bar they say `mouseDownCanMoveWindow` false, since the toolbar and a
+  glass window's status bar drag the window from a view that allows it. A click rates the
+  playing track by path at once, as Get Info's does, and shows no message, as a table click
+  shows none: the stars change in place.
+- **Nothing while nothing plays:** the stars keep their place unseen (alpha 0) and take no
+  click, as the art does, so the parts beside them don't move when a track starts and a stack's
+  height doesn't change. A playing file the index doesn't have (not yet scanned) shows five
+  dimmed empty stars that take no click, as Get Info's do for such a file.
+- **From anywhere:** the app adds `NowPlayingBar.ratingsChanged()` to `ratingsChanged`, which
+  reads the row again and shows it without loading the art again; a sync goes through
+  `libraryChanged` as now.
+- **Where the view lives:** `RatingStars` moves to `Core/BarView` (its own commit, map.md
+  Promotion), the lowest module both Get Info and the bars import, with the font size an
+  argument: Get Info's system size, the status bar's 11 points, the toolbar's small size.
+
+Order, each step its own commit:
+
+- 80.1 Promote `RatingStars` to `Core/BarView` (refactor): `BarView` gains `DisplayText` and
+  `Library`, `TagEditor` gains `BarView`; `init(fontPoints:)`; `mouseDownCanMoveWindow` false;
+  a `text` the view draws, filled then empty stars, which `draw` reads. Its tests stay in
+  `TagEditorTests`.
+- 80.2 The part (`Core/Settings`): `StatusPart.rating` and `HeaderPart.rating`, titled as the
+  track table's Rating column. Tests in `BarLayoutTests` and `HeaderPartTests`: a layout with
+  the part decodes and encodes, for each.
+- 80.3 The views (`Features/NowPlaying`): `StatusBarParts.view(for: .rating)` and
+  `HeaderStatus.view(for: .rating)` give their stars; `show()` sets each from
+  `model.track?.rating`, hidden and off with nothing playing, dimmed and off for a file the
+  index doesn't have; a click calls `NowPlayingBar.ratingClicked(stars, path)`; the
+  customization sheet's drawing shows four stars. `ratingsChanged()`. Tests in
+  `NowPlayingBarTests`: the text for 0 to 5 stars, nothing while nothing plays, the stars
+  change on a rating set while playing (`ratingsChanged` and `libraryChanged`), a click
+  reports the playing path, and a mouse down on them never moves the window.
+- 80.4 The app (`App/MusicPlayer`): `ratingClicked` goes to `LibraryBrowser.setRating(_:paths:)`
+  and `ratingsChanged` to the bar too. Test in `MusicPlayerTests`: a rating set through the
+  browser shows in the status bar's stars.
+- 80.5 ADR 0203: the stars clickable in both bars, unseen while nothing plays, no message on a
+  click, and the view promoted to `BarView`.
+
 ### 84. A codebase agents can keep changing safely
 
 Asked by the owner on 2026-11-10: a review of the tree, fixing what it finds, aimed at what makes
