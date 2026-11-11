@@ -102,6 +102,7 @@ actor RendererSession {
     /// Where the server listens; nil for the interface the renderer was found on.
     private let serverInterfaceOverride: NetworkInterface?
     private let shared: RendererShared
+    private let awake: SleepAssertion
     private let emit: @Sendable (OutputEvent) -> Void
     private let publish: @Sendable (SignalPath) -> Void
     private let now: @Sendable () -> Double
@@ -123,7 +124,7 @@ actor RendererSession {
 
     init(
         renderer: Renderer, control: AVTransportControl, timeoutSeconds: Double,
-        serverInterface: NetworkInterface?, shared: RendererShared,
+        serverInterface: NetworkInterface?, shared: RendererShared, awake: SleepAssertion,
         emit: @escaping @Sendable (OutputEvent) -> Void,
         publish: @escaping @Sendable (SignalPath) -> Void, now: @escaping @Sendable () -> Double,
         startTicker: @escaping @Sendable () -> Void, rediscover: RendererOutput.Rediscover?
@@ -133,6 +134,7 @@ actor RendererSession {
         self.timeoutSeconds = timeoutSeconds
         serverInterfaceOverride = serverInterface
         self.shared = shared
+        self.awake = awake
         self.emit = emit
         self.publish = publish
         self.now = now
@@ -156,6 +158,9 @@ actor RendererSession {
         // Polls run while a track is loaded or a lost renderer is watched for, and the
         // ticker stops otherwise.
         if shared.wantTicks(current != nil || lost) { startTicker() }
+        // The Mac stays awake while the engine says the track plays: a pause, a stop, a lost
+        // renderer or the queue's end lets it sleep (ADR 0197).
+        awake.hold(current?.playing == true)
     }
 
     /// The path as it stands, for the panel.

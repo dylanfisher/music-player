@@ -151,12 +151,12 @@ private func eventually(_ what: String, _ check: () -> Bool) async {
 }
 
 private func output(
-    _ fake: FakeRenderer, timeout: Double = 1,
+    _ fake: FakeRenderer, timeout: Double = 1, sleep: FakeSleepAssertions = FakeSleepAssertions(),
     rediscover: RendererOutput.Rediscover? = nil
 ) async throws -> (RendererOutput, EventLog) {
     let output = try RendererOutput(
         renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
-        timeoutSeconds: timeout, rediscover: rediscover)
+        timeoutSeconds: timeout, sleepAssertions: sleep.calls, rediscover: rediscover)
     return (output, EventLog(output))
 }
 
@@ -511,7 +511,7 @@ private final class ShiftedClock: @unchecked Sendable {
     let clock = ShiftedClock()
     let output = try RendererOutput(
         renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
-        timeoutSeconds: 1, now: clock.now)
+        timeoutSeconds: 1, sleepAssertions: FakeSleepAssertions().calls, now: clock.now)
     let log = EventLog(output)
     defer { output.close() }
     output.load(item(1, "short"), startSeconds: 0, playing: true)
@@ -562,7 +562,7 @@ private final class ShiftedClock: @unchecked Sendable {
     let clock = ShiftedClock()
     let output = try RendererOutput(
         renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
-        timeoutSeconds: 1, now: clock.now)
+        timeoutSeconds: 1, sleepAssertions: FakeSleepAssertions().calls, now: clock.now)
     let log = EventLog(output)
     defer { output.close() }
     output.load(item(1, "medium"), startSeconds: 0, playing: true)
@@ -970,6 +970,94 @@ private final class ShiftedClock: @unchecked Sendable {
     await eventually("polling to stop") { !output.isPolling }
 }
 
+@Test func playingHoldsOneSleepAssertionThatPauseReleasesAndAResumeTakesAgain() async throws {
+    let fake = try await FakeRenderer.denon()
+    let sleep = FakeSleepAssertions()
+    let (output, log) = try await output(fake, sleep: sleep)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the assertion") { sleep.held == 1 }
+    #expect(sleep.created == ["Music Player playing to Denon AVR-X1800H"])
+    // The polls while it plays take no second one.
+    await eventually("several polls") {
+        fake.actions.filter { $0 == "GetTransportInfo" }.count >= 3
+    }
+    #expect(sleep.created.count == 1)
+    output.pause()
+    await eventually("a pause") { fake.transportState == .paused }
+    await eventually("the release on pause") { sleep.held == 0 }
+    output.play()
+    await eventually("play again") { fake.transportState == .playing }
+    await eventually("the assertion again") { sleep.held == 1 }
+    #expect(sleep.created.count == 2)
+    output.stop()
+    await eventually("nothing loaded") { output.position() == nil }
+    await eventually("the release on stop") { sleep.held == 0 }
+    #expect(sleep.most == 1)
+    #expect(sleep.badReleases == 0)
+}
+
+@Test func aLoadPausedTakesNoSleepAssertion() async throws {
+    let fake = try await FakeRenderer.denon()
+    let sleep = FakeSleepAssertions()
+    let (output, log) = try await output(fake, sleep: sleep)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: false)
+    await log.wait(for: ["started 1"])
+    await eventually("several polls") {
+        fake.actions.filter { $0 == "GetTransportInfo" }.count >= 3
+    }
+    #expect(sleep.created == [])
+}
+
+@Test func aLostRendererReleasesTheSleepAssertion() async throws {
+    let fake = try await FakeRenderer.denon()
+    let sleep = FakeSleepAssertions()
+    let (output, log) = try await output(fake, timeout: 0.3, sleep: sleep)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the assertion") { sleep.held == 1 }
+    fake.vanish()
+    await log.wait(for: ["started 1", "lost 1"])
+    await eventually("the release") { sleep.held == 0 }
+    // Watching for it to come back takes none.
+    try await Task.sleep(nanoseconds: 1_000_000_000)
+    #expect(sleep.created.count == 1)
+    #expect(sleep.badReleases == 0)
+}
+
+@Test func aQueuePlayedOutReleasesTheSleepAssertion() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 1)
+    let sleep = FakeSleepAssertions()
+    let (output, log) = try await output(fake, sleep: sleep)
+    defer { output.close() }
+    output.load(item(1, "short"), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the assertion") { sleep.held == 1 }
+    await log.wait(for: ["started 1", "ended 1", "finished 1"], seconds: 15)
+    await eventually("the release") { sleep.held == 0 }
+    #expect(sleep.badReleases == 0)
+}
+
+@Test func closingReleasesTheSleepAssertionAtOnceAndForGood() async throws {
+    let fake = try await FakeRenderer.denon()
+    fake.stall("Stop")
+    let sleep = FakeSleepAssertions()
+    let (output, log) = try await output(fake, sleep: sleep)
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the assertion") { sleep.held == 1 }
+    output.play()
+    output.close()
+    #expect(sleep.held == 0)
+    try await Task.sleep(nanoseconds: 500_000_000)
+    #expect(sleep.held == 0)
+    #expect(sleep.created.count == 1)
+    #expect(sleep.badReleases == 0)
+}
+
 @Test func aRendererThatMovedIsFoundAgainByItsUDN() async throws {
     let first = try await FakeRenderer.denon()
     let moved = try await FakeRenderer.denon()
@@ -1006,7 +1094,7 @@ private final class ShiftedClock: @unchecked Sendable {
     // The engine reads the events itself, so no log shares them.
     let output = try RendererOutput(
         renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
-        timeoutSeconds: 1)
+        timeoutSeconds: 1, sleepAssertions: FakeSleepAssertions().calls)
     defer { output.close() }
     let engine = PlaybackEngine(output: output)
     let updates = await engine.updates()

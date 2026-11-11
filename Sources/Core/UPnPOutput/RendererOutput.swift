@@ -36,6 +36,7 @@ public final class RendererOutput: Output, @unchecked Sendable {
     private let now: @Sendable () -> Double
     private let worker: Task<Void, Never>
     private let ticker = TickerTask()
+    private let awake: SleepAssertion
 
     /// Throws when the renderer has no AVTransport the app can reach. `rediscover` searches
     /// again when the renderer is lost, since it may come back at a new address.
@@ -44,14 +45,17 @@ public final class RendererOutput: Output, @unchecked Sendable {
     {
         try self.init(
             renderer: renderer, serverInterface: nil, pollSeconds: Self.pollSeconds,
-            timeoutSeconds: Self.actionTimeoutSeconds, rediscover: rediscover)
+            timeoutSeconds: Self.actionTimeoutSeconds, sleepAssertions: .live,
+            rediscover: rediscover)
     }
 
     /// `serverInterface` is where the HTTP server listens, nil for the renderer's own: tests
-    /// pass loopback, since their made-up interfaces can't be bound.
+    /// pass loopback, since their made-up interfaces can't be bound, and a stand-in for the
+    /// power calls.
     init(
         renderer: Renderer, serverInterface: NetworkInterface?, pollSeconds: Double,
-        timeoutSeconds: Double, rediscover: Rediscover? = nil,
+        timeoutSeconds: Double, sleepAssertions: SleepAssertionCalls,
+        rediscover: Rediscover? = nil,
         now: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime }
     ) throws(RendererOutputError) {
         guard let transport = renderer.transport else {
@@ -69,6 +73,9 @@ public final class RendererOutput: Output, @unchecked Sendable {
         self.work = work
         let shared = RendererShared(now: now)
         self.shared = shared
+        let awake = SleepAssertion(
+            name: "\(appDisplayName) playing to \(renderer.name)", calls: sleepAssertions)
+        self.awake = awake
         let ticker = ticker
         // Runs only while the session wants polls, and ends when it stops wanting them.
         let startTicker: @Sendable () -> Void = {
@@ -87,7 +94,7 @@ public final class RendererOutput: Output, @unchecked Sendable {
         }
         let session = RendererSession(
             renderer: renderer, control: control, timeoutSeconds: timeoutSeconds,
-            serverInterface: serverInterface, shared: shared,
+            serverInterface: serverInterface, shared: shared, awake: awake,
             emit: { [eventContinuation] in eventContinuation.yield($0) },
             publish: { [pathContinuation] in pathContinuation.yield($0) }, now: now,
             startTicker: startTicker, rediscover: rediscover)
@@ -129,6 +136,7 @@ public final class RendererOutput: Output, @unchecked Sendable {
         guard shared.close() else { return }
         let loaded = shared.position(at: now()) != nil
         ticker.cancel()
+        awake.close()
         worker.cancel()
         work.finish()
         shared.stopServer()
