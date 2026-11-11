@@ -24,6 +24,10 @@ actor RendererSession {
     static let lostAfterPolls = 3
     /// Polls in a row that find it stopped, after Play, before it counts as refusing the track.
     static let notStartingPolls = 5
+    /// Polls in a row that find it transitioning, or in a state the app doesn't know, after
+    /// Play, before it counts as never starting the track: a renderer may buffer for seconds
+    /// before it plays, but one that never does would keep the Mac awake for good (ADR 0197).
+    static let notStartingTransitionPolls = 30
     /// Polls in a row that find it playing or paused other than the engine said before the
     /// engine is told: one alone may be a reply from before the last Play or Pause.
     static let disagreeingPolls = 2
@@ -66,6 +70,7 @@ actor RendererSession {
         /// A Play or Pause given while `awaitingPlay`, sent once the renderer has started.
         var queuedTransport = false
         var stoppedPolls = 0
+        var transitioningPolls = 0
         /// Polls in a row that found it stopped at the end holding a next track it took; one
         /// that finds it changing tracks starts the count again.
         var stoppedAtEndPolls = 0
@@ -401,8 +406,9 @@ actor RendererSession {
             await stopped(current, transportOK: transport.isOK)
         case .transitioning:
             current.stoppedAtEndPolls = 0
+            await notStarted(current)
         case .other:
-            break
+            await notStarted(current)
         }
     }
 
@@ -561,6 +567,20 @@ actor RendererSession {
             return release()
         }
         await ended(current)
+    }
+
+    /// The renderer is neither playing nor stopped. Before it has started a track the engine
+    /// plays, the clock doesn't run, so nothing else ends a wait that never ends.
+    private func notStarted(_ current: Loaded) async {
+        guard current.playing, !current.started else { return }
+        current.transitioningPolls += 1
+        guard current.transitioningPolls >= Self.notStartingTransitionPolls else { return }
+        await send(AVTransport.stop)
+        guard self.current === current else { return }
+        emit(
+            .trackFailed(current.item.id, RendererOutputError.didNotStart(renderer: renderer.name)))
+        emit(.finished(current.item.id))
+        release()
     }
 
     /// The renderer has stopped: the track played out, or never started, or someone stopped it.

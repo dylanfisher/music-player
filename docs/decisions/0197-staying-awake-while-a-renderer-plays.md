@@ -21,6 +21,12 @@ app's HTTP server instead, so no IO runs, and the app held no assertion of its o
   refused or failed track, a lost renderer and the queue's end all clear that fact through
   paths that already existed, so none of them needs a release of its own. `close()` releases
   it at once, without waiting on the session, and no later hold takes one.
+- **A renderer that never starts a track fails it.** Before a renderer has said it plays a
+  track, the app's clock doesn't run, so a renderer that stays `TRANSITIONING`, or in a state
+  the app doesn't know, would keep `playing` true, and the Mac awake, for good. After
+  `notStartingTransitionPolls` such polls in a row (30, half a minute) the session sends Stop
+  and reports the track as never started, as it does for one that stops without playing. Once
+  a track has started, the clock runs and its deadline ends any wait.
 - **One assertion, taken on a change.** `SleepAssertion` creates one only when the want turns
   true and releases it when it turns false, so a poll each second can't take a second one. A
   failed create is logged as an error with its IOReturn and tried again only at the next change,
@@ -49,3 +55,7 @@ app's HTTP server instead, so no IO runs, and the app held no assertion of its o
 - While a renderer plays, the Mac stays awake on battery until the lid closes, the user
   chooses Sleep or the battery runs low; the display sleeps on its own schedule.
 - Paused on a renderer, the Mac idle-sleeps as it would with nothing playing.
+- The want follows the engine, a command behind: it's settled as each command or poll ends,
+  so it lags by at most one action's timeout, far short of any idle-sleep delay. A Pause
+  given while the renderer is still starting releases the assertion at once, though the
+  renderer streams on until the next poll sends the queued Pause, a second or so.

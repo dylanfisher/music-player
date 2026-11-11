@@ -20,6 +20,9 @@ public enum RendererOutputError: PlaybackFailure {
     /// The renderer stopped before it played the track, as one does with a stream it can't
     /// decode.
     case stoppedWithoutPlaying(renderer: String, contentType: String)
+    /// After Play, it stayed transitioning, or in a state the app doesn't know, and never
+    /// said it was playing.
+    case didNotStart(renderer: String)
     /// It reported `ERROR_OCCURRED`.
     case transportError(renderer: String)
     /// Its remote, front panel or another app stopped it, or gave it another stream.
@@ -40,6 +43,7 @@ public enum RendererOutputError: PlaybackFailure {
         case .refused(let renderer, let problem): "\(renderer): \(problem)"
         case .stoppedWithoutPlaying(let renderer, let type):
             "\(renderer) stopped without playing the track; it may not decode \(type) as sent"
+        case .didNotStart(let renderer): "\(renderer) never started playing the track"
         case .transportError(let renderer): "\(renderer) reported an error playing the track"
         case .stoppedOnRenderer(let renderer): "playback was stopped on \(renderer)"
         case .playingSomethingElse(let renderer):
@@ -54,8 +58,8 @@ public enum RendererOutputError: PlaybackFailure {
         case .unreadable(let error): error.userMessage
         case .server: "the app couldn't start sending files to the renderer"
         case .refused(let renderer, _): "\(renderer) refused what the app asked of it"
-        case .unsupported, .stoppedWithoutPlaying, .transportError, .stoppedOnRenderer,
-            .playingSomethingElse:
+        case .unsupported, .stoppedWithoutPlaying, .didNotStart, .transportError,
+            .stoppedOnRenderer, .playingSomethingElse:
             description
         }
     }

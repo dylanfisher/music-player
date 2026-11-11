@@ -42,6 +42,7 @@ final class FakeRenderer: @unchecked Sendable {
     private var refusing: [String: Int] = [:]
     private var stalling: Set<String> = []
     private var startsPlaying = true
+    private var transitionsForever = false
     private var advancesToNext = true
     private var keepsNext = false
     private var reencodes = false
@@ -181,6 +182,8 @@ final class FakeRenderer: @unchecked Sendable {
         }
     }
     func neverStarts() { lock.withLock { startsPlaying = false } }
+    /// Play leaves it transitioning, for good.
+    func staysTransitioning() { lock.withLock { transitionsForever = true } }
     func ignoresNext() { lock.withLock { advancesToNext = false } }
     func setTrackSeconds(_ value: Double) { lock.withLock { trackSecondsValue = value } }
 
@@ -339,7 +342,9 @@ final class FakeRenderer: @unchecked Sendable {
                 }
             case "Play":
                 reportedWhilePaused = nil
-                if startsPlaying, !uri.isEmpty, state != .playing {
+                if transitionsForever, !uri.isEmpty {
+                    state = .transitioning
+                } else if startsPlaying, !uri.isEmpty, state != .playing {
                     since = now + (state == .paused ? resumeHoldSeconds : 0)
                     state = .playing
                 }

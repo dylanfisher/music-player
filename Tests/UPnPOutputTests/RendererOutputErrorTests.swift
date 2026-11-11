@@ -14,6 +14,7 @@ private let errors: [RendererOutputError] = [
     .server(.system("bind", errno: 48)),
     .refused(renderer: "Denon", "SOAP fault 701: Transition not available"),
     .stoppedWithoutPlaying(renderer: "Denon", contentType: "audio/flac"),
+    .didNotStart(renderer: "Denon"),
     .transportError(renderer: "Denon"), .stoppedOnRenderer(renderer: "Denon"),
     .playingSomethingElse(renderer: "Denon"),
 ]

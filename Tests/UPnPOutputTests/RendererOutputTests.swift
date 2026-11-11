@@ -1080,6 +1080,22 @@ private final class ShiftedClock: @unchecked Sendable {
     #expect(moved.fetched.map(\.status) == [206], "\(moved.fetched.map(\.status)) \(moved.actions)")
 }
 
+@Test func aRendererThatNeverLeavesTransitioningFailsTheTrackAndLetsTheMacSleep() async throws {
+    let fake = try await FakeRenderer.denon()
+    fake.staysTransitioning()
+    let sleep = FakeSleepAssertions()
+    let (output, log) = try await output(fake, sleep: sleep)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the assertion") { sleep.held == 1 }
+    await log.wait(for: ["started 1", "trackFailed 1", "finished 1"], seconds: 20)
+    #expect(log.error(1)?.contains("never started playing") == true)
+    #expect(fake.commands.last == "Stop")
+    await eventually("the release") { sleep.held == 0 }
+    #expect(sleep.badReleases == 0)
+}
+
 @Test func aRendererFoundAgainUnderANewNameNamesTheSleepAssertionAfterIt() async throws {
     let first = try await FakeRenderer.denon()
     let renamed = try await FakeRenderer(
