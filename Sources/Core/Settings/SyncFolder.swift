@@ -3,18 +3,14 @@ import Foundation
 /// The folder machines share their logs through (ADR 0038): a path, or on a network share the
 /// share's URL and the path inside it, found wherever the share is mounted, as a watched folder
 /// is (ADR 0028).
-public struct SyncFolder: FolderSetting {
-    public var path: String
-    public var share: String?
+public typealias SyncFolder = SettingFolder<SyncFolderRole>
 
-    public init(path: String, share: String? = nil) {
-        self.path = path
-        self.share = share
-    }
-
+public enum SyncFolderRole: FolderRole {
     public static var typeName: String { "a sync folder (path, optional share)" }
     public static var kind: SettingKind { .syncFolder }
+}
 
+extension SettingFolder where Role == SyncFolderRole {
     /// Names the folder in `sync_state`, so a log pushed to one folder starts again in another.
     public var identity: String { share.map { "\($0) \(path)" } ?? path }
 
