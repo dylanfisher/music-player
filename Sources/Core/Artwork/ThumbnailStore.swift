@@ -13,7 +13,7 @@ private let logger = moduleLogger()
 /// can't be read or written is logged and the cover read from its file instead. Least recently
 /// used goes first once it holds more than `capacityBytes` or `capacityFiles`. Safe to use from
 /// any thread.
-public final class ThumbnailStore: @unchecked Sendable {
+public final class ThumbnailStore: Sendable {
     /// About 6,000 covers at the column's default size, well over the albums of a 43k-track
     /// library.
     static let capacityBytes = 100_000_000

@@ -10,7 +10,7 @@ private let logger = moduleLogger()
 /// average, about 0.5 MB a file. A cache, not app state: a file that can't be read or written
 /// is logged and the audio analyzed again. Least recently used goes first once it holds more
 /// than `capacityBytes`. Safe to use from any thread.
-public final class SpectrogramStore: @unchecked Sendable {
+public final class SpectrogramStore: Sendable {
     /// About 200 files of an hour or more, 1,000 columns each.
     static let capacityBytes = 100_000_000
     /// Bytes written between trims.
