@@ -147,7 +147,7 @@ let package = Package(
         ),
         .target(
             name: "BarView",
-            dependencies: ["Settings"],
+            dependencies: ["DisplayText", "Library", "Settings"],
             path: "Sources/Core/BarView",
             swiftSettings: strictSwift
         ),
@@ -216,8 +216,8 @@ let package = Package(
         .target(
             name: "TagEditor",
             dependencies: [
-                "Artwork", "Commands", "Discogs", "DisplayText", "Library", "Log", "Metadata",
-                "Settings", "TagWriter", "WindowPlacement",
+                "Artwork", "BarView", "Commands", "Discogs", "DisplayText", "Library", "Log",
+                "Metadata", "Settings", "TagWriter", "WindowPlacement",
             ],
             path: "Sources/Features/TagEditor",
             swiftSettings: strictSwift
@@ -569,8 +569,8 @@ let package = Package(
         .testTarget(
             name: "TagEditorTests",
             dependencies: [
-                "Commands", "Discogs", "Fixtures", "Metadata", "TagEditor", "TagWriter",
-                "WindowPlacement",
+                "BarView", "Commands", "Discogs", "DisplayText", "Fixtures", "Metadata",
+                "TagEditor", "TagWriter", "WindowPlacement",
             ],
             swiftSettings: strictSwift
         ),

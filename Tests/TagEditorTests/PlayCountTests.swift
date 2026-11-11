@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 
+@testable import BarView
 @testable import Fixtures
 @testable import Library
 @testable import Metadata

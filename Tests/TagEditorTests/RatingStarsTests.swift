@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 
+@testable import BarView
 @testable import Library
 @testable import Metadata
 @testable import TagEditor

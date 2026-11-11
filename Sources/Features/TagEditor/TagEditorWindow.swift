@@ -1,5 +1,6 @@
 import AppKit
 import Artwork
+import BarView
 import Commands
 import Discogs
 import DisplayText
@@ -76,7 +77,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private(set) var commandButtons: [(id: CommandID, button: NSButton)] = []
     private var fileValues: [FileRow: NSTextField] = [:]
     /// The Info tab's stars at the title's right, which rate in the index at once.
-    let ratingStars = RatingStars()
+    let ratingStars = RatingStars(fontPoints: NSFont.systemFontSize)
     /// Called with the stars a click on `ratingStars` gives the tracks, 0 to clear.
     var rated: (Int) -> Void = { _ in }
     /// The File tab's play count, kept in the index, not the file (ADR 0162).

@@ -102,6 +102,9 @@ public func stars(_ count: Int) -> String {
 /// An unfilled star, as Get Info draws the stars a rating doesn't reach.
 public let emptyStar = "☆"
 
+/// What a field, or Get Info's stars, shows when the selected tracks differ in it.
+public let mixedPlaceholder = "Mixed"
+
 /// `text` as one line for a terminal. A file name or a tag can hold control characters, which
 /// would move the cursor, retitle the window or write the clipboard, or a line break, which
 /// would print a line that looks like the app's own; each prints as `\u{1B}`, `\u{A}` and so on.

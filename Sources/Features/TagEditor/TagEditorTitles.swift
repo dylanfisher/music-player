@@ -60,8 +60,5 @@ extension TagEditField {
     }
 }
 
-/// What a field shows when the selected tracks differ in it.
-let mixedPlaceholder = "Mixed"
-
 /// The Plays field's tooltip: the count is the index's, so Save stores it there (ADR 0162).
 let playCountToolTip = "Kept in the library, not the files; Undo Tag Edit leaves it"
