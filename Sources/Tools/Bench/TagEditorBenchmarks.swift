@@ -267,9 +267,10 @@ private func oversizedCover() -> Data {
     return Data(bytes)
 }
 
-/// One batch write of `edit`, a title unless given, to `batchFileCount` copies of a fixture FLAC grown to
-/// `batchFileBytes` with audio bytes, in seconds. On the NAS every file system call the writer
-/// makes on a music file is priced as `SimulatedLink` says; the journal stays on this Mac.
+/// One batch write of `edit`, a title unless given, to `batchFileCount` copies of a fixture
+/// FLAC grown to `batchFileBytes` with audio bytes, in seconds. On the NAS every file system
+/// call the writer makes on a music file is priced as `SimulatedLink` says; the journal stays
+/// on this Mac.
 private func batchWrite(
     _ edit: TagEdit = TagEdit(values: [.title: "Batch"]), inPlace: Bool, nas: Bool
 ) throws -> Measured {
