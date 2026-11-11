@@ -884,3 +884,27 @@ private extension LibraryIndex {
 private extension Array where Element == Machine {
     var pair: (Machine, Machine) { (self[0], self[1]) }
 }
+
+@Test func anImportThatGainedSkipsAddsTheSkipsGainedOnTheOtherMachine() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    try a.scanned("x.flac")
+    try b.scanned("x.flac")
+    try a.importSwinsian("x.flac", plays: 7, skips: 2)
+    try syncAll([a, b])
+    try a.importSwinsian("x.flac", plays: 7, skips: 3)
+    try syncAll([a, b])
+    #expect(try a.counts("x.flac") == [7, 3])
+    #expect(try b.counts("x.flac") == [7, 3])
+}
+
+/// A path another Mac skipped before this one saw it is first seen at that skip's clock.
+@Test func aPathFirstSeenInAnotherMachinesSkipIsAddedAtItsClock() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    try a.index.recordSkip(a.path("y.flac"))
+    try syncAll([a, b])
+    let added = try b.index.database.prepare("SELECT added_seconds FROM paths WHERE path = ?")
+        .map(b.path("y.flac").precomposedStringWithCanonicalMapping) { try $0.double(0) }
+    #expect(added == [Double(a.nowMs) / 1000])
+}
