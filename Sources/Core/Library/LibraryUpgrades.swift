@@ -36,7 +36,7 @@ extension LibraryIndex {
     }
 
     /// Marks `releases` Never Upgrade, or clears them, logging each for the other Macs.
-    func setNeverUpgrade(_ never: Bool, releases: [Int]) throws {
+    package func setNeverUpgrade(_ never: Bool, releases: [Int]) throws {
         try database.transaction {
             for release in Set(releases).sorted() {
                 try setNeverUpgrade(never, release: release)
@@ -50,7 +50,7 @@ extension LibraryIndex {
     /// Marks the releases of the tracks `ids` Never Upgrade, or clears them when every one is
     /// marked already. Gives what they are now; nil when no track carries a release id that's
     /// a number.
-    func toggleNeverUpgrade(trackIDs ids: [Int64]) throws -> Bool? {
+    package func toggleNeverUpgrade(trackIDs ids: [Int64]) throws -> Bool? {
         let query = try statement(
             "SELECT discogs_release_id FROM tracks WHERE file_id = ? AND discogs_release_id"
                 + " IS NOT NULL")
@@ -135,7 +135,7 @@ extension LibraryIndex {
     }
 
     /// Queue Again: forgets `releases`' misses, so they're candidates again.
-    func clearUpgradeMisses(releases: [Int]) throws {
+    package func clearUpgradeMisses(releases: [Int]) throws {
         try database.transaction {
             let delete = try statement("DELETE FROM \(upgradeMissesTable) WHERE release_id = ?")
             for release in releases { try delete.run(release) }

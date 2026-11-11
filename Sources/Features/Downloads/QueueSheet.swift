@@ -2,8 +2,10 @@ import AppKit
 import DisplayText
 import Recommender
 
-/// The Upgrades and From Library Selection sheets (54.13): albums with a box each, those that
-/// can't be queued saying why, and the format to ask for. Ends with `result` set on Queue.
+/// The Upgrades, From Library Selection and Not Found sheets (54.13): albums with a box each,
+/// those that can't be queued saying why, and the format to ask for when there's a choice.
+/// Ends with `result` set on its button, or `marked` on the second button, which Upgrades has
+/// for Never Upgrade.
 @MainActor
 final class QueueSheet: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     enum Column: String {
@@ -17,16 +19,22 @@ final class QueueSheet: NSWindowController, NSTableViewDataSource, NSTableViewDe
     /// The button that queues, here and in Paste a Discogs Release.
     static let queueTitle = "Queue"
     let queueButton = NSButton(title: QueueSheet.queueTitle, target: nil, action: nil)
+    /// The second button, for the ticked albums; nil for none.
+    let otherButton: NSButton?
     let summary = NSTextField(labelWithString: "")
     /// The rows ticked.
     private(set) var ticked: Set<Int>
     /// The albums to queue, and the policy; nil for Cancel.
     private(set) var result: (choices: [QueueChoice], policy: FormatPolicy)?
+    /// The albums ticked when the second button ended the sheet.
+    private(set) var marked: [QueueChoice]?
 
     init(
         heading: String, note: String, choices: [QueueChoice], policies: [FormatPolicy],
-        tickingAll: Bool
+        tickingAll: Bool, button: String = QueueSheet.queueTitle, other: String? = nil
     ) {
+        queueButton.title = button
+        otherButton = other.map { NSButton(title: $0, target: nil, action: nil) }
         self.choices = choices
         self.policies = policies
         ticked = tickingAll ? Set(choices.indices.filter { choices[$0].refusal == nil }) : []
@@ -60,10 +68,14 @@ final class QueueSheet: NSWindowController, NSTableViewDataSource, NSTableViewDe
         queueButton.target = self
         queueButton.action = #selector(queue)
         queueButton.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [
-            NSTextField(labelWithString: "Format:"), policyPopUp, summary, NSView(), cancel,
-            queueButton,
-        ])
+        otherButton?.target = self
+        otherButton?.action = #selector(other)
+        // One policy is no choice.
+        let format =
+            policies.count > 1 ? [NSTextField(labelWithString: "Format:"), policyPopUp] : []
+        let buttons = NSStackView(
+            views: format + [summary, NSView(), cancel] + (otherButton.map { [$0] } ?? [])
+                + [queueButton])
         let page = NSStackView(views: [title, noteLabel, scroll, buttons])
         page.orientation = .vertical
         page.alignment = .leading
@@ -78,6 +90,7 @@ final class QueueSheet: NSWindowController, NSTableViewDataSource, NSTableViewDe
     private func refresh() {
         summary.stringValue = "\(ticked.count) of \(choices.count) to queue"
         queueButton.isEnabled = !ticked.isEmpty
+        otherButton?.isEnabled = !ticked.isEmpty
     }
 
     /// Ticks or unticks `row`; a row that can't be queued has no box.
@@ -120,6 +133,12 @@ final class QueueSheet: NSWindowController, NSTableViewDataSource, NSTableViewDe
     @objc private func boxClicked(_ sender: NSButton) { toggle(sender.tag) }
 
     @objc private func cancel() { endSheet() }
+
+    @objc private func other() {
+        guard !ticked.isEmpty else { return }
+        marked = ticked.sorted().map { choices[$0] }
+        endSheet()
+    }
 
     @objc private func queue() {
         guard !ticked.isEmpty else { return }

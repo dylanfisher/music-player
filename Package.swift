@@ -234,8 +234,8 @@ let package = Package(
         .target(
             name: "Downloads",
             dependencies: [
-                "Analysis", "Discogs", "DisplayText", "Library", "Log", "Metadata", "Recommender",
-                "Settings", "TagWriter", "WindowPlacement",
+                "Analysis", "Commands", "Discogs", "DisplayText", "Library", "Log", "Metadata",
+                "Recommender", "Settings", "TagWriter", "WindowPlacement",
             ],
             path: "Sources/Features/Downloads",
             swiftSettings: strictSwift

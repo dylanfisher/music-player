@@ -1,3 +1,4 @@
+import Commands
 import Foundation
 import Library
 import Recommender
@@ -13,16 +14,40 @@ struct QueueChoice: Equatable, Sendable {
     /// Why it can't be queued; nil when it can.
     var refusal: String?
 
-    /// The upgrade candidates, as the Upgrades sheet lists them: each with the quality it has.
-    static func upgrades(_ candidates: [UpgradeCandidate]) -> [QueueChoice] {
+    /// The upgrade candidates, as the Upgrades sheet lists them: each with the quality it has,
+    /// and those whose release is in `never` marked Never Upgrade, which only the automatic
+    /// upgrades leave out.
+    static func upgrades(_ candidates: [UpgradeCandidate], never: Set<Int> = [])
+        -> [QueueChoice]
+    {
         candidates.map { candidate in
             QueueChoice(
                 title: albumTitle(candidate.artist, candidate.title),
-                detail: "\(candidate.quality), release \(candidate.releaseID)",
+                detail: "\(candidate.quality), release \(candidate.releaseID)"
+                    + (never.contains(candidate.releaseID) ? ", \(neverUpgradeTitle)" : ""),
                 releaseID: candidate.releaseID,
                 upgrade: DownloadJob.Upgrade(
                     currentQuality: candidate.quality, oldPaths: candidate.sharePaths),
                 refusal: nil)
+        }
+    }
+
+    /// The Never Upgrade mark, as the Upgrades sheet's button and its rows name it: the track
+    /// menu's command.
+    static let neverUpgradeTitle = AppCommands.title(of: .toggleNeverUpgrade)
+
+    /// The candidates set aside after their misses, as the Not Found sheet lists them, with
+    /// how many there were; queuing one again clears them.
+    static func setAside(_ candidates: [UpgradeCandidate], misses: [Int: UpgradeMiss])
+        -> [QueueChoice]
+    {
+        candidates.compactMap { candidate in
+            guard let miss = misses[candidate.releaseID], miss.isSetAside else { return nil }
+            return QueueChoice(
+                title: albumTitle(candidate.artist, candidate.title),
+                detail: "\(miss.misses) searches found no clean copy, release"
+                    + " \(candidate.releaseID)",
+                releaseID: candidate.releaseID, upgrade: nil, refusal: nil)
         }
     }
 

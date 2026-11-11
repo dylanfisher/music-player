@@ -334,3 +334,53 @@ private func rows() -> [DownloadRow] {
     #expect(box.state == .off)
     window.window?.close()
 }
+
+/// Upgrade to FLAC Automatically beside it does the same (ADR 0200).
+@MainActor
+@Test func theAutoUpgradeBoxShowsTheSettingAndReportsAClick() throws {
+    let downloads = Downloads()
+    var chosen: [Bool] = []
+    downloads.autoUpgradeChosen = { on in
+        chosen.append(on)
+        downloads.autoUpgrade = on
+    }
+    downloads.show()
+    let window = try #require(downloads.controller)
+    let box = window.autoUpgradeBox
+    #expect(box.state == .off)
+    #expect(box.title == AppSettings().autoUpgrade.title)
+    click(box)
+    #expect(chosen == [true])
+    #expect(box.state == .on)
+    downloads.autoUpgrade = false
+    #expect(box.state == .off)
+    window.window?.close()
+}
+
+/// The Upgrades sheet's Never Upgrade ends it with the ticked albums, and Not Found's one
+/// policy is no choice to show.
+@MainActor
+@Test func aQueueSheetsSecondButtonGivesTheTickedAlbums() throws {
+    let choices = [1, 2].map { (release: Int) in
+        QueueChoice(
+            title: "Album \(release)", detail: "", releaseID: release, upgrade: nil, refusal: nil)
+    }
+    let sheet = QueueSheet(
+        heading: "Upgrades", note: "", choices: choices, policies: [.flac, .lossless],
+        tickingAll: false, other: QueueChoice.neverUpgradeTitle)
+    let never = try #require(sheet.otherButton)
+    #expect(!never.isEnabled, "nothing ticked")
+    sheet.toggle(1)
+    #expect(never.isEnabled)
+    click(never)
+    #expect(sheet.marked == [choices[1]])
+    #expect(sheet.result == nil)
+    #expect(!sheet.policyPopUp.isHidden && sheet.policyPopUp.superview != nil)
+
+    let again = QueueSheet(
+        heading: "Not Found", note: "", choices: choices, policies: [.flac], tickingAll: true,
+        button: Downloads.queueAgainTitle)
+    #expect(again.otherButton == nil)
+    #expect(again.queueButton.title == Downloads.queueAgainTitle)
+    #expect(again.policyPopUp.superview == nil, "one policy is no choice")
+}

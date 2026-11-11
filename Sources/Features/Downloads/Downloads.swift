@@ -930,13 +930,18 @@ package final class Downloads {
             }
             Task {
                 let found = await blockingFileWork {
-                    Result {
-                        try LibraryIndex(at: setup.databaseURL).upgradeCandidates(onShare: share)
+                    Result { () throws -> ([UpgradeCandidate], Set<Int>) in
+                        let index = try LibraryIndex(at: setup.databaseURL)
+                        return (
+                            try index.upgradeCandidates(onShare: share),
+                            try index.neverUpgradeReleases()
+                        )
                     }
                 }
                 let candidates: [UpgradeCandidate]
+                let never: Set<Int>
                 do {
-                    candidates = try found.get()
+                    (candidates, never) = try found.get()
                 } catch {
                     return alert("The library couldn't be read", ["\(error)"])
                 }
@@ -944,8 +949,55 @@ package final class Downloads {
                     heading: "Upgrades",
                     note:
                         "Lossy albums whose every track carries one Discogs release id. A lossless"
-                        + " copy replaces each; Approve deletes the old files.",
-                    QueueChoice.upgrades(candidates), upgrade: true, tickingAll: false)
+                        + " copy replaces each; Approve deletes the old files. Never Upgrade"
+                        + " keeps an album out of the automatic upgrades.",
+                    QueueChoice.upgrades(candidates, never: never), upgrade: true,
+                    tickingAll: false, other: QueueChoice.neverUpgradeTitle
+                ) { marked in
+                    self.write("The albums weren't marked Never Upgrade") { index in
+                        try index.setNeverUpgrade(true, releases: marked.compactMap(\.releaseID))
+                    }
+                }
+            }
+        case .notFound:
+            guard let share = setup.share else {
+                return alert(
+                    "Upgrades need the staging folder on the library's share",
+                    ["An upgrade's old files are kept by their path on the share."])
+            }
+            Task {
+                let found = await blockingFileWork {
+                    Result { () throws -> [QueueChoice] in
+                        let index = try LibraryIndex(at: setup.databaseURL)
+                        return QueueChoice.setAside(
+                            try index.upgradeCandidates(onShare: share),
+                            misses: try index.upgradeMisses())
+                    }
+                }
+                let choices: [QueueChoice]
+                do {
+                    choices = try found.get()
+                } catch {
+                    return alert("The library couldn't be read", ["\(error)"])
+                }
+                guard !choices.isEmpty else {
+                    return alert("Nothing to queue", ["No automatic upgrade was set aside."])
+                }
+                let sheet = QueueSheet(
+                    heading: "Upgrades Not Found",
+                    note:
+                        "Albums Upgrade to FLAC Automatically set aside after searching four"
+                        + " times. Queue Again clears their misses, so it queues them in turn.",
+                    choices: choices, policies: [.flac], tickingAll: false,
+                    button: Self.queueAgainTitle)
+                present(sheet) {
+                    guard let again = sheet.result?.choices else { return }
+                    self.write("The albums weren't queued again") { index in
+                        try index.clearUpgradeMisses(releases: again.compactMap(\.releaseID))
+                    } then: {
+                        self.upgradeAutomatically()
+                    }
+                }
             }
         case .fromSelection:
             let selected: [Int64]
@@ -993,9 +1045,30 @@ package final class Downloads {
         }
     }
 
+    /// Not Found's button.
+    static let queueAgainTitle = "Queue Again"
+
+    /// Runs `change` on the index off the main thread, then `then`; an alert headed `failure`
+    /// when it threw.
+    private func write(
+        _ failure: String, _ change: @escaping @Sendable (LibraryIndex) throws -> Void,
+        then: @escaping () -> Void = {}
+    ) {
+        guard let database = session?.setup.databaseURL else { return }
+        Task {
+            let done = await blockingFileWork { Result { try change(LibraryIndex(at: database)) } }
+            do {
+                try done.get()
+                then()
+            } catch {
+                alert(failure, ["\(error)"])
+            }
+        }
+    }
+
     private func chooseAndQueue(
         heading: String, note: String, _ choices: [QueueChoice], upgrade: Bool,
-        tickingAll: Bool
+        tickingAll: Bool, other: String? = nil, marked: @escaping ([QueueChoice]) -> Void = { _ in }
     ) {
         guard !choices.isEmpty else {
             return alert(
@@ -1004,8 +1077,10 @@ package final class Downloads {
         }
         let queueSheet = QueueSheet(
             heading: heading, note: note, choices: choices,
-            policies: FormatPolicy.offered(upgrade: upgrade), tickingAll: tickingAll)
+            policies: FormatPolicy.offered(upgrade: upgrade), tickingAll: tickingAll,
+            other: other)
         present(queueSheet) {
+            if let chosen = queueSheet.marked { return marked(chosen) }
             guard let chosen = queueSheet.result else { return }
             self.queue(chosen.choices, chosen.policy)
         }

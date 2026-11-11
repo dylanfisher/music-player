@@ -81,13 +81,14 @@ enum DownloadAction: CaseIterable, Sendable {
 
 /// The ways to queue a download, in the toolbar's Add menu.
 enum DownloadAddition: CaseIterable, Sendable {
-    case upgrades, fromSelection, pasteRelease
+    case upgrades, fromSelection, pasteRelease, notFound
 
     var title: String {
         switch self {
         case .upgrades: "Upgrades…"
         case .fromSelection: "From Library Selection…"
         case .pasteRelease: "Paste a Discogs Release…"
+        case .notFound: "Not Found Upgrades…"
         }
     }
 }

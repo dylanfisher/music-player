@@ -18,6 +18,34 @@ extension AppDelegate {
         dispatcher.handle(
             .showDownloads, enabled: { [weak self] in self?.window != nil },
             run: { [weak self] in self?.downloads.show(offeringSelection: true) })
+        dispatcher.handle(
+            .toggleNeverUpgrade, enabled: hasSelectedTracks,
+            run: { [weak self] in self?.toggleNeverUpgrade() })
+    }
+
+    /// Never Upgrade: marks the selected tracks' releases, or clears them when every one is
+    /// marked, in the index, which syncs the mark (ADR 0200). A beep for tracks with no
+    /// release id.
+    private func toggleNeverUpgrade() {
+        guard let browser else { return }
+        let ids: [Int64]
+        do {
+            ids = try browser.selectedTrackIDs()
+        } catch {
+            return browser.reportCommand("couldn't mark the albums Never Upgrade", error)
+        }
+        let database = libraryFileURL(in: paths.dataDirectory)
+        Task { [weak browser] in
+            let toggled = await blockingFileWork {
+                Result { try LibraryIndex(at: database).toggleNeverUpgrade(trackIDs: ids) }
+            }
+            switch toggled {
+            case .success(nil): NSSound.beep()
+            case .success: break
+            case .failure(let error):
+                browser?.reportCommand("couldn't mark the albums Never Upgrade", error)
+            }
+        }
     }
 
     /// The settings the downloads are made from; a change to any restarts them.

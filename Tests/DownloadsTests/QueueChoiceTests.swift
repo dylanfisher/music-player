@@ -46,3 +46,24 @@ private func album(_ id: Int64, _ releases: [String?]) -> DiscogsAlbum {
         title: "Release 7", detail: "", releaseID: 7, upgrade: nil, refusal: nil)
     #expect(manual.order(.mp3320) == .manual(.mp3320))
 }
+
+@Test func upgradesNameAMarkedAlbumAndNotFoundListsTheSetAside() {
+    let candidates = [1, 2, 3].map {
+        UpgradeCandidate(
+            albumID: Int64($0), title: "Album \($0)", artist: "Made-Up Artist", releaseID: $0,
+            sharePaths: ["library/\($0).mp3"], quality: "MP3 320 kbps")
+    }
+    #expect(
+        QueueChoice.upgrades(candidates, never: [2]).map(\.detail) == [
+            "MP3 320 kbps, release 1", "MP3 320 kbps, release 2, Never Upgrade",
+            "MP3 320 kbps, release 3",
+        ])
+    let setAside = QueueChoice.setAside(
+        candidates,
+        misses: [
+            1: UpgradeMiss(misses: 4, retryAt: nil), 2: UpgradeMiss(misses: 2, retryAt: 5),
+        ])
+    #expect(setAside.map(\.releaseID) == [1])
+    #expect(setAside.first?.detail == "4 searches found no clean copy, release 1")
+    #expect(setAside.first?.upgrade == nil, "queuing again only clears the misses")
+}

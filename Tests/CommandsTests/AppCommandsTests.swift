@@ -34,7 +34,7 @@ import Testing
         titles(AppMenus.trackMenu) == [
             "Play Next", "Add to Playback Queue", "Play Now", "-", "Show Album", "Show Artist",
             "Show in All Music", "Open Discogs Release", "Get Discogs Artwork…",
-            "Combine Albums for Tagging…", "-", "Like",
+            "Combine Albums for Tagging…", "Never Upgrade", "-", "Like",
             "Dislike", "-", "Rating ▸ 6",
             "-", "Get Info", "Show Spectrum",
             "Reveal in Finder", "-",
