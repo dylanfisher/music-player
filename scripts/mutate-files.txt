@@ -25,3 +25,9 @@ Sources/Core/Library/LibrarySyncMerge.swift all LibraryTests
 Sources/Core/Recommender/DownloadJob.swift all RecommenderTests
 Sources/Features/Downloads/DownloadsModel.swift all DownloadsTests
 Sources/Features/Downloads/Downloads+AutoUpgrade.swift all DownloadsTests
+# The browser's sort and its selection steps: the default sorts, the selection history and
+# showing a step, and the sort a source change puts back.
+Sources/Features/LibraryBrowser/BrowserModel.swift 286-314 LibraryBrowserTests
+Sources/Features/LibraryBrowser/BrowserModel.swift 485-572 LibraryBrowserTests
+Sources/Features/LibraryBrowser/BrowserModel.swift 595-628 LibraryBrowserTests
+Sources/Features/LibraryBrowser/BrowserModel.swift 765-775 LibraryBrowserTests

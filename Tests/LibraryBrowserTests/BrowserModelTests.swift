@@ -753,3 +753,44 @@ private func loadedModel(
     #expect(try await model.albumTarget(.previousAlbum, from: starts[2] + 1) == starts[1])
     #expect(try await model.albumTarget(.previousAlbum, from: nil) == starts.last)
 }
+
+@MainActor @Test func aQueueTakesTheTablesSortOrTheSourcesOwn() async throws {
+    let (model, _) = try await loadedModel()
+    await model.setSort(.title, ascending: false)
+    #expect(model.queueSort(for: nil) == (.title, false))
+    #expect(model.queueSort(for: .history) == (.lastPlayed, false))
+}
+
+/// A step shown brings back its Stats filter and days, and the sort its source has; leaving
+/// Stats for another source drops the days.
+@MainActor @Test func aStepShownTakesItsStatsAndSortAndLeavingStatsDropsTheDays() async throws {
+    let (model, _) = try await loadedModel()
+    let span = PlaySpan(start: 1_700_000_000, end: 1_700_086_400)
+    var stats = TrackFilter(source: .stats(.month))
+    stats.stats = StatsFilter(.span(span), title: "A day")
+    stats.statsSpan = span
+    await model.show(WindowPlace(filter: stats))
+    #expect(model.filter.stats == stats.stats)
+    #expect(model.filter.statsSpan == span)
+    #expect(model.sortColumn == .playCount && !model.ascending)
+    await model.show(WindowPlace(filter: TrackFilter()))
+    #expect(model.sortColumn == .artist && model.ascending)
+
+    await model.filterStats(nil, in: .month)
+    await model.showStatsSpan(span, of: .month)
+    #expect(model.filter.statsSpan == span)
+    await model.setSource(nil)
+    #expect(model.filter.statsSpan == nil)
+}
+
+@MainActor @Test func sortingByAColumnAscendsUnlessItSortsAlreadyAndReversingFlipsIt() async throws
+{
+    let (model, index) = try await loadedModel()
+    await model.sort(by: .title)
+    #expect(model.sortColumn == .title && model.ascending)
+    await model.reverseSort()
+    #expect(model.sortColumn == .title && !model.ascending)
+    #expect(model.trackIDs == (try index.trackIDs(sortedBy: .title, ascending: false)))
+    await model.sort(by: .title)
+    #expect(!model.ascending, "already sorted by it")
+}
