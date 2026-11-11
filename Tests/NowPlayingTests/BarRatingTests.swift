@@ -136,6 +136,21 @@ private func stars(of bar: NowPlayingBar) -> [RatingStars] {
     #expect(stars(of: bar).allSatisfy { $0.rating == 2 })
 }
 
+/// The click's rating stays while its write isn't done, through a playback update that shows
+/// the bars again, until the bars hear how the write went.
+@MainActor @Test func theClicksRatingStaysWhileItsWriteIsPending() {
+    let index = Index()
+    index.rating = 2
+    let bar = bar(index)
+    bar.apply(playing(0))
+    let width = bar.header.rating.intrinsicContentSize.width / 5
+    bar.header.rating.click(atX: width * 3.5)
+    bar.apply(PlaybackUpdate(state: playing(0).state, event: nil))
+    #expect(stars(of: bar).allSatisfy { $0.rating == 4 })
+    bar.ratingsChanged(nil) { _ in true }
+    #expect(stars(of: bar).allSatisfy { $0.rating == 2 })
+}
+
 /// A click on any bar's stars rates the playing track by its path, and a click on its rating
 /// clears it; with nothing playing a click does nothing.
 @MainActor @Test func aClickOnTheStarsRatesThePlayingTrack() {

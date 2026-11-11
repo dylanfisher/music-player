@@ -57,6 +57,8 @@ public final class NowPlayingBar: NSObject {
     private var timer: Timer?
     /// Seeks sent to the engine and not yet done, while which the bars keep the target.
     private var pendingSeeks = 0
+    /// The rating a click gave the track at `path`, whose write isn't done yet.
+    private var clickedRating: (path: String, stars: Int)?
     /// Whether the engine is connected and an output opened.
     private var connected = false
     /// Why no output could be opened, which the format line says until an engine connects.
@@ -149,6 +151,7 @@ public final class NowPlayingBar: NSObject {
     /// picks out, or nil after a write that failed. The stars show the playing track's new
     /// rating, if it's one of them, or its rating again, without reading the index.
     public func ratingsChanged(_ stars: Int?, includes: (TrackRow) -> Bool) {
+        clickedRating = nil
         if let stars, let track = model.track, includes(track) { model.rated(stars) }
         showRating()
     }
@@ -280,15 +283,23 @@ public final class NowPlayingBar: NSObject {
         for stars in ratings {
             stars.alphaValue = model.currentURL == nil ? 0 : 1
             stars.setAccessibilityElement(model.currentURL != nil)
-            stars.rating = model.track?.rating ?? 0
+            stars.rating = pendingRating ?? model.track?.rating ?? 0
             stars.isEnabled = model.track != nil
         }
     }
 
+    /// The rating a click gave the playing track, while its write isn't done.
+    private var pendingRating: Int? {
+        guard let clickedRating, clickedRating.path == model.track?.path else { return nil }
+        return clickedRating.stars
+    }
+
     /// A click on the stars of the track `ratingClicked` is told. The stars clicked show the
-    /// click's rating, the others the old one, until `ratingsChanged` says how the write went.
+    /// click's rating, the others the old one until the bars next show, then every bar shows it,
+    /// until `ratingsChanged` says how the write went.
     private func rate(_ stars: Int) {
         guard let path = model.track?.path else { return }
+        clickedRating = (path, stars)
         ratingClicked(stars, path)
     }
 
