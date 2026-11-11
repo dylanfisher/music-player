@@ -90,7 +90,6 @@ extension Downloads {
         let candidates: [UpgradeCandidate]
         let missed: [Int: UpgradeMiss]
         do {
-            candidates = try await upgradeCandidates(database, share)
             // Read again: the steps may have counted misses.
             missed =
                 settled.steps.isEmpty
@@ -98,6 +97,18 @@ extension Downloads {
                 : try await blockingFileWork {
                     Result { try LibraryIndex(at: database).upgradeMisses() }
                 }.get()
+            let key = AutoUpgrades.CandidatesRead.Key(
+                share: share, epoch: epoch,
+                states: session.model.jobs.rows.mapValues(\.state), misses: missed,
+                never: never)
+            if let kept = candidatesRead?.candidates(for: key, at: now()) {
+                candidates = kept
+            } else {
+                let at = now()
+                candidates = try await upgradeCandidates(database, share)
+                candidatesRead = AutoUpgrades.CandidatesRead(
+                    key: key, at: at, candidates: candidates)
+            }
         } catch {
             return logger.error("the upgrade candidates couldn't be read: \(error)")
         }

@@ -18,6 +18,33 @@ enum AutoUpgrades {
         case requeue(AutoUpgradeJob)
     }
 
+    /// The candidates a pass read, kept for the passes after it while the jobs, misses and
+    /// marks they're chosen by stay the same: a poll with a slot free and nothing to queue
+    /// doesn't read the whole library again.
+    struct CandidatesRead {
+        struct Key: Equatable {
+            var share: String
+            var epoch: String
+            /// Each job's state: one that lands, or ends, changes the albums to upgrade.
+            var states: [Int: JobState]
+            var misses: [Int: UpgradeMiss]
+            var never: Set<Int>
+        }
+
+        /// How long a read is kept, in seconds: a scan or a play changes the library with no
+        /// job changing.
+        static let kept: TimeInterval = 600
+
+        var key: Key
+        var at: Date
+        var candidates: [UpgradeCandidate]
+
+        /// The candidates kept, when they were read with `key` less than `kept` before `now`.
+        func candidates(for key: Key, at now: Date) -> [UpgradeCandidate]? {
+            key == self.key && now.timeIntervalSince(at) < Self.kept ? candidates : nil
+        }
+    }
+
     /// The jobs a state ends in; they change no more.
     static let terminal: Set<JobState> = [.imported, .rejected, .cancelled]
 

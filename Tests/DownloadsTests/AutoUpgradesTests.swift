@@ -304,6 +304,42 @@ private final class Once: @unchecked Sendable {
     downloads.stop()
 }
 
+/// How many times the stand-in library was read.
+private final class Reads: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var made: Int { lock.withLock { count } }
+
+    func read() { lock.withLock { count += 1 } }
+}
+
+@MainActor
+@Test func aPassWithNothingChangedReadsNoCandidates() async throws {
+    let fake = FakeService()
+    let (downloads, session) = try await upgrading(fake, Library([]), inFlight: 1)
+    let reads = Reads()
+    downloads.upgradeCandidates = { _, _ in
+        reads.read()
+        return []
+    }
+    let start = Date()
+    downloads.now = { start }
+    downloads.autoUpgrade = true
+    await settled(downloads)
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    #expect(reads.made == 1, "nothing changed")
+    downloads.now = { start + AutoUpgrades.CandidatesRead.kept }
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    #expect(reads.made == 2, "kept no longer")
+    fake.put(listed(1, release: 7, .downloading))
+    await session.model.poll()
+    await eventually("read again: a job changed") { reads.made == 3 }
+    downloads.stop()
+}
+
 @MainActor
 @Test func aCopyTaggedWithADiscrepancyIsRequeuedButNotAnUpgradeQueuedByHand() async throws {
     let discrepancy = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])

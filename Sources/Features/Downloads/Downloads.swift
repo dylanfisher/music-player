@@ -212,6 +212,8 @@ package final class Downloads {
     var notClean: Set<AutoUpgradeJob> = []
     /// The jobs it queued that the index didn't record, recorded again at each pass.
     var unrecorded: Set<AutoUpgradeJob> = []
+    /// The candidates the last pass read, for a pass while nothing they're chosen by changed.
+    var candidatesRead: AutoUpgrades.CandidatesRead?
     /// The releases whose snapshot couldn't be built, left until the session stops.
     var unqueueable: Set<Int> = []
     /// The clock the misses are dated by; tests stand in for it.
@@ -312,6 +314,7 @@ package final class Downloads {
         notClean = []
         unrecorded = []
         unqueueable = []
+        candidatesRead = nil
         session?.model.stop()
         session = nil
         refresh()
