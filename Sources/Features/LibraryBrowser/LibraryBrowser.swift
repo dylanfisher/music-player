@@ -2037,14 +2037,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    /// Rates the selected tracks; 0 stars clears their rating.
     /// The mark of the Rating submenu's item for `stars` over the selected tracks.
     public func selectionRatingMark(_ stars: Int) -> RatingMark {
         RatingMark(stars: stars, ratings: selectionRatings())
     }
 
     /// The ratings the selected tracks have, read again only when the selection or the index
-    /// changed since the last read, so validating the submenu's six items reads them once.
+    /// changed since the last read. Validating the submenu asks each of its six items whether
+    /// it's on and whether it's mixed, checking the selection and the change stamp twelve
+    /// times, but queries the ratings once.
     private func selectionRatings() -> Set<Int> {
         do {
             let ids = try selectedTrackIDs()
@@ -2067,7 +2068,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    /// Rates the selected tracks, then says so in the status bar.
+    /// Rates the selected tracks, then says so in the status bar; 0 stars clears their rating.
     public func rateSelection(_ stars: Int) {
         guard let ids = selectedTrackIDs(else: "couldn't rate the tracks") else { return }
         let title = ids.count == 1 ? selectedTitle(ids[0]) : nil
@@ -2171,7 +2172,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         edit("couldn't count the skip of \(path)") { try await self.model.recordSkip(path) }
     }
 
-    /// Sets the play count of the tracks at `paths` by hand, as Get Info's Save does.
     /// Rates the tracks at `paths`, from Get Info's stars.
     public func setRating(_ stars: Int, paths: [String]) {
         edit("couldn't rate the tracks") {
@@ -2182,6 +2182,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
+    /// Sets the play count of the tracks at `paths` by hand, as Get Info's Save does.
     public func setPlayCount(_ count: Int, paths: [String]) {
         edit("couldn't set the play count") {
             try await self.model.setPlayCount(count, paths: paths)
@@ -2316,8 +2317,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Puts `view` on the status bar's left, after the scan, saving and analysis text and
-    /// before the rating's message and the leading columns, where another feature shows what it's doing; it hides
-    /// itself when it has nothing to show (ADR 0163).
+    /// before the rating's message and the leading columns, where another feature shows what
+    /// it's doing; it hides itself when it has nothing to show (ADR 0163).
     public func setStatusAccessory(_ view: NSView) {
         // The init puts the label in the stack, so it's always there.
         guard let after = statusLeading.arrangedSubviews.firstIndex(of: analysisLabel) else {

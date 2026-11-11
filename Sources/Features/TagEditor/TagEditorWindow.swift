@@ -901,8 +901,6 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         commandsChanged()
     }
 
-    /// Puts the model's values in the fields, and the art. A field typed in keeps what was
-    /// typed, which a tab made since shows too.
     /// The ratings the index has now for the window's tracks, one each, set from elsewhere.
     func showRatings(_ ratings: [Int?]) {
         model?.showRatings(ratings)
@@ -915,6 +913,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         ratingStars.isEnabled = !model.ratedPaths.isEmpty
     }
 
+    /// Puts the model's values in the fields, and the art. A field typed in keeps what was
+    /// typed, which a tab made since shows too.
     private func showValues() {
         guard let model else { return }
         for (field, views) in fields {
