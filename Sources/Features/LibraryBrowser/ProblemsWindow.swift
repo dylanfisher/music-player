@@ -160,21 +160,13 @@ final class ProblemsWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate
     /// spread the widths set after.
     private func keepWidths(_ widths: ColumnWidths) {
         window.contentView?.layoutSubtreeIfNeeded()
-        for column in table.tableColumns {
-            if let width = widths.widths[column.identifier.rawValue] {
-                column.width = CGFloat(width)
-            }
-        }
+        table.setWidths(widths.widths)
         keepsWidths = true
     }
 
     /// The columns' widths as they are now.
     var columnWidths: ColumnWidths {
-        ColumnWidths(
-            Dictionary(
-                uniqueKeysWithValues: table.tableColumns.map {
-                    ($0.identifier.rawValue, Double($0.width))
-                }))
+        ColumnWidths(table.widthsByColumn)
     }
 
     func tableViewColumnDidResize(_ notification: Notification) {

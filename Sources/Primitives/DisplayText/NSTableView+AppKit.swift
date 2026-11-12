@@ -32,4 +32,17 @@ extension NSTableView {
         scroll.borderType = .bezelBorder
         return scroll
     }
+
+    /// Each column's width by its identifier, as a window's state keeps them.
+    public var widthsByColumn: [String: Double] {
+        Dictionary(
+            uniqueKeysWithValues: tableColumns.map { ($0.identifier.rawValue, Double($0.width)) })
+    }
+
+    /// Gives each column `widths` lists its width; a column not listed keeps its own.
+    public func setWidths(_ widths: [String: Double]) {
+        for column in tableColumns {
+            if let width = widths[column.identifier.rawValue] { column.width = CGFloat(width) }
+        }
+    }
 }
