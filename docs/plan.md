@@ -399,8 +399,10 @@ profile, and a place to read the lists and act on them. The contract is music-re
 `docs/api.md`, sections HTTP, Profile, Community values, Feedback and Recommendations, and
 its ADR 0028 for why the route behaves as it does; this phase changes nothing in that repo.
 
-**Waiting on the owner:** approval of this plan. The questions below are answered; nothing
-is built before the approval.
+Approved by the owner on 2026-11-11, to be built lean: one implementer, the core tests only
+(each route's request bytes; each fixture decodes and fails strictly on one changed field; the
+refusal codes and `busy`; the model's paging, filter reset, re-read after a mark, undo and busy
+retry; the seed rules), and of the phase gate only the full `./scripts/check` before landing.
 
 What exists, found by search:
 
