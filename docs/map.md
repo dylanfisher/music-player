@@ -41,7 +41,7 @@ a tier changes the table, `allowed` and every target's `path:` together.
 |---|---|---|---|
 | **primitives** | `Sources/Primitives` | Portable units with no knowledge of music or this app: ring buffer, SQLite wrapper, HTTP server, SSDP, key chords, window placement. No settings reads. System frameworks are fine, AppKit included, in a file of its own (`<Type>+AppKit.swift`) so the rest of the unit stays testable without a window. | nothing in this table |
 | **core** | `Sources/Core` | The domain: the library index, scanner and sync, tag reading and writing, decoders and playback, audio analysis, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer, receiver control), Discogs and the recommender service, commands and scripting, settings, snapshots, logging, and the bars' column views that two features share (`BarView`, the one Core module with AppKit). | primitives, other core modules |
-| **features** | `Sources/Features` | User-facing slices: library browser, now playing, settings window, tag editor, Discogs tagger, downloads. | core, primitives |
+| **features** | `Sources/Features` | User-facing slices: library browser, now playing, settings window, tag editor, Discogs tagger, downloads, recommendations. | core, primitives |
 | **app** | `Sources/App` | The composition root: `main`, app delegate, menus. Wires features together; holds no logic of its own. A second executable here, the `music-player` command line, ships in the bundle beside the app. | features, core, primitives |
 | **tools** | `Sources/Tools` | Development tooling that never ships in the app: the fixture generator, test stand-ins such as a null audio device, and benchmarks. | tools, features, core, primitives |
 
