@@ -15,7 +15,10 @@ extension RecommendationsService {
     static var unused: RecommendationsService {
         RecommendationsService(
             page: { _, _, _ throws(RecommenderError) in throw unexpected("a page") },
-            sendProfile: { _ throws(RecommenderError) in throw unexpected("the profile") })
+            sendProfile: { _ throws(RecommenderError) in throw unexpected("the profile") },
+            mark: { _, _, _ throws(RecommenderError) in throw unexpected("a mark") },
+            unmark: { _, _ throws(RecommenderError) in throw unexpected("an undo") },
+            marks: { () throws(RecommenderError) in throw unexpected("the marks") })
     }
 }
 
@@ -69,4 +72,14 @@ final class Sleeps: @unchecked Sendable {
     var sleep: @Sendable (Double) async throws -> Void {
         { [self] seconds in lock.withLock { asked.append(seconds) } }
     }
+}
+
+/// The marks and undos a fake service was sent, in order, as "kind id".
+final class MarkCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var got: [String] = []
+
+    func append(_ call: String) { lock.withLock { got.append(call) } }
+
+    var calls: [String] { lock.withLock { got } }
 }

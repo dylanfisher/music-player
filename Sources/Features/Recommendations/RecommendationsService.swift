@@ -9,6 +9,14 @@ package struct RecommendationsService: Sendable {
             RecommendationPage
     /// Keeps the profile in place of the one before, answering what it queued.
     var sendProfile: @Sendable (LibraryProfile) async throws(RecommenderError) -> ProfileReceipt
+    /// Sets a verdict on a master or release.
+    var mark:
+        @Sendable (AlbumKind, Int, FeedbackMark.Verdict) async throws(RecommenderError) ->
+            FeedbackMark
+    /// Removes the verdict on a master or release.
+    var unmark: @Sendable (AlbumKind, Int) async throws(RecommenderError) -> Bool
+    /// Every mark, oldest first.
+    var marks: @Sendable () async throws(RecommenderError) -> [FeedbackMark]
 }
 
 extension RecommendationsService {
@@ -21,5 +29,10 @@ extension RecommendationsService {
         sendProfile = { profile throws(RecommenderError) in
             try await client().sendProfile(profile)
         }
+        mark = { kind, id, verdict throws(RecommenderError) in
+            try await client().mark(kind, id, verdict: verdict)
+        }
+        unmark = { kind, id throws(RecommenderError) in try await client().unmark(kind, id) }
+        marks = { () throws(RecommenderError) in try await client().marks() }
     }
 }

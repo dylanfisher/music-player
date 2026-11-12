@@ -21,6 +21,8 @@ final class RecommendationsModel {
     private(set) var more = false
     private(set) var facts: RecommendationPage.Facts?
     private(set) var problem: ListProblem?
+    /// A mark or undo that failed, said beside the rows.
+    private(set) var notice: String?
     /// Whether a read is out.
     var isReading: Bool { reading != nil }
     /// Hears every change to what the model holds.
@@ -64,6 +66,65 @@ final class RecommendationsModel {
     @discardableResult
     func readAgain(through count: Int) -> Task<Void, Never>? {
         read(from: 0, through: count)
+    }
+
+    /// Sets `verdict` on the albums of `marked` (on the Artists view, each artist's best),
+    /// taking their rows out at once, then reads the list again through as many rows as it
+    /// showed, since the cap of 3 to an artist or label can bring back an album the read
+    /// before left out. A mark that fails puts its rows back and says why. The task answers
+    /// the albums marked, for Undo.
+    @discardableResult
+    func mark(_ marked: [RecommendationRow], _ verdict: FeedbackMark.Verdict)
+        -> Task<[MarkedAlbum], Never>?
+    {
+        guard let service = service() else {
+            problem = .notSet
+            changed()
+            return nil
+        }
+        let albums = distinct(marked.map { MarkedAlbum(kind: $0.album.kind, id: $0.album.id) })
+        let before = rows
+        let shown = rows.count
+        stop()
+        rows.removeAll { albums.contains(MarkedAlbum(kind: $0.album.kind, id: $0.album.id)) }
+        notice = nil
+        changed()
+        return Task {
+            var set: [MarkedAlbum] = []
+            for album in albums {
+                do throws(RecommenderError) {
+                    _ = try await service.mark(album.kind, album.id, verdict)
+                    set.append(album)
+                } catch {
+                    notice = "Couldn't mark the album: \(terminalSafe(error.description))"
+                }
+            }
+            if set.count < albums.count {
+                rows = before.filter {
+                    !set.contains(MarkedAlbum(kind: $0.album.kind, id: $0.album.id))
+                }
+            }
+            await readAgain(through: shown)?.value
+            return set
+        }
+    }
+
+    /// Removes the marks on `albums`, for Undo, and reads the list again.
+    @discardableResult
+    func unmark(_ albums: [MarkedAlbum]) -> Task<Void, Never>? {
+        guard let service = service() else { return nil }
+        let shown = rows.count + albums.count
+        stop()
+        return Task {
+            for album in albums {
+                do throws(RecommenderError) {
+                    _ = try await service.unmark(album.kind, album.id)
+                } catch {
+                    notice = "Couldn't undo the mark: \(terminalSafe(error.description))"
+                }
+            }
+            await readAgain(through: shown)?.value
+        }
     }
 
     /// Stops the read out, for a closed window.
@@ -155,4 +216,16 @@ final class RecommendationsModel {
         default: .failed(terminalSafe(error.description))
         }
     }
+}
+
+/// A master or release a mark is on.
+struct MarkedAlbum: Equatable, Hashable, Sendable {
+    var kind: AlbumKind
+    var id: Int
+}
+
+/// `values` without repeats, in their first order.
+private func distinct<Value: Hashable>(_ values: [Value]) -> [Value] {
+    var seen: Set<Value> = []
+    return values.filter { seen.insert($0).inserted }
 }

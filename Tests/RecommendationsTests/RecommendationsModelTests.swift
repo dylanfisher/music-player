@@ -71,3 +71,61 @@ import Testing
     #expect(model.rows.count == 10)
     #expect(model.problem == nil)
 }
+
+@MainActor
+@Test func aMarkTakesItsRowsOutThenReadsTheRowsShownAgain() async {
+    let requests = Requests()
+    let calls = MarkCalls()
+    var service = list(250, requests)
+    service.mark = { kind, id, verdict in
+        calls.append("\(kind) \(id)")
+        return FeedbackMark(seq: 1, kind: kind, id: id, verdict: verdict, at: 0)
+    }
+    let model = RecommendationsModel(service: { service })
+    await model.show(RecommendationQuery())?.value
+    await model.readMore()?.value
+    let marking = model.mark([model.rows[5], model.rows[7]], .notInterested)
+    #expect(model.rows.count == 198)
+    #expect(!model.rows.contains { [5, 7].contains($0.album.id) })
+    let marked = await marking?.value
+    #expect(marked == [MarkedAlbum(kind: .master, id: 5), MarkedAlbum(kind: .master, id: 7)])
+    #expect(calls.calls == ["master 5", "master 7"])
+    #expect(requests.offsets == [0, 100, 0, 100])
+    #expect(model.notice == nil)
+}
+
+@MainActor
+@Test func undoRemovesTheMarksAndReadsTheListAgain() async {
+    let requests = Requests()
+    let calls = MarkCalls()
+    var service = list(250, requests)
+    service.unmark = { kind, id in
+        calls.append("\(kind) \(id)")
+        return true
+    }
+    let model = RecommendationsModel(service: { service })
+    await model.show(RecommendationQuery())?.value
+    await model.unmark([MarkedAlbum(kind: .release, id: 42)])?.value
+    #expect(calls.calls == ["release 42"])
+    #expect(requests.offsets == [0, 0, 100])
+    #expect(model.rows.count == 200)
+}
+
+@MainActor
+@Test func aFailedMarkPutsItsRowsBackAndSaysWhy() async {
+    let requests = Requests()
+    var service = list(10, requests)
+    service.mark = { _, _, _ throws(RecommenderError) in
+        throw RecommenderError(service: "the fake", kind: .status(500, code: "internal"))
+    }
+    let model = RecommendationsModel(service: { service })
+    await model.show(RecommendationQuery())?.value
+    let before = model.rows
+    service.page = { _, _, _ throws(RecommenderError) in
+        throw RecommenderError(service: "the fake", kind: .status(500, code: "internal"))
+    }
+    let marked = await model.mark([model.rows[3]], .alreadyHave)?.value
+    #expect(marked == [])
+    #expect(model.rows == before)
+    #expect(model.notice?.hasPrefix("Couldn't mark the album") == true)
+}

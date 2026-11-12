@@ -1,4 +1,5 @@
 import AppKit
+import Discogs
 import DisplayText
 import Library
 import Recommender
@@ -19,6 +20,9 @@ public final class Recommendations {
     var readProfile: @Sendable () async throws -> LibraryProfile
     /// The albums of some tracks, for a seed, read off the main thread.
     var readSeeds: @Sendable ([Int64]) async throws -> [SeedAlbum]
+    /// This Mac's Discogs catalog as set now, which the Marked sheet names marks from; a mark
+    /// whose album it doesn't have, or every mark while there is none, goes by its id.
+    package var catalog: () -> URL? = { nil }
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
     private var sendingProfile = false
@@ -106,6 +110,8 @@ public final class Recommendations {
         made.keepWidths(columnWidths)
         made.queryChosen = { [weak self] in self?.model.show($0) }
         made.reachedEnd = { [weak self] in self?.model.readMore() }
+        made.markChosen = { [weak self] in self?.mark($0, $1) }
+        made.showMarked = { [weak self] in self?.showMarked() }
         made.columnsResized = { [weak self] widths in
             self?.columnWidths = widths
             self?.columnWidthsChanged(widths)
@@ -115,6 +121,57 @@ public final class Recommendations {
         }
         model.changed = { [weak self] in self?.redraw() }
         return made
+    }
+
+    // MARK: - Marks
+
+    /// Not Interested or Already Have on `rows`, which Edit > Undo takes back.
+    private func mark(_ rows: [RecommendationRow], _ verdict: FeedbackMark.Verdict) {
+        guard let marking = model.mark(rows, verdict) else { return }
+        Task {
+            let marked = await marking.value
+            guard !marked.isEmpty, let undo = controller?.window?.undoManager else { return }
+            undo.registerUndo(withTarget: self) { target in
+                MainActor.assumeIsolated { _ = target.model.unmark(marked) }
+            }
+            undo.setActionName(verdictTitle(verdict))
+        }
+    }
+
+    /// Marked…: reads every mark, names each from the catalog, and shows them in a sheet.
+    private func showMarked() {
+        guard let service = service(), let window = controller?.window,
+            window.attachedSheet == nil
+        else { return }
+        let catalog = catalog().flatMap {
+            FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
+        }
+        Task {
+            let named: [(mark: FeedbackMark, name: String)]
+            do {
+                let marks = try await service.marks()
+                named = try await Task.detached {
+                    let names = try catalog.map { try Catalog(at: $0) }
+                    return try marks.map { mark in
+                        let name = try names?.markName(mark.kind, mark.id)
+                        return (mark, name ?? "\(mark.kind) \(mark.id)")
+                    }
+                }.value
+            } catch {
+                return report(terminalSafe("couldn't read the marks: \(error)"))
+            }
+            let sheet = MarkedSheet(named)
+            let model = model
+            sheet.removeChosen = { marks in
+                model.unmark(marks.map { MarkedAlbum(kind: $0.kind, id: $0.id) })
+            }
+            sheet.done = { [weak sheet] in
+                guard let sheetWindow = sheet?.window else { return }
+                sheetWindow.sheetParent?.endSheet(sheetWindow)
+            }
+            guard let sheetWindow = sheet.window else { return }
+            window.beginSheet(sheetWindow) { _ in _ = sheet }
+        }
     }
 
     private func redraw() {
@@ -134,6 +191,9 @@ public final class Recommendations {
             }
         } else if !model.isReading, model.rows.isEmpty {
             message = "The list has no albums these filters keep."
+        }
+        if let notice = model.notice {
+            message = message.map { "\(notice)\n\($0)" } ?? notice
         }
         controller.show(
             rows: model.rows, query: model.query, seeds: model.seeds,

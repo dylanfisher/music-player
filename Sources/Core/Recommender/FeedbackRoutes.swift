@@ -14,14 +14,14 @@ extension RecommenderClient {
     }
 
     /// Removes the verdict on the master or release, answering whether there was one.
-    func unmark(_ kind: AlbumKind, _ id: Int) async throws(RecommenderError) -> Bool {
+    package func unmark(_ kind: AlbumKind, _ id: Int) async throws(RecommenderError) -> Bool {
         try await call(
             "/v1/feedback/undo", body: UnmarkRequest(kind: kind, id: id), as: UnmarkReply.self
         ).removed
     }
 
     /// Every mark, in ascending `seq`: each page of `feedback/list` until there are no more.
-    func marks() async throws(RecommenderError) -> [FeedbackMark] {
+    package func marks() async throws(RecommenderError) -> [FeedbackMark] {
         var marks: [FeedbackMark] = []
         while true {
             let page = try await call(

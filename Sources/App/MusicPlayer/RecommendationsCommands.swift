@@ -46,6 +46,10 @@ extension AppDelegate {
         recommendations.service = { [weak self] in self?.recommendationsService() }
         recommendations.say = { [weak self] in self?.browser?.show(failure: $0) }
         recommendations.report = { [weak self] in self?.browser?.report($0) }
+        recommendations.catalog = { [weak self] in
+            guard let self, let settings else { return nil }
+            return paths.discogsCatalogFile(settings[\.discogsCatalogPath])
+        }
         if let state { recommendations.columnWidths = state[\.recommendationsColumns] }
         recommendations.columnWidthsChanged = { [weak self] in
             self?.saver?.set(\.recommendationsColumns, $0)

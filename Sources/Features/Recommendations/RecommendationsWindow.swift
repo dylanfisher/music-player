@@ -24,7 +24,11 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     let yearFromField = NSTextField()
     let yearToField = NSTextField()
     let labelsField = NSTokenField()
-    let table = NSTableView()
+    let table = RecommendationTable()
+    let notInterestedButton = NSButton(
+        title: verdictTitle(.notInterested), target: nil, action: nil)
+    let alreadyHaveButton = NSButton(title: verdictTitle(.alreadyHave), target: nil, action: nil)
+    let markedButton = NSButton(title: "Marked…", target: nil, action: nil)
     let detailLabel = NSTextField(wrappingLabelWithString: "")
     let progress = NSProgressIndicator()
     let messageLabel = NSTextField(wrappingLabelWithString: "")
@@ -38,6 +42,12 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
 
     /// Hears a change of list, view or filter.
     var queryChosen: (RecommendationQuery) -> Void = { _ in }
+    /// Hears Not Interested or Already Have on rows.
+    var markChosen: ([RecommendationRow], FeedbackMark.Verdict) -> Void = { _, _ in }
+    /// Hears Marked… clicked.
+    var showMarked: () -> Void = {}
+    /// The row selected when a mark took rows out, selected again as the rows come back.
+    private var place: Int?
     /// Hears the table scrolled to its last row.
     var reachedEnd: () -> Void = {}
     var visibilityChanged: (Bool) -> Void = { _ in }
@@ -92,6 +102,21 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             NSTextField(labelWithString: "Years"), yearFromField, yearToField, labelsField,
         ])
         bar.spacing = 8
+        notInterestedButton.action = #selector(notInterestedClicked)
+        notInterestedButton.toolTip = "Leave the selected albums out of every list (⌫)."
+        alreadyHaveButton.action = #selector(alreadyHaveClicked)
+        alreadyHaveButton.toolTip = "Leave the selected albums out of every list, as had."
+        markedButton.action = #selector(markedClicked)
+        markedButton.toolTip = "Every album marked, to remove a mark."
+        let actions = NSStackView(views: [
+            notInterestedButton, alreadyHaveButton, NSView(), markedButton,
+        ])
+        actions.spacing = 8
+        for button in [notInterestedButton, alreadyHaveButton, markedButton] {
+            button.bezelStyle = .rounded
+            button.target = self
+        }
+        table.deleteKey = { [weak self] in self?.notInterestedClicked() }
 
         for column in RecommendationColumn.allCases {
             table.addColumn(
@@ -123,12 +148,12 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         factsLabel.textColor = .secondaryLabelColor
         factsLabel.lineBreakMode = .byTruncatingTail
         factsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let page = NSStackView(views: [bar, status, scroll, detailLabel, factsLabel])
+        let page = NSStackView(views: [bar, actions, status, scroll, detailLabel, factsLabel])
         page.orientation = .vertical
         page.alignment = .leading
         page.spacing = 10
         page.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
-        for view in [scroll, detailLabel, factsLabel] {
+        for view in [actions, scroll, detailLabel, factsLabel] {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -28).isActive = true
         }
         scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -168,7 +193,11 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         if rows != self.rows {
             self.rows = rows
             table.reloadData()
+            if let place, !rows.isEmpty {
+                table.selectRowIndexes([min(place, rows.count - 1)], byExtendingSelection: false)
+            }
         }
+        if !pending { place = nil }
         if pending { progress.startAnimation(nil) } else { progress.stopAnimation(nil) }
         messageLabel.stringValue = message ?? ""
         messageLabel.isHidden = message == nil
@@ -182,6 +211,37 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     private func showDetail() {
         let row = table.selectedRow
         detailLabel.stringValue = row >= 0 && row < rows.count ? reasonsText(rows[row].album) : ""
+        for button in [notInterestedButton, alreadyHaveButton] {
+            button.isEnabled = !selectedRows.isEmpty
+        }
+    }
+
+    /// The rows selected, in the list's order.
+    var selectedRows: [RecommendationRow] {
+        table.selectedRowIndexes.filter { $0 < rows.count }.map { rows[$0] }
+    }
+
+    /// The rows a menu item acts on: the selection when the clicked row is in it, else the
+    /// clicked row.
+    private func menuRows(_ clicked: Int) -> [RecommendationRow] {
+        table.selectedRowIndexes.contains(clicked) ? selectedRows : [rows[clicked]]
+    }
+
+    private func mark(_ marked: [RecommendationRow], _ verdict: FeedbackMark.Verdict) {
+        guard !marked.isEmpty else { return }
+        place = table.selectedRowIndexes.first
+        markChosen(marked, verdict)
+    }
+
+    @objc private func notInterestedClicked() { mark(selectedRows, .notInterested) }
+
+    @objc private func alreadyHaveClicked() { mark(selectedRows, .alreadyHave) }
+
+    @objc private func markedClicked() { showMarked() }
+
+    @objc private func verdictChosen(_ sender: NSMenuItem) {
+        guard let clicked = sender.representedObject as? Int, clicked < rows.count else { return }
+        mark(menuRows(clicked), sender.tag == 0 ? .notInterested : .alreadyHave)
     }
 
     @objc private func actionClicked() { action?() }
@@ -257,7 +317,17 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             return
         }
         let clicked = table.clickedRow
-        guard clicked >= 0, clicked < rows.count, query.show == .albums else { return }
+        guard clicked >= 0, clicked < rows.count else { return }
+        for (tag, button) in [notInterestedButton, alreadyHaveButton].enumerated() {
+            let item = NSMenuItem(
+                title: button.title, action: #selector(verdictChosen), keyEquivalent: "")
+            item.target = self
+            item.tag = tag
+            item.representedObject = clicked
+            menu.addItem(item)
+        }
+        guard query.show == .albums else { return }
+        menu.addItem(.separator())
         let album = rows[clicked].album
         for style in album.styles.compactMap(\.name) {
             let item = NSMenuItem(
@@ -319,4 +389,19 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     func windowDidBecomeKey(_ notification: Notification) { visibilityChanged(true) }
 
     func windowWillClose(_ notification: Notification) { visibilityChanged(false) }
+}
+
+/// The window's table, which hears ⌫ for Not Interested.
+final class RecommendationTable: NSTableView {
+    var deleteKey: () -> Void = {}
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == "\u{7F}",
+            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty
+        {
+            deleteKey()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
 }
