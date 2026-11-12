@@ -76,6 +76,9 @@ extension CommandID {
     public static let showDownloads = CommandID("downloads.show")
     /// music-recommender's lists of albums the library doesn't have (ADR 0205).
     public static let showRecommendations = CommandID("recommendations.show")
+    /// The list of the selected tracks' album, or of their album artist (ADR 0205).
+    public static let recommendationsForAlbum = CommandID("recommendations.forAlbum")
+    public static let recommendationsForArtist = CommandID("recommendations.forArtist")
     public static let rescanNow = CommandID("library.rescanNow")
     /// Analyzes every file not analyzed yet, or changed since, until paused (ADR 0116); once
     /// every file was tried, the whole library again (ADR 0119).
@@ -280,6 +283,8 @@ public enum AppCommands {
             Command(.showDiscogsTagger, "Discogs Tagger…"),
             Command(.showDownloads, "Downloads…"),
             Command(.showRecommendations, "Recommendations…"),
+            Command(.recommendationsForAlbum, "Recommendations for Album"),
+            Command(.recommendationsForArtist, "Recommendations for Artist"),
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
             Command(.rescanNow, "Rescan All"),
             // Not from links either: it reads every file on the NAS.

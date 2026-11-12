@@ -17,8 +17,26 @@ extension AppDelegate {
         dispatcher.handle(.showRecommendations, enabled: hasWindow) { [weak self] in
             self?.recommendations.show()
         }
+        let canSeed = { [weak self] in self?.hasSelectedTracks() == true && serviceIsSet() }
+        for (command, kind) in [
+            (CommandID.recommendationsForAlbum, SeedKind.album),
+            (.recommendationsForArtist, .artist),
+        ] {
+            dispatcher.handle(command, enabled: canSeed) { [weak self] in
+                self?.showRecommendations(kind)
+            }
+        }
         dispatcher.handle(.sendLibraryProfile, enabled: serviceIsSet) { [weak self] in
             self?.recommendations.sendProfile()
+        }
+    }
+
+    private func showRecommendations(_ kind: SeedKind) {
+        guard let browser else { return }
+        do {
+            recommendations.show(kind, forTracks: try browser.selectedTrackIDs())
+        } catch {
+            browser.reportCommand("couldn't read the selection for its recommendations", error)
         }
     }
 

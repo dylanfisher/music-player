@@ -159,3 +159,34 @@ import Testing
     #expect(try Data(contentsOf: target) == Data("keep".utf8))
     #expect(try Data(contentsOf: music) == bytes)
 }
+
+@Test func aSeedNamesItsAlbumsArtistAndReleaseAsTheProfileDoes() throws {
+    let index = try craftedIndex([
+        Crafted(
+            path: "/m/a/1.flac", artist: "Guest", album: "A", albumArtist: "Band", number: 1,
+            custom: [DiscogsKey.releaseID: "42"]
+        ).scanned,
+        Crafted(
+            path: "/m/a/2.flac", album: "A", albumArtist: "Band", number: 2,
+            custom: [DiscogsKey.releaseID: "42"]
+        ).scanned,
+        Crafted(
+            path: "/m/c/1.flac", artist: "One", album: "Mix", number: 1,
+            custom: [DiscogsKey.releaseID: "7"], compilation: true
+        ).scanned,
+        Crafted(
+            path: "/m/c/2.flac", artist: "Two", album: "Mix", number: 2, compilation: true
+        ).scanned,
+    ])
+    let seeds = try index.recommendationSeeds(
+        trackIDs: ids(index, ["/m/c/2.flac", "/m/a/1.flac", "/m/a/2.flac"]))
+    #expect(seeds.map { $0.title } == ["A", "Mix"])
+    #expect(seeds.map { $0.artist } == ["Band", variousArtists])
+    #expect(seeds.map { $0.releaseID } == [42, nil])
+    let profile = try index.libraryProfile().albums
+    for seed in seeds {
+        let album = try #require(profile.first { $0.title == seed.title })
+        #expect(album.artist == seed.artist)
+        #expect(album.discogsReleaseID == seed.releaseID)
+    }
+}

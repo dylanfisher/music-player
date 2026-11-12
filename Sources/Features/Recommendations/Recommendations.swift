@@ -17,6 +17,8 @@ public final class Recommendations {
     public var report: (String) -> Void = { _ in }
     /// The profile Export Library Profile… writes, read off the main thread.
     var readProfile: @Sendable () async throws -> LibraryProfile
+    /// The albums of some tracks, for a seed, read off the main thread.
+    var readSeeds: @Sendable ([Int64]) async throws -> [SeedAlbum]
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
     private var sendingProfile = false
@@ -32,6 +34,11 @@ public final class Recommendations {
     public init(databaseURL: URL) {
         readProfile = {
             try await Task.detached { try LibraryIndex(at: databaseURL).libraryProfile() }.value
+        }
+        readSeeds = { ids in
+            try await Task.detached {
+                try LibraryIndex(at: databaseURL).recommendationSeeds(trackIDs: ids)
+            }.value
         }
     }
 
@@ -54,6 +61,30 @@ public final class Recommendations {
                 say(profileSentSummary(try await service.sendProfile(profile)))
             } catch {
                 report(terminalSafe("couldn't send the library profile: \(error)"))
+            }
+        }
+    }
+
+    /// Recommendations for Album or for Artist: shows the list of the selected tracks' one
+    /// album or one artist, or beeps and says why there is none.
+    @discardableResult
+    public func show(_ kind: SeedKind, forTracks ids: [Int64]) -> Task<Void, Never> {
+        Task {
+            let albums: [SeedAlbum]
+            do {
+                albums = try await readSeeds(ids)
+            } catch {
+                return report(terminalSafe("\(kind.commandTitle): \(error)"))
+            }
+            switch seed(kind, of: albums) {
+            case .failure(let problem):
+                beep()
+                say(problem.text)
+            case .success(let seed):
+                var query = model.query
+                query.seed = seed
+                (controller ?? makeWindow()).showWindow(nil)
+                model.show(query)
             }
         }
     }

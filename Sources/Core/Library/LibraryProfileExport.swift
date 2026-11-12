@@ -50,6 +50,38 @@ extension LibraryIndex {
         return LibraryProfile(albums: albums)
     }
 
+    /// The albums of the tracks `ids`, each once in the order first met, with its title and
+    /// the artist and release id the profile sends for it, read from all its tracks: the seeds
+    /// Recommendations for Album and for Artist ask the service for.
+    package func recommendationSeeds(trackIDs ids: [Int64]) throws -> [(
+        title: String, artist: String, releaseID: Int?
+    )] {
+        let albumOf = try statement(
+            "SELECT album_id FROM tracks WHERE file_id = ? AND album_id IS NOT NULL")
+        var albums: [Int64] = []
+        for id in ids {
+            for album in try albumOf.map(id, row: { try $0.int64(0) }) where !albums.contains(album)
+            {
+                albums.append(album)
+            }
+        }
+        let tracks = try statement(
+            """
+            SELECT a.title, ar.name, t.discogs_release_id
+            FROM tracks t JOIN albums a ON a.id = t.album_id
+            LEFT JOIN artists ar ON ar.id = a.artist_id
+            WHERE t.album_id = ?
+            """)
+        return try albums.compactMap { album in
+            let rows = try tracks.map(album) {
+                (title: try $0.text(0), artist: $0.optionalText(1), release: $0.optionalText(2))
+            }
+            guard let first = rows.first else { return nil }
+            let identity = profileIdentity(artist: first.artist, releases: rows.map(\.release))
+            return (first.title, identity.artist, identity.releaseID)
+        }
+    }
+
     /// Writes `libraryProfile()` to `url` as JSON, in place of any file there, and returns how
     /// many albums it holds. A link, or a file the index holds, at `url` is refused, so a slip
     /// in the save panel can't replace a music file or a file a link names (ADR 0025, row 76).

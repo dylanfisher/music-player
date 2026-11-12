@@ -251,7 +251,9 @@ let package = Package(
         ),
         .target(
             name: "Recommendations",
-            dependencies: ["DisplayText", "Library", "Recommender", "Settings", "WindowPlacement"],
+            dependencies: [
+                "Commands", "DisplayText", "Library", "Recommender", "Settings", "WindowPlacement",
+            ],
             path: "Sources/Features/Recommendations",
             swiftSettings: strictSwift
         ),

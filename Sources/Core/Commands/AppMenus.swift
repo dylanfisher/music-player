@@ -70,6 +70,7 @@ public enum AppMenus {
         .command(.showAlbum), .command(.showArtist), .command(.showInAllMusic),
         .command(.openDiscogsRelease), .command(.getDiscogsArtwork),
         .command(.combineForTagging), .command(.toggleNeverUpgrade), .separator,
+        .command(.recommendationsForAlbum), .command(.recommendationsForArtist), .separator,
         .command(.toggleLoved), .command(.toggleDisliked), .separator,
         .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
         .separator, .command(.editTags), .command(.showSpectrum), .command(.revealInFinder),
@@ -115,7 +116,8 @@ public enum AppMenus {
                     .command(.pauseScan), .command(.resumeScan),
                     .command(.showStats), .command(.showYearInReview),
                     .command(.showDiscogsTagger), .command(.showDownloads),
-                    .command(.showRecommendations), .command(.rescanNow),
+                    .command(.showRecommendations), .command(.recommendationsForAlbum),
+                    .command(.recommendationsForArtist), .command(.rescanNow),
                     .submenu(
                         "Moved and Removed Files",
                         [
