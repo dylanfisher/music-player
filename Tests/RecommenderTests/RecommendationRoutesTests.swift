@@ -16,7 +16,7 @@ private func everyFilter() -> RecommendationQuery.Filters {
 
 @Test func aListRequestSendsOnlyTheFieldsSet() async throws {
     let stub = try await StubService(
-        Array(repeating: (200, try fixture("recommendations.json")), count: 4))
+        Array(repeating: (200, try fixture("recommendations.json")), count: 6))
     defer { stub.stop() }
     let client = try stub.client
     _ = try await client.recommendations(RecommendationQuery(), offset: 0)
@@ -36,6 +36,9 @@ private func everyFilter() -> RecommendationQuery.Filters {
                 return f
             }()),
         offset: 0)
+    _ = try await client.recommendations(RecommendationQuery(sort: .wantHave), offset: 0)
+    _ = try await client.recommendations(
+        RecommendationQuery(show: .artists, sort: .rating), offset: 0)
     #expect(
         stub.requests.map(\.bodyText) == [
             #"{"limit":100,"list":"library","offset":0,"show":"albums"}"#,
@@ -44,6 +47,8 @@ private func everyFilter() -> RecommendationQuery.Filters {
                 + #""year_to":1999}"#,
             #"{"artist":"Made-Up Artist","limit":100,"list":"artist","offset":0,"show":"artists"}"#,
             #"{"limit":100,"list":"library","offset":0,"show":"albums","year_to":1999}"#,
+            #"{"limit":100,"list":"library","offset":0,"show":"albums","sort":"want_have"}"#,
+            #"{"limit":100,"list":"library","offset":0,"show":"artists"}"#,
         ])
     for request in stub.requests {
         #expect(request.head.hasPrefix("POST /v1/recommendations HTTP/1.1\r\n"))

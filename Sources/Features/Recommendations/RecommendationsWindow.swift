@@ -4,7 +4,8 @@ import DisplayText
 import Recommender
 import Settings
 
-/// The Recommendations window (ADR 0205): the list pop-up, the view and the albums' filters,
+/// The Recommendations window (ADR 0205): the list pop-up, the view, the albums' order and
+/// filters,
 /// a table of the rows, the selected row's reasons, what is pending or wrong, and the list's
 /// facts. It draws what it's given and reports what the user does; `Recommendations` does the
 /// rest.
@@ -17,6 +18,9 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     let listButton = NSPopUpButton()
     let viewControl = NSSegmentedControl(
         labels: ["Albums", "Artists"], trackingMode: .selectOne, target: nil, action: nil)
+    let sortButton = NSPopUpButton()
+    static let sortHelp =
+        "By a community value, highest first, among the first 300 albums by score."
     let missingBox = NSButton(checkboxWithTitle: "Missing", target: nil, action: nil)
     static let missingHelp =
         "Only albums by an artist of the list's albums: the library's artists for Library, the"
@@ -45,7 +49,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     private var seeds: [RecommendationQuery.Seed] = []
     private var action: (() -> Void)?
 
-    /// Hears a change of list, view or filter.
+    /// Hears a change of list, view, order or filter.
     var queryChosen: (RecommendationQuery) -> Void = { _ in }
     /// Hears Not Interested or Already Have on rows.
     var markChosen: ([RecommendationRow], FeedbackMark.Verdict) -> Void = { _, _ in }
@@ -85,6 +89,10 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         listButton.action = #selector(listChosen)
         viewControl.target = self
         viewControl.action = #selector(viewChosen)
+        sortButton.addItems(withTitles: RecommendationQuery.Sort.allCases.map(sortTitle))
+        sortButton.target = self
+        sortButton.action = #selector(sortChosen)
+        sortButton.toolTip = Self.sortHelp
         missingBox.target = self
         missingBox.action = #selector(filterEdited)
         missingBox.toolTip = Self.missingHelp
@@ -107,7 +115,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             field.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
         }
         let bar = NSStackView(views: [
-            listButton, viewControl, missingBox, stylesField,
+            listButton, viewControl, sortButton, missingBox, stylesField,
             NSTextField(labelWithString: "Years"), yearFromField, yearToField, labelsField,
         ])
         bar.spacing = 8
@@ -202,11 +210,15 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         if let index = seeds.firstIndex(of: query.seed) { listButton.selectItem(at: index) }
         viewControl.selectedSegment = query.show == .albums ? 0 : 1
         let albums = query.show == .albums
-        for control in [missingBox, stylesField, yearFromField, yearToField, labelsField] {
+        for control in [
+            sortButton, missingBox, stylesField, yearFromField, yearToField, labelsField,
+        ] {
             control.isEnabled = albums
         }
         if query != self.query {
             self.query = query
+            sortButton.selectItem(
+                at: RecommendationQuery.Sort.allCases.firstIndex(of: query.sort) ?? 0)
             missingBox.state = query.filters.missing ? .on : .off
             stylesField.objectValue = query.filters.styles
             yearFromField.stringValue = query.filters.yearFrom.map(String.init) ?? ""
@@ -305,6 +317,15 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     @objc private func viewChosen() {
         var chosen = query
         chosen.show = viewControl.selectedSegment == 0 ? .albums : .artists
+        queryChosen(chosen)
+    }
+
+    @objc private func sortChosen() {
+        let sorts = RecommendationQuery.Sort.allCases
+        let index = sortButton.indexOfSelectedItem
+        guard index >= 0, index < sorts.count, sorts[index] != query.sort else { return }
+        var chosen = query
+        chosen.sort = sorts[index]
         queryChosen(chosen)
     }
 

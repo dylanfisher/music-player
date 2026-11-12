@@ -27,19 +27,31 @@ package struct RecommendationQuery: Equatable, Hashable, Sendable {
         package init() {}
     }
 
+    /// The albums' order: by score, or by a community value, highest first, among the first
+    /// 300 albums by score. Not sent with `artists`, nor when it is `score`.
+    package enum Sort: String, CaseIterable, Equatable, Hashable, Sendable {
+        case score, rating, have, want
+        case wantHave = "want_have"
+    }
+
     package var seed: Seed
     package var show: Show
     package var filters: Filters
+    package var sort: Sort
 
-    package init(seed: Seed = .library, show: Show = .albums, filters: Filters = Filters()) {
+    package init(
+        seed: Seed = .library, show: Show = .albums, filters: Filters = Filters(),
+        sort: Sort = .score
+    ) {
         self.seed = seed
         self.show = show
         self.filters = filters
+        self.sort = sort
     }
 }
 
-/// The body of `/v1/recommendations`. The service refuses an unknown field and a filter with
-/// `show: artists`, so an unset one is left out rather than sent as `null`.
+/// The body of `/v1/recommendations`. The service refuses an unknown field, and a filter or
+/// `sort` with `show: artists`, so an unset one is left out rather than sent as `null`.
 struct RecommendationRequest: Encodable {
     var query: RecommendationQuery
     var offset: Int
@@ -57,6 +69,7 @@ struct RecommendationRequest: Encodable {
         case yearFrom = "year_from"
         case yearTo = "year_to"
         case labelIDs = "label_ids"
+        case sort
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -82,5 +95,6 @@ struct RecommendationRequest: Encodable {
         if !filters.labels.isEmpty {
             try container.encode(filters.labels.map(\.id), forKey: .labelIDs)
         }
+        if query.sort != .score { try container.encode(query.sort.rawValue, forKey: .sort) }
     }
 }

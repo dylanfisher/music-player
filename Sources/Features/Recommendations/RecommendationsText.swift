@@ -31,6 +31,17 @@ func seedTitle(_ seed: RecommendationQuery.Seed) -> String {
     }
 }
 
+/// The Sort pop-up's title for `sort`, named for its column.
+func sortTitle(_ sort: RecommendationQuery.Sort) -> String {
+    switch sort {
+    case .score: "By \(RecommendationColumn.score.title)"
+    case .rating: "By \(RecommendationColumn.rating.title)"
+    case .have: "By \(RecommendationColumn.have.title)"
+    case .want: "By \(RecommendationColumn.want.title)"
+    case .wantHave: "By Want per Have"
+    }
+}
+
 /// What the window says in place of the list, and what to do about it.
 func problemText(_ problem: ListProblem, seed: RecommendationQuery.Seed) -> String {
     switch problem {

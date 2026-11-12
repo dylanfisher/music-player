@@ -60,6 +60,12 @@ The owner answered the phase's five questions on 2026-11-11, each as recommended
   poll, and is empty for a job rejected or cancelled, which Downloads doesn't list, and for
   a job of another release of the same master.
 
+- **A Sort pop-up orders the albums,** By Score unless chosen, or By Rating, Have, Want or
+  Want per Have, the service's `sort`, which orders the first 300 albums by score by that
+  value. It is sent only when not by score, and, like the filters, never with Artists, which
+  the service refuses. A change of order reads the list again from offset 0. The table's
+  headers don't sort: a header click could only reorder the rows read so far.
+
 ## Alternatives considered
 
 - **A browser view.** Rejected: every source of the browser is a track table over the index,
