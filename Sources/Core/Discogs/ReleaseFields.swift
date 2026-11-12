@@ -59,7 +59,7 @@ struct ReleaseFields {
         case .releaseID: return .text(String(release.id))
         case .masterID: return text(release.masterID.map { "m\($0)" })
         case .releaseURL: return .text(releaseURL(release.id))
-        case .masterURL: return text(release.masterID.map { discogsURL("master", $0) })
+        case .masterURL: return text(release.masterID.map(masterURL))
         case .album: return text(release.title)
         case .albumArtist: return release.artists.isEmpty ? nil : .artists(release.artists)
         case .albumArtistURL: return list(artistURLs(release.artists))
@@ -152,11 +152,17 @@ struct ReleaseFields {
 /// Discogs use.
 func releaseURL(_ id: Int) -> String { discogsURL("release", id) }
 
+/// The Discogs page of master `id`: the master URL tag's and Open on Discogs's address.
+func masterURL(_ id: Int) -> String { discogsURL("master", id) }
+
 /// The Discogs page of release `id`, from `releaseURL`.
-public func discogsPage(_ id: Int) -> URL {
-    guard let url = URL(string: releaseURL(id)) else {
-        preconditionFailure("\(releaseURL(id)) isn't a URL")
-    }
+public func discogsPage(_ id: Int) -> URL { page(releaseURL(id)) }
+
+/// The Discogs page of master `id`, from `masterURL`.
+public func discogsMasterPage(_ id: Int) -> URL { page(masterURL(id)) }
+
+private func page(_ address: String) -> URL {
+    guard let url = URL(string: address) else { preconditionFailure("\(address) isn't a URL") }
     return url
 }
 

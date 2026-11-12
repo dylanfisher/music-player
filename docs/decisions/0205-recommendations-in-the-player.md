@@ -49,6 +49,10 @@ The owner answered the phase's five questions on 2026-11-11, each as recommended
   a package entry point over its queue, so the snapshot, the format policy and the errors stay
   in one place. Each row is a choice of its album's `release_id`, a master's main release; one
   with `release_id` `null` says so in the sheet.
+- **Open on Discogs opens the album's own page.** The button and a row's menu open the first
+  selected row's master page, or its release's for a release without a master, as Open
+  Discogs Release opens the first selected track's. That command's ⇧⌘D does the same while the
+  window is key, so the shortcut is declared once, in `AppCommands`.
 
 ## Alternatives considered
 

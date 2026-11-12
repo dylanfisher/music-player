@@ -25,6 +25,8 @@ public final class Recommendations {
     package var catalog: () -> URL? = { nil }
     /// Download…: queues the albums in Downloads' queue sheet.
     package var download: ([RecommendationPage.Album]) -> Void = { _ in }
+    /// Opens a Discogs page; tests record it instead.
+    var open: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
     private var sendingProfile = false
@@ -115,6 +117,7 @@ public final class Recommendations {
         made.markChosen = { [weak self] in self?.mark($0, $1) }
         made.showMarked = { [weak self] in self?.showMarked() }
         made.downloadChosen = { [weak self] in self?.download($0.map(\.album)) }
+        made.discogsChosen = { [weak self] in self?.open(discogsPage(of: $0.album)) }
         made.columnsResized = { [weak self] widths in
             self?.columnWidths = widths
             self?.columnWidthsChanged(widths)
@@ -125,6 +128,18 @@ public final class Recommendations {
         model.changed = { [weak self] in self?.redraw() }
         return made
     }
+
+    /// Whether `window` is the Recommendations window, where Open Discogs Release opens the
+    /// selected album's page.
+    public func isOwnWindow(_ window: NSWindow?) -> Bool {
+        window != nil && window === controller?.window
+    }
+
+    /// Whether the window has a row selected, for Open Discogs Release.
+    public var hasSelection: Bool { controller?.selectedRows.isEmpty == false }
+
+    /// Open Discogs Release while the window is key: the first selected album's page.
+    public func openSelectedOnDiscogs() { controller?.discogsClicked() }
 
     // MARK: - Marks
 
@@ -202,5 +217,13 @@ public final class Recommendations {
             rows: model.rows, query: model.query, seeds: model.seeds,
             pending: model.isReading, message: message, action: action,
             facts: model.facts.map(factsText))
+    }
+}
+
+/// The Discogs page of `album`: its master's, or its release's when it has no master.
+func discogsPage(of album: RecommendationPage.Album) -> URL {
+    switch album.kind {
+    case .master: discogsMasterPage(album.id)
+    case .release: discogsPage(album.id)
     }
 }

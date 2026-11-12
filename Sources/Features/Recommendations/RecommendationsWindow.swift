@@ -1,4 +1,5 @@
 import AppKit
+import Discogs
 import DisplayText
 import Recommender
 import Settings
@@ -30,6 +31,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     let alreadyHaveButton = NSButton(title: verdictTitle(.alreadyHave), target: nil, action: nil)
     let markedButton = NSButton(title: "Marked…", target: nil, action: nil)
     let downloadButton = NSButton(title: "Download…", target: nil, action: nil)
+    let discogsButton = NSButton(title: openOnDiscogsTitle, target: nil, action: nil)
     let detailLabel = NSTextField(wrappingLabelWithString: "")
     let progress = NSProgressIndicator()
     let messageLabel = NSTextField(wrappingLabelWithString: "")
@@ -47,6 +49,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     var markChosen: ([RecommendationRow], FeedbackMark.Verdict) -> Void = { _, _ in }
     /// Hears Download… on rows.
     var downloadChosen: ([RecommendationRow]) -> Void = { _ in }
+    /// Hears Open on Discogs on a row.
+    var discogsChosen: (RecommendationRow) -> Void = { _ in }
     /// Hears Marked… clicked.
     var showMarked: () -> Void = {}
     /// The row selected when a mark took rows out, selected again as the rows come back.
@@ -113,11 +117,17 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         markedButton.toolTip = "Every album marked, to remove a mark."
         downloadButton.action = #selector(downloadClicked)
         downloadButton.toolTip = "Queue the selected albums in Downloads."
+        discogsButton.action = #selector(discogsClicked)
+        discogsButton.toolTip = "Open the first selected album's page on Discogs."
+        let buttons = [
+            notInterestedButton, alreadyHaveButton, downloadButton, discogsButton, markedButton,
+        ]
         let actions = NSStackView(views: [
-            notInterestedButton, alreadyHaveButton, downloadButton, NSView(), markedButton,
+            notInterestedButton, alreadyHaveButton, downloadButton, discogsButton, NSView(),
+            markedButton,
         ])
         actions.spacing = 8
-        for button in [notInterestedButton, alreadyHaveButton, downloadButton, markedButton] {
+        for button in buttons {
             button.bezelStyle = .rounded
             button.target = self
         }
@@ -216,7 +226,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     private func showDetail() {
         let row = table.selectedRow
         detailLabel.stringValue = row >= 0 && row < rows.count ? reasonsText(rows[row].album) : ""
-        for button in [notInterestedButton, alreadyHaveButton, downloadButton] {
+        for button in [notInterestedButton, alreadyHaveButton, downloadButton, discogsButton] {
             button.isEnabled = !selectedRows.isEmpty
         }
     }
@@ -247,6 +257,17 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     @objc private func downloadClicked() {
         let chosen = selectedRows
         if !chosen.isEmpty { downloadChosen(chosen) }
+    }
+
+    /// Open on Discogs: the first selected row's page, as Open Discogs Release opens the
+    /// first selected track's.
+    @objc func discogsClicked() {
+        if let first = selectedRows.first { discogsChosen(first) }
+    }
+
+    @objc private func discogsMenuChosen(_ sender: NSMenuItem) {
+        guard let clicked = sender.representedObject as? Int, clicked < rows.count else { return }
+        discogsChosen(rows[clicked])
     }
 
     @objc private func downloadMenuChosen(_ sender: NSMenuItem) {
@@ -346,6 +367,11 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         download.target = self
         download.representedObject = clicked
         menu.addItem(download)
+        let discogs = NSMenuItem(
+            title: discogsButton.title, action: #selector(discogsMenuChosen), keyEquivalent: "")
+        discogs.target = self
+        discogs.representedObject = clicked
+        menu.addItem(discogs)
         guard query.show == .albums else { return }
         menu.addItem(.separator())
         let album = rows[clicked].album

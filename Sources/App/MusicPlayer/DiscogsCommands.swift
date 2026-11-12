@@ -17,10 +17,23 @@ extension AppDelegate {
         dispatcher.handle(
             .showDiscogsTagger, enabled: { [weak self] in self?.window != nil },
             run: { [weak self] in self?.discogsTaggerController()?.show() })
+        // The Recommendations window's selected album while that window is key, else the
+        // selected track's release.
         dispatcher.handle(
-            .openDiscogsRelease, enabled: hasSelectedTracks,
+            .openDiscogsRelease,
+            enabled: { [weak self] in
+                guard let self else { return false }
+                if recommendations.isOwnWindow(NSApp.keyWindow) {
+                    return recommendations.hasSelection
+                }
+                return hasSelectedTracks()
+            },
             run: { [weak self] in
-                self?.browser?.openSelectedRelease { NSWorkspace.shared.open(discogsPage($0)) }
+                guard let self else { return }
+                if recommendations.isOwnWindow(NSApp.keyWindow) {
+                    return recommendations.openSelectedOnDiscogs()
+                }
+                browser?.openSelectedRelease { NSWorkspace.shared.open(discogsPage($0)) }
             })
         dispatcher.handle(
             .getDiscogsArtwork, enabled: hasSelectedTracks,
