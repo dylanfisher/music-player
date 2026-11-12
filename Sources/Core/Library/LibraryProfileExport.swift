@@ -3,10 +3,9 @@ import Foundation
 import Recommender
 
 extension LibraryIndex {
-    /// Every album as music-recommender's profile has it, read from the index alone (ADR 0198).
-    /// An album's artist is its album artist, else its track artist, else `variousArtists`; its
-    /// release id is the one every track carries, as a positive number, as ADR 0129 matches an
-    /// album, else none. Tracks without an album aren't in an album to send.
+    /// Every album as music-recommender's profile has it, read from the index alone (ADR 0198),
+    /// its artist and release id by `profileIdentity`. Tracks without an album aren't in an
+    /// album to send.
     func libraryProfile() throws -> LibraryProfile {
         let rows = try database.prepare(
             """
@@ -37,15 +36,14 @@ extension LibraryIndex {
             let tracks = rows[start..<end]
             start = end
             let first = tracks[tracks.startIndex]
-            let releases = Set(tracks.map(\.release))
-            let release = releases.count == 1 ? releases.first?.flatMap { Int($0) } : nil
+            let identity = profileIdentity(artist: first.artist, releases: tracks.map(\.release))
             albums.append(
                 LibraryProfile.Album(
-                    artist: first.artist ?? variousArtists, title: first.title,
+                    artist: identity.artist, title: first.title,
                     durations: tracks.map(\.seconds),
                     catalogNumbers: distinct(tracks.compactMap(\.catalogNumber)),
                     barcodes: distinct(tracks.compactMap(\.barcode)),
-                    discogsReleaseID: release.flatMap { $0 > 0 ? $0 : nil },
+                    discogsReleaseID: identity.releaseID,
                     plays: tracks.map(\.plays).reduce(0, +),
                     loved: tracks.filter(\.loved).count))
         }
@@ -84,6 +82,16 @@ enum ProfileDestinationRefusal: Error, Equatable, CustomStringConvertible {
         case .indexed(let path): "\(path) is in the library, so the profile isn't written over it"
         }
     }
+}
+
+/// An album's artist and release id as the profile sends them, so a seed asked for from the
+/// selection names what the service has. The artist is the album's (its album artist, else its
+/// track artist), else `variousArtists`; the release id is the one every track carries, as a
+/// positive number, as ADR 0129 matches an album, else none. `releases` holds each track's tag.
+func profileIdentity(artist: String?, releases: [String?]) -> (artist: String, releaseID: Int?) {
+    let distinct = Set(releases)
+    let release = distinct.count == 1 ? distinct.first?.flatMap { Int($0) } : nil
+    return (artist ?? variousArtists, release.flatMap { $0 > 0 ? $0 : nil })
 }
 
 /// `values` without repeats, in their first order.
