@@ -4,16 +4,16 @@ import StrictKeys
 /// artists (`docs/api.md` there, section Recommendations). Every field is always there, an
 /// absent value `null`; a value of a kind or status this player doesn't know fails the reply,
 /// naming the field, so it is shown rather than skipped.
-struct RecommendationPage: Equatable, Sendable, Decodable {
+package struct RecommendationPage: Equatable, Sendable, Decodable {
     /// What the list was scored from.
-    struct Facts: Equatable, Sendable, Decodable {
+    package struct Facts: Equatable, Sendable, Decodable {
         /// The dumps' set, `YYYYMMDD`.
-        var catalogSet: String
-        var computedAt: Int
+        package var catalogSet: String
+        package var computedAt: Int
         /// The profile's albums it was scored from.
-        var seeds: Int
+        package var seeds: Int
         /// The albums it holds before the filters and the caps.
-        var candidates: Int
+        package var candidates: Int
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case catalogSet = "catalog_set"
@@ -23,9 +23,9 @@ struct RecommendationPage: Equatable, Sendable, Decodable {
     }
 
     /// An artist, label or style by id and name, the name nil when the catalog has none.
-    struct Named: Equatable, Hashable, Sendable, Decodable {
-        var id: Int
-        var name: String?
+    package struct Named: Equatable, Hashable, Sendable, Decodable {
+        package var id: Int
+        package var name: String?
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case id, name
@@ -34,8 +34,8 @@ struct RecommendationPage: Equatable, Sendable, Decodable {
 
     /// A connection of the album to the library. The fields its `kind` doesn't use are nil or
     /// empty.
-    struct Reason: Equatable, Sendable, Decodable {
-        enum Kind: String, Equatable, Sendable, Decodable {
+    package struct Reason: Equatable, Sendable, Decodable {
+        package enum Kind: String, Equatable, Sendable, Decodable {
             case artist, credit, label, related, styles
         }
 
@@ -43,19 +43,19 @@ struct RecommendationPage: Equatable, Sendable, Decodable {
             case alias, member, group
         }
 
-        var kind: Kind
+        package var kind: Kind
         /// For showing, not for parsing.
-        var words: String
-        var weight: Double
-        var artist: Named?
-        var role: String?
+        package var words: String
+        package var weight: Double
+        package var artist: Named?
+        package var role: String?
         var seedRoles: [String]
-        var label: Named?
+        package var label: Named?
         var via: Named?
         var relation: Relation?
-        var of: Named?
-        var albums: Int?
-        var styles: [Named]
+        package var of: Named?
+        package var albums: Int?
+        package var styles: [Named]
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case kind, words, weight, artist, role
@@ -64,25 +64,25 @@ struct RecommendationPage: Equatable, Sendable, Decodable {
         }
     }
 
-    struct Album: Equatable, Sendable, Decodable {
+    package struct Album: Equatable, Sendable, Decodable {
         /// `master` and its master id, or `release` and its id for a release without a master:
         /// what a mark takes.
-        var kind: AlbumKind
-        var id: Int
+        package var kind: AlbumKind
+        package var id: Int
         /// The release that stands for the album, whose community values these are; nil when
         /// the catalog has no row for the master.
-        var releaseID: Int?
+        package var releaseID: Int?
         /// Its place in the whole list by score, before the filters and the caps.
-        var rank: Int
-        var score: Double
-        var artists: [Named]
-        var title: String
-        var year: Int?
-        var label: Named?
-        var styles: [Named]
-        var community: CommunityValues?
+        package var rank: Int
+        package var score: Double
+        package var artists: [Named]
+        package var title: String
+        package var year: Int?
+        package var label: Named?
+        package var styles: [Named]
+        package var community: CommunityValues?
         /// Up to 3, strongest first.
-        var reasons: [Reason]
+        package var reasons: [Reason]
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case kind, id
@@ -91,27 +91,27 @@ struct RecommendationPage: Equatable, Sendable, Decodable {
         }
     }
 
-    struct Artist: Equatable, Sendable, Decodable {
-        var rank: Int
-        var id: Int
-        var name: String?
-        var score: Double
+    package struct Artist: Equatable, Sendable, Decodable {
+        package var rank: Int
+        package var id: Int
+        package var name: String?
+        package var score: Double
         /// The albums its score counts, 1 to 3.
-        var albums: Int
-        var best: Album
+        package var albums: Int
+        package var best: Album
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case rank, id, name, score, albums, best
         }
     }
 
-    var list: Facts
+    package var list: Facts
     /// With `show: albums`; nil with artists.
-    var albums: [Album]?
+    package var albums: [Album]?
     /// With `show: artists`; nil with albums.
-    var artists: [Artist]?
+    package var artists: [Artist]?
     /// Whether the list goes on past this page.
-    var more: Bool
+    package var more: Bool
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case ok, list, albums, artists, more

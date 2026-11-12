@@ -6,7 +6,7 @@ import StrictKeys
 /// branch on `code`; `message` is for a person. The other fields come with the codes the
 /// contract lists them for.
 package struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConvertible {
-    enum Code: String, Equatable, Sendable, Decodable {
+    package enum Code: String, Equatable, Sendable, Decodable {
         /// The service's config has no downloads tables.
         case downloadsOff = "downloads_off"
         /// A job for the release that isn't terminal exists: `jobID`.
@@ -31,15 +31,15 @@ package struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConve
         case noSeed = "no_seed"
     }
 
-    var code: Code
-    var message: String
+    package var code: Code
+    package var message: String
     var jobID: Int? = nil
     /// For `illegalTransition`, the job's state.
     package var state: String? = nil
     var machine: String? = nil
     var expiresAt: Int? = nil
     /// For `outOfDate`, whether the list is being scored again.
-    var rebuilding: Bool? = nil
+    package var rebuilding: Bool? = nil
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case code, message

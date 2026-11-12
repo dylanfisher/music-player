@@ -107,6 +107,10 @@ public struct AppState: SettingsSchema {
     public let downloadsColumns = Setting(
         "downloads.columns", title: "Downloads Columns", default: ColumnWidths(),
         "The Downloads window's column widths, by column. A column not listed has its own.")
+    public let recommendationsColumns = Setting(
+        "recommendations.columns", title: "Recommendations Columns", default: ColumnWidths(),
+        "The Recommendations window's column widths, by column. A column not listed has its"
+            + " own.")
     public let taggerSource = Setting<DiscogsSource?>(
         "discogsTagger.source", title: "Discogs Tagger Source", default: nil,
         "Where the Discogs tagger last looked releases up on this Mac. Null asks the catalog"

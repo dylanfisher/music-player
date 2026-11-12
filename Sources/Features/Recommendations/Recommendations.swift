@@ -2,6 +2,8 @@ import AppKit
 import DisplayText
 import Library
 import Recommender
+import Settings
+import WindowPlacement
 
 /// music-recommender's lists of albums the library doesn't have (phase 86, ADR 0205), and
 /// Send Library Profile to Service, which sends the profile only when asked.
@@ -18,6 +20,13 @@ public final class Recommendations {
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
     private var sendingProfile = false
+    /// The window's column widths, as the state file keeps them.
+    public var columnWidths = ColumnWidths()
+    public var columnWidthsChanged: (ColumnWidths) -> Void = { _ in }
+    private(set) lazy var model = RecommendationsModel(service: { [weak self] in
+        self?.service()
+    })
+    private(set) var controller: RecommendationsWindow?
 
     /// `databaseURL` is the library index the profile is read from.
     public init(databaseURL: URL) {
@@ -47,5 +56,57 @@ public final class Recommendations {
                 report(terminalSafe("couldn't send the library profile: \(error)"))
             }
         }
+    }
+
+    // MARK: - The window
+
+    /// File > Recommendations…: shows the window, making it the first time, where it was left,
+    /// and reads its list unless it has one.
+    public func show() {
+        let controller = controller ?? makeWindow()
+        controller.showWindow(nil)
+        if model.rows.isEmpty, !model.isReading { model.show(model.query) }
+    }
+
+    private func makeWindow() -> RecommendationsWindow {
+        let made = RecommendationsWindow()
+        controller = made
+        made.window?.keepsFrame(as: RecommendationsWindow.title)
+        made.keepWidths(columnWidths)
+        made.queryChosen = { [weak self] in self?.model.show($0) }
+        made.reachedEnd = { [weak self] in self?.model.readMore() }
+        made.columnsResized = { [weak self] widths in
+            self?.columnWidths = widths
+            self?.columnWidthsChanged(widths)
+        }
+        made.visibilityChanged = { [weak self] open in
+            if !open { self?.model.stop() }
+        }
+        model.changed = { [weak self] in self?.redraw() }
+        return made
+    }
+
+    private func redraw() {
+        guard let controller else { return }
+        let model = model
+        let seed = model.query.seed
+        var message = model.isReading ? pendingText(seed) : nil
+        var action: (title: String, run: () -> Void)?
+        if let problem = model.problem {
+            message = problemText(problem, seed: seed)
+            switch problem {
+            case .refused(let refusal) where refusal.code == .noProfile:
+                action = ("Send Library Profile", { [weak self] in self?.sendProfile() })
+            case .busy, .failed:
+                action = ("Try Again", { [weak self] in self?.model.readAgain(through: 0) })
+            default: break
+            }
+        } else if !model.isReading, model.rows.isEmpty {
+            message = "The list has no albums these filters keep."
+        }
+        controller.show(
+            rows: model.rows, query: model.query, seeds: model.seeds,
+            pending: model.isReading, message: message, action: action,
+            facts: model.facts.map(factsText))
     }
 }

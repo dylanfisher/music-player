@@ -14,6 +14,9 @@ extension AppDelegate {
             guard let self, window != nil, let settings else { return false }
             return downloadsAreSet(settings)
         }
+        dispatcher.handle(.showRecommendations, enabled: hasWindow) { [weak self] in
+            self?.recommendations.show()
+        }
         dispatcher.handle(.sendLibraryProfile, enabled: serviceIsSet) { [weak self] in
             self?.recommendations.sendProfile()
         }
@@ -25,6 +28,10 @@ extension AppDelegate {
         recommendations.service = { [weak self] in self?.recommendationsService() }
         recommendations.say = { [weak self] in self?.browser?.show(failure: $0) }
         recommendations.report = { [weak self] in self?.browser?.report($0) }
+        if let state { recommendations.columnWidths = state[\.recommendationsColumns] }
+        recommendations.columnWidthsChanged = { [weak self] in
+            self?.saver?.set(\.recommendationsColumns, $0)
+        }
         return recommendations
     }
 

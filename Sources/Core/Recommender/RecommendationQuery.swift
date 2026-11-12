@@ -1,8 +1,8 @@
 /// Which of the service's lists to read, how, and through which filters: everything a request
 /// to `/v1/recommendations` says but the page.
-struct RecommendationQuery: Equatable, Hashable, Sendable {
+package struct RecommendationQuery: Equatable, Hashable, Sendable {
     /// The list: the whole library's, or one seed's.
-    enum Seed: Equatable, Hashable, Sendable {
+    package enum Seed: Equatable, Hashable, Sendable {
         case library
         /// The seed album, by the Discogs release it is tagged with.
         case album(releaseID: Int, title: String)
@@ -10,28 +10,28 @@ struct RecommendationQuery: Equatable, Hashable, Sendable {
         case artist(String)
     }
 
-    enum Show: String, Equatable, Hashable, Sendable {
+    package enum Show: String, Equatable, Hashable, Sendable {
         case albums, artists
     }
 
     /// The albums' filters, together keeping what each keeps. None is sent with `artists`.
-    struct Filters: Equatable, Hashable, Sendable {
+    package struct Filters: Equatable, Hashable, Sendable {
         /// Only albums by an artist of the list's albums.
-        var missing = false
+        package var missing = false
         /// Discogs style names; any of them keeps an album.
-        var styles: [String] = []
-        var yearFrom: Int? = nil
-        var yearTo: Int? = nil
-        var labels: [RecommendationPage.Named] = []
+        package var styles: [String] = []
+        package var yearFrom: Int? = nil
+        package var yearTo: Int? = nil
+        package var labels: [RecommendationPage.Named] = []
 
-        init() {}
+        package init() {}
     }
 
-    var seed: Seed
-    var show: Show
-    var filters: Filters
+    package var seed: Seed
+    package var show: Show
+    package var filters: Filters
 
-    init(seed: Seed = .library, show: Show = .albums, filters: Filters = Filters()) {
+    package init(seed: Seed = .library, show: Show = .albums, filters: Filters = Filters()) {
         self.seed = seed
         self.show = show
         self.filters = filters

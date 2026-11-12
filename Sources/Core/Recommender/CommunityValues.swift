@@ -4,8 +4,8 @@ import StrictKeys
 /// votes, have, want and what is for sale (`docs/api.md` there, section Community values).
 /// A recommended album carries its row; a later library column can read the same row from
 /// `/v1/community`.
-struct CommunityValues: Equatable, Sendable, Decodable {
-    enum Status: String, Equatable, Sendable, Decodable {
+package struct CommunityValues: Equatable, Sendable, Decodable {
+    package enum Status: String, Equatable, Sendable, Decodable {
         /// The sync has its values.
         case fetched
         /// In the sync's queue and not fetched yet.
@@ -18,13 +18,13 @@ struct CommunityValues: Equatable, Sendable, Decodable {
         case notQueued = "not_queued"
     }
 
-    struct Values: Equatable, Sendable, Decodable {
-        var ratingAverage: Double
-        var ratingCount: Int
-        var have: Int
-        var want: Int
-        var numForSale: Int?
-        var lowestPrice: Double?
+    package struct Values: Equatable, Sendable, Decodable {
+        package var ratingAverage: Double
+        package var ratingCount: Int
+        package var have: Int
+        package var want: Int
+        package var numForSale: Int?
+        package var lowestPrice: Double?
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case ratingAverage = "rating_average"
@@ -46,7 +46,7 @@ struct CommunityValues: Equatable, Sendable, Decodable {
             self.lowestPrice = lowestPrice
         }
 
-        init(from decoder: any Decoder) throws {
+        package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             ratingAverage = try container.decode(Double.self, forKey: .ratingAverage)
             ratingCount = try container.decode(Int.self, forKey: .ratingCount)
@@ -57,10 +57,10 @@ struct CommunityValues: Equatable, Sendable, Decodable {
         }
     }
 
-    var releaseID: Int
-    var status: Status
-    var checkedAt: Int?
-    var values: Values?
+    package var releaseID: Int
+    package var status: Status
+    package var checkedAt: Int?
+    package var values: Values?
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case releaseID = "release_id"
@@ -76,7 +76,7 @@ struct CommunityValues: Equatable, Sendable, Decodable {
         self.values = values
     }
 
-    init(from decoder: any Decoder) throws {
+    package init(from decoder: any Decoder) throws {
         let container = try strictContainer(decoder, CodingKeys.self)
         releaseID = try container.decode(Int.self, forKey: .releaseID)
         status = try container.decode(Status.self, forKey: .status)

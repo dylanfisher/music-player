@@ -114,7 +114,8 @@ public enum AppMenus {
                     .command(.analyzeLibrary), .command(.pauseLibraryAnalysis),
                     .command(.pauseScan), .command(.resumeScan),
                     .command(.showStats), .command(.showYearInReview),
-                    .command(.showDiscogsTagger), .command(.showDownloads), .command(.rescanNow),
+                    .command(.showDiscogsTagger), .command(.showDownloads),
+                    .command(.showRecommendations), .command(.rescanNow),
                     .submenu(
                         "Moved and Removed Files",
                         [

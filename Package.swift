@@ -251,7 +251,7 @@ let package = Package(
         ),
         .target(
             name: "Recommendations",
-            dependencies: ["DisplayText", "Library", "Recommender"],
+            dependencies: ["DisplayText", "Library", "Recommender", "Settings", "WindowPlacement"],
             path: "Sources/Features/Recommendations",
             swiftSettings: strictSwift
         ),
@@ -433,7 +433,7 @@ let package = Package(
         ),
         .testTarget(
             name: "RecommendationsTests",
-            dependencies: ["Recommendations", "Recommender"],
+            dependencies: ["Recommendations", "Recommender", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(
