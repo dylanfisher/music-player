@@ -1,0 +1,18 @@
+{"ok": true,
+ "list": {"catalog_set": "20261001", "computed_at": 1800000000, "seeds": 3950,
+          "candidates": 848755},
+ "albums": [
+  {"kind": "release", "id": 2003, "release_id": 2003, "rank": 4, "score": 0.81,
+   "artists": [{"id": 23, "name": "Gus Other"}], "title": "Produced Album", "year": 2001,
+   "label": {"id": 30, "name": "Seed Records"},
+   "styles": [{"id": 2, "name": "Made-Up Common"}],
+   "community": {"release_id": 2003, "status": "fetched", "checked_at": 1794060000,
+                 "values": {"rating_average": 4.25, "rating_count": 87, "have": 1203,
+                            "want": 340, "num_for_sale": 12, "lowest_price": null}},
+   "reasons": [
+    {"kind": "credit", "words": "Producer: Dee Producer, Producer on 1 album you have",
+     "weight": 1.5, "artist": {"id": 21, "name": "Dee Producer"}, "role": "Producer",
+     "seed_roles": ["Producer"], "label": null, "via": null, "relation": null, "of": null,
+     "albums": 1, "styles": []}]}],
+ "artists": null,
+ "more": true}

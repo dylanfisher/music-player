@@ -41,9 +41,11 @@ package struct RecommenderClient: Sendable {
     }
 
     /// Posts `body` to `path` and decodes the reply as `Reply`, or as the refusal the service
-    /// gave. Any status but 200 is an error, read with its body for the code.
+    /// gave. Any status but 200 is an error, read with its body for the code. `timeoutSeconds`
+    /// is the whole exchange's; only a route that computes before it answers takes longer.
     func call<Request: Encodable, Reply: Decodable>(
-        _ path: String, body: Request, as _: Reply.Type
+        _ path: String, body: Request, as _: Reply.Type,
+        timeoutSeconds: Double = LocalHTTPClient.timeoutSeconds
     ) async throws(RecommenderError) -> Reply {
         let url = url(path)
         let fail = { (kind: RecommenderError.Kind) in
@@ -62,7 +64,7 @@ package struct RecommenderClient: Sendable {
                 fields: [
                     ("Content-Type", "application/json"),
                     ("Authorization", "Bearer \(token.secret)"),
-                ], body: bytes, keepingRefusals: true)
+                ], body: bytes, timeoutSeconds: timeoutSeconds, keepingRefusals: true)
         } catch {
             throw fail(RecommenderError.Kind(error))
         }

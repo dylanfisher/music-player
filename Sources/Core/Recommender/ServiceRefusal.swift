@@ -18,6 +18,17 @@ package struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConve
         case claimed
         /// No one holds the claim or lease the event needs; this machine takes it first.
         case notClaimed = "not_claimed"
+        /// No catalog has been imported, or it is from another version of the service.
+        case noCatalog = "no_catalog"
+        /// No profile has been sent.
+        case noProfile = "no_profile"
+        /// The whole library's list hasn't been scored yet.
+        case noList = "no_list"
+        /// The whole library's list was scored from another catalog or profile; `rebuilding`
+        /// says whether it is being scored again now.
+        case outOfDate = "out_of_date"
+        /// No album of the profile is the seed, or the catalog doesn't have its release.
+        case noSeed = "no_seed"
     }
 
     var code: Code
@@ -27,12 +38,15 @@ package struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConve
     package var state: String? = nil
     var machine: String? = nil
     var expiresAt: Int? = nil
+    /// For `outOfDate`, whether the list is being scored again.
+    var rebuilding: Bool? = nil
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case code, message
         case jobID = "job_id"
         case state, machine
         case expiresAt = "expires_at"
+        case rebuilding
     }
 
     init(code: Code, message: String) {
@@ -48,6 +62,7 @@ package struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConve
         state = try container.decodeIfPresent(String.self, forKey: .state)
         machine = try container.decodeIfPresent(String.self, forKey: .machine)
         expiresAt = try container.decodeIfPresent(Int.self, forKey: .expiresAt)
+        rebuilding = try container.decodeIfPresent(Bool.self, forKey: .rebuilding)
     }
 
     package var description: String { "\(code.rawValue): \(terminalSafe(message))" }
