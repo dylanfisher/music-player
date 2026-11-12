@@ -84,18 +84,6 @@ package final class Downloads {
         }
     }
 
-    /// The service's own limit on a machine's name.
-    nonisolated static let machineNameCap = 64
-
-    /// This Mac's name for leases and claims: the ID the library index names its sync log by,
-    /// which is the same on every launch and on no other Mac. Reads the index off the calling
-    /// thread.
-    package nonisolated static func machineName(databaseURL: URL) async throws -> String {
-        try await blockingFileWork {
-            Result { String(try LibraryIndex(at: databaseURL).machineID().prefix(machineNameCap)) }
-        }.get()
-    }
-
     /// What the window says while the service isn't set.
     static let notSet =
         "music-recommender isn't set up on this Mac. Set its address in Settings > General, and"
@@ -143,6 +131,9 @@ package final class Downloads {
     /// saves them as a column is resized.
     package var columnWidths = ColumnWidths()
     package var columnWidthsChanged: (ColumnWidths) -> Void = { _ in }
+    /// Hears each release's newest job's state, by release id, after anything shown changes,
+    /// and none once polling stops: the Recommendations window's Download column.
+    package var releaseStatesChanged: ([Int: String]) -> Void = { _ in }
 
     /// Shows files in the Finder, and opens a web page; tests stand in for both.
     var showInFinder: ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
@@ -492,6 +483,7 @@ package final class Downloads {
     /// `opening`, just before it shows, so it opens on the rows as they are.
     private func refresh(opening: Bool = false) {
         showStatus()
+        releaseStatesChanged(session?.model.releaseStates ?? [:])
         guard let controller, opening || controller.window?.isVisible == true else { return }
         defer { offerSelection() }
         controller.showSlskd(session?.slskdPage)

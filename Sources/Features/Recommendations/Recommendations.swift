@@ -29,6 +29,8 @@ public final class Recommendations {
     var open: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
+    /// The state of each release's newest download job, by release id, from Downloads.
+    private var downloads: [Int: String] = [:]
     private var sendingProfile = false
     /// The window's column widths, as the state file keeps them.
     public var columnWidths = ColumnWidths()
@@ -97,6 +99,12 @@ public final class Recommendations {
         }
     }
 
+    /// Shows the states of Downloads' jobs, by release id, in the Download column.
+    package func show(downloads: [Int: String]) {
+        self.downloads = downloads
+        controller?.show(downloads: downloads)
+    }
+
     // MARK: - The window
 
     /// File > Recommendations…: shows the window, making it the first time, where it was left,
@@ -112,6 +120,7 @@ public final class Recommendations {
         controller = made
         made.window?.keepsFrame(as: RecommendationsWindow.title)
         made.keepWidths(columnWidths)
+        made.show(downloads: downloads)
         made.queryChosen = { [weak self] in self?.model.show($0) }
         made.reachedEnd = { [weak self] in self?.model.readMore() }
         made.markChosen = { [weak self] in self?.mark($0, $1) }

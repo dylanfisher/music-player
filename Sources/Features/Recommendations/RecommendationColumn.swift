@@ -5,9 +5,11 @@ import Recommender
 import Settings
 
 /// A column of the Recommendations window's table, and its text for a row. On the Artists
-/// view, Artist, Albums and Score are the artist's and the rest its best album's.
+/// view, Artist, Albums and Score are the artist's and the rest its best album's. Download is
+/// the state of the newest download job of the album's release, from Downloads.
 enum RecommendationColumn: String, CaseIterable {
-    case rank, artist, albums, title, year, label, styles, rating, have, want, why, score
+    case rank, artist, albums, title, year, label, styles, rating, have, want, download, why
+    case score
     case forSale, lowestPrice
 
     var title: String {
@@ -22,6 +24,7 @@ enum RecommendationColumn: String, CaseIterable {
         case .rating: "Rating"
         case .have: "Have"
         case .want: "Want"
+        case .download: "Download"
         case .why: "Why"
         case .score: "Score"
         case .forSale: "For Sale"
@@ -32,7 +35,7 @@ enum RecommendationColumn: String, CaseIterable {
     var width: Double {
         switch self {
         case .artist, .title: 180
-        case .label, .styles: 140
+        case .label, .styles, .download: 140
         case .why: 320
         case .rating: 80
         case .rank, .albums, .year, .have, .want, .score, .forSale, .lowestPrice: 60
@@ -45,7 +48,8 @@ enum RecommendationColumn: String, CaseIterable {
     /// Whether the column has anything to show on `show`'s view.
     func applies(to show: RecommendationQuery.Show) -> Bool { self != .albums || show == .artists }
 
-    func text(_ row: RecommendationRow) -> String {
+    /// `download` is the state of the newest job of the row's album's release, nil for none.
+    func text(_ row: RecommendationRow, download: String?) -> String {
         let album = row.album
         let values = album.community?.values
         switch self {
@@ -62,6 +66,7 @@ enum RecommendationColumn: String, CaseIterable {
         case .rating: return ratingText(album.community)
         case .have: return values.map { number($0.have) } ?? ""
         case .want: return values.map { number($0.want) } ?? ""
+        case .download: return download ?? ""
         case .why: return album.reasons.first.map { terminalSafe($0.words) } ?? ""
         case .score: return String(format: "%.2f", row.artist?.score ?? album.score)
         case .forSale: return values?.numForSale.map(number) ?? ""

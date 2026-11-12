@@ -40,6 +40,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     /// The rows shown, in the list's order.
     private(set) var rows: [RecommendationRow] = []
     private(set) var query = RecommendationQuery()
+    /// The state of each release's newest download job, by release id.
+    private(set) var downloads: [Int: String] = [:]
     private var seeds: [RecommendationQuery.Seed] = []
     private var action: (() -> Void)?
 
@@ -173,6 +175,16 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         }
         scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
         window.contentView = page
+    }
+
+    /// Shows the states of the download jobs, by release id, in the Download column.
+    func show(downloads: [Int: String]) {
+        guard downloads != self.downloads else { return }
+        self.downloads = downloads
+        let column = table.column(
+            withIdentifier: NSUserInterfaceItemIdentifier(RecommendationColumn.download.rawValue))
+        table.reloadData(
+            forRowIndexes: IndexSet(integersIn: 0..<rows.count), columnIndexes: [column])
     }
 
     /// Shows the list: `rows` of `query`, the pop-up's `seeds`, `message` with a spinner while
@@ -406,9 +418,12 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             })
         else { return nil }
         if row == rows.count - 1 { reachedEnd() }
-        let label = NSTextField(labelWithString: column.text(rows[row]))
+        let album = rows[row].album
+        let label = NSTextField(
+            labelWithString: column.text(
+                rows[row], download: album.releaseID.flatMap { downloads[$0] }))
         label.lineBreakMode = .byTruncatingTail
-        label.toolTip = column == .why ? reasonsText(rows[row].album) : label.stringValue
+        label.toolTip = column == .why ? reasonsText(album) : label.stringValue
         return label
     }
 

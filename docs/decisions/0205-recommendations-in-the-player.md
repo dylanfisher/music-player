@@ -54,6 +54,12 @@ The owner answered the phase's five questions on 2026-11-11, each as recommended
   Discogs Release opens the first selected track's. That command's ⇧⌘D does the same while the
   window is key, so the shortcut is declared once, in `AppCommands`.
 
+- **A Download column says where each album's download is.** It shows the state of the
+  newest job Downloads lists for the album's `release_id`, in the words of the Downloads
+  window's State column, whichever way the job was queued. It is as current as Downloads'
+  poll, and is empty for a job rejected or cancelled, which Downloads doesn't list, and for
+  a job of another release of the same master.
+
 ## Alternatives considered
 
 - **A browser view.** Rejected: every source of the browser is a track table over the index,

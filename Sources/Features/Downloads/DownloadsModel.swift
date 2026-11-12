@@ -246,6 +246,21 @@ final class DownloadsModel {
     /// The job a row shows.
     func job(_ id: Int) -> DownloadJob? { jobs.rows[id] }
 
+    /// Each release's newest job's state in words, by release id, for the Recommendations
+    /// window's Download column.
+    var releaseStates: [Int: String] { Self.releaseStates(rows) }
+
+    nonisolated static func releaseStates(_ rows: [DownloadRow]) -> [Int: String] {
+        var newest: [Int: DownloadRow] = [:]
+        for row in rows {
+            if let kept = newest[row.releaseID], (kept.added, kept.id) > (row.added, row.id) {
+                continue
+            }
+            newest[row.releaseID] = row
+        }
+        return newest.mapValues(\.state)
+    }
+
     /// Starts the job `id` again, with `policy` for a retry that searches again. Nil when the
     /// service took it, else why not.
     func retry(_ id: Int, policy: FormatPolicy?) async -> String? {

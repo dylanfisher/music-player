@@ -685,3 +685,17 @@ private final class HeldList: @unchecked Sendable {
     #expect(downloads.rows.first?.state == "Approved")
     #expect(downloads.rows.first?.stateDetail != left)
 }
+
+/// The Recommendations window's Download column shows the state of each release's newest
+/// job, and nothing for a job that isn't listed.
+@Test func eachReleaseShowsItsNewestJobsState() {
+    let older = job(1, .failed, created: 1_794_000_000) { $0.failedStage = .search }
+    let newer = job(2, .queued, created: 1_794_060_000)
+    let other = job(3, .staged) { $0.release.releaseID = 99 }
+    let cancelled = job(4, .cancelled) { $0.release.releaseID = 7 }
+    let rows = [older, newer, other, cancelled].compactMap {
+        DownloadRow($0, machine: "Studio")
+    }
+    #expect(DownloadsModel.releaseStates(rows) == [4242: "Queued", 99: "Staged"])
+    #expect(DownloadsModel.releaseStates(rows.reversed()) == [4242: "Queued", 99: "Staged"])
+}
