@@ -29,6 +29,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         title: verdictTitle(.notInterested), target: nil, action: nil)
     let alreadyHaveButton = NSButton(title: verdictTitle(.alreadyHave), target: nil, action: nil)
     let markedButton = NSButton(title: "Marked…", target: nil, action: nil)
+    let downloadButton = NSButton(title: "Download…", target: nil, action: nil)
     let detailLabel = NSTextField(wrappingLabelWithString: "")
     let progress = NSProgressIndicator()
     let messageLabel = NSTextField(wrappingLabelWithString: "")
@@ -44,6 +45,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     var queryChosen: (RecommendationQuery) -> Void = { _ in }
     /// Hears Not Interested or Already Have on rows.
     var markChosen: ([RecommendationRow], FeedbackMark.Verdict) -> Void = { _, _ in }
+    /// Hears Download… on rows.
+    var downloadChosen: ([RecommendationRow]) -> Void = { _ in }
     /// Hears Marked… clicked.
     var showMarked: () -> Void = {}
     /// The row selected when a mark took rows out, selected again as the rows come back.
@@ -108,11 +111,13 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         alreadyHaveButton.toolTip = "Leave the selected albums out of every list, as had."
         markedButton.action = #selector(markedClicked)
         markedButton.toolTip = "Every album marked, to remove a mark."
+        downloadButton.action = #selector(downloadClicked)
+        downloadButton.toolTip = "Queue the selected albums in Downloads."
         let actions = NSStackView(views: [
-            notInterestedButton, alreadyHaveButton, NSView(), markedButton,
+            notInterestedButton, alreadyHaveButton, downloadButton, NSView(), markedButton,
         ])
         actions.spacing = 8
-        for button in [notInterestedButton, alreadyHaveButton, markedButton] {
+        for button in [notInterestedButton, alreadyHaveButton, downloadButton, markedButton] {
             button.bezelStyle = .rounded
             button.target = self
         }
@@ -211,7 +216,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     private func showDetail() {
         let row = table.selectedRow
         detailLabel.stringValue = row >= 0 && row < rows.count ? reasonsText(rows[row].album) : ""
-        for button in [notInterestedButton, alreadyHaveButton] {
+        for button in [notInterestedButton, alreadyHaveButton, downloadButton] {
             button.isEnabled = !selectedRows.isEmpty
         }
     }
@@ -238,6 +243,16 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     @objc private func alreadyHaveClicked() { mark(selectedRows, .alreadyHave) }
 
     @objc private func markedClicked() { showMarked() }
+
+    @objc private func downloadClicked() {
+        let chosen = selectedRows
+        if !chosen.isEmpty { downloadChosen(chosen) }
+    }
+
+    @objc private func downloadMenuChosen(_ sender: NSMenuItem) {
+        guard let clicked = sender.representedObject as? Int, clicked < rows.count else { return }
+        downloadChosen(menuRows(clicked))
+    }
 
     @objc private func verdictChosen(_ sender: NSMenuItem) {
         guard let clicked = sender.representedObject as? Int, clicked < rows.count else { return }
@@ -326,6 +341,11 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             item.representedObject = clicked
             menu.addItem(item)
         }
+        let download = NSMenuItem(
+            title: downloadButton.title, action: #selector(downloadMenuChosen), keyEquivalent: "")
+        download.target = self
+        download.representedObject = clicked
+        menu.addItem(download)
         guard query.show == .albums else { return }
         menu.addItem(.separator())
         let album = rows[clicked].album

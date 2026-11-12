@@ -67,3 +67,17 @@ private func album(_ id: Int64, _ releases: [String?]) -> DiscogsAlbum {
     #expect(setAside.first?.detail == "4 searches found no clean copy, release 1")
     #expect(setAside.first?.upgrade == nil, "queuing again only clears the misses")
 }
+
+@Test func eachRecommendationQueuesItsReleaseAndOneWithoutSaysSo() {
+    func recommended(_ id: Int, _ release: Int?) -> RecommendationPage.Album {
+        RecommendationPage.Album(
+            kind: .master, id: id, releaseID: release, rank: id, score: 0.5,
+            artists: [RecommendationPage.Named(id: 1, name: "Made-Up Artist")],
+            title: "Album \(id)", year: nil, label: nil, styles: [], community: nil, reasons: [])
+    }
+    let choices = QueueChoice.recommended([recommended(1, 4242), recommended(2, nil)])
+    #expect(choices.map(\.title) == ["Made-Up Artist - Album 1", "Made-Up Artist - Album 2"])
+    #expect(choices.map(\.releaseID) == [4242, nil])
+    #expect(choices[0].refusal == nil)
+    #expect(choices[1].refusal != nil)
+}

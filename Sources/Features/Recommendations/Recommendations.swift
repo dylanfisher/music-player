@@ -23,6 +23,8 @@ public final class Recommendations {
     /// This Mac's Discogs catalog as set now, which the Marked sheet names marks from; a mark
     /// whose album it doesn't have, or every mark while there is none, goes by its id.
     package var catalog: () -> URL? = { nil }
+    /// Download…: queues the albums in Downloads' queue sheet.
+    package var download: ([RecommendationPage.Album]) -> Void = { _ in }
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
     private var sendingProfile = false
@@ -112,6 +114,7 @@ public final class Recommendations {
         made.reachedEnd = { [weak self] in self?.model.readMore() }
         made.markChosen = { [weak self] in self?.mark($0, $1) }
         made.showMarked = { [weak self] in self?.showMarked() }
+        made.downloadChosen = { [weak self] in self?.download($0.map(\.album)) }
         made.columnsResized = { [weak self] widths in
             self?.columnWidths = widths
             self?.columnWidthsChanged(widths)

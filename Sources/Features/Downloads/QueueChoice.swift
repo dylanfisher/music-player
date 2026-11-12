@@ -70,6 +70,20 @@ struct QueueChoice: Equatable, Sendable {
             }
     }
 
+    /// The Recommendations window's albums (phase 86, ADR 0205), each downloaded as the release
+    /// that stands for it, a master's main release; one without a release says so.
+    static func recommended(_ albums: [RecommendationPage.Album]) -> [QueueChoice] {
+        albums.map { album in
+            let artists = album.artists.compactMap(\.name).joined(separator: ", ")
+            return QueueChoice(
+                title: albumTitle(artists.isEmpty ? nil : artists, album.title),
+                detail: album.releaseID.map(DownloadRow.releaseName) ?? "",
+                releaseID: album.releaseID, upgrade: nil,
+                refusal: album.releaseID == nil
+                    ? "The service has no release for this master in its catalog" : nil)
+        }
+    }
+
     /// The order to create the job with: an upgrade's takes only a lossless policy, so nil
     /// for a lossy one.
     func order(_ policy: FormatPolicy) -> JobOrder? {

@@ -1090,7 +1090,7 @@ package final class Downloads {
         }
     }
 
-    private func chooseAndQueue(
+    func chooseAndQueue(
         heading: String, note: String, _ choices: [QueueChoice], upgrade: Bool,
         tickingAll: Bool, other: String? = nil, marked: @escaping ([QueueChoice]) -> Void = { _ in }
     ) {
@@ -1210,7 +1210,7 @@ package final class Downloads {
         }
     }
 
-    private func alert(_ message: String, _ details: [String]) {
+    func alert(_ message: String, _ details: [String]) {
         guard let window = controller?.window else { return }
         let shown = 8
         let alert = NSAlert()
