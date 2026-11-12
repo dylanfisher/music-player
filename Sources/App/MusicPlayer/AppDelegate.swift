@@ -168,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var outputMenu: OutputMenu?
     var playlistMenus: [PlaylistMenu] = []
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
-    /// Logs the main thread's stalls over 100 ms, for the field data the benches can't give.
+    private(set) lazy var recommendations = makeRecommendations()
     /// The art column's thumbnails, kept between launches (ADR 0079).
     private lazy var thumbnails = ThumbnailStore(directory: paths.thumbnailDirectory)
     /// The Spectrum window's spectrograms, kept beside the thumbnails (ADR 0115).

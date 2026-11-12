@@ -6,7 +6,7 @@ extension LibraryIndex {
     /// Every album as music-recommender's profile has it, read from the index alone (ADR 0198),
     /// its artist and release id by `profileIdentity`. Tracks without an album aren't in an
     /// album to send.
-    func libraryProfile() throws -> LibraryProfile {
+    package func libraryProfile() throws -> LibraryProfile {
         let rows = try database.prepare(
             """
             SELECT t.album_id, a.title, ar.name, t.length_frames, t.sample_rate_hz,

@@ -15,7 +15,11 @@ package struct RecommenderError: Error, Equatable, CustomStringConvertible {
         /// A 400: the request wasn't of the route's shape (`bad_request`), or was over a cap
         /// (`too_large`).
         case badRequest(code: String, message: String)
-        /// Another status than 200, 400 or 401, with the code its body gave, if any.
+        /// A 500 `internal`: the service failed answering, with its message, which says what
+        /// failed and, for a profile kept, that it was kept.
+        case failed(message: String)
+        /// Another status than 200, 400, 401 or a 500 `internal`, with the code its body gave,
+        /// if any.
         case status(Int, code: String?)
         /// A 200 with `ok: false`: the service understood the request and refused it.
         case refused(ServiceRefusal)
@@ -51,6 +55,8 @@ package struct RecommenderError: Error, Equatable, CustomStringConvertible {
             case 400:
                 self = .badRequest(
                     code: failure?.error.code ?? "", message: failure?.error.message ?? "")
+            case 500 where failure?.error.code == "internal":
+                self = .failed(message: failure?.error.message ?? "")
             default: self = .status(status, code: failure?.error.code)
             }
         }
@@ -63,6 +69,7 @@ package struct RecommenderError: Error, Equatable, CustomStringConvertible {
             case .unauthorized: "refused the token; it must match the service's player_token"
             case .badRequest(let code, let message):
                 "refused the request as \(terminalSafe(code)): \(terminalSafe(message))"
+            case .failed(let message): "failed: \(terminalSafe(message))"
             case .status(let status, let code):
                 "answered with status \(status)" + (code.map { " (\(terminalSafe($0)))" } ?? "")
             case .refused(let refusal): "refused: \(refusal)"

@@ -250,6 +250,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Recommendations",
+            dependencies: ["DisplayText", "Library", "Recommender"],
+            path: "Sources/Features/Recommendations",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Downloads",
             dependencies: [
                 "Analysis", "Commands", "Discogs", "DisplayText", "Library", "Log", "Metadata",
@@ -295,7 +301,8 @@ let package = Package(
                 "DisplayText",
                 "Downloads", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
-                "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Recommender",
+                "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Recommendations",
+                "Recommender",
                 "Scripting", "SQLite", "Settings", "SettingsWindow", "Snapshot", "Spectrum",
                 "TagEditor", "TagWriter", "UPnP", "UPnPOutput", "WindowPlacement",
             ],
@@ -422,6 +429,11 @@ let package = Package(
                 "Analysis", "Discogs", "Downloads", "Fixtures", "Library", "LocalNetwork",
                 "Recommender",
             ],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "RecommendationsTests",
+            dependencies: ["Recommendations", "Recommender"],
             swiftSettings: strictSwift
         ),
         .testTarget(

@@ -81,7 +81,7 @@ extension AppDelegate {
         }
     }
 
-    private func downloadsAreSet(_ settings: ConfigStore<AppSettings>) -> Bool {
+    func downloadsAreSet(_ settings: ConfigStore<AppSettings>) -> Bool {
         settings[\.recommenderAddress]?.address != nil && settings[\.recommenderToken] != nil
     }
 

@@ -1,11 +1,11 @@
 import StrictKeys
 
 /// What the service did with a profile it kept.
-struct ProfileReceipt: Equatable, Sendable, Decodable {
-    var albums: Int
-    var withReleaseID: Int
+package struct ProfileReceipt: Equatable, Sendable, Decodable {
+    package var albums: Int
+    package var withReleaseID: Int
     /// Release ids that weren't in the community sync's queue before.
-    var queued: Int
+    package var queued: Int
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case ok, albums
@@ -29,7 +29,7 @@ extension RecommenderClient {
     static let profileTimeoutSeconds = 60.0
 
     /// Sends `profile` as the one the service keeps, the bytes Export Library Profile… writes.
-    func sendProfile(_ profile: LibraryProfile) async throws(RecommenderError)
+    package func sendProfile(_ profile: LibraryProfile) async throws(RecommenderError)
         -> ProfileReceipt
     {
         try await call(

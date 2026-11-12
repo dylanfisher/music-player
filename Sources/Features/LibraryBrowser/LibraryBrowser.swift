@@ -1197,7 +1197,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// The problems button's title while it shows, for tests.
     var problemsButtonTitle: String? { problemsButton.isHidden ? nil : problemsButton.title }
 
-    private func show(failure message: String) {
+    public func show(failure message: String) {
         messagesShown += 1
         statusLabel.stringValue = message
         statusLabel.toolTip = message
