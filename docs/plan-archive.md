@@ -12597,3 +12597,244 @@ owner cut the gate's bench and `/simplify` for this phase, and landed it with th
 side by side with phases 77 to 83 for part of it: 8 auditors, triage, 5 lanes (the mutation
 lane alone about 11 hours, most of it mutation runs on a loaded machine); the owner stopped one
 rescoring run at 279 of 594 mutants.
+
+### 86. Recommendations in the player
+
+Asked by the owner on 2026-11-11. music-recommender serves its lists (its phase 7.2, final):
+the whole library's, a seed album's and a seed artist's, of albums or artists, with filters
+and paging, and takes the library's profile and the owner's Not Interested and Already Have
+marks over HTTP. The player gains a client for those routes, a command that sends the
+profile, and a place to read the lists and act on them. The contract is music-recommender's
+`docs/api.md`, sections HTTP, Profile, Community values, Feedback and Recommendations, and
+its ADR 0028 for why the route behaves as it does; this phase changes nothing in that repo.
+
+Approved by the owner on 2026-11-11, to be built lean: one implementer, the core tests only
+(each route's request bytes; each fixture decodes and fails strictly on one changed field; the
+refusal codes and `busy`; the model's paging, filter reset, re-read after a mark, undo and busy
+retry; the seed rules), and of the phase gate only the full `./scripts/check` before landing.
+
+What exists, found by search:
+
+- **The client.** `RecommenderClient.call` (`Core/Recommender`) posts JSON with the bearer
+  token over `LocalHTTPClient` (1 MiB a reply, 5 s an exchange, ADR 0145) and decodes the
+  reply strictly (`ServiceReply`'s `decodeReply`, `StrictKeys`), a 200 with `ok: false` as
+  `ServiceRefusal`, any other status as `RecommenderError.Kind` with its `error.code`.
+  `DownloadRoutes.swift` is the neighbor for new routes; `StubService` and `ClientTests` are
+  the neighbors for their tests.
+- **The settings.** `recommender.address`, `.port` and `.token` (`AppSettings`); the token is
+  a `ServiceToken`, which redacts itself (ADR 0144). The downloads make a client per call from
+  them in `DownloadsCommands.downloadsSetup`.
+- **The profile.** `LibraryIndex.libraryProfile()` (`Core/Library/LibraryProfileExport`) builds
+  the `LibraryProfile` that File > Export Library Profile… writes (ADR 0198), through
+  `LibraryReader.writeLibraryProfile`, `BrowserModel.exportLibraryProfile` and
+  `LibraryBrowser.exportLibraryProfile`; the menu entry is `AppMenus`' File section, the
+  command `.exportLibraryProfile` in `AppCommands`, the save panel in `PlaylistCommands`.
+  It sends no `rating` (ADR 0198 left an album's rating to the owner).
+- **Queueing a download by release id.** `Downloads.queue(_:_:)` builds each
+  `QueueChoice`'s `ReleaseSnapshot.queueable(releaseID:catalogAt:)` from this Mac's Discogs
+  catalog and creates the jobs; Paste a Discogs Release… is its one-release caller.
+  Both are private to `Downloads`.
+- **A window of its own over the service.** `Features/Downloads` (`DownloadsWindow`,
+  `DownloadsModel`, `DownloadsService` with a fake in its tests, column widths kept in the
+  state file) is the neighbor for a new window. The library browser's sources (Library,
+  History, Timeline, Stats, playlists) are all track tables over the index.
+- **Not there:** no community values anywhere in the player yet, and no route for the
+  recommendations, profile or feedback.
+
+Contract facts this design holds to:
+
+- Every reply field is always present, an absent value `null`; a missing or unknown field,
+  or a wrong type, fails the reply. A value of `kind`, `status`, reason `kind`, `verdict` or
+  community `status` the player doesn't know is an error shown, never a row skipped.
+- The service refuses unknown request fields, so a request sends only the documented ones,
+  and leaves an optional field out rather than sending `null`.
+- A seed list's first request computes it, about 23 s, and up to 4 queue behind each other,
+  so its worst wait is about 90 s; other routes answer at once.
+- A 503 with code `busy` means ask again. The player branches on `error.code`, never on
+  `message`.
+- A mark drops its album out of every list from the next request on, with no rebuild, and
+  moves later pages by one; the cap of 3 to an artist and a label is counted again, so a
+  page read after a mark can hold an album the earlier read didn't.
+- The token goes only in the config file and the `Authorization` header.
+
+#### Questions for the owner
+
+The owner's answers, 2026-11-11: each recommendation below, taken as written; for question 2,
+the profile is sent only when asked, never unasked, and without a rating for now. A window
+rather than a browser view because the rows aren't library tracks, it needs nothing from
+phase 85's splits, and it can sit beside the library while a seed list computes.
+
+1. **A window or a browser view, and where in the menus.** Recommended: a window,
+   **File > Recommendations…** beside Downloads…, and **Recommendations for Album** and
+   **Recommendations for Artist** in the track table's context menu and the File menu, seeded
+   from the selection. The lists' rows are albums the library doesn't have, which none of the
+   browser's track-table sources can hold without a second kind of row in the table, sidebar
+   and their models; the browser's files are also the ones phase 85 splits. A window follows
+   Downloads, and can stay open beside the library while its first seed list computes.
+2. **Sending the profile beside exporting it, or in its place.** Recommended: beside it, as
+   **File > Send Library Profile to Service**, enabled while the address and token are set;
+   Export stays for `profile load` on another machine and for looking at what is sent. An
+   alternative is sending it unasked as well (at launch and after a scan or a tag edit, at
+   most once an hour), which removes the step altogether; that is left out unless asked.
+   Also: **should the profile now send an album `rating`** (the contract takes 1 to 5,
+   optional)? ADR 0198 left it out until the owner said what an album's rating is. Recommended:
+   leave it out in this phase.
+3. **What a row shows, and how reasons appear.** Recommended: one line a row, columns Artist,
+   Title, Year, Label, Styles, Rating (`4.25 (87)`), Have, Want and Why, where Why is the first
+   reason's `words`; all three reasons in the row's tooltip and in a detail line below the
+   table for the selected row. Hidden by default and shown from the header's menu: Rank,
+   Score, For Sale and Lowest Price. A row with community `status` other than `fetched` (or
+   `failed` with values) shows the status in the Rating column (`queued`, `gone`). The Artists
+   list shows Artist, Albums, Score and its best album's Title and Year, with the album's
+   columns for the best album.
+4. **Queue Download in this phase.** Recommended: yes. It reuses `Downloads.queue`, so it is
+   one entry point and a sheet already built: **Download…** on the selected rows opens the
+   queue sheet with the format pop-up, each row as a `QueueChoice` with the album's
+   `release_id` (a master's main release); a row with `release_id` `null`, or one not in this
+   Mac's catalog, says so in the sheet as Upgrades… does.
+5. **A list of the marks, to undo one later.** `feedback/list` answers kind, id, verdict and
+   time but no name. Recommended: in this phase, Undo only (Edit > Undo after a mark, for any
+   mark set in this window since it opened), and a **Marked** sheet from the window that names
+   each mark from this Mac's catalog where it has the release or master, else `release 4242`,
+   with Remove Mark. If the owner wants names on every Mac, the contract change below adds
+   them.
+
+#### Contract notes for music-recommender
+
+Nothing here blocks the phase. For the owner to take there:
+
+- **Optional fields sent as `null`.** `api.md` says the profile's `discogs_release_id` and
+  `rating` may be absent or `null`, but not whether `/v1/recommendations`' optional fields
+  (`release_id`, `artist`, `offset`, `limit`, `missing`, the filters) and `downloads/retry`'s
+  take `null`. A sentence under the request table: "An optional field is left out; `null` is
+  a 400 `bad_request`" (or "…is read as left out", whichever the code does). The player leaves
+  them out either way.
+- **Names on the marks**, only if the owner answers question 5 that way. `### The mark` gains
+  `"title": "Made-Up Album"` (string or `null`) and `"artists": [{"id": 23, "name": "Gus
+  Other"}]` (possibly empty), read from the catalog when the mark is listed and answered, `null`
+  and empty when the catalog has no row for it; `POST /v1/feedback`'s reply carries them too.
+  It is a change to a final shape, so the player's decoder and this phase change with it.
+
+#### The phase
+
+- [x] **The routes**, in `Core/Recommender` beside `DownloadRoutes.swift`, each with its
+      request type sending only the documented fields and its strict reply type:
+      `recommendations(_:)` (`RecommendationRoutes.swift`, the reply in
+      `RecommendationPage.swift`: the list's facts, albums or artists, `more`, an album with
+      its artists, label, styles, community values and reasons); `sendProfile(_:)`, which
+      posts `LibraryProfile.json()` unchanged and answers `albums`, `with_release_id` and
+      `queued`; `mark(_:_:verdict:)`, `unmark(_:_:)` and `marks()` (every page of
+      `feedback/list` until `more` is false), in `FeedbackRoutes.swift`. `/v1/community` isn't
+      built: each album already carries its community row, decoded by a `CommunityValues` type
+      that a later library column can reuse with the route.
+- [x] **Refusals and errors.** `ServiceRefusal.Code` gains `no_catalog`, `no_profile`,
+      `no_list`, `out_of_date` (with `rebuilding`) and `no_seed`. A value the player doesn't
+      know in an album's `kind`, a reason's `kind`, a community `status` or a mark's `kind` or
+      `verdict` is an error naming the field and the value, as `unknownState` is for a job.
+- [x] **Timeouts.** `call` takes the exchange's timeout. The recommendations route uses
+      `seedListTimeout`, 120 s: over the contract's worst case of 4 seed lists at about 23 s
+      each, with room for a slower catalog, defined once with the reason beside it. The profile
+      uses 60 s, for a body of a few MB on Wi-Fi and the service's write. Every other route
+      keeps `LocalHTTPClient.timeoutSeconds`.
+- [x] **Send Library Profile to Service** (question 2): builds the profile off the main thread
+      as the export does, sends it, and says in the status bar what the service answered
+      (`Sent 6,541 albums, 1,741 with a release id; 12 newly queued for the community sync`), or
+      the error. A 500 whose message says the profile is kept is shown as the service's text.
+      One send at a time.
+- [x] **The Recommendations window** (`Features/Recommendations`, question 1), its model
+      testable without a window, as `DownloadsModel` is:
+      - The list: a pop-up of Library and the seeds asked for since launch; Albums or Artists;
+        Missing (albums only). Filters for albums only: styles (a token field; a style on a
+        row adds itself from the row's context menu), years from and to, and labels (from a
+        row's context menu, shown as tokens to remove). A change of list, view or filter reads
+        from offset 0.
+      - Paging: 100 rows a request; scrolling to the end reads the next page while `more`.
+      - Pending: the window shows a progress indicator and "Computing the list for *album*,
+        which takes about half a minute the first time" while a seed list's reply is pending;
+        a change of list cancels the request (the service keeps the list it computes).
+      - Refusals, each with its own text and what to do: `no_profile` with a Send Library
+        Profile button; `no_catalog`; `no_list`; `out_of_date` with `rebuilding` true, which
+        asks again every 30 s while the window is open, and false, which says what the status
+        page shows; `no_seed`, naming the album or artist. A 503 `busy` asks again after 5 s,
+        up to 6 times, then says the service is busy with a Try Again button. Everything else
+        is the error's text.
+      - The list's facts in the window's footer: the catalog set, when it was scored, its seed
+        albums and candidates.
+      - Rows and reasons as question 3; column widths kept in the state file as Downloads'
+        are.
+- [x] **Seeds from the selection.** Recommendations for Album takes the selected tracks'
+      album and its release id by the profile's rule (every track carries one positive id,
+      ADR 0129); for Artist, the album artist by the profile's rule (album artist, else track
+      artist, else `variousArtists`), moved out of `libraryProfile()` into one function both
+      call, so the seed matches the name the service has. One album or artist in the
+      selection, or a beep and a status-bar line saying why (no release id; several albums).
+- [x] **Not Interested and Already Have**, from the row's context menu, a toolbar button each
+      and keys (⌫ for Not Interested), on every selected album (a master or release by the
+      row's `kind` and `id`; on the Artists view, the best album). The rows leave the table at
+      once; then the window reads the list again from offset 0 through as many rows as it
+      showed, 100 a request, keeping the selection's place, since the cap can bring back an
+      album the earlier read left out. Edit > Undo removes the marks (`feedback/undo`) and reads
+      the list again. A failed mark puts its rows back and says why.
+- [x] **Marked…** (question 5): a sheet of every mark from `feedback/list`, newest first,
+      named from this Mac's catalog where it can be, with Remove Mark.
+- [x] **Download…** (question 4): the selected albums into Downloads' queue sheet, through a
+      package entry point on `Downloads` over its `queue`, so the snapshot, the policy and the
+      errors stay in one place.
+- [x] **Tests**, through `StubService` and never the real service:
+      - Each route's request bytes exactly, the token only in the header, optional fields
+        left out when not set and a filter never sent with `show: "artists"`.
+      - `api.md`'s example replies, copied into `Tests/RecommenderTests/Fixtures`, decode;
+        each with a field removed, one added, a type changed, or an unknown kind, status or
+        verdict, fails with the field named.
+      - Each refusal code, `out_of_date`'s `rebuilding`, a 503 `busy`, a 400 `too_large` for the
+        profile.
+      - The recommendations route uses `seedListTimeout`, checked without waiting for it.
+      - No error, status line or log line holds the token.
+      - The model, with a fake service: paging and `more`; a change of filter reads from 0; a
+        mark removes rows and reads the shown rows again; undo; busy asks again and gives up
+        after 6; `out_of_date` asks again; a change of list cancels the pending one; the seed
+        rules for album and artist, and the profile's artist rule unchanged.
+      - Download… makes one choice a row with the row's `release_id`, and a refusal for
+        `null`.
+- [x] **ADR 0205**: the window and its menus, sending the profile beside the export, the
+      routes' timeouts, the busy and rebuilding retries, reading the list again after a mark,
+      and the answers to the questions above.
+- [x] **Docs:** map.md gains `Features/Recommendations`; AGENTS.md's Stack line already names
+      the client. Version: minor at landing (`feat`).
+- [ ] **Owner check** on the real service on mbp2021: send the profile and read the counts;
+      open the window on Library; ask for a seed album's list and see the progress, then rows
+      within about half a minute, then at once a second time; filter by a style, years and a
+      label; mark an album Not Interested and see it go, then undo it; Download… one album and
+      see it queue in Downloads.
+
+Implementation plan, phase 86 (ADR 0205), in commits:
+
+1. `feat(recommender)`: `call`'s timeout; the refusal codes; the reply types and the three
+   route files; fixtures and `ClientTests`-style tests beside them.
+2. `refactor(library)`: the album's artist and release id rules out of `libraryProfile()`
+   into one function for the profile and the seeds, behavior unchanged.
+3. `feat(library)`: Send Library Profile to Service, its command, menu entry and status text.
+4. `feat(recommendations)`: the window and model with the lists, filters, paging, progress,
+   refusals and retries; File > Recommendations….
+5. `feat(recommendations)`: seeds from the selection, the two commands and the context menu.
+6. `feat(recommendations)`: Not Interested, Already Have, undo, and the Marked sheet.
+7. `feat(downloads)`: Download… from the window through `Downloads`.
+8. `docs`: ADR 0205, map.md.
+
+Result, phase 86 (landed 2026-11-11 as 0.38.0, built lean at the owner's word): the three
+route files with strict replies and the five new refusal codes, `call`'s timeout
+(`seedListTimeout` 120 s, the profile 60 s), the album artist and release id rule shared by the
+profile and the seeds, File > Send Library Profile to Service, and the Recommendations window
+with Library and seed lists, albums and artists, filters, paging, the pending line, the
+refusals and the busy and rebuilding retries, Not Interested and Already Have with undo, the
+Marked… sheet, and Download… into Downloads' queue through `Downloads.queue(recommended:)`
+(`Downloads+Recommendations.swift`, since Downloads.swift was at its size ceiling). An extra
+refactor reads and sets a table's column widths once. Not as planned: a row whose release
+isn't in this Mac's catalog fails when queued, through `queue`'s own error, rather than being
+flagged when the sheet opens (ADR 0205). Tests are the core set only. Of the gate, only the full
+`./scripts/check` ran, and passed; no code review, `/simplify`, bench or architecture audit.
+Under load from other sessions, unrelated timing tests failed in commits 6 and 7's runs and
+passed alone; LibraryBrowserTests `leavingStatsRedrawsTheSplitsOldDivider` failed twice, once
+alone, in code the phase didn't touch, and passed in commit 8's run. Cost: two Opus
+implementers (the owner stopped the first in commit 6), the second about 129k tokens, 58 tool
+calls and 16 minutes; the first's count wasn't reported. Pending: the owner check.
