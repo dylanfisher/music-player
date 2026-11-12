@@ -27,6 +27,9 @@ import Testing
     try index.recordPlay("/m/a/1.flac", at: 1)
     try index.recordPlay("/m/a/1.flac", at: 2)
     try index.recordPlay("/m/a/3.flac", at: 3)
+    try index.recordSkip("/m/a/2.flac")
+    try index.recordSkip("/m/a/2.flac")
+    try index.recordSkip("/m/a/3.flac")
     try index.toggle(.liked, trackIDs: ids(index, ["/m/a/2.flac", "/m/a/3.flac"]))
     try index.setRating(5, trackIDs: ids(index, ["/m/a/1.flac"]))
 
@@ -34,13 +37,52 @@ import Testing
     #expect(
         profile.albums == [
             LibraryProfile.Album(
-                artist: "Band", title: "A", durations: [10, 245, 31],
-                catalogNumbers: ["SK 032", "SK 032B"], barcodes: ["0 1234"],
-                discogsReleaseID: 42, plays: 3, loved: 2),
+                key: try albumKey(index, "/m/a/1.flac"), artist: "Band", title: "A",
+                durations: [10, 245, 31], catalogNumbers: ["SK 032", "SK 032B"],
+                barcodes: ["0 1234"], discogsReleaseID: 42, plays: 3, loved: 2, lastPlayed: 3,
+                skips: 3),
             LibraryProfile.Album(
-                artist: "Artist", title: "B", durations: [200], catalogNumbers: [],
-                barcodes: [], discogsReleaseID: nil, plays: 0, loved: 0),
+                key: try albumKey(index, "/m/b/1.flac"), artist: "Artist", title: "B",
+                durations: [200], catalogNumbers: [], barcodes: [], discogsReleaseID: nil,
+                plays: 0, loved: 0, lastPlayed: nil, skips: 0),
         ])
+}
+
+/// The profile's key of the album of the track at `path`.
+private func albumKey(_ index: LibraryIndex, _ path: String) throws -> String {
+    let id = try #require(try index.rows(ids: ids(index, [path])).first?.albumID)
+    return profileKey(albumID: id)
+}
+
+@Test func anAlbumsKeyNamesItsAlbumAndReadsBack() {
+    #expect(profileKey(albumID: 812) == "a812")
+    #expect(albumID(profileKey: "a812") == 812)
+    for other in ["812", "a", "a-1", "a0x1", "r4242", "a 1", "a01", "a+5"] {
+        #expect(albumID(profileKey: other) == nil, "\(other)")
+    }
+}
+
+@Test func anImportedLastPlayedIsNotSentButTheNewestPlayHereIs() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/m/a/1.flac", album: "A", number: 1).scanned,
+        Crafted(path: "/m/a/2.flac", album: "A", number: 2).scanned,
+        Crafted(path: "/m/b/1.flac", album: "B").scanned,
+    ])
+    var swinsian = PlayerLibrary(player: .swinsian, source: "/swinsian/Library.sqlite")
+    for path in ["/m/a/1.flac", "/m/b/1.flac"] {
+        var track = PlayerTrack(path: path)
+        track.plays = 4
+        track.lastPlayedSeconds = 2_000
+        _ = swinsian.add(track)
+    }
+    _ = try index.applyImport(swinsian, prefix: nil)
+    try index.recordPlay("/m/a/2.flac", at: 500)
+    try index.recordPlay("/m/a/2.flac", at: 1_000)
+    let lastPlayed = Dictionary(
+        uniqueKeysWithValues: try index.libraryProfile().albums.map { ($0.title, $0.lastPlayed) })
+    // B's only date is Swinsian's, and A's newest play here is older than Swinsian's.
+    let expected: [String: Int?] = ["A": 1_000, "B": nil]
+    #expect(lastPlayed == expected)
 }
 
 @Test func anAlbumHasAReleaseIDOnlyWhenEveryTrackCarriesOnePositiveNumber() throws {
@@ -92,7 +134,7 @@ import Testing
 
 // What the export holds and where it may write (ADR 0198; ADR 0025, row 76).
 
-@Test func eachAlbumHoldsADR0198sNineKeysAndNoPathOrRating() throws {
+@Test func eachAlbumHoldsTheContractsTwelveKeysAndNoPathOrRating() throws {
     let index = try craftedIndex([
         Crafted(path: "/m/a/1.flac", album: "A", custom: [DiscogsKey.releaseID: "42"]).scanned
     ])
@@ -105,7 +147,7 @@ import Testing
     #expect(
         Set(albums[0].keys) == [
             "artist", "title", "track_count", "durations", "catalog_numbers", "barcodes",
-            "discogs_release_id", "plays", "loved",
+            "discogs_release_id", "plays", "loved", "key", "last_played", "skips",
         ])
     let text = String(decoding: try index.libraryProfile().json(), as: UTF8.self)
     #expect(!text.contains("/m/"), "no path")
@@ -125,7 +167,7 @@ import Testing
     #expect(album["title"] as? String == hostile)
     #expect(album["artist"] as? String == hostile)
     #expect(album["plays"] as? Int == 0)
-    #expect(album.count == 9)
+    #expect(album.count == 12)
 }
 
 @Test func theProfileIsNeverWrittenOverAFileOfTheLibraryOrALink() throws {

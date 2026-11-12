@@ -11,7 +11,10 @@ extension LibraryIndex {
             """
             SELECT t.album_id, a.title, ar.name, t.length_frames, t.sample_rate_hz,
                 t.catalog_number, t.barcode, t.discogs_release_id, max(0, ifnull(p.play_count, 0)),
-                \(lovedSQL)
+                \(lovedSQL), ifnull(p.skip_count, 0),
+                -- A play recorded here or synced has a history row; an import's Last Played
+                -- has none, and isn't a play to send (ADR 0105).
+                (SELECT max(h.played_at) FROM history h WHERE h.path_id = t.file_id)
             FROM tracks t JOIN albums a ON a.id = t.album_id JOIN files f ON f.id = t.file_id
             LEFT JOIN artists ar ON ar.id = a.artist_id
             LEFT JOIN plays p ON p.path_id = t.file_id
@@ -25,7 +28,8 @@ extension LibraryIndex {
                 album: try row.int64(0), title: try row.text(1), artist: row.optionalText(2),
                 seconds: rateHz > 0 ? Int((Double(try row.int(3)) / Double(rateHz)).rounded()) : 0,
                 catalogNumber: row.optionalText(5), barcode: row.optionalText(6),
-                release: row.optionalText(7), plays: try row.int(8), loved: try row.int(9) == 1
+                release: row.optionalText(7), plays: try row.int(8), loved: try row.int(9) == 1,
+                skips: try row.int(10), lastPlayed: row.optionalInt(11)
             )
         }
         var albums: [LibraryProfile.Album] = []
@@ -39,13 +43,15 @@ extension LibraryIndex {
             let identity = profileIdentity(artist: first.artist, releases: tracks.map(\.release))
             albums.append(
                 LibraryProfile.Album(
-                    artist: identity.artist, title: first.title,
+                    key: profileKey(albumID: album), artist: identity.artist, title: first.title,
                     durations: tracks.map(\.seconds),
                     catalogNumbers: distinct(tracks.compactMap(\.catalogNumber)),
                     barcodes: distinct(tracks.compactMap(\.barcode)),
                     discogsReleaseID: identity.releaseID,
                     plays: tracks.map(\.plays).reduce(0, +),
-                    loved: tracks.filter(\.loved).count))
+                    loved: tracks.filter(\.loved).count,
+                    lastPlayed: tracks.compactMap(\.lastPlayed).max(),
+                    skips: tracks.map(\.skips).reduce(0, +)))
         }
         return LibraryProfile(albums: albums)
     }
@@ -99,6 +105,17 @@ extension LibraryIndex {
         try profile.json().write(to: url, options: .atomic)
         return profile.albums.count
     }
+}
+
+/// The profile's `key` of the album `albumID`, which Rediscover gives back (ADR 0206).
+package func profileKey(albumID: Int64) -> String { "a\(albumID)" }
+
+/// The album a profile `key` names, or nil for a key this player doesn't write.
+package func albumID(profileKey key: String) -> Int64? {
+    guard key.hasPrefix("a"), case let digits = key.dropFirst(), digits.first != "0",
+        digits.allSatisfy({ ("0"..."9").contains($0) }), let id = Int64(digits), id > 0
+    else { return nil }
+    return id
 }
 
 /// Why the profile isn't written where the owner chose.

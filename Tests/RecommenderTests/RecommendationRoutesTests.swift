@@ -124,8 +124,9 @@ private func artistsPage() throws -> String {
     defer { stub.stop() }
     let profile = LibraryProfile(albums: [
         LibraryProfile.Album(
-            artist: "Made-Up Artist", title: "Made-Up Album", durations: [245],
-            catalogNumbers: [], barcodes: [], discogsReleaseID: 4242, plays: 1, loved: 0)
+            key: "a812", artist: "Made-Up Artist", title: "Made-Up Album", durations: [245],
+            catalogNumbers: [], barcodes: [], discogsReleaseID: 4242, plays: 1, loved: 0,
+            lastPlayed: 1_793_000_000, skips: 0)
     ])
     #expect(
         try await stub.client.sendProfile(profile)
