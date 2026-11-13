@@ -46,7 +46,7 @@ public final class BrowserModel {
     /// Called when a query fails. What the browser showed stays.
     public var failed: (String) -> Void = { _ in }
 
-    private let reader: LibraryReader
+    let reader: LibraryReader
     /// Counts changes, so a change's results are applied only if no newer one started.
     private var generation = 0
     /// The newest change's filter and sort, applied or still running. Each change builds on
@@ -447,40 +447,6 @@ public final class BrowserModel {
         await refresh()
     }
 
-    /// Rates the tracks `trackIDs`; 0 stars clears their rating.
-    public func rate(_ trackIDs: [Int64], stars: Int) async throws {
-        try await reader.setRating(stars, trackIDs: trackIDs)
-        await refreshEdited()
-    }
-
-    /// Rates the tracks at `paths`, returning the ids of those the index has.
-    func setRating(_ stars: Int, paths: [String]) async throws -> [Int64] {
-        let rated = try await reader.setRating(stars, paths: paths)
-        await refreshEdited()
-        return rated
-    }
-
-    func toggle(_ opinion: TrackOpinion, _ trackIDs: [Int64]) async throws {
-        try await reader.toggle(opinion, trackIDs: trackIDs)
-        await refreshEdited()
-    }
-
-    public func recordPlay(_ path: String, at seconds: Double) async throws {
-        try await reader.recordPlay(path, at: seconds)
-        await refreshEdited()
-    }
-
-    /// Sets the play count of the tracks at `paths` by hand (ADR 0162).
-    func setPlayCount(_ count: Int, paths: [String]) async throws {
-        try await reader.setPlayCount(count, paths: paths)
-        await refreshEdited()
-    }
-
-    public func recordSkip(_ path: String) async throws {
-        try await reader.recordSkip(path)
-        await refreshEdited()
-    }
-
     /// The window as it is now, as a step keeps it.
     var place: WindowPlace {
         let list = listPlace()
@@ -783,7 +749,7 @@ public final class BrowserModel {
     /// Runs every query again after an edit that moves no file (a rating, an opinion, a
     /// counted play or skip), so the kept queue stays usable: a skip is counted as Enter plays
     /// the next track, and a play partway through each track.
-    private func refreshEdited() async {
+    func refreshEdited() async {
         await reload(panesFrom: 0, reason: .libraryChanged)
     }
 

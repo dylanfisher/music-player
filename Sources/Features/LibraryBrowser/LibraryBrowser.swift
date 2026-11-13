@@ -239,7 +239,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// True from Resolve Lost Stats until its last sheet closes, so one is open at a time.
     private var isResolvingLostStats = false
     private(set) var lostStatsSheet: LostStatsSheet?
-    private var isImportingMoves = false
+    var isImportingMoves = false
     /// The selected tracks' ratings as last read, with the index's change stamp then.
     private var selectionRatingsRead: (ids: [Int64], stamp: [Int], ratings: Set<Int>)?
     /// Whether the last read of the selected tracks' ratings failed, which was reported then.
@@ -752,36 +752,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    // MARK: Importing moves
-
-    /// Import Moves…: applies the move list at `list` with `importing`, then says over `window`
-    /// what it moved, and lists the lines that moved nothing in the Problems window, where ⌘C
-    /// copies them.
-    public func importMoves(
-        from list: URL, over window: NSWindow,
-        by importing: @escaping (URL) async throws -> MoveListImport
-    ) {
-        guard !isImportingMoves else { return beep() }
-        isImportingMoves = true
-        show(failure: "Importing the moves in \(terminalSafe(list.lastPathComponent))…")
-        Task {
-            defer { isImportingMoves = false }
-            let result: MoveListImport
-            do {
-                result = try await importing(list)
-            } catch {
-                return report(terminalSafe("couldn't import the moves in \(list.path): \(error)"))
-            }
-            finish(
-                result.summary, result.problems.map { Problem($0.description) },
-                as: \.importedMovesReport)
-            refreshNow()
-            runHealth()
-            edited()
-            tell(result.summary, result.detail, window)
-        }
-    }
-
     // MARK: Removing tracks
 
     /// Asks over `window` whether to remove the selected tracks from the library, or to move
@@ -858,7 +828,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         runHealth()
     }
 
-    private func runHealth() {
+    func runHealth() {
         Task { await health.run() }
         healthPanel.show(report: health.report, checkedAt: health.checkedAt, running: true)
     }
