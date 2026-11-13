@@ -28,6 +28,8 @@ final class RediscoverModel {
     /// The day's albums the index has, by album id.
     private(set) var albums: [Int64: RediscoverDay.Album] = [:]
     private(set) var problem: Problem?
+    /// A Not Now or its undo that failed, said beside the day until Refresh or the next open.
+    private(set) var notice: String?
     private(set) var isReading = false
     /// The album of the first selected track, whose reasons the panel shows.
     var selectedAlbumID: Int64? {
@@ -72,9 +74,11 @@ final class RediscoverModel {
         }
     }
 
-    /// Reads today's albums: when the source opens, and on Refresh.
+    /// Reads today's albums: when the source opens, and on Refresh, which drop the notice; and
+    /// after Not Now and its undo, which keep it.
     @discardableResult
-    func read() -> Task<Void, Never> {
+    func read(keepingNotice: Bool = false) -> Task<Void, Never> {
+        if !keepingNotice { notice = nil }
         session += 1
         let mine = session
         return Task {
@@ -106,6 +110,57 @@ final class RediscoverModel {
                     return finish(.failed(why), mine)
                 }
             }
+        }
+    }
+
+    /// Not Now on the day's albums of `albumIDs`, the others ignored: takes them out of the list
+    /// at once, marks each for 30 days, then reads the day again, so the draw fills their place.
+    /// The task answers the service's ids of the albums marked, for Undo; a mark that fails is
+    /// said, and the read puts its album back.
+    @discardableResult
+    func notNow(_ albumIDs: [Int64]) -> Task<[String], Never>? {
+        let chosen = albumIDs.compactMap { albums[$0] }
+        guard let service = service(), !chosen.isEmpty else { return nil }
+        notice = nil
+        return Task {
+            for id in albumIDs { albums[id] = nil }
+            day?.albums.removeAll { album in chosen.contains { $0.id == album.id } }
+            changed()
+            do {
+                _ = try await show(
+                    self.albumIDs.compactMap { id in albums[id].map { (id, $0.title) } })
+            } catch {
+                notice = "couldn't take the albums out of the list: \(error)"
+            }
+            listed()
+            var marked: [String] = []
+            for album in chosen {
+                do throws(RecommenderError) {
+                    _ = try await service.notNow(album.id)
+                    marked.append(album.id)
+                } catch {
+                    notice = "couldn't mark \(album.title) Not Now: \(error)"
+                }
+            }
+            await read(keepingNotice: true).value
+            return marked
+        }
+    }
+
+    /// Undo of Not Now: removes the marks on the service's `ids`, then reads the day again.
+    @discardableResult
+    func undoNotNow(_ ids: [String]) -> Task<Void, Never>? {
+        guard let service = service(), !ids.isEmpty else { return nil }
+        notice = nil
+        return Task {
+            for id in ids {
+                do throws(RecommenderError) {
+                    _ = try await service.undoNotNow(id)
+                } catch {
+                    notice = "couldn't remove the Not Now mark: \(error)"
+                }
+            }
+            await read(keepingNotice: true).value
         }
     }
 

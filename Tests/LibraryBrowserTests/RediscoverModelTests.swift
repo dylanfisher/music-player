@@ -30,6 +30,10 @@ final class RediscoverCalls {
     var calls: [String] = []
     /// What the service answers to each ask for a day, in turn.
     var replies: [Result<RediscoverDay, RecommenderError>] = []
+    /// Whether Not Now's marks fail.
+    var marksFail = false
+    /// The service's ids of the albums marked Not Now.
+    var marked: Set<String> = []
 }
 
 /// The error a stand-in service throws for `kind`, at the address the panel names.
@@ -63,8 +67,18 @@ func rediscoverModel(
                 guard let reply else { throw serviceError(.cancelled) }
                 return try reply.get()
             },
-            notNow: { _ throws(RecommenderError) in throw serviceError(.cancelled) },
-            undoNotNow: { _ throws(RecommenderError) in throw serviceError(.cancelled) })
+            notNow: { id throws(RecommenderError) in
+                let fails = await MainActor.run {
+                    calls.calls.append("not now \(id)")
+                    return calls.marksFail
+                }
+                if fails { throw serviceError(.unreachable(.refused("connection refused"))) }
+                return 1_802_592_000
+            },
+            undoNotNow: { id throws(RecommenderError) in
+                await MainActor.run { calls.calls.append("undo \(id)") }
+                return true
+            })
     }
     model.sendProfile = { force in
         calls.calls.append(force ? "send profile, forced" : "send profile")
@@ -164,4 +178,52 @@ func rediscoverModel(
     model2.sendProfile = { _ in .unchanged }
     await model2.read().value
     #expect(calls.calls == ["day 2026-11-13"])
+}
+
+@MainActor
+@Test func notNowTakesTheAlbumOutAtOnceMarksItAndReadsTheDayAgain() async {
+    let calls = RediscoverCalls()
+    let model = rediscoverModel(
+        [
+            .success(rediscoverDay(["a7", "a3", "a5"])),
+            .success(rediscoverDay(["a7", "a5", "a9"])),
+        ],
+        known: [3, 5, 7, 9], calls: calls)
+    await model.read().value
+    calls.calls = []
+    var listedThen: [[Int64]] = []
+    model.listed = { listedThen.append(model.albumIDs) }
+    // An album not among the day's is ignored.
+    let marked = await model.notNow([3, 42])?.value
+    #expect(marked == ["ka3"])
+    #expect(listedThen.first == [7, 5], "out of the list before the service answers")
+    #expect(
+        calls.calls == [
+            "show [7, 5]", "not now ka3", "send profile", "day 2026-11-12", "show [7, 5, 9]",
+        ])
+    #expect(model.albumIDs == [7, 5, 9])
+    #expect(model.notNow([42]) == nil, "nothing of the day's")
+
+    calls.calls = []
+    calls.replies = [.success(rediscoverDay(["a7", "a3", "a5"]))]
+    await model.undoNotNow(["ka3"])?.value
+    #expect(calls.calls == ["undo ka3", "send profile", "day 2026-11-12", "show [7, 3, 5]"])
+    #expect(model.albumIDs == [7, 3, 5])
+}
+
+@MainActor
+@Test func aNotNowThatFailsIsSaidAndTheReadPutsTheAlbumBack() async {
+    let calls = RediscoverCalls()
+    let day = rediscoverDay(["a7", "a3"])
+    let model = rediscoverModel([.success(day), .success(day)], known: [3, 7], calls: calls)
+    await model.read().value
+    calls.marksFail = true
+    let marked = await model.notNow([3])?.value
+    #expect(marked == [])
+    #expect(model.albumIDs == [7, 3])
+    #expect(model.notice?.contains("couldn't mark Album a3 Not Now") == true)
+    #expect(model.notice?.contains("192.168.1.20:7878") == true)
+    calls.replies = [.success(day)]
+    await model.read().value
+    #expect(model.notice == nil, "a Refresh drops it")
 }

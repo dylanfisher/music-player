@@ -34,6 +34,10 @@ extension AppDelegate {
         dispatcher.handle(.showRediscover, enabled: hasWindow) { [weak self] in
             self?.browser?.showRediscover()
         }
+        let canNotNow = { [weak self] in self?.browser?.canNotNow == true }
+        dispatcher.handle(.notNow, enabled: canNotNow) { [weak self] in
+            self?.browser?.notNowSelection()
+        }
     }
 
     /// Rediscover in `browser` (ADR 0206): the service's calls as set now, the profile sent

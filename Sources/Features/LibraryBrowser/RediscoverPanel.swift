@@ -1,4 +1,6 @@
 import AppKit
+import Commands
+import DisplayText
 import Recommender
 import Settings
 
@@ -13,6 +15,8 @@ final class RediscoverPanel: NSViewController, SourcePanel {
 
     /// Refresh clicked: send the profile if it changed, and read the day again.
     var refresh: () -> Void = {}
+    /// Not Now clicked, for the selected album.
+    var notNow: () -> Void = {}
 
     let dayLabel = NSTextField(labelWithString: "")
     let statusLabel = NSTextField(labelWithString: "")
@@ -20,10 +24,12 @@ final class RediscoverPanel: NSViewController, SourcePanel {
     let factsText = NSTextField(wrappingLabelWithString: "")
     let threadsText = NSTextField(wrappingLabelWithString: "")
     let reasonsText = NSTextField(wrappingLabelWithString: "")
+    let notNowButton = NSButton(title: AppCommands.title(of: .notNow), target: nil, action: nil)
     private(set) lazy var dayCard = StatsCard(title: "Today", body: factsText)
     private(set) lazy var threadsCard = StatsCard(
         title: "Threads", body: threadsText, columns: 2)
-    private(set) lazy var albumCard = StatsCard(title: "Why This Album", body: reasonsText)
+    private(set) lazy var albumCard = StatsCard(
+        title: "Why This Album", body: reasonsText, accessory: notNowButton)
     private let flow = StatsFlowView()
     private let target = ControlTarget()
 
@@ -46,6 +52,15 @@ final class RediscoverPanel: NSViewController, SourcePanel {
         refreshButton.target = target
         refreshButton.action = #selector(ControlTarget.act(_:))
         target.handlers[ObjectIdentifier(refreshButton)] = { [weak self] in self?.refresh() }
+        notNowButton.bezelStyle = .rounded
+        notNowButton.controlSize = .small
+        notNowButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        notNowButton.toolTip =
+            "Leave this album out of Rediscover for \(RecommenderClient.notNowDays) days."
+            + " Edit > Undo puts it back."
+        notNowButton.target = target
+        notNowButton.action = #selector(ControlTarget.act(_:))
+        target.handlers[ObjectIdentifier(notNowButton)] = { [weak self] in self?.notNow() }
         for text in [factsText, threadsText, reasonsText] {
             text.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
             text.isSelectable = true
@@ -87,12 +102,14 @@ final class RediscoverPanel: NSViewController, SourcePanel {
         dayLabel.stringValue = model.day.map { rediscoverDayTitle($0.facts.day) } ?? ""
         let facts = model.day.map(rediscoverFactsText)
         let problem = model.problem.map(rediscoverProblemText)
+        let notice = model.notice.map(terminalSafe)
         factsText.stringValue =
-            [facts, problem].compactMap { $0 }.joined(separator: "\n\n")
-        factsText.textColor = problem == nil ? .labelColor : .systemRed
+            [facts, problem, notice].compactMap { $0 }.joined(separator: "\n\n")
+        factsText.textColor = problem == nil && notice == nil ? .labelColor : .systemRed
         threadsText.stringValue = model.day.map(rediscoverThreadsText) ?? ""
         reasonsText.stringValue =
             model.selected.map(rediscoverReasonsText)
             ?? "Select a track of one of the day's albums to see why it's here."
+        notNowButton.isEnabled = model.selected != nil
     }
 }

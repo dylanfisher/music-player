@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import Library
 import Recommender
 import Settings
@@ -24,6 +25,7 @@ extension LibraryBrowser {
             }
         }
         rediscoverPanel.refresh = { [weak self] in self?.rediscover.read() }
+        rediscoverPanel.notNow = { [weak self] in self?.notNowSelection() }
     }
 
     /// The calls to music-recommender as set now; nil while its address or token isn't set.
@@ -58,6 +60,37 @@ extension LibraryBrowser {
     /// Whether the panel shown takes the height Listening Stats' does.
     var showsPanelOfStatsHeight: Bool {
         shownPanel === statsPanel || shownPanel === rediscoverPanel
+    }
+
+    /// Whether Not Now applies: Rediscover shows a day and tracks are selected.
+    public var canNotNow: Bool {
+        model.filter.source == .rediscover && rediscover.day != nil
+            && !table.table.selectedRowIndexes.isEmpty
+    }
+
+    /// Not Now: leaves the selected tracks' albums out of Rediscover for 30 days, which
+    /// Edit > Undo takes back; beeps when none is one of the day's.
+    public func notNowSelection() {
+        guard canNotNow else { return NSSound.beep() }
+        let ids = model.ids(ofRows: table.table.selectedRowIndexes)
+        Task {
+            let albums: [Int64]
+            do {
+                let byTrack = try await reader.albumIDs(ids: ids)
+                albums = ids.compactMap { byTrack[$0] }.reduce(into: []) { found, id in
+                    if !found.contains(id) { found.append(id) }
+                }
+            } catch {
+                return report("couldn't read the selected tracks' albums: \(error)")
+            }
+            guard let marking = rediscover.notNow(albums) else { return NSSound.beep() }
+            let marked = await marking.value
+            guard !marked.isEmpty, let undo = content.view.window?.undoManager else { return }
+            undo.registerUndo(withTarget: self) { target in
+                MainActor.assumeIsolated { _ = target.rediscover.undoNotNow(marked) }
+            }
+            undo.setActionName(AppCommands.title(of: .notNow))
+        }
     }
 
     /// Shows the reasons of the first selected track's album while Rediscover shows.

@@ -39,11 +39,27 @@ private func rediscoverBrowser(
     browser.rediscoverService = {
         RediscoverService(
             day: { asked throws(RecommenderError) in
-                await MainActor.run { calls.calls.append("day \(asked)") }
-                return answer
+                await MainActor.run {
+                    calls.calls.append("day \(asked)")
+                    var day = answer
+                    day.albums.removeAll { calls.marked.contains($0.id) }
+                    return day
+                }
             },
-            notNow: { _ throws(RecommenderError) in throw serviceError(.cancelled) },
-            undoNotNow: { _ throws(RecommenderError) in throw serviceError(.cancelled) })
+            notNow: { id throws(RecommenderError) in
+                await MainActor.run {
+                    calls.calls.append("not now \(id)")
+                    calls.marked.insert(id)
+                }
+                return 1_802_592_000
+            },
+            undoNotNow: { id throws(RecommenderError) in
+                await MainActor.run {
+                    calls.calls.append("undo \(id)")
+                    calls.marked.remove(id)
+                }
+                return true
+            })
     }
     browser.sendProfile = { force in
         calls.calls.append(force ? "send profile, forced" : "send profile")
@@ -98,4 +114,28 @@ private func waitForTheDay(_ browser: LibraryBrowser, _ ids: [Int64]) async thro
     browser.showsRediscoverInSidebar = true
     #expect(outline.numberOfRows == rows)
     #expect(browser.sidebarController.selectedSource == .rediscover)
+}
+
+@MainActor @Test func notNowFromTheSelectionTakesItsAlbumOutAndUndoPutsItBack() async throws {
+    let calls = RediscoverCalls()
+    let (browser, window, ids) = try await rediscoverBrowser(calls: calls)
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+    browser.showRediscover()
+    try await waitForTheDay(browser, ids)
+    #expect(!browser.canNotNow, "nothing selected")
+    browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
+    #expect(browser.canNotNow)
+    browser.notNowSelection()
+    try await waitForTheDay(browser, [ids[1]])
+    #expect(calls.calls.contains("not now k\(profileKey(albumID: ids[0]))"))
+    let undo = try #require(window.undoManager)
+    try await waitFor("the undo") { undo.canUndo }
+    #expect(undo.undoActionName == "Not Now")
+    undo.undo()
+    try await waitFor("the album back") { calls.marked.isEmpty }
+    try await waitFor("its tracks back") {
+        let albums = try await browser.reader.albumIDs(ids: browser.model.trackIDs)
+        return Set(albums.values) == Set(ids)
+    }
 }

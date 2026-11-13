@@ -88,3 +88,15 @@ it now goes unasked:
 - **Show Rediscover in Sidebar,** `library.showRediscover`, on by default, in Settings'
   Browsing section. Off, the row goes; Show Rediscover, in the File menu beside Show Listening
   Stats, still shows the source, with no row selected, as Library Health shows.
+
+### Not Now
+
+- **The service's mark.** Not Now, in the track table's context menu, the File menu beside
+  Show Rediscover and the Why This Album card, marks the selected tracks' albums of the day for
+  30 days with `rediscover/not_now`, so every Mac leaves them out. Albums of the selection that
+  aren't the day's are ignored.
+- **At once, then read again:** the albums leave the table before the service answers, and the
+  day is read again after, so the draw fills their place. A mark that fails is said in the
+  Today card, and the read puts its album back.
+- **Edit > Undo** removes the marks with `not_now/undo` and reads the day again, on the main
+  window's undo manager, named Not Now.
