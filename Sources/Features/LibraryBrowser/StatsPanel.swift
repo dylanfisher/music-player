@@ -124,7 +124,7 @@ final class StatsPanel: NSViewController, SourcePanel {
         showPeriod(model.period, years: model.years())
         rankings.selectedSegment = model.ranking == .plays ? 0 : 1
         if let report = model.report { cards.show(report, ranking: model.ranking) }
-        statusLabel.stringValue = model.isLoading ? "Reading…" : ""
+        statusLabel.stringValue = model.isLoading ? panelReadingText : ""
     }
 
     /// Names what the table is narrowed to in the header, and marks its row or bar; hides the

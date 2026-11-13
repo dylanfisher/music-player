@@ -5,9 +5,10 @@ import KeyChord
 import Library
 import Settings
 
-/// The source list: the library, History, the timeline and Listening Stats, and the playlists.
-/// Library Health isn't here: it opens from a command, and while it or a span of the timeline
-/// shows no row is selected.
+/// The source list: the library, History, the timeline, Listening Stats and Rediscover, and the
+/// playlists. Library Health isn't here: it opens from a command, and while it or a span of the
+/// timeline shows no row is selected; neither is one for Rediscover while Show Rediscover in
+/// Sidebar is off.
 /// Tracks dragged from the table onto a manual playlist are added to it; playlist files dropped
 /// anywhere on it are imported. A playlist's name is edited in its row after its context menu's
 /// Rename or Return; a click only selects it. The context menu also copies or deletes it. The
@@ -18,6 +19,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 {
     let outline = KeyOutlineView()
     private let library = SidebarNode(.library, title: "Music")
+    private let libraryGroup = SidebarNode(.group, title: "Library")
+    private let rediscover = SidebarNode(.rediscover, title: RediscoverPanel.title)
     private let groups: [SidebarNode]
     private let playlistGroup = SidebarNode(.group, title: "Playlists")
     private let selectSource: (BrowserSource?) -> Void
@@ -42,6 +45,16 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private var renameCancelled = false
     /// The period Stats showed last, which its row shows again.
     private(set) var statsPeriod = StatsPeriod.month
+    /// The source shown, which the rows select.
+    private var source: BrowserSource?
+    /// `library.showRediscover`: whether Rediscover has a row.
+    var showsRediscover = true {
+        didSet {
+            guard showsRediscover != oldValue else { return }
+            libraryGroup.children = libraryRows
+            show(playlists: playlists, source: source)
+        }
+    }
 
     init(
         selectSource: @escaping (BrowserSource?) -> Void,
@@ -49,21 +62,30 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     ) {
         self.selectSource = selectSource
         self.keyCommand = keyCommand
-        let libraryGroup = SidebarNode(.group, title: "Library")
         let history = SidebarNode(.history, title: "History")
         let timeline = SidebarNode(.timeline, title: "Timeline")
         let stats = SidebarNode(.stats, title: "Stats")
-        libraryGroup.children = [library, history, timeline, stats]
+        libraryRowsWithoutRediscover = [library, history, timeline, stats]
         libraryGroup.toolTip = "The whole library and what you've played."
         library.toolTip =
             "Every track in the library. The columns above the tracks and the search narrow it."
         history.toolTip = "Each track you've played, once, the latest played first."
         timeline.toolTip = "Every play, one row each, the latest first."
         stats.toolTip = "What you've played most, and when, by week, month or year."
+        rediscover.toolTip =
+            "Albums you have and haven't played for a long time, or ever, a new set each day."
         playlistGroup.toolTip =
             "Your playlists and smart playlists. Drop playlist files here to import them."
         groups = [libraryGroup, playlistGroup]
         super.init(nibName: nil, bundle: nil)
+        libraryGroup.children = libraryRows
+    }
+
+    private let libraryRowsWithoutRediscover: [SidebarNode]
+
+    /// The Library group's rows, Rediscover's last while it has one.
+    private var libraryRows: [SidebarNode] {
+        libraryRowsWithoutRediscover + (showsRediscover ? [rediscover] : [])
     }
 
     @available(*, unavailable)
@@ -99,6 +121,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// health check, selects none.
     func show(playlists: [Playlist], source: BrowserSource?) {
         self.playlists = playlists
+        self.source = source
         applying = true
         defer { applying = false }
         let open = openRows()
@@ -114,8 +137,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         case .health, .plays:
             outline.deselectAll(nil)
             return
+        case .rediscover where !showsRediscover:
+            outline.deselectAll(nil)
+            return
         case .stats(let period): statsPeriod = period
-        case .playlist, .history, .timeline, nil: break
+        case .playlist, .history, .timeline, .rediscover, nil: break
         }
         let selected = source.flatMap(row(for:)) ?? outline.row(forItem: library)
         outline.selectRowIndexes([selected], byExtendingSelection: false)
@@ -190,7 +216,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         guard let node = item as? SidebarNode else { return false }
         switch node.kind {
         case .group: return true
-        case .library, .history, .timeline, .stats, .playlist: return false
+        case .library, .history, .timeline, .stats, .rediscover, .playlist: return false
         }
     }
 
@@ -314,7 +340,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         switch selectedNode?.kind {
         case .library: selectSource(nil)
         case .group, nil: break
-        case .history, .timeline, .stats, .playlist: selectSource(selectedSource)
+        case .history, .timeline, .stats, .rediscover, .playlist: selectSource(selectedSource)
         }
     }
 }
@@ -441,7 +467,7 @@ func playlistFileURLs(_ pasteboard: NSPasteboard) -> [URL] {
 /// A row of the source list. A class, since NSOutlineView tells items apart by identity.
 private final class SidebarNode {
     enum Kind: Equatable {
-        case group, library, history, timeline, stats
+        case group, library, history, timeline, stats, rediscover
         case playlist(Playlist)
     }
 
@@ -457,6 +483,7 @@ private final class SidebarNode {
         case .playlist(let playlist): .playlist(playlist.id)
         case .history: .history
         case .timeline: .timeline
+        case .rediscover: .rediscover
         case .group, .library, .stats: nil
         }
     }
@@ -469,6 +496,7 @@ private final class SidebarNode {
         case .history: "clock"
         case .timeline: "list.bullet"
         case .stats: "chart.bar"
+        case .rediscover: "clock.arrow.circlepath"
         case .playlist(let playlist):
             switch playlist.kind {
             case .manual: SymbolName.playlist

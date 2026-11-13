@@ -349,6 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             signalPath: signalPath, queue: queue, saver: saver)
         self.browser = browser
         connectRatings(browser, nowPlaying) { [weak self] in self?.tagEditing.ratingsChanged() }
+        wireRediscover(browser, settings)
         self.nowPlaying = nowPlaying
         nowPlaying.follow(window.window)
         nowPlaying.problemOpened = { [weak self] in self?.showProblem($0) }

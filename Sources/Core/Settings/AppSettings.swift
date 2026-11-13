@@ -118,6 +118,9 @@ public struct AppSettings: SettingsSchema {
         "browser.columnGroupings", title: "Browser Column Groupings",
         groupings: BrowserColumn.defaults.map(\.grouping),
         "Each browser column's grouping, left to right; right-click a header to change.")
+    public let showRediscover = Setting(
+        "library.showRediscover", title: "Show Rediscover in Sidebar", default: true,
+        "List Rediscover in the sidebar; Show Rediscover opens it either way.")
     public let fileViewer = Setting(
         "library.fileViewer", title: "File Viewer", default: FileViewer.searcher,
         "Where Reveal in Finder shows tracks; without Searcher, it uses Finder.")

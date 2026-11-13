@@ -61,3 +61,30 @@ it now goes unasked:
   the panel's error, never skipped. `no_profile` is a refusal like any other.
 - **The day** is the Mac's local date in the Gregorian calendar, whatever calendar it shows,
   so two Macs in one time zone ask for the same draw.
+
+### The source
+
+- **`BrowserSource.rediscover`,** saved as `rediscover`, is the Rediscover row after Stats in
+  the sidebar's Library group, as Listening Stats is a source (ADR 0102): a panel in the
+  columns' place over the track table, so the day's tracks play, queue and drag as any
+  table's. The panel takes Listening Stats' height, which the divider drag saves; a second
+  saved height for a panel of the same cards wasn't worth a key.
+- **The panel** has the day and Refresh in its header, and three cards: Today, with how many
+  albums of how many considered and when they were scored, or what went wrong; Threads, a line
+  each, with the titles of the day's albums in it; and Why This Album, the selected track's
+  album and its reasons, as the service words them.
+- **The table** lists the tracks of the day's albums the index has, in the reply's order, each
+  album in disc and track order: Rediscover opens in the Order column's sort, as a manual
+  playlist does, and the user can sort it otherwise. The album ids are kept in memory on both
+  of the window's connections, as the refresh connection lists a source during a scan, so no
+  table is written.
+- **Reading:** each time Rediscover starts showing and on Refresh, the profile is sent if it
+  changed, then the day is asked for: the Mac's local date. A day's draw is the service's to
+  keep the same.
+- **Mapping back:** a reply's `key` is read as `a` and an album id, and the album must be in
+  the index under the reply's title. A key that isn't, after the index was rebuilt or when
+  another Mac sent the last profile, sends this Mac's profile, forced, and asks for the day once
+  more; keys still unknown then are said in the Today card, and the albums found still list.
+- **Show Rediscover in Sidebar,** `library.showRediscover`, on by default, in Settings'
+  Browsing section. Off, the row goes; Show Rediscover, in the File menu beside Show Listening
+  Stats, still shows the source, with no row selected, as Library Health shows.

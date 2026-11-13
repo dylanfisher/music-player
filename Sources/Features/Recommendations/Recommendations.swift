@@ -93,6 +93,12 @@ public final class Recommendations {
         }
     }
 
+    /// Sends the profile through the one sender, if it changed unless `force`, as Rediscover
+    /// asks before it reads a day, answering how it went.
+    package func sendProfile(force: Bool) async -> ProfileSender.Outcome {
+        await profileSender.send(force: force).value
+    }
+
     /// Sends the profile unasked, at launch and after a scan, if it changed since the last
     /// send. Only a failure is said.
     @discardableResult

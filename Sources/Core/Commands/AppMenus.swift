@@ -114,7 +114,7 @@ public enum AppMenus {
                     .command(.addFolder), .command(.showWatchedFolders), .command(.checkHealth),
                     .command(.analyzeLibrary), .command(.pauseLibraryAnalysis),
                     .command(.pauseScan), .command(.resumeScan),
-                    .command(.showStats), .command(.showYearInReview),
+                    .command(.showStats), .command(.showYearInReview), .command(.showRediscover),
                     .command(.showDiscogsTagger), .command(.showDownloads),
                     .command(.showRecommendations), .command(.recommendationsForAlbum),
                     .command(.recommendationsForArtist), .command(.rescanNow),

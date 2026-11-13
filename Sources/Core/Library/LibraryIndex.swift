@@ -39,6 +39,9 @@ public final class LibraryIndex {
     /// Whether albums are made of each Discogs release (ADR 0143): what this open built the
     /// index with, which the stored index SQL holds for every other connection.
     public private(set) var separateReleases = false
+    /// The day's albums of Rediscover, best first, which a `.rediscover` source lists; in
+    /// memory, as each connection's own (ADR 0206).
+    var rediscoverAlbums: [Int64] = []
     /// Files moved aside for one reason that are kept beside the library: unreadable ones, or
     /// those a restore replaced; older ones are deleted when another is moved.
     static let keptUnreadableFiles = 3

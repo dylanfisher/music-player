@@ -4,7 +4,7 @@ import StrictKeys
 /// (`docs/api.md` there, section Rediscover; ADR 0206).
 extension RecommenderClient {
     /// The days Not Now leaves an album out for.
-    static let notNowDays = 30
+    package static let notNowDays = 30
 
     /// The albums of `day`, `YYYY-MM-DD` as `RediscoverDay.day(of:)` makes it. The service
     /// answers from scores it has, within the usual timeout.
@@ -14,7 +14,7 @@ extension RecommenderClient {
 
     /// Leaves the album the service names `id` out of Rediscover for `days` days from now, in
     /// place of a mark there, answering when the mark ends, in Unix seconds.
-    func notNow(_ id: String, days: Int = notNowDays) async throws(RecommenderError)
+    package func notNow(_ id: String, days: Int = notNowDays) async throws(RecommenderError)
         -> Int
     {
         try await call(
@@ -24,7 +24,7 @@ extension RecommenderClient {
     }
 
     /// Removes the album's mark, answering whether there was one.
-    func undoNotNow(_ id: String) async throws(RecommenderError) -> Bool {
+    package func undoNotNow(_ id: String) async throws(RecommenderError) -> Bool {
         try await call(
             "/v1/rediscover/not_now/undo", body: UndoNotNowRequest(id: id),
             as: UndoNotNowReply.self

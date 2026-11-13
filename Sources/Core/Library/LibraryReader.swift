@@ -92,6 +92,14 @@ public actor LibraryReader {
     /// Lists `report`'s tracks for the `.health` sources.
     public func showHealth(_ report: HealthReport) throws { try index.showHealth(report) }
 
+    /// Lists Rediscover's `albums`, best first, for the `.rediscover` source, here and on the
+    /// refresh connection, and answers the ids of those the index doesn't have by that title.
+    public func showRediscover(_ albums: [(id: Int64, title: String)]) async throws -> [Int64] {
+        let unknown = try index.showRediscover(albums)
+        _ = try await refreshConnection?.showRediscover(albums)
+        return unknown
+    }
+
     public func trackIDs(_ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool)
         throws -> [Int64]
     {

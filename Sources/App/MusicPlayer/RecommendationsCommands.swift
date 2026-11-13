@@ -2,6 +2,7 @@ import Commands
 import Foundation
 import Library
 import LibraryBrowser
+import LocalNetwork
 import Recommendations
 import Recommender
 import Settings
@@ -30,6 +31,20 @@ extension AppDelegate {
         dispatcher.handle(.sendLibraryProfile, enabled: serviceIsSet) { [weak self] in
             self?.recommendations.sendProfile()
         }
+        dispatcher.handle(.showRediscover, enabled: hasWindow) { [weak self] in
+            self?.browser?.showRediscover()
+        }
+    }
+
+    /// Rediscover in `browser` (ADR 0206): the service's calls as set now, the profile sent
+    /// through Recommendations' sender, and its row in the sidebar as the setting says.
+    func wireRediscover(_ browser: LibraryBrowser, _ settings: ConfigStore<AppSettings>) {
+        browser.rediscoverService = { [weak self] in self?.rediscoverService() }
+        browser.sendProfile = { [weak self] force in
+            guard let self else { return .notSet }
+            return await recommendations.sendProfile(force: force)
+        }
+        browser.showsRediscoverInSidebar = settings[\.showRediscover]
     }
 
     /// `events`, the Library Analysis standing shown again and the profile sent, if it
@@ -88,12 +103,26 @@ extension AppDelegate {
     /// The calls to the service at its address, port and token as set now, or nil while the
     /// address or token isn't set.
     private func recommendationsService() -> RecommendationsService? {
-        guard let settings, let address = settings[\.recommenderAddress]?.address,
-            let token = settings[\.recommenderToken]
-        else { return nil }
-        let port = UInt16(settings[\.recommenderPort])
+        guard let (address, port, token) = serviceAddress() else { return nil }
         return RecommendationsService { () throws(RecommenderError) in
             try RecommenderClient(address: address, port: port, token: token)
         }
+    }
+
+    /// Rediscover's calls, as `recommendationsService` makes the window's.
+    private func rediscoverService() -> RediscoverService? {
+        guard let (address, port, token) = serviceAddress() else { return nil }
+        return RediscoverService { () throws(RecommenderError) in
+            try RecommenderClient(address: address, port: port, token: token)
+        }
+    }
+
+    /// The service's address, port and token as set now, or nil while the address or token
+    /// isn't set.
+    private func serviceAddress() -> (IPAddress, UInt16, ServiceToken)? {
+        guard let settings, let address = settings[\.recommenderAddress]?.address,
+            let token = settings[\.recommenderToken]
+        else { return nil }
+        return (address, UInt16(settings[\.recommenderPort]), token)
     }
 }

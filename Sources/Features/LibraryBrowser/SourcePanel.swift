@@ -13,6 +13,9 @@ protocol SourcePanel: NSViewController {
     func sourceShown(_ source: BrowserSource)
 }
 
+/// What a panel's header says while its content is being read.
+let panelReadingText = "Reading…"
+
 /// `document` in a scroll view that scrolls it up and down, as wide as the view and as tall as
 /// `height` makes it or its own size does, drawing no background: the panels' content and the
 /// Listening Stats lists.

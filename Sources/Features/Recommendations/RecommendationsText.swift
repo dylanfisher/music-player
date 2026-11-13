@@ -51,7 +51,7 @@ func sortTitle(_ sort: RecommendationQuery.Sort) -> String {
 /// What the window says in place of the list, and what to do about it.
 func problemText(_ problem: ListProblem, seed: RecommendationQuery.Seed) -> String {
     switch problem {
-    case .notSet: return "Set music-recommender's address and token in Settings."
+    case .notSet: return serviceNotSetText
     case .busy:
         return "The service is busy computing other lists. Try again in a minute."
     case .failed(let text): return text

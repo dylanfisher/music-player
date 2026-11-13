@@ -174,6 +174,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Listening Stats' own connection, opened the first time Stats shows.
     var statsReader: StatsReader?
     var yearReview: YearReviewWindow?
+    /// Rediscover's panel, shown while it's the source, and its model (ADR 0206).
+    let rediscoverPanel = RediscoverPanel()
+    private(set) lazy var rediscover = makeRediscover()
     /// The panel slot's height while Stats shows, apart from the columns' (ADR 0102).
     public var statsHeight = AppState().statsHeight.defaultValue
     /// The slot's height as last placed or dragged, so a change of panel moves the divider
@@ -279,6 +282,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         table.selectionChanged = {
             owner?.readSelectionTotals()
             owner?.recordSelection()
+            owner?.rediscoverSelectionChanged()
             owner?.selectionChanged()
         }
         table.dropFiles = { urls in Task { await owner?.addFiles(urls) } }
@@ -394,6 +398,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         content.addChild(healthPanel)
         wireStats()
         content.addChild(statsPanel)
+        wireRediscover()
     }
 
     private func makeContent() -> NSView {
@@ -512,10 +517,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         split.needsDisplay = true
     }
 
-    /// The slot's height for what it holds: the Stats panel's own, or the columns', which the
-    /// health panel shares, at least its least height.
+    /// The slot's height for what it holds: the Stats panel's own, which Rediscover's shares, or
+    /// the columns', which the health panel shares, at least its least height.
     var slotHeight: Int {
-        if shownPanel === statsPanel { return statsHeight }
+        if showsPanelOfStatsHeight { return statsHeight }
         if shownPanel === healthPanel { return max(browserHeight, HealthPanel.leastHeightPoints) }
         return browserHeight
     }
@@ -523,7 +528,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// The least height of the panel shown, which its divider keeps; nil for the columns,
     /// which can be dragged shut.
     private var leastSlotHeight: Int? {
-        if shownPanel === statsPanel { return AppState.statsHeightRange.lowerBound }
+        if showsPanelOfStatsHeight { return AppState.statsHeightRange.lowerBound }
         if shownPanel === healthPanel { return HealthPanel.leastHeightPoints }
         return nil
     }
@@ -907,6 +912,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showTimelineIfItIsTheSource()
         showPanelOfTheSource()
         readStatsIfShownFirst()
+        readRediscoverIfShownFirst()
         runHealthIfShownFirst()
         readTotals(
             of: model.trackIDs, into: \.listTotals,
@@ -2222,6 +2228,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         switch source {
         case .health: healthPanel
         case .stats: statsPanel
+        case .rediscover: rediscoverPanel
         case .playlist, .history, .timeline, .plays, nil: nil
         }
     }
@@ -2643,7 +2650,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             return
         }
         placedHeight = height
-        if shownPanel === statsPanel {
+        if showsPanelOfStatsHeight {
             guard height != statsHeight else { return }
             statsHeight = height
             statsHeightChanged(height)

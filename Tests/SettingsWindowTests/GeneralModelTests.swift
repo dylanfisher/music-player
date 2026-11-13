@@ -313,7 +313,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         sections.first { $0.section == .playCounts }?.rows.map(\.key) == [schema.playedPercent.key])
     #expect(
         sections.first { $0.section == .browsing }?.rows.map(\.key) == [
-            schema.groupByAlbumArtist.key, schema.separateReleases.key, schema.fileViewer.key,
+            schema.groupByAlbumArtist.key, schema.separateReleases.key,
+            schema.showRediscover.key, schema.fileViewer.key,
         ])
     #expect(
         sections.first { $0.section == .database }?.rows.map(\.key) == [

@@ -15,7 +15,7 @@ package struct RediscoverDay: Equatable, Sendable, Decodable {
         /// When the scores the draw is from were computed, in Unix seconds.
         package var computedAt: Int
         /// The profile's albums before the draw and the not-now marks.
-        var albumsConsidered: Int
+        package var albumsConsidered: Int
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case day

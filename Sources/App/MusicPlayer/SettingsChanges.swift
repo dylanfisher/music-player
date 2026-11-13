@@ -161,6 +161,9 @@ extension AppDelegate {
             let on = settings[\.groupByAlbumArtist]
             Task { await browser.setGroupByAlbumArtist(on) }
         }
+        if keys.contains(schema.showRediscover.key) {
+            browser?.showsRediscoverInSidebar = settings[\.showRediscover]
+        }
         if keys.contains(schema.separateReleases.key) { askToSeparateReleases(settings) }
         // A file that stops naming the key leaves the columns as they are, as a launch without
         // it keeps the state file's.

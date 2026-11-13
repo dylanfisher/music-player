@@ -282,9 +282,9 @@ public final class BrowserModel {
         return playlists.contains { $0.id == id }
     }
 
-    /// A manual playlist opens in its own order, and History with the latest play first. Other
-    /// sources keep the sort the table has, and leaving one of those two puts back the sort it
-    /// replaced, unless the user chose another meanwhile.
+    /// A manual playlist and Rediscover open in their own order, History with the latest play
+    /// first and Stats with the most played. Other sources keep the sort the table has, and
+    /// leaving one of these puts back the sort it replaced, unless the user chose another.
     func defaultSort(_ source: BrowserSource?) -> (column: TrackColumn, ascending: Bool)? {
         switch source {
         case .playlist(let id):
@@ -292,6 +292,7 @@ public final class BrowserModel {
         case .history: (.lastPlayed, false)
         // The tracks played most first, as the panel ranks them.
         case .stats: (.playCount, false)
+        case .rediscover: (.playlistOrder, true)
         case .timeline, .plays, .health, nil: nil
         }
     }
@@ -522,7 +523,7 @@ public final class BrowserModel {
     private func enter(_ source: BrowserSource?) {
         changeSort(from: pending.source, to: source)
         switch source {
-        case .health, .stats: pending.selections = [:]
+        case .health, .stats, .rediscover: pending.selections = [:]
         case .playlist, .history, .timeline, .plays, nil: break
         }
         switch (pending.source, source, pending.stats?.item) {

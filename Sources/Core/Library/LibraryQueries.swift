@@ -115,7 +115,11 @@ extension LibraryIndex {
         // album order below.
         var entries = ""
         var entryValues: [(any SQLiteValue)?] = []
-        if column == .playlistOrder {
+        let rediscovers = filter.source == .rediscover
+        if column == .playlistOrder, rediscovers {
+            // Rediscover's order is its albums', each in disc and track order below.
+            entries = "LEFT JOIN (\(rediscoverOrderSQL)) pe ON pe.album_id = t.album_id"
+        } else if column == .playlistOrder {
             entries =
                 "LEFT JOIN playlist_entries pe ON pe.playlist_id = ? AND pe.path_id = t.file_id"
             if case .playlist(let id) = filter.source {
@@ -140,6 +144,8 @@ extension LibraryIndex {
             order =
                 (column == .artist ? "\(artist), \(album)" : "\(album), \(artist)")
                 + ", \(release)t.album_id \(direction)"
+            tieBreak = "t.disc_number, t.track_number, t.sort_title, t.file_id"
+        } else if column == .playlistOrder, rediscovers {
             tieBreak = "t.disc_number, t.track_number, t.sort_title, t.file_id"
         } else if column == .lastPlayed {
             // A time is almost unique, so the ID breaks ties without the artist and album
@@ -471,6 +477,8 @@ extension LibraryIndex {
                     + " WHERE played_at >= ? AND played_at < ?)" + narrowed,
                 [span.start, span.end, span.start, span.end] + values
             )
+        case .rediscover:
+            return ("t.album_id IN (\(sqlList(rediscoverAlbums)))", [])
         case .timeline, .plays:
             // The timeline pages through plays with `timeline(before:limit:)` instead.
             throw LibraryError.playsNotTracks

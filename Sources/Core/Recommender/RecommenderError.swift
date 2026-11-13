@@ -2,6 +2,9 @@ import DisplayText
 import Foundation
 import LocalNetwork
 
+/// What a window or panel says while the service can't be asked.
+package let serviceNotSetText = "Set music-recommender's address and token in Settings."
+
 /// Why a call to music-recommender failed, naming the address it went to and never the token.
 package struct RecommenderError: Error, Equatable, CustomStringConvertible {
     package enum Kind: Error, Equatable, CustomStringConvertible {

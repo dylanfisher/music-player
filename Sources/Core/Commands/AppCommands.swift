@@ -69,6 +69,8 @@ extension CommandID {
     /// Shows Listening Stats; `music-player stats` prints them (ADR 0102).
     public static let showStats = CommandID("library.stats")
     public static let showYearInReview = CommandID("library.yearInReview")
+    /// Shows Rediscover, whether or not the sidebar lists it (ADR 0206).
+    public static let showRediscover = CommandID("library.rediscover")
     /// Opens the Discogs tagger, which writes tags only after the user confirms (ADR 0133).
     public static let showDiscogsTagger = CommandID("library.discogsTagger")
     /// Opens the Downloads window: albums music-recommender found on Soulseek, staged for
@@ -280,6 +282,7 @@ public enum AppCommands {
             Command(
                 .showStats, "Show Listening Stats", argument: statsPeriodArgument, replies: true),
             Command(.showYearInReview, "Show Year in Review"),
+            Command(.showRediscover, "Show Rediscover"),
             Command(.showDiscogsTagger, "Discogs Tagger…"),
             Command(.showDownloads, "Downloads…"),
             Command(.showRecommendations, "Recommendations…"),
