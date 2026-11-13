@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-10
 - **Status:** accepted; each album's `key`, `last_played` and `skips` added by
-  [0206](0206-rediscover.md) (phase 86.1)
+  [0206](0206-rediscover.md) (phase 87.1)
 - **See also:** [0129](0129-custom-tag-fields.md) (an album's release id),
   [0131](0131-discogs-matching.md) (the matcher's albums),
   [0144](0144-the-service-token.md) (the service token),

@@ -9,7 +9,7 @@
 
 ## Context
 
-Phase 86. music-recommender's phase 9 scores the albums the library already has by how long
+Phase 87. music-recommender's phase 9 scores the albums the library already has by how long
 since they were played, by the community's ratings and haves, and by the owner's loves, and
 `POST /v1/rediscover` answers a day's draw of them with reasons and threads (its `docs/api.md`,
 Rediscover). It reads three new fields of each album in the profile, `key`, `last_played` and

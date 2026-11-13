@@ -51,8 +51,7 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 Set by the owner on 2026-11-11. Earlier run orders are in the archive.
 
 1. Phase 85, what phase 84 left, waits until the owner starts it.
-2. Phase 86, Rediscover, added by the owner on 2026-11-12 and run now.
-3. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -110,6 +109,9 @@ that phase's Result line, and delete its line here.
 
 ### Owner checks in the running app
 
+- **87** ([phase](plan-archive.md#87-rediscover)): Rediscover on this Mac and the 2015 MacBook
+  Pro over two days, against the real service: the panel, Not Now's undo, a resend from the
+  other Mac, and whether the albums, reasons and threads hold up.
 - **35** ([phase](plan-archive.md#35-seek-progress-bar-and-buffering)): click and scrub the
   progress bar on the 2015 MacBook Pro, in the toolbar and the status bar, glass on and off.
 - **36** ([phase](plan-archive.md#36-window-chrome-and-glass)): dark mode, the real blur, 36.8's
@@ -388,44 +390,6 @@ detail of each item.
       playback rows.
 - [ ] **Code review** of phase 84's 52 commits, which landed without one: `/code-review high`
       on `5fb2cabe..` the landing commit, its confirmed findings fixed.
-
-### 86. Rediscover
-
-Albums already in the library, brought back to play, scored by music-recommender's
-`POST /v1/rediscover` (its phase 9; the contract is its `docs/api.md`, Rediscover, and the
-profile's new fields). The owner (2026-11-12): "music already in my library is resurfaced for
-me to listen to", weighed by community ratings and by music not listened to "ever/recently",
-with "interesting relations between music surfaced". The owner's answers (2026-11-12): a
-sidebar source like Listening Stats, with a setting to leave its row out of the sidebar;
-albums never played and added recently take part; Not Now is kept by the service; the profile
-is sent on its own.
-
-- [x] **86.1 The profile's new fields.** Each album's `key` (the player's album id),
-      `last_played` (the latest real play of its tracks, never an imported Last Played, ADR
-      0105) and `skips`, in `LibraryProfileExport` and the export file. Tests: an imported Last
-      Played isn't sent; the newest track play is.
-      Commit `33748674`.
-- [x] **86.2 Sent on its own.** The profile goes at launch, after a scan, and when Rediscover
-      opens or refreshes if it changed since the last send, one at a time, batched. ADR 0205's
-      "never unasked" amended. Tests with a stand-in transport and an injected clock.
-      Commit `be46a045`.
-- [x] **86.3 The client.** `rediscover`, `not_now` and `not_now/undo` routes in
-      `Core/Recommender`, decoded strictly, an unknown `kind` an error, with fuzz targets and
-      recorded replies.
-      Commit `7e8c1068`.
-- [x] **86.4 The source.** `BrowserSource.rediscover`: a panel of cards (the threads, and the
-      day) over a track table of the day's albums' tracks in the reply's order, each album's
-      reasons in the panel when it's selected; a Show Rediscover command; a setting, Show
-      Rediscover in Sidebar, on by default. The model has no AppKit and the tests drive it.
-      Commits `56529056`, `6771c5b5`, `150ce62a`.
-- [x] **86.5 Not Now.** From the context menu and the panel: 30 days, Edit > Undo removes the
-      mark; the album leaves at once and the day's list is read again.
-      Commit `5d0542b8`.
-- [x] **86.6 Not answering.** The panel says when the service isn't answering or refuses the
-      token, naming the address, as the Recommendations window does.
-      Commit `d2e4da06`.
-- [ ] **Hardware checkpoint (owner):** on this Mac and the 2015 MacBook Pro, open Rediscover on
-      two days, play an album from it, and judge the albums, reasons and threads.
 
 ### 10. Web remote
 

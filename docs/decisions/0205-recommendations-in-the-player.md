@@ -1,7 +1,7 @@
 # 0205. Recommendations in the player
 
 - **Date:** 2026-11-11
-- **Status:** accepted; the profile sent unasked amended 2026-11-12 (phase 86.2)
+- **Status:** accepted; the profile sent unasked amended 2026-11-12 (phase 87.2)
 - **Amended by:** [0206](0206-rediscover.md), 2026-11-12: the profile is sent unasked at
   launch, after a scan that changed the library and when Rediscover opens or refreshes, each
   time only if it changed since the last send; Send Library Profile to Service stays, and

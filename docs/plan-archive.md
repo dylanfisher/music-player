@@ -12838,3 +12838,49 @@ passed alone; LibraryBrowserTests `leavingStatsRedrawsTheSplitsOldDivider` faile
 alone, in code the phase didn't touch, and passed in commit 8's run. Cost: two Opus
 implementers (the owner stopped the first in commit 6), the second about 129k tokens, 58 tool
 calls and 16 minutes; the first's count wasn't reported. Pending: the owner check.
+
+### 87. Rediscover
+
+Albums already in the library, brought back to play, scored by music-recommender's
+`POST /v1/rediscover` (its phase 9; the contract is its `docs/api.md`, Rediscover, and the
+profile's new fields). The owner (2026-11-12): "music already in my library is resurfaced for
+me to listen to", weighed by community ratings and by music not listened to "ever/recently",
+with "interesting relations between music surfaced". The owner's answers (2026-11-12): a
+sidebar source like Listening Stats, with a setting to leave its row out of the sidebar;
+albums never played and added recently take part; Not Now is kept by the service; the profile
+is sent on its own.
+
+- [x] **87.1 The profile's new fields.** Each album's `key` (the player's album id),
+      `last_played` (the latest real play of its tracks, never an imported Last Played, ADR
+      0105) and `skips`, in `LibraryProfileExport` and the export file. Tests: an imported Last
+      Played isn't sent; the newest track play is.
+      Commit `33748674`.
+- [x] **87.2 Sent on its own.** The profile goes at launch, after a scan, and when Rediscover
+      opens or refreshes if it changed since the last send, one at a time, batched. ADR 0205's
+      "never unasked" amended. Tests with a stand-in transport and an injected clock.
+      Commit `be46a045`.
+- [x] **87.3 The client.** `rediscover`, `not_now` and `not_now/undo` routes in
+      `Core/Recommender`, decoded strictly, an unknown `kind` an error, with fuzz targets and
+      recorded replies.
+      Commit `7e8c1068`.
+- [x] **87.4 The source.** `BrowserSource.rediscover`: a panel of cards (the threads, and the
+      day) over a track table of the day's albums' tracks in the reply's order, each album's
+      reasons in the panel when it's selected; a Show Rediscover command; a setting, Show
+      Rediscover in Sidebar, on by default. The model has no AppKit and the tests drive it.
+      Commits `56529056`, `6771c5b5`, `150ce62a`.
+- [x] **87.5 Not Now.** From the context menu and the panel: 30 days, Edit > Undo removes the
+      mark; the album leaves at once and the day's list is read again.
+      Commit `5d0542b8`.
+- [x] **87.6 Not answering.** The panel says when the service isn't answering or refuses the
+      token, naming the address, as the Recommendations window does.
+      Commit `d2e4da06`.
+- [ ] **Hardware checkpoint (owner):** on this Mac and the 2015 MacBook Pro, open Rediscover on
+      two days, play an album from it, and judge the albums, reasons and threads.
+
+Result (2026-11-12, minimal mode at the owner's word: one Opus builder, the full
+`./scripts/check` once, no `/code-review` or `/simplify`): ADR 0206, ADR 0205 amended for the
+profile sent on its own. `./scripts/check` failed only on tests the phase didn't touch:
+`theGlassHeadersAreFrosted` and `aRefusedQuarantineFlagIsLeftOff` fail the same way on its
+base, and HALOutputTests `aDeviceCallNamesTheDeviceAndNoFile` failed 1 of 3 runs on main; that
+flake still needs its cause found. Built against stand-ins only; the service side is
+music-recommender's phase 9. Pending: the owner check.
