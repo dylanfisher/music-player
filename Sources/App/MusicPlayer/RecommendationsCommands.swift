@@ -6,8 +6,9 @@ import Recommendations
 import Recommender
 import Settings
 
-/// music-recommender's lists (phase 86, ADR 0205): Send Library Profile to Service sends the
-/// profile only when asked, while the service's address and token are set.
+/// music-recommender's lists (ADR 0205), and the profile, sent by Send Library Profile to
+/// Service and unasked at launch and after a scan that changed the library (ADR 0206), while
+/// the service's address and token are set.
 extension AppDelegate {
     func registerRecommendationsCommands(_ dispatcher: CommandDispatcher) {
         let serviceIsSet = { [weak self] in
@@ -28,6 +29,32 @@ extension AppDelegate {
         }
         dispatcher.handle(.sendLibraryProfile, enabled: serviceIsSet) { [weak self] in
             self?.recommendations.sendProfile()
+        }
+    }
+
+    /// `events`, the Library Analysis standing shown again and the profile sent, if it
+    /// changed, after each scan that changed the library.
+    func standingAndProfileFollowing(
+        _ events: @escaping @Sendable (WatcherEvent) -> Void
+    ) -> @Sendable (WatcherEvent) -> Void {
+        profileSentFollowing(analysisStandingFollowing(events))
+    }
+
+    private func profileSentFollowing(
+        _ events: @escaping @Sendable (WatcherEvent) -> Void
+    ) -> @Sendable (WatcherEvent) -> Void {
+        { [weak self] event in
+            events(event)
+            let changed: Bool =
+                switch event {
+                case .scanned(_, let summary): summary.read > 0 || summary.removed > 0
+                case .removed: true
+                default: false
+                }
+            guard changed else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { _ = self?.recommendations.sendProfileIfChanged() }
+            }
         }
     }
 

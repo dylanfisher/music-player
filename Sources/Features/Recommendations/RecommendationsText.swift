@@ -9,6 +9,12 @@ func profileSentSummary(_ receipt: ProfileReceipt) -> String {
         + " \(number(receipt.queued)) newly queued for the community sync"
 }
 
+/// What the status bar says when the profile couldn't be read or sent: `why` names the
+/// address.
+func profileFailure(_ why: String) -> String {
+    terminalSafe("couldn't send the library profile: \(why)")
+}
+
 /// What a pending read says: a seed list's first read computes it.
 func pendingText(_ seed: RecommendationQuery.Seed) -> String {
     switch seed {

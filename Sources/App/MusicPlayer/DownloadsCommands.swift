@@ -63,6 +63,8 @@ extension AppDelegate {
         downloadsStarting?.cancel()
         downloadsStarting = nil
         guard let settings, downloadsAreSet(settings) else { return downloads.stop() }
+        // At launch, and once the address or token is set (ADR 0206).
+        recommendations.sendProfileIfChanged()
         let database = libraryFileURL(in: paths.dataDirectory)
         // The name comes from the index, which is read off the main thread.
         downloadsStarting = Task { [weak self] in

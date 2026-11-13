@@ -33,3 +33,20 @@ profile is sent on its own.
 - **`skips`** are the tracks' skip counts summed, as the Skips column shows them, imported
   skips included: a skip has no date to tell them apart by.
 - Export Library Profile… writes the same fields, so the file stays what is sent.
+
+### The profile is sent on its own
+
+ADR 0205 sent it only when asked. Rediscover's list is only as current as the last profile, so
+it now goes unasked:
+
+- **When:** at launch, after a scan that read or removed files, and when Rediscover opens or is
+  refreshed. Each time the profile is read again and sent only if it differs from the one this
+  run last sent, so a scan of a network folder that changed nothing sends nothing.
+- **Not after a play.** The service scores its recommendation list again whenever the plays
+  or loves in the profile change, so a send after every play would rebuild it all day.
+  Rediscover opening sends the plays since; the service's list follows the next launch or scan.
+- **One at a time.** `ProfileSender` keeps one send out; every ask made meanwhile is answered
+  by one more send after it, which reads the profile then. A send that fails is tried again at
+  the next ask; an unasked one says only its failure in the status bar, naming the address.
+- **Send Library Profile to Service stays,** and sends the profile though it hasn't changed,
+  through the same sender, saying what the service kept.

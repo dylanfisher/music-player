@@ -1012,7 +1012,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A run Bench measures, or one drawing a PNG, takes no snapshots, which would add
         // their reads to what it measures.
         let snapshotting = measuring == nil && !reportingLaunch && snapshotURL == nil
-        let events = analysisStandingFollowing(
+        let events = standingAndProfileFollowing(
             reportingLaunch ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents)
         guard
             let watcher = startedWatcher(

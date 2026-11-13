@@ -6,8 +6,9 @@ import Recommender
 import Settings
 import WindowPlacement
 
-/// music-recommender's lists of albums the library doesn't have (phase 86, ADR 0205), and
-/// Send Library Profile to Service, which sends the profile only when asked.
+/// music-recommender's lists of albums the library doesn't have (ADR 0205), and the
+/// library profile, sent unasked when it changed and by Send Library Profile to Service
+/// (ADR 0206).
 @MainActor
 public final class Recommendations {
     /// The calls to the service as set now; nil while its address or token isn't set.
@@ -32,6 +33,8 @@ public final class Recommendations {
     /// The state of each release's newest download job, by release id, from Downloads.
     private var downloads: [Int: String] = [:]
     private var sendingProfile = false
+    /// Every send of the profile, asked or not, one at a time.
+    private(set) lazy var profileSender = makeProfileSender()
     /// The window's column widths, as the state file keeps them.
     public var columnWidths = ColumnWidths()
     public var columnWidthsChanged: (ColumnWidths) -> Void = { _ in }
@@ -52,8 +55,23 @@ public final class Recommendations {
         }
     }
 
-    /// Send Library Profile to Service: reads the profile, sends it, and says what the service
-    /// did with it, or why it couldn't. One send at a time.
+    private func makeProfileSender() -> ProfileSender {
+        ProfileSender(
+            read: { [weak self] in
+                guard let self else { throw CancellationError() }
+                return try await readProfile()
+            },
+            send: { [weak self] in
+                guard let service = self?.service() else { return nil }
+                let send: ProfileSender.Send = { profile throws(RecommenderError) in
+                    try await service.sendProfile(profile)
+                }
+                return send
+            })
+    }
+
+    /// Send Library Profile to Service: reads the profile, sends it though it may be the one
+    /// sent last, and says what the service did with it, or why it couldn't.
     @discardableResult
     public func sendProfile() -> Task<Void, Never>? {
         guard !sendingProfile else {
@@ -61,17 +79,27 @@ public final class Recommendations {
             say("The library profile is already being sent")
             return nil
         }
-        guard let service = service() else { return nil }
+        guard service() != nil else { return nil }
         sendingProfile = true
         say("Sending the library profile…")
+        let sending = profileSender.send(force: true)
         return Task {
             defer { sendingProfile = false }
-            do {
-                let profile = try await readProfile()
-                say(profileSentSummary(try await service.sendProfile(profile)))
-            } catch {
-                report(terminalSafe("couldn't send the library profile: \(error)"))
+            switch await sending.value {
+            case .sent(let receipt): say(profileSentSummary(receipt))
+            case .failed(let why): report(profileFailure(why))
+            case .notSet, .unchanged: break
             }
+        }
+    }
+
+    /// Sends the profile unasked, at launch and after a scan, if it changed since the last
+    /// send. Only a failure is said.
+    @discardableResult
+    public func sendProfileIfChanged() -> Task<Void, Never> {
+        let sending = profileSender.send()
+        return Task {
+            if case .failed(let why) = await sending.value { report(profileFailure(why)) }
         }
     }
 
