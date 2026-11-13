@@ -50,3 +50,14 @@ it now goes unasked:
   the next ask; an unasked one says only its failure in the status bar, naming the address.
 - **Send Library Profile to Service stays,** and sends the profile though it hasn't changed,
   through the same sender, saying what the service kept.
+
+### The client
+
+- **Three routes** on `RecommenderClient`: `rediscover(day:)`, `notNow(_:days:)` with 30 days
+  unless asked, and `undoNotNow(_:)`, each with the usual 5 s timeout: the service answers
+  from scores it already has, budgeted under 1 s.
+- **Strict, as every reply:** a field missing or not in the contract fails the reply, naming
+  it, and so does a reason's or a thread's `kind` this player doesn't know, which is shown as
+  the panel's error, never skipped. `no_profile` is a refusal like any other.
+- **The day** is the Mac's local date in the Gregorian calendar, whatever calendar it shows,
+  so two Macs in one time zone ask for the same draw.

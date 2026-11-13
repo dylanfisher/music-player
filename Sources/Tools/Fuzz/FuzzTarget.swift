@@ -40,7 +40,7 @@ struct FuzzTarget: Sendable {
         vorbis, config, state, journal, rules, playlistFile, syncLog, swinsian, swinsianPredicate,
         swinsianColumns, iTunesXML, tagWriter, receiverLine, deviceDescription, soapReply,
         avTransportReply, serviceDescription, httpRequest, didlLite, chunkedBody, discogsDump,
-        recommenderReply,
+        recommenderReply, rediscoverReply,
     ]
 
     static func named(_ name: String) -> FuzzTarget? { all.first { $0.name == name } }

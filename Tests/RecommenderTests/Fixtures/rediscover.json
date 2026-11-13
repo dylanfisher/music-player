@@ -1,0 +1,25 @@
+{"ok": true,
+ "rediscover": {"day": "2026-11-12", "computed_at": 1800000000, "albums_considered": 6541},
+ "albums": [
+  {"id": "r4242", "key": "a812", "artist": "Made-Up Artist", "title": "Made-Up Album",
+   "release_id": 4242, "year": 1997, "label": {"id": 30, "name": "Seed Records"},
+   "styles": [{"id": 2, "name": "Made-Up Common"}],
+   "plays": 31, "skips": 2, "last_played": 1693000000, "score": 0.92,
+   "community": {"release_id": 4242, "status": "fetched", "checked_at": 1794060000,
+                 "values": {"rating_average": 4.4, "rating_count": 310, "have": 5120,
+                            "want": 1400, "num_for_sale": 12, "lowest_price": 9.5}},
+   "reasons": [
+    {"kind": "not_played_since", "words": "Last played 3 years ago", "keys": [],
+     "artist": null, "role": null, "label": null},
+    {"kind": "credit", "words": "Engineer: Dee Engineer, also on 2 albums you played this month",
+     "keys": ["a90", "a133"], "artist": {"id": 21, "name": "Dee Engineer"}, "role": "Engineer",
+     "label": null}]},
+  {"id": "k3f9a0c1d", "key": "a77", "artist": "Other Band", "title": "Never Heard",
+   "release_id": null, "year": null, "label": null, "styles": [],
+   "plays": 0, "skips": 0, "last_played": null, "score": 0.61, "community": null,
+   "reasons": [
+    {"kind": "never_played", "words": "Never played", "keys": [],
+     "artist": null, "role": null, "label": null}]}],
+ "threads": [
+  {"kind": "label", "words": "Seed Records, 1995 to 2001", "ids": ["r4242", "r5150"],
+   "artist": null, "label": {"id": 30, "name": "Seed Records"}}]}

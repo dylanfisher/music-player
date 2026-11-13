@@ -1,3 +1,4 @@
+import Library
 import LocalNetwork
 import Recommender
 
@@ -54,6 +55,58 @@ let recommenderReply = FuzzTarget(
                         "the paging went to \(jobs.after)")
                 }
             }
+            return read
+        }
+    })
+
+/// A day of Rediscover with every field the contract has, an untagged album and a thread.
+private let rediscoverDay = """
+    {"ok": true, "rediscover": {"day": "2026-11-12", "computed_at": 1800000000,
+    "albums_considered": 6541}, "albums": [{"id": "r4242", "key": "a812", "artist": "A",
+    "title": "T", "release_id": 4242, "year": 1997, "label": {"id": 30, "name": "L"},
+    "styles": [{"id": 2, "name": "S"}], "plays": 31, "skips": 2, "last_played": 1693000000,
+    "score": 0.92, "community": {"release_id": 4242, "status": "fetched",
+    "checked_at": 1794060000, "values": {"rating_average": 4.4, "rating_count": 310,
+    "have": 5120, "want": 1400, "num_for_sale": 12, "lowest_price": 9.5}}, "reasons": [
+    {"kind": "credit", "words": "w", "keys": ["a90"], "artist": {"id": 21, "name": "D"},
+    "role": "Engineer", "label": null}]}, {"id": "k3f9", "key": "a77", "artist": "B",
+    "title": "U", "release_id": null, "year": null, "label": null, "styles": [], "plays": 0,
+    "skips": 0, "last_played": null, "score": 0.61, "community": null, "reasons": [
+    {"kind": "never_played", "words": "w", "keys": [], "artist": null, "role": null,
+    "label": null}]}], "threads": [{"kind": "label", "words": "w", "ids": ["r4242", "k3f9"],
+    "artist": null, "label": {"id": 30, "name": "L"}}]}
+    """
+
+/// music-recommender's Rediscover replies: a day, whose keys are read back as album ids as
+/// the browser reads them, and Not Now's two answers.
+let rediscoverReply = FuzzTarget(
+    name: "rediscover-reply",
+    summary: "music-recommender's Rediscover replies: a day and Not Now's answers",
+    seedFormats: [],
+    tokens: jsonTokens + ["\"a0\"", "\"a-1\"", "\"a9223372036854775808\"", "\"kind\""],
+    madeSeeds: { _, _ in
+        [
+            rediscoverDay, #"{"ok": true, "until": 1802592000}"#,
+            #"{"ok": true, "removed": false}"#,
+            #"{"ok": false, "error": {"code": "no_profile", "message": "m"}}"#,
+        ].map { Array($0.utf8) }
+    },
+    prepare: { _ in
+        { input in
+            var read = false
+            // Most inputs aren't a reply of any kind; only one that decodes is checked.
+            if let day = try? decodeReply(input, as: RediscoverDay.self) {
+                read = true
+                for album in day.albums {
+                    if let id = albumID(profileKey: album.key) {
+                        precondition(id > 0 && profileKey(albumID: id) == album.key, "\(album.key)")
+                    }
+                }
+            }
+            // As above, for Not Now's answers.
+            if (try? decodeReply(input, as: NotNowReply.self)) != nil { read = true }
+            // As above.
+            if (try? decodeReply(input, as: UndoNotNowReply.self)) != nil { read = true }
             return read
         }
     })
