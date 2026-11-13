@@ -100,3 +100,35 @@ it now goes unasked:
   Today card, and the read puts its album back.
 - **Edit > Undo** removes the marks with `not_now/undo` and reads the day again, on the main
   window's undo manager, named Not Now.
+
+### Not answering
+
+- **The panel says it,** as the Recommendations window does, in the error's own words, which
+  name the address tried: the header says Not answering for no answer or an address off the
+  local subnets, with a line in the Today card to check the service runs there and the address
+  in Settings, and Token refused for a 401, whose words say it must match `player_token`. Any
+  other error is said in the Today card alone.
+- **The day read before stays** in the table under the error, so a service down for a minute
+  doesn't empty the source; Refresh asks again.
+
+## Alternatives considered
+
+- **A window of its own,** as Recommendations has. Rejected by the owner: the albums are the
+  library's own, so a track table over the index holds them, and play, queue and drag work as
+  everywhere.
+- **The day's albums in a temporary table** on the window's connection, as Library Health's
+  tracks are. Rejected: the refresh connection is read-only and lists the source during a
+  scan, so it would list nothing; a list of 60 ids in memory on each connection costs nothing.
+- **Matching a reply's album by artist and title** instead of `key`. Rejected: the key names
+  the album row, and the title is checked against it, so an album of another Mac's profile
+  isn't taken for one of this library.
+- **Sending the profile after every play,** so Rediscover never misses one. Rejected: the
+  service scores its recommendation list again when plays change.
+- **Keeping Not Now in the player,** in the state file. Rejected by the owner: the service's
+  mark holds on every Mac and the draw leaves the album out itself.
+
+## Consequences
+
+- The first open after a launch on a Mac that didn't send the last profile sends this Mac's,
+  so the two Macs' profiles take turns at the service, each replacing the other's.
+- Rediscover's height is Listening Stats', and a drag of either divider sets both.

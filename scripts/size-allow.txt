@@ -1,12 +1,12 @@
 # Swift files under Sources over 1,000 lines, each with its ceiling, `<path> <ceiling> | <reason>`
 # (scripts/size.swift, ADR 0201). A ceiling only goes down: lower it when the file shrinks, and
 # delete the entry once the file is at or under 1,000 lines.
-Sources/Features/LibraryBrowser/LibraryBrowser.swift 2774 | phase 84 splits it (84.30)
+Sources/Features/LibraryBrowser/LibraryBrowser.swift 2751 | phase 84 splits it (84.30)
 Sources/Core/HALOutput/DeviceOutput.swift 1657 | its control machine moves to a file of its own (84.5)
 Sources/Features/DiscogsTagger/TaggerModel.swift 1265 | over the limit when the step came in; no split planned yet
 Sources/Features/TagEditor/TagEditorWindow.swift 1261 | over the limit when the step came in; no split planned yet
-Sources/App/MusicPlayer/AppDelegate.swift 1255 | phase 84 splits it (84.30)
+Sources/App/MusicPlayer/AppDelegate.swift 1240 | phase 84 splits it (84.30)
 Sources/Features/Downloads/Downloads.swift 1215 | over the limit when the step came in; no split planned yet
 Sources/Features/DiscogsTagger/TaggerWindow.swift 1156 | over the limit when the step came in; no split planned yet
-Sources/Features/LibraryBrowser/BrowserModel.swift 1125 | phase 84 splits it (84.30)
+Sources/Features/LibraryBrowser/BrowserModel.swift 1092 | phase 84 splits it (84.30)
 Sources/Features/LibraryBrowser/TrackTableController.swift 1042 | phase 84 splits it (84.30)

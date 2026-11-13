@@ -16,6 +16,11 @@ final class RediscoverModel {
         case notSet
         /// The service understood the request and refused it, with its code.
         case refused(ServiceRefusal)
+        /// Nothing answered at the address, or it isn't one of a local subnet; the error's
+        /// text names it.
+        case notAnswering(String)
+        /// The service refused the token, as the error's text, which names the address, says.
+        case tokenRefused(String)
         /// Any other error, as its text, which names the address.
         case failed(String)
         /// This many of the day's albums aren't in this library, even after its profile was
@@ -186,7 +191,11 @@ final class RediscoverModel {
     }
 
     private func problem(_ error: RecommenderError) -> Problem {
-        if case .refused(let refusal) = error.kind { return .refused(refusal) }
-        return .failed("\(error)")
+        switch error.kind {
+        case .refused(let refusal): return .refused(refusal)
+        case .unreachable, .offSubnet: return .notAnswering("\(error)")
+        case .unauthorized: return .tokenRefused("\(error)")
+        default: return .failed("\(error)")
+        }
     }
 }

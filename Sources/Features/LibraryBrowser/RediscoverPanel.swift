@@ -98,7 +98,8 @@ final class RediscoverPanel: NSViewController, SourcePanel {
     /// selected album's reasons; "Reading…" while a read is out.
     func show(_ model: RediscoverModel) {
         _ = view
-        statusLabel.stringValue = model.isReading ? panelReadingText : ""
+        statusLabel.stringValue =
+            model.isReading ? panelReadingText : model.problem.flatMap(rediscoverStatusText) ?? ""
         dayLabel.stringValue = model.day.map { rediscoverDayTitle($0.facts.day) } ?? ""
         let facts = model.day.map(rediscoverFactsText)
         let problem = model.problem.map(rediscoverProblemText)

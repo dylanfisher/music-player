@@ -46,11 +46,24 @@ func rediscoverReasonsText(_ album: RediscoverDay.Album) -> String {
         + album.reasons.map { "• " + terminalSafe($0.words) }).joined(separator: "\n")
 }
 
+/// What the panel's header says beside the day when the service can't be asked; nil for the
+/// other problems, which only the Today card says.
+func rediscoverStatusText(_ problem: RediscoverModel.Problem) -> String? {
+    switch problem {
+    case .notAnswering: "Not answering"
+    case .tokenRefused: "Token refused"
+    case .notSet, .refused, .failed, .unknownAlbums: nil
+    }
+}
+
 /// What the panel says in place of the day, or beside it.
 func rediscoverProblemText(_ problem: RediscoverModel.Problem) -> String {
     switch problem {
     case .notSet: return serviceNotSetText
-    case .failed(let text): return terminalSafe(text)
+    case .failed(let text), .tokenRefused(let text): return terminalSafe(text)
+    case .notAnswering(let text):
+        return terminalSafe(text) + ". Check that music-recommender is running there, and the"
+            + " address in Settings."
     case .unknownAlbums(let unknown):
         return "\(count(unknown, "album")) of the day aren't in this library, though its"
             + " profile was sent again. Refresh in a minute; if they stay, the service may"

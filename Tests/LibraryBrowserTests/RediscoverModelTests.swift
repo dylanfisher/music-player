@@ -227,3 +227,37 @@ func rediscoverModel(
     await model.read().value
     #expect(model.notice == nil, "a Refresh drops it")
 }
+
+@MainActor
+@Test func aServiceNotAnsweringOrRefusingTheTokenIsSaidNamingTheAddressAndKeepsTheDay() async {
+    let calls = RediscoverCalls()
+    let model = rediscoverModel(
+        [
+            .success(rediscoverDay(["a7"])),
+            .failure(serviceError(.unreachable(.timedOut))),
+            .failure(serviceError(.unauthorized)),
+        ], known: [7], calls: calls)
+    await model.read().value
+    await model.read().value
+    guard case .notAnswering(let why) = model.problem else {
+        Issue.record("\(String(describing: model.problem))")
+        return
+    }
+    #expect(why.contains("192.168.1.20:7878"))
+    #expect(model.albumIDs == [7], "the day read before still lists")
+    let panel = RediscoverPanel()
+    panel.show(model)
+    #expect(panel.statusLabel.stringValue == "Not answering")
+    #expect(panel.factsText.stringValue.contains("192.168.1.20:7878"))
+    #expect(panel.factsText.stringValue.contains("Check that music-recommender is running"))
+
+    await model.read().value
+    guard case .tokenRefused(let refused) = model.problem else {
+        Issue.record("\(String(describing: model.problem))")
+        return
+    }
+    #expect(refused.contains("192.168.1.20:7878") && refused.contains("refused the token"))
+    panel.show(model)
+    #expect(panel.statusLabel.stringValue == "Token refused")
+    #expect(panel.factsText.stringValue.contains("player_token"))
+}
