@@ -400,24 +400,30 @@ sidebar source like Listening Stats, with a setting to leave its row out of the 
 albums never played and added recently take part; Not Now is kept by the service; the profile
 is sent on its own.
 
-- [ ] **86.1 The profile's new fields.** Each album's `key` (the player's album id),
+- [x] **86.1 The profile's new fields.** Each album's `key` (the player's album id),
       `last_played` (the latest real play of its tracks, never an imported Last Played, ADR
       0105) and `skips`, in `LibraryProfileExport` and the export file. Tests: an imported Last
       Played isn't sent; the newest track play is.
-- [ ] **86.2 Sent on its own.** The profile goes at launch, after a scan, and when Rediscover
+      Commit `33748674`.
+- [x] **86.2 Sent on its own.** The profile goes at launch, after a scan, and when Rediscover
       opens or refreshes if it changed since the last send, one at a time, batched. ADR 0205's
       "never unasked" amended. Tests with a stand-in transport and an injected clock.
-- [ ] **86.3 The client.** `rediscover`, `not_now` and `not_now/undo` routes in
+      Commit `be46a045`.
+- [x] **86.3 The client.** `rediscover`, `not_now` and `not_now/undo` routes in
       `Core/Recommender`, decoded strictly, an unknown `kind` an error, with fuzz targets and
       recorded replies.
-- [ ] **86.4 The source.** `BrowserSource.rediscover`: a panel of cards (the threads, and the
+      Commit `7e8c1068`.
+- [x] **86.4 The source.** `BrowserSource.rediscover`: a panel of cards (the threads, and the
       day) over a track table of the day's albums' tracks in the reply's order, each album's
       reasons in the panel when it's selected; a Show Rediscover command; a setting, Show
       Rediscover in Sidebar, on by default. The model has no AppKit and the tests drive it.
-- [ ] **86.5 Not Now.** From the context menu and the panel: 30 days, Edit > Undo removes the
+      Commits `56529056`, `6771c5b5`, `150ce62a`.
+- [x] **86.5 Not Now.** From the context menu and the panel: 30 days, Edit > Undo removes the
       mark; the album leaves at once and the day's list is read again.
-- [ ] **86.6 Not answering.** The panel says when the service isn't answering or refuses the
+      Commit `5d0542b8`.
+- [x] **86.6 Not answering.** The panel says when the service isn't answering or refuses the
       token, naming the address, as the Recommendations window does.
+      Commit `d2e4da06`.
 - [ ] **Hardware checkpoint (owner):** on this Mac and the 2015 MacBook Pro, open Rediscover on
       two days, play an album from it, and judge the albums, reasons and threads.
 
