@@ -1033,19 +1033,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         carry(nil, then: nil)
     }
 
-    /// `events`, and a "launched" line on standard output once the watcher's scans at start
-    /// have ended.
-    private func reportingLaunchEnd(
-        _ events: @escaping @Sendable (WatcherEvent) -> Void
-    ) -> @Sendable (WatcherEvent) -> Void {
-        { event in
-            events(event)
-            if case .launchScansEnded = event {
-                FileHandle.standardOutput.write(launchedLine)
-            }
-        }
-    }
-
     /// Asks for a folder to watch in a sheet over `window`.
     func addFolder(over window: NSWindow) {
         guard let settings else { return }
@@ -1233,9 +1220,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if window == nil { NSApp.terminate(nil) }
     }
 }
-
-/// What `--report-launch` prints once the launch's scans have ended.
-private let launchedLine = Data("launched\n".utf8)
 
 /// A play request whose start isn't one of its tracks.
 enum PlayRequestError: Error, CustomStringConvertible {

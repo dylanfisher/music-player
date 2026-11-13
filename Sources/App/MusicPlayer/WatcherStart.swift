@@ -60,3 +60,19 @@ func unwatchedNotice(_ settings: ConfigStore<AppSettings>) -> String? {
     guard !settings.blocked, settings.fileValue(\.watchedFolders) == nil else { return nil }
     return "\"\(settings.schema.watchedFolders.key)\" isn't set, so the library isn't watched"
 }
+
+/// What `--report-launch` prints once the launch's scans have ended.
+let launchedLine = Data("launched\n".utf8)
+
+/// `events`, and a "launched" line on standard output once the watcher's scans at start have
+/// ended.
+func reportingLaunchEnd(
+    _ events: @escaping @Sendable (WatcherEvent) -> Void
+) -> @Sendable (WatcherEvent) -> Void {
+    { event in
+        events(event)
+        if case .launchScansEnded = event {
+            FileHandle.standardOutput.write(launchedLine)
+        }
+    }
+}
