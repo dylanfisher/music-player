@@ -15,6 +15,8 @@ package enum JobOrder: Equatable, Sendable {
 
     /// Queued by the owner from a library album or a pasted release.
     case manual(FormatPolicy)
+    /// Queued by the owner from the Recommendations window (ADR 0207).
+    case recommendation(FormatPolicy)
     /// Replaces a lossy library album with the same release.
     case upgrade(DownloadJob.Upgrade, LosslessPolicy)
 }
@@ -37,6 +39,10 @@ struct CreateRequest: Encodable {
         case .manual(let policy):
             try container.encode(policy, forKey: .formatPolicy)
             try container.encode(DownloadJob.Source.manual, forKey: .source)
+            try container.encodeNil(forKey: .upgrade)
+        case .recommendation(let policy):
+            try container.encode(policy, forKey: .formatPolicy)
+            try container.encode(DownloadJob.Source.recommendation, forKey: .source)
             try container.encodeNil(forKey: .upgrade)
         case .upgrade(let upgrade, let policy):
             try container.encode(policy.formatPolicy, forKey: .formatPolicy)

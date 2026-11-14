@@ -13,6 +13,8 @@ struct QueueChoice: Equatable, Sendable {
     var upgrade: DownloadJob.Upgrade?
     /// Why it can't be queued; nil when it can.
     var refusal: String?
+    /// From the Recommendations window, which the service records as the job's source.
+    var isRecommended = false
 
     /// The upgrade candidates, as the Upgrades sheet lists them: each with the quality it has,
     /// and those whose release is in `never` marked Never Upgrade, which only the automatic
@@ -80,14 +82,15 @@ struct QueueChoice: Equatable, Sendable {
                 detail: album.releaseID.map(DownloadRow.releaseName) ?? "",
                 releaseID: album.releaseID, upgrade: nil,
                 refusal: album.releaseID == nil
-                    ? "The service has no release for this master in its catalog" : nil)
+                    ? "The service has no release for this master in its catalog" : nil,
+                isRecommended: true)
         }
     }
 
     /// The order to create the job with: an upgrade's takes only a lossless policy, so nil
     /// for a lossy one.
     func order(_ policy: FormatPolicy) -> JobOrder? {
-        guard let upgrade else { return .manual(policy) }
+        guard let upgrade else { return isRecommended ? .recommendation(policy) : .manual(policy) }
         return JobOrder.LosslessPolicy.allCases.first { $0.formatPolicy == policy }.map {
             .upgrade(upgrade, $0)
         }

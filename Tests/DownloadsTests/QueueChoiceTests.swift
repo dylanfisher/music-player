@@ -80,4 +80,5 @@ private func album(_ id: Int64, _ releases: [String?]) -> DiscogsAlbum {
     #expect(choices.map(\.releaseID) == [4242, nil])
     #expect(choices[0].refusal == nil)
     #expect(choices[1].refusal != nil)
+    #expect(choices[0].order(.flac) == .recommendation(.flac), "sent as the job's source")
 }

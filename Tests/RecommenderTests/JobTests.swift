@@ -139,6 +139,16 @@ private let snapshot = ReleaseSnapshot(
             == ["current_quality": "MP3 320", "old_paths": ["library/a/b/1.mp3"]])
 }
 
+@Test func aRecommendationSendsItsSourceWithNoUpgrade() async throws {
+    let stub = try await StubService([(200, jobReply(try jobJSON()))])
+    defer { stub.stop() }
+    _ = try await stub.client.create(snapshot, .recommendation(.any))
+    let body = try #require(stub.requests.first).json
+    #expect(body["format_policy"] as? String == "any")
+    #expect(body["source"] as? String == "recommendation")
+    #expect(body["upgrade"] is NSNull)
+}
+
 @Test func aReleaseAlreadyQueuedIsRefusedWithItsJob() async throws {
     let stub = try await StubService([
         (200, #"{"ok": false, "error": {"code": "already_active", "message": "m", "job_id": 7}}"#)
