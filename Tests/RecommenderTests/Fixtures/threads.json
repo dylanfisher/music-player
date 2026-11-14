@@ -1,0 +1,22 @@
+{"ok": true,
+ "seed": {"id": "r4242", "key": "a812", "artist": "Made-Up Artist", "title": "Made-Up Album",
+          "release_id": 4242, "year": 1997, "label": {"id": 30, "name": "Seed Records"},
+          "styles": [{"id": 2, "name": "Made-Up Common"}],
+          "plays": 31, "skips": 2, "last_played": 1693000000, "community": null},
+ "computed_at": 1800000000,
+ "albums": [
+  {"id": "r5150", "key": "a90", "artist": "Other Artist", "title": "Other Album",
+   "release_id": 5150, "year": 1999, "label": {"id": 30, "name": "Seed Records"},
+   "styles": [], "plays": 0, "skips": 0, "last_played": null, "community": null},
+  {"id": "r6060", "key": "a133", "artist": "Third Artist", "title": "Third Album",
+   "release_id": 6060, "year": null, "label": null,
+   "styles": [{"id": 9, "name": "Made-Up Rare"}], "plays": 4, "skips": 0,
+   "last_played": 1790000000,
+   "community": {"release_id": 6060, "status": "fetched", "checked_at": 1794060000,
+                 "values": {"rating_average": 4.1, "rating_count": 20, "have": 300,
+                            "want": 90, "num_for_sale": 2, "lowest_price": 14.0}}}],
+ "threads": [
+  {"kind": "credit", "words": "Engineer: Dee Engineer, on 6 of your albums", "ids": ["r5150"],
+   "artist": {"id": 21, "name": "Dee Engineer"}, "label": null},
+  {"kind": "styles", "words": "Made-Up Rare, on 2 of your albums", "ids": ["r6060"],
+   "artist": null, "label": null}]}

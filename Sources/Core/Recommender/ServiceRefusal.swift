@@ -27,8 +27,11 @@ package struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConve
         /// The whole library's list was scored from another catalog or profile; `rebuilding`
         /// says whether it is being scored again now.
         case outOfDate = "out_of_date"
-        /// No album of the profile is the seed, or the catalog doesn't have its release.
+        /// No album of the profile is the seed, or for a list the catalog doesn't have its
+        /// release.
         case noSeed = "no_seed"
+        /// Threads' seed has no release id, or the catalog doesn't have its release.
+        case untagged
     }
 
     package var code: Code

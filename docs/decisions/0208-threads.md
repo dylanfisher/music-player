@@ -40,6 +40,10 @@ this source and Rediscover's card.
   keeps its seed while another source shows; its row with no seed yet says to choose Show
   Threads on an album. The seed isn't saved across launches: an album id can change at an
   index rebuild.
+- **The client's `threads(key:)`** decodes the reply as `AlbumThreads`, its seed and albums
+  Rediscover's album decoded unscored: `score` nil and `reasons` empty, and either key in the
+  reply fails it as an unknown key does, so a Rediscover album can't pass for one of Threads.
+  The refusal `untagged` is a code of its own; `no_seed` keeps its one case for both routes.
 - **The panel** has the seed's title, artist and year in its header, with Refresh, and two
   cards: Threads, a line each in the service's words, with All above them, chosen unless
   another is, a click on one listing only its albums; and Why This Album, the threads the

@@ -110,3 +110,48 @@ let rediscoverReply = FuzzTarget(
             return read
         }
     })
+
+/// Threads of a seed with every field the contract has: a thread of one album and one of two.
+private let albumThreads = """
+    {"ok": true, "seed": {"id": "r4242", "key": "a812", "artist": "A", "title": "T",
+    "release_id": 4242, "year": 1997, "label": {"id": 30, "name": "L"}, "styles": [{"id": 2,
+    "name": "S"}], "plays": 31, "skips": 2, "last_played": 1693000000, "community": null},
+    "computed_at": 1800000000, "albums": [{"id": "r5150", "key": "a90", "artist": "B",
+    "title": "U", "release_id": 5150, "year": 1999, "label": {"id": 30, "name": "L"},
+    "styles": [], "plays": 0, "skips": 0, "last_played": null, "community": {"release_id": 5150,
+    "status": "fetched", "checked_at": 1794060000, "values": {"rating_average": 4.4,
+    "rating_count": 310, "have": 5120, "want": 1400, "num_for_sale": 12, "lowest_price": 9.5}}},
+    {"id": "r6060", "key": "a133", "artist": "C", "title": "V", "release_id": 6060,
+    "year": null, "label": null, "styles": [], "plays": 4, "skips": 0, "last_played": 1,
+    "community": null}], "threads": [{"kind": "credit", "words": "w", "ids": ["r5150"],
+    "artist": {"id": 21, "name": "D"}, "label": null}, {"kind": "styles", "words": "w",
+    "ids": ["r5150", "r6060"], "artist": null, "label": null}]}
+    """
+
+/// music-recommender's Threads reply, whose keys are read back as album ids as the browser
+/// reads them.
+let threadsReply = FuzzTarget(
+    name: "threads-reply",
+    summary: "music-recommender's Threads reply: a seed's albums and threads",
+    seedFormats: [],
+    tokens: jsonTokens + ["\"a0\"", "\"score\"", "\"reasons\"", "\"kind\"", "\"untagged\""],
+    madeSeeds: { _, _ in
+        [albumThreads, #"{"ok": false, "error": {"code": "untagged", "message": "m"}}"#].map {
+            Array($0.utf8)
+        }
+    },
+    prepare: { _ in
+        { input in
+            // Most inputs aren't the reply; only one that decodes is checked.
+            guard let threads = try? decodeReply(input, as: AlbumThreads.self) else {
+                return false
+            }
+            for album in [threads.seed] + threads.albums {
+                precondition(album.score == nil && album.reasons.isEmpty, "\(album.key) scored")
+                if let id = albumID(profileKey: album.key) {
+                    precondition(id > 0 && profileKey(albumID: id) == album.key, "\(album.key)")
+                }
+            }
+            return true
+        }
+    })

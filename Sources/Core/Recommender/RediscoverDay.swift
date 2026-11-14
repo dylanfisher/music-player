@@ -61,10 +61,11 @@ package struct RediscoverDay: Equatable, Sendable, Decodable {
         package var plays: Int
         package var skips: Int
         package var lastPlayed: Int?
-        /// From 0 to 1, 1 for the profile's best scored album.
-        package var score: Double
+        /// From 0 to 1, 1 for the profile's best scored album; nil for an album of Threads,
+        /// which has none.
+        package var score: Double?
         package var community: CommunityValues?
-        /// Up to 3, strongest first.
+        /// Up to 3, strongest first; empty for an album of Threads, which has none.
         package var reasons: [Reason]
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
@@ -76,7 +77,7 @@ package struct RediscoverDay: Equatable, Sendable, Decodable {
         }
     }
 
-    /// Day's albums that share something.
+    /// Albums that share something: the day's, or those of Threads (ADR 0208).
     package struct Thread: Equatable, Sendable, Decodable {
         package enum Kind: String, Equatable, Sendable, Decodable {
             case artist, credit, label, related, styles
@@ -85,7 +86,8 @@ package struct RediscoverDay: Equatable, Sendable, Decodable {
         package var kind: Kind
         /// For showing, not for parsing.
         package var words: String
-        /// The `id`s of its albums, 2 or more, in the order of the day's albums.
+        /// The `id`s of its albums: of the day's, 2 or more, in their order; of Threads', 1 or
+        /// more by year and title, the seed in every thread and never here.
         package var ids: [String]
         package var artist: Named?
         package var label: Named?
@@ -151,7 +153,11 @@ extension RediscoverDay.Reason {
 }
 
 extension RediscoverDay.Album {
-    package init(from decoder: any Decoder) throws {
+    package init(from decoder: any Decoder) throws { try self.init(from: decoder, scored: true) }
+
+    /// `scored` for the day's albums, which have `score` and `reasons`; Threads' albums have
+    /// neither, and one there fails the reply as an unknown key would.
+    init(from decoder: any Decoder, scored: Bool) throws {
         let container = try strictContainer(decoder, CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         key = try container.decode(String.self, forKey: .key)
@@ -164,9 +170,17 @@ extension RediscoverDay.Album {
         plays = try container.decode(Int.self, forKey: .plays)
         skips = try container.decode(Int.self, forKey: .skips)
         lastPlayed = try container.decode(Int?.self, forKey: .lastPlayed)
-        score = try container.decode(Double.self, forKey: .score)
         community = try container.decode(CommunityValues?.self, forKey: .community)
-        reasons = try container.decode([RediscoverDay.Reason].self, forKey: .reasons)
+        if scored {
+            score = try container.decode(Double.self, forKey: .score)
+            reasons = try container.decode([RediscoverDay.Reason].self, forKey: .reasons)
+        } else {
+            for key in [CodingKeys.score, .reasons] where container.contains(key) {
+                throw unknownKey(key, in: container)
+            }
+            score = nil
+            reasons = []
+        }
     }
 }
 
