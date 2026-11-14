@@ -51,7 +51,9 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 Set by the owner on 2026-11-11. Earlier run orders are in the archive.
 
 1. Phase 85, what phase 84 left, waits until the owner starts it.
-2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+2. Phase 89, Threads, waits until the owner starts it. It builds against music-recommender's
+   api.md through a stand-in transport, so it doesn't wait for that repo's phase 10.
+3. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -374,7 +376,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
+Phase 85 is what phase 84 left on 2026-11-11; phase 89 was planned on 2026-11-14; phases 10 and 13 are from the original plan and haven't been built.
 
 ### 85. The file splits and the performance rerun
 
@@ -393,6 +395,30 @@ detail of each item.
       playback rows.
 - [ ] **Code review** of phase 84's 52 commits, which landed without one: `/code-review high`
       on `5fb2cabe..` the landing commit, its confirmed findings fixed.
+
+### 89. Threads
+
+The library's own albums connected to one album, grouped by what they share with it, from
+music-recommender's `POST /v1/threads` (its phase 10; the contract is its `docs/api.md`,
+Threads). The owner (2026-11-14): "if i'm on an album, i can generate a view of other albums
+already in my library that are connected", a sidebar item named Threads. The decisions and the
+owner's answers are in [ADR 0208](decisions/0208-threads.md).
+
+- [ ] **89.1 The client.** `threads(key:)` on `RecommenderClient` in `Core/Recommender`,
+      decoded strictly with Rediscover's thread and album types (an album without `score` and
+      `reasons`, a thread's `ids` of one or more), its refusals typed, with a fuzz target and
+      recorded replies.
+- [ ] **89.2 The command and the place.** Show Threads in `AppCommands`, the File menu and the
+      track table's context menu, enabled by the album seed rule only; `BrowserSource.threads`
+      and a window place holding the seed, so Back and Forward walk the seeds. Tests: an
+      untagged album, two albums and no selection disable it; a walk of three seeds goes back
+      through each.
+- [ ] **89.3 The source.** The panel (the seed in the header, the Threads card with All and a
+      line each, Why This Album) over a track table of the reply's albums, a thread's click
+      filtering it; the key mapping, the forced profile and the errors as Rediscover's;
+      Show Threads in Sidebar, on by default. The model has no AppKit and the tests drive it.
+- [ ] **Hardware checkpoint (owner):** on this Mac and the 2015 MacBook Pro, seed Threads from
+      a few albums, walk three albums deep and back, and judge the threads.
 
 ### 10. Web remote
 
