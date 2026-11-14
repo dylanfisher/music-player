@@ -79,6 +79,11 @@ import Testing
             text.replacingOccurrences(of: #""plays": 0,"#, with: #""plays": 0, "loved": 1,"#),
             RediscoverDay.self, "loved"
         ),
+        // A thread of the day holds 2 albums or more.
+        (
+            text.replacingOccurrences(of: #"["r4242", "r5150"]"#, with: #"["r4242"]"#),
+            RediscoverDay.self, "ids"
+        ),
         (#"{"ok": true}"#, NotNowReply.self, "until"),
         (#"{"ok": true, "removed": true, "until": 1}"#, UndoNotNowReply.self, "until"),
     ]

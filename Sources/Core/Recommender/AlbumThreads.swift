@@ -26,7 +26,7 @@ extension AlbumThreads {
         seed = try container.decode(UnscoredAlbum.self, forKey: .seed).album
         computedAt = try container.decode(Int.self, forKey: .computedAt)
         albums = try container.decode([UnscoredAlbum].self, forKey: .albums).map(\.album)
-        threads = try container.decode([RediscoverDay.Thread].self, forKey: .threads)
+        threads = try container.decode([ConnectedThread].self, forKey: .threads).map(\.thread)
     }
 }
 
@@ -36,5 +36,14 @@ private struct UnscoredAlbum: Decodable {
 
     init(from decoder: any Decoder) throws {
         album = try RediscoverDay.Album(from: decoder, scored: false)
+    }
+}
+
+/// A thread of the reply, of one album or more.
+private struct ConnectedThread: Decodable {
+    var thread: RediscoverDay.Thread
+
+    init(from decoder: any Decoder) throws {
+        thread = try RediscoverDay.Thread(from: decoder, leastAlbums: 1)
     }
 }

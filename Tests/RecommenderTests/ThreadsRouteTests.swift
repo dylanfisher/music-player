@@ -36,6 +36,8 @@ import Testing
         (#""last_played": 1790000000,"#, #""last_played": 1790000000, "loved": 1,"#, "loved"),
         (#""label": null}]}"#, #""label": null, "role": null}]}"#, "role"),
         (#""kind": "styles""#, #""kind": "decade""#, "kind"),
+        // A thread holds 1 album or more.
+        (#""ids": ["r6060"]"#, #""ids": []"#, "ids"),
     ]
     for (from, to, field) in cases {
         let reply = text.replacingOccurrences(of: from, with: to)

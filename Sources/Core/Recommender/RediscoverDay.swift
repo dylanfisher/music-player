@@ -185,11 +185,25 @@ extension RediscoverDay.Album {
 }
 
 extension RediscoverDay.Thread {
+    /// The fewest albums a thread of the day has.
+    static let leastDayAlbums = 2
+
     package init(from decoder: any Decoder) throws {
+        try self.init(from: decoder, leastAlbums: Self.leastDayAlbums)
+    }
+
+    /// A thread of at least `leastAlbums` albums: 2 for the day's, 1 for Threads'. One with
+    /// fewer fails the reply, naming `ids`.
+    init(from decoder: any Decoder, leastAlbums: Int) throws {
         let container = try strictContainer(decoder, CodingKeys.self)
         kind = try container.decode(Kind.self, forKey: .kind)
         words = try container.decode(String.self, forKey: .words)
         ids = try container.decode([String].self, forKey: .ids)
+        guard ids.count >= leastAlbums else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .ids, in: container,
+                debugDescription: "\(ids.count) albums, fewer than \(leastAlbums)")
+        }
         artist = try container.decode(RediscoverDay.Named?.self, forKey: .artist)
         label = try container.decode(RediscoverDay.Named?.self, forKey: .label)
     }
