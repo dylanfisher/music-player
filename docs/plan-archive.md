@@ -12922,3 +12922,64 @@ passes every step but `test`, whose failures (HALOutputTests' StepWatch, 10 of 1
 MusicPlayerTests' frosted glass headers; TagWriterTests' quarantine flag) also fail on main on
 this Mac. Bench skipped: the new LEFT JOIN is on a primary key, and SQLite drops it from a
 query that doesn't use the field. Pending: the owner check.
+
+### 89. Threads
+
+The library's own albums connected to one album, grouped by what they share with it, from
+music-recommender's `POST /v1/threads` (its phase 10; the contract is its `docs/api.md`,
+Threads). The owner (2026-11-14): "if i'm on an album, i can generate a view of other albums
+already in my library that are connected", a sidebar item named Threads. The decisions and the
+owner's answers are in [ADR 0208](decisions/0208-threads.md).
+
+- [x] **89.1 The client.** `threads(key:)` on `RecommenderClient` in `Core/Recommender`,
+      decoded strictly with Rediscover's thread and album types (an album without `score` and
+      `reasons`, a thread's `ids` of one or more), its refusals typed, with a fuzz target and
+      recorded replies.
+      Commits `604b44ab`, `6c15d121`.
+- [x] **89.2 The command and the place.** Show Threads in `AppCommands`, the File menu and the
+      track table's context menu, enabled by the album seed rule only; `BrowserSource.threads`
+      and a window place holding the seed, so Back and Forward walk the seeds. Tests: an
+      untagged album, two albums and no selection disable it; a walk of three seeds goes back
+      through each.
+      Commits `c80b1e99`, `b6bd78bc`.
+- [x] **89.3 The source.** The panel (the seed in the header, the Threads card with All and a
+      line each, Why This Album) over a track table of the reply's albums, a thread's click
+      filtering it; the key mapping, the forced profile and the errors as Rediscover's;
+      Show Threads in Sidebar, on by default. The model has no AppKit and the tests drive it.
+      Commits `b6bd78bc`, `f93b3aaf`.
+- [ ] **Hardware checkpoint (owner):** on this Mac and the 2015 MacBook Pro, seed Threads from
+      a few albums, walk three albums deep and back, and judge the threads.
+
+  Plan:
+  - `Core/Recommender`: `AlbumThreads` (seed, `computed_at`, albums, threads) beside
+    `RediscoverDay`, whose `Album` decodes unscored (no `score`, no `reasons`, either one
+    there failing the reply) for Threads; `ThreadsRoute.swift` with `threads(key:)`; the
+    refusal code `untagged`; a `threads-reply` fuzz target; `threads.json` recorded; tests in
+    `ThreadsRouteTests`.
+  - `Core/Library`: `threadsAlbums` beside `rediscoverAlbums` with `showThreads`, listed by a
+    `.threads` source in its order; `threadsSeed(trackIDs:)`, the selection's one album when
+    every track has its one release, from the same read as `recommendationSeeds`.
+  - `Core/Settings`: `BrowserSource.threads` (`threads`), `library.showThreads`; in
+    `Core/Library`, `TrackFilter.threadsSeed` (an album id, compared with the source by Back
+    and Forward's steps).
+  - `Core/Commands`: `library.threads`, Show Threads, in the File menu after Show Rediscover
+    and in the track menu after Recommendations for Artist.
+  - `Features/LibraryBrowser`: `ThreadsModel` (seed, reply, chosen thread, the forced
+    profile, errors), `ThreadsPanel`, `ThreadsText`, `ThreadsService`, `Threads.swift`
+    wiring; BrowserModel keeps the last seed for the sidebar row. Tests: model, text, browser
+    (disabled for an untagged album, two albums and none; a walk of three seeds back), index.
+  - `App`: the command's handler and enabling, the service, the sidebar setting.
+
+Result (2026-11-14): one Opus builder, about 310k tokens over the build and one fix round (158
+tool calls, 48 minutes), and one Sonnet correctness reviewer, 90k. The review found a stale
+read that could put an earlier seed's threads under a later seed's header, a stale `no_seed`
+retry that still asked again, and a thread with no albums accepted; all three are fixed with
+tests that fail without them, and Rediscover's threads now need the 2 albums its contract
+gives. Built against stand-ins; the service side is music-recommender's phase 10, landed
+first, whose final api.md changed no field from the draft. The full gate passes every step but
+`test`, whose failures also fail on main on this Mac: HALOutputTests' StepWatch and
+DeviceOutput seeks, LibraryTests' paused-scan job, MusicPlayerTests' frosted glass headers,
+TagWriterTests' quarantine flag, and RecommendationsTests' process exiting partway with status
+0, 2 of 8 runs on main and 2 of 5 on the branch, run alone; that one still needs its cause
+found. Bench and release bundle skipped: no budgeted path, Package.swift or `#available`
+changed. Pending: the owner check.
