@@ -110,18 +110,19 @@ final class ThreadsModel {
                         if case .failed(let why) = await sendProfile(true) {
                             return finish(.failed(why), mine)
                         }
+                        guard mine == session else { return }
                         continue
                     }
                     return finish(Problem(error), mine)
                 }
                 guard mine == session else { return }
-                let unknown: Int
+                let taken: Int?
                 do {
-                    unknown = try await take(reply)
+                    taken = try await take(reply, mine)
                 } catch {
                     return finish(.failed("couldn't list the threads' albums: \(error)"), mine)
                 }
-                guard mine == session else { return }
+                guard let unknown = taken else { return }
                 if unknown == 0 { return finish(nil, mine) }
                 if sentAgain { return finish(.unknownAlbums(unknown), mine) }
                 if case .failed(let why) = await sendProfile(true) {
@@ -149,14 +150,16 @@ final class ThreadsModel {
     }
 
     /// Takes `reply` as the threads shown, lists those of its albums the index has, and
-    /// answers how many it doesn't.
-    private func take(_ reply: AlbumThreads) async throws -> Int {
+    /// answers how many it doesn't; nil, taking nothing, when a newer read than `session`
+    /// started while the index listed them.
+    private func take(_ reply: AlbumThreads, _ session: Int) async throws -> Int? {
         let keyed = reply.albums.compactMap { album in
             albumID(profileKey: album.key).map { (id: $0, album: album) }
         }
         listing += 1
         let mine = listing
         let missing = Set(try await show(keyed.map { ($0.id, $0.album.title) }))
+        guard session == self.session else { return nil }
         self.reply = reply
         chosen = nil
         albums = Dictionary(

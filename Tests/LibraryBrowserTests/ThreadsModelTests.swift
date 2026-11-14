@@ -176,3 +176,87 @@ private func threadsModel(
     await failing.read(2).value
     #expect(failing.problem == .failed("didn't answer"))
 }
+
+/// Holds the first call that waits on it until `open()`.
+@MainActor
+private final class Gate {
+    private var waiting: CheckedContinuation<Void, Never>?
+    private(set) var held = false
+    private var used = false
+
+    func wait() async {
+        guard !used else { return }
+        used = true
+        await withCheckedContinuation {
+            waiting = $0
+            held = true
+        }
+    }
+
+    func open() {
+        waiting?.resume()
+        waiting = nil
+    }
+}
+
+@MainActor
+@Test func aReplyListedAfterAnotherSeedWasAskedForIsDropped() async throws {
+    let calls = ThreadsCalls()
+    let gate = Gate()
+    let model = ThreadsModel(show: { albums in
+        // The first seed's albums wait in the index while Back shows another seed.
+        if !albums.isEmpty { await gate.wait() }
+        return []
+    })
+    model.sendProfile = { _ in .unchanged }
+    calls.replies = [
+        .success(albumThreads("a2", ["a7"])), .success(albumThreads("a7", ["a3"])),
+    ]
+    model.service = threadsService(calls)
+    let first = model.read(2)
+    try await waitFor("the first seed's albums listing") { gate.held }
+    await model.read(7).value
+    #expect(model.reply?.seed.key == "a7")
+    gate.open()
+    await first.value
+    #expect(model.reply?.seed.key == "a7", "the first seed's reply is dropped")
+    #expect(model.seed == 7 && model.albumIDs == [3])
+}
+
+@MainActor
+@Test func aSeedRetryAfterAnotherSeedWasAskedForAsksNothing() async throws {
+    let calls = ThreadsCalls()
+    let gate = Gate()
+    let model = ThreadsModel(show: { _ in [] })
+    model.sendProfile = { force in
+        if force { await gate.wait() }
+        return .unchanged
+    }
+    calls.replies = [
+        .failure(serviceError(.refused(ServiceRefusal(code: .noSeed, message: "no")))),
+        .success(albumThreads("a7", ["a3"])),
+    ]
+    model.service = threadsService(calls)
+    let first = model.read(2)
+    try await waitFor("the forced send") { gate.held }
+    await model.read(7).value
+    gate.open()
+    await first.value
+    #expect(calls.calls == ["threads a2", "threads a7"])
+    #expect(model.reply?.seed.key == "a7")
+}
+
+/// A service that answers `calls.replies` in turn, recording each key asked.
+@MainActor
+private func threadsService(_ calls: ThreadsCalls) -> () -> ThreadsService? {
+    {
+        ThreadsService(threads: { key throws(RecommenderError) in
+            let reply = await MainActor.run {
+                calls.calls.append("threads \(key)")
+                return calls.replies.isEmpty ? nil : calls.replies.removeFirst()
+            }
+            guard let reply else { throw serviceError(.cancelled) }
+            return try reply.get()
+        })
+    }
+}
