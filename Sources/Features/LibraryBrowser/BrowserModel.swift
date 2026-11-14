@@ -286,8 +286,9 @@ public final class BrowserModel {
     }
 
     /// A manual playlist, Rediscover and Threads open in their own order, History with the
-    /// latest play first and Stats with the most played. Other sources keep the sort the table has, and
-    /// leaving one of these puts back the sort it replaced, unless the user chose another.
+    /// latest play first and Stats with the most played. Other sources keep the sort the table
+    /// has, and leaving one of these puts back the sort it replaced, unless the user chose
+    /// another.
     func defaultSort(_ source: BrowserSource?) -> (column: TrackColumn, ascending: Bool)? {
         switch source {
         case .playlist(let id):
