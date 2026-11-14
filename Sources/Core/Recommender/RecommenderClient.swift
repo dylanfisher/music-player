@@ -76,6 +76,15 @@ package struct RecommenderClient: Sendable {
     }
 }
 
+/// music-recommender's status page at `address` and `port`, which a browser opens without the
+/// token.
+package func serviceStatusPage(address: IPAddress, port: UInt16) -> URL {
+    guard let url = URL(string: "http://\(address.urlHost):\(port)/status") else {
+        preconditionFailure("an IP literal and a port always make a URL")
+    }
+    return url
+}
+
 extension RecommenderClient {
     /// The URL of the route at `path`.
     func url(_ path: String) -> LocalURL {

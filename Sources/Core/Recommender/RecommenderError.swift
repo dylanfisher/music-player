@@ -4,6 +4,8 @@ import LocalNetwork
 
 /// What a window or panel says while the service can't be asked.
 package let serviceNotSetText = "Set music-recommender's address and token in Settings."
+/// What Service Status says while the service's address isn't set.
+package let serviceAddressNotSetText = "Set music-recommender's address in Settings."
 
 /// Why a call to music-recommender failed, naming the address it went to and never the token.
 package struct RecommenderError: Error, Equatable, CustomStringConvertible {

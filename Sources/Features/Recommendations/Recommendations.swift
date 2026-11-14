@@ -26,7 +26,9 @@ public final class Recommendations {
     package var catalog: () -> URL? = { nil }
     /// Download…: queues the albums in Downloads' queue sheet.
     package var download: ([RecommendationPage.Album]) -> Void = { _ in }
-    /// Opens a Discogs page; tests record it instead.
+    /// music-recommender's status page as set now; nil while its address isn't set.
+    package var statusPage: () -> URL? = { nil }
+    /// Opens a Discogs page or the status page; tests record it instead.
     var open: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
@@ -159,6 +161,7 @@ public final class Recommendations {
         made.reachedEnd = { [weak self] in self?.model.readMore() }
         made.markChosen = { [weak self] in self?.mark($0, $1) }
         made.showMarked = { [weak self] in self?.showMarked() }
+        made.statusChosen = { [weak self] in self?.openStatusPage() }
         made.downloadChosen = { [weak self] in self?.download($0.map(\.album)) }
         made.discogsChosen = { [weak self] in self?.open(discogsPage(of: $0.album)) }
         made.columnsResized = { [weak self] widths in
@@ -183,6 +186,16 @@ public final class Recommendations {
 
     /// Open Discogs Release while the window is key: the first selected album's page.
     public func openSelectedOnDiscogs() { controller?.discogsClicked() }
+
+    /// Service Status: opens music-recommender's status page in the browser, or beeps and says
+    /// what to set while its address isn't set.
+    func openStatusPage() {
+        guard let page = statusPage() else {
+            beep()
+            return say(serviceAddressNotSetText)
+        }
+        open(page)
+    }
 
     // MARK: - Marks
 

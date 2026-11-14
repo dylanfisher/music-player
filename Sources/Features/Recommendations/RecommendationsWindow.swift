@@ -41,6 +41,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     let messageLabel = NSTextField(wrappingLabelWithString: "")
     let actionButton = NSButton(title: "", target: nil, action: nil)
     let factsLabel = NSTextField(labelWithString: "")
+    let statusLink = NSButton(title: "Service Status", target: nil, action: nil)
     /// The rows shown, in the list's order.
     private(set) var rows: [RecommendationRow] = []
     private(set) var query = RecommendationQuery()
@@ -59,6 +60,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     var discogsChosen: (RecommendationRow) -> Void = { _ in }
     /// Hears Marked… clicked.
     var showMarked: () -> Void = {}
+    /// Hears Service Status clicked.
+    var statusChosen: () -> Void = {}
     /// The row selected when a mark took rows out, selected again as the rows come back.
     private var place: Int?
     /// Hears the table scrolled to its last row.
@@ -173,12 +176,25 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         factsLabel.textColor = .secondaryLabelColor
         factsLabel.lineBreakMode = .byTruncatingTail
         factsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let page = NSStackView(views: [bar, actions, status, scroll, detailLabel, factsLabel])
+        statusLink.isBordered = false
+        statusLink.attributedTitle = NSAttributedString(
+            string: statusLink.title,
+            attributes: [
+                .foregroundColor: NSColor.linkColor,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
+            ])
+        statusLink.toolTip = "Open music-recommender's status page in the browser."
+        statusLink.target = self
+        statusLink.action = #selector(statusClicked)
+        let footer = NSStackView(views: [factsLabel, NSView(), statusLink])
+        footer.spacing = 8
+        let page = NSStackView(views: [bar, actions, status, scroll, detailLabel, footer])
         page.orientation = .vertical
         page.alignment = .leading
         page.spacing = 10
         page.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
-        for view in [actions, scroll, detailLabel, factsLabel] {
+        for view in [actions, scroll, detailLabel, footer] {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -28).isActive = true
         }
         scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -277,6 +293,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     @objc private func alreadyHaveClicked() { mark(selectedRows, .alreadyHave) }
 
     @objc private func markedClicked() { showMarked() }
+
+    @objc private func statusClicked() { statusChosen() }
 
     @objc private func downloadClicked() {
         let chosen = selectedRows

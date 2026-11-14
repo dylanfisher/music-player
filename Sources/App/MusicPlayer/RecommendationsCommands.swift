@@ -90,6 +90,12 @@ extension AppDelegate {
         let recommendations = Recommendations(
             databaseURL: libraryFileURL(in: paths.dataDirectory))
         recommendations.service = { [weak self] in self?.recommendationsService() }
+        recommendations.statusPage = { [weak self] in
+            guard let settings = self?.settings,
+                let address = settings[\.recommenderAddress]?.address
+            else { return nil }
+            return serviceStatusPage(address: address, port: UInt16(settings[\.recommenderPort]))
+        }
         recommendations.say = { [weak self] in self?.browser?.show(failure: $0) }
         recommendations.report = { [weak self] in self?.browser?.report($0) }
         recommendations.download = { [weak self] in self?.downloads.queue(recommended: $0) }
