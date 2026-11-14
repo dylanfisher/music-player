@@ -30,6 +30,8 @@ private let everyEvent: [SyncEvent] = [
     .playlistDelete(playlist: playlist),
     .neverUpgrade(release: 4242, never: true),
     .neverUpgrade(release: 1, never: false),
+    .downloadSource(release: 4242, source: .recommendation, at: 1_800_000_000.25),
+    .downloadSource(release: 1, source: .manual, at: 0),
 ]
 
 @Test func everyEventReadsBackAsWritten() throws {
@@ -108,6 +110,12 @@ private func problem(_ line: String) -> String? {
         (#"{\#(head),"event":"addedFiles","folder":"m","names":[".."],"at":1}"#, "relative"),
         (#"{\#(head),"event":"addedFiles","folder":"/m","names":["a"],"at":1}"#, "relative"),
         (#"{\#(head),"event":"addedFiles","folder":"m","names":["a"]}"#, #"has no "at""#),
+        (
+            #"{\#(head),"event":"downloadSource","release":1,"source":"upgrade","at":1}"#,
+            "isn't a download source"
+        ),
+        (#"{\#(head),"event":"downloadSource","release":0,"source":"manual","at":1}"#, "isn't in"),
+        (#"{\#(head),"event":"downloadSource","release":1,"source":"manual"}"#, #"has no "at""#),
     ]
     for (line, expected) in refused {
         let found = problem(line)
@@ -183,6 +191,20 @@ private func folder(with lines: [String], name: String = String(repeating: "c", 
         [WatchedFolder(path: "library", share: "smb://nas/music", kind: .network)],
         among: [MountedShare(url: "smb://nas/music", mountPoint: root.path + "/music")])
     return (sync, index)
+}
+
+@Test func aDownloadSourceThisBuildDoesntKnowIsAProblemWithItsLine() throws {
+    let unknown =
+        #"{"seq":1,"ms":1,"n":0,"event":"downloadSource","release":7,"source":"radio","at":5}"#
+    let known = SyncRecord(
+        seq: 2, clock: clock, event: .downloadSource(release: 8, source: .manual, at: 5)
+    ).line
+    let (sync, index) = try folder(with: [unknown, known])
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.applied == 1)
+    #expect(report.problems.count == 1)
+    #expect(report.problems.first?.contains("isn't a download source") == true, "\(report)")
+    #expect(try index.downloadOrigins() == [8: DownloadOrigin(source: .manual, importedSeconds: 5)])
 }
 
 @Test func problemsInALogAreCappedAndTheRestOfItIsRead() throws {

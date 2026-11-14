@@ -150,6 +150,11 @@ extension LibraryIndex {
         case .neverUpgrade(let release, let never):
             guard try wins(stamp, .neverUpgrade, Int64(release)) else { return nil }
             try setNeverUpgrade(never, release: release)
+        case .downloadSource(let release, let source, let at):
+            guard
+                try mergeDownloadSource(
+                    release: release, DownloadOrigin(source: source, importedSeconds: at))
+            else { return nil }
         }
         merge.changed = true
         return nil

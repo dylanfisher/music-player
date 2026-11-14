@@ -21,6 +21,8 @@ package struct ApprovedImport: Sendable {
 
     package var jobID: Int
     package var releaseID: Int
+    /// How the job was made, which Download Source records (ADR 0207).
+    var source: DownloadJob.Source
     /// As the service last listed it: `staged`, `approved` or `importing`.
     package var state: JobState
     /// The job's folder in the staging folder.
@@ -29,11 +31,12 @@ package struct ApprovedImport: Sendable {
     var upgrade: Upgrade?
 
     package init(
-        jobID: Int, releaseID: Int, state: JobState, folder: String, files: [DownloadJob.File],
-        upgrade: Upgrade?
+        jobID: Int, releaseID: Int, source: DownloadJob.Source, state: JobState, folder: String,
+        files: [DownloadJob.File], upgrade: Upgrade?
     ) {
         self.jobID = jobID
         self.releaseID = releaseID
+        self.source = source
         self.state = state
         self.folder = folder
         self.files = files
@@ -154,7 +157,10 @@ package struct ImportRun {
         }
         rescan(directories.sorted())
         do {
-            try report(.imported, job)
+            try index.database.transaction {
+                try index.recordDownloadSource(of: job)
+                try report(.imported, job)
+            }
         } catch {
             return fail(.carry, "\(error)", job)
         }

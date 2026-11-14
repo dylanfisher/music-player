@@ -312,7 +312,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
             switch shown.source {
             case .upgrade: return "Upgrade"
             case .manual: return "Queued by hand"
-            case .recommendation: return "Recommendation"
+            case .recommendation: return DownloadSource.recommendation.title
             }
         case .album: return shown.album
         case .format: return shown.format

@@ -78,6 +78,9 @@ enum SchemaPart: String, CaseIterable {
     /// the service's epoch and job id, and each release's misses. Keyed by release and job, so
     /// an index rebuild keeps them; not synced, since each Mac counts its own.
     case autoUpgrades
+    /// Where each release downloaded through music-recommender came from (ADR 0207), by
+    /// Discogs release id, so an index rebuild keeps it. Synced, the earliest import winning.
+    case downloadSources
 
     /// The part's SQL, the index's built with Separate Releases as given (ADR 0143); the other
     /// parts don't depend on it.
@@ -104,6 +107,7 @@ enum SchemaPart: String, CaseIterable {
         case .layoutMoves: layoutMovesSchema
         case .neverUpgrade: neverUpgradeSchema
         case .autoUpgrades: autoUpgradesSchema
+        case .downloadSources: downloadSourcesSchema
         }
     }
 
@@ -162,6 +166,7 @@ enum SchemaPart: String, CaseIterable {
         case .layoutMoves: [layoutMovesTable]
         case .neverUpgrade: [neverUpgradeTable]
         case .autoUpgrades: [autoUpgradeJobsTable, upgradeMissesTable]
+        case .downloadSources: [downloadSourcesTable]
         }
     }
 }
@@ -197,6 +202,7 @@ let layoutMovesTable = "layout_moves"
 let neverUpgradeTable = "never_upgrade"
 let autoUpgradeJobsTable = "auto_upgrade_jobs"
 let upgradeMissesTable = "upgrade_misses"
+let downloadSourcesTable = "download_sources"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
@@ -576,6 +582,16 @@ private let autoUpgradesSchema = """
         release_id INTEGER PRIMARY KEY,
         misses INTEGER NOT NULL,
         retry_seconds REAL
+    );
+    """
+
+private let downloadSourcesSchema = """
+    -- Each release's first import from a music-recommender job: `recommendation` or `manual`,
+    -- and when, in seconds since 1970. None means it wasn't downloaded, or before this table.
+    CREATE TABLE \(downloadSourcesTable) (
+        release_id INTEGER PRIMARY KEY,
+        source TEXT NOT NULL,
+        imported_seconds REAL NOT NULL
     );
     """
 

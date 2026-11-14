@@ -132,8 +132,8 @@ struct ApprovalPlan: Sendable {
             let folder = job.stagedFolder, let files = job.stagedFiles
         else { return nil }
         return ApprovedImport(
-            jobID: job.id, releaseID: job.release.releaseID, state: job.state, folder: folder,
-            files: files,
+            jobID: job.id, releaseID: job.release.releaseID, source: job.source, state: job.state,
+            folder: folder, files: files,
             upgrade: isUpgrade && !(keepingBoth && keepBoth != nil)
                 ? ApprovedImport.Upgrade(
                     old: old,

@@ -204,7 +204,7 @@ private final class Setup {
 
 private func approved(_ id: Int) -> ApprovedImport {
     ApprovedImport(
-        jobID: id, releaseID: 4242, state: .staged, folder: "job-\(id)",
+        jobID: id, releaseID: 4242, source: .manual, state: .staged, folder: "job-\(id)",
         files: [DownloadJob.File(name: "01 First Song.flac", sizeBytes: 1, position: "1")],
         upgrade: nil)
 }

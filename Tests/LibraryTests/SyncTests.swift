@@ -1,4 +1,5 @@
 import Foundation
+import Recommender
 import Testing
 
 @testable import Library
@@ -182,6 +183,31 @@ private func syncAll(_ machines: [Machine]) throws {
     try syncAll([a, b])
     #expect(try a.index.neverUpgradeReleases() == [7], "B's clear was later")
     #expect(try b.index.neverUpgradeReleases() == [7])
+}
+
+/// Records a job of `release` from `source` as imported, as Approve does.
+private func imported(_ machine: Machine, _ release: Int, _ source: DownloadJob.Source) throws {
+    let job = ApprovedImport(
+        jobID: release, releaseID: release, source: source, state: .staged, folder: "job",
+        files: [], upgrade: nil)
+    try machine.index.database.transaction { try machine.index.recordDownloadSource(of: job) }
+}
+
+@Test func aDownloadSourceReachesTheOtherMacAndTheEarliestImportWins() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    try imported(a, 4242, .recommendation)
+    try syncAll([a, b])
+    let first = DownloadOrigin(source: .recommendation, importedSeconds: 1_800_000_000)
+    #expect(try b.index.downloadOrigins() == [4242: first])
+    // Each imports release 7 before reading the other's: A's, a second earlier, wins on both.
+    b.nowMs += 1000
+    try imported(b, 7, .manual)
+    try imported(a, 7, .recommendation)
+    try syncAll([a, b])
+    for machine in [a, b] {
+        #expect(try machine.index.downloadOrigins() == [4242: first, 7: first], "\(machine.mount)")
+    }
 }
 
 @Test func aTieOnTheClockGoesToTheHigherMachineID() throws {

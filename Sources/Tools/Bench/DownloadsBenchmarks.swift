@@ -76,7 +76,8 @@ private func approveRun(latency: FileLatency? = nil) throws -> ApproveRun {
             throw BenchError.expected("two staged files analyzed, both clean: \(origins)")
         }
         let approved = ApprovedImport(
-            jobID: 1, releaseID: 1, state: .staged, folder: job, files: files, upgrade: nil)
+            jobID: 1, releaseID: 1, source: .manual, state: .staged, folder: job, files: files,
+            upgrade: nil)
         var outcome: ImportOutcome?
         let importSeconds = try seconds {
             outcome = try waited {

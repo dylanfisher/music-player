@@ -22,6 +22,8 @@ public enum LibraryError: Error, Equatable, CustomStringConvertible {
     case notRelative(String)
     /// A release id the import ledger holds that isn't a number.
     case notAReleaseID(String)
+    /// A download source the index holds that this build doesn't know.
+    case notADownloadSource(String)
     /// The owner answered the rescan question with Quit, so the index was left as it was.
     case rescanDeclined
 
@@ -46,6 +48,8 @@ public enum LibraryError: Error, Equatable, CustomStringConvertible {
                 + " recorded"
         case .notAReleaseID(let text):
             "the import ledger holds \(text.debugDescription) where a release id belongs"
+        case .notADownloadSource(let text):
+            "the index holds \(text.debugDescription) where a download source belongs"
         case .rescanDeclined: "the library wasn't rebuilt, since the rescan was declined"
         }
     }

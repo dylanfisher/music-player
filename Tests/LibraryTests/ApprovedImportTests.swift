@@ -57,9 +57,10 @@ private final class ImportFolders {
 
     func oldPath(_ name: String) -> String { folders.library + "/Artist/Album/" + name }
 
-    func job(state: JobState = .staged, upgrade: Bool, positions: [String?] = ["1", "2"])
-        throws -> ApprovedImport
-    {
+    func job(
+        state: JobState = .staged, upgrade: Bool, positions: [String?] = ["1", "2"],
+        source: DownloadJob.Source? = nil
+    ) throws -> ApprovedImport {
         let files = try folders.files().enumerated().map { offset, file in
             DownloadJob.File(
                 name: file.name, sizeBytes: file.sizeBytes, position: positions[offset])
@@ -70,7 +71,8 @@ private final class ImportFolders {
                 position: String(offset + 1), hasStats: offset == 0, release: release)
         }
         return ApprovedImport(
-            jobID: 7, releaseID: 77, state: state, folder: "job-7", files: files,
+            jobID: 7, releaseID: 77, source: source ?? (upgrade ? .upgrade : .manual),
+            state: state, folder: "job-7", files: files,
             upgrade: upgrade ? ApprovedImport.Upgrade(old: old, acknowledged: []) : nil)
     }
 
@@ -682,4 +684,66 @@ func anUpgradeOfAnAlbumSpelledInAnotherCaseKeepsItsPathsAndStats() async throws 
     let track = try #require(try setup.index.track(path: old[0]))
     #expect(track.id == setup.played)
     #expect(track.playCount == 1)
+}
+
+/// The download sources the index logged for the other Macs.
+private func loggedSources(_ index: LibraryIndex) throws -> [SyncEvent] {
+    try index.database.prepare("SELECT line FROM \(syncOutboxTable)").map {
+        try SyncRecord(line: Array(try $0.text(0).utf8)[...]).event
+    }.filter { if case .downloadSource = $0 { true } else { false } }
+}
+
+@Test func anImportRecordsWhereItCameFromOnceAndARebuiltIndexKeepsIt() async throws {
+    let setup = try ImportFolders()
+    setup.index.wallClockMs = { 1_800_000_000_000 }
+    let job = try setup.job(upgrade: false, source: .recommendation)
+    #expect(await setup.run().run(job) == .imported(setup.folders.destinations))
+    let first = DownloadOrigin(source: .recommendation, importedSeconds: 1_800_000_000)
+    #expect(try setup.index.downloadOrigins() == [77: first])
+    #expect(
+        try loggedSources(setup.index) == [
+            .downloadSource(release: 77, source: .recommendation, at: 1_800_000_000)
+        ])
+    // A later job of the release, here a manual one, leaves the first import's.
+    var later = job
+    later.source = .manual
+    setup.index.wallClockMs = { 1_900_000_000_000 }
+    try setup.index.database.transaction { try setup.index.recordDownloadSource(of: later) }
+    #expect(try setup.index.downloadOrigins() == [77: first])
+    #expect(try loggedSources(setup.index).count == 1)
+
+    try setup.index.database.execute(
+        "UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
+    let rebuilt = try LibraryIndex(at: setup.index.fileURL)
+    #expect(try rebuilt.downloadOrigins() == [77: first])
+}
+
+@Test func aRetaggedJobRecordsTheReleaseItsFilesCarry() async throws {
+    let setup = try ImportFolders()
+    try setup.index.recordTaggedRelease(job: 7, queued: 77, folder: "job-7", release: 99)
+    let job = try setup.job(upgrade: false, source: .recommendation)
+    #expect(await setup.run().run(job) == .imported(setup.folders.destinations))
+    #expect(try setup.index.downloadOrigins().keys.sorted() == [99])
+}
+
+@Test func anUpgradeRecordsNoSourceOfItsOwn() async throws {
+    let setup = try ImportFolders()
+    let outcome = await setup.run().run(try setup.job(upgrade: true))
+    #expect(outcome == .imported(setup.folders.destinations))
+    try setup.expectUpgraded()
+    #expect(try setup.index.downloadOrigins().isEmpty)
+    #expect(try loggedSources(setup.index).isEmpty)
+}
+
+@Test func anUpgradeToAnotherReleaseGivesItTheOldReleasesSource() async throws {
+    let setup = try ImportFolders(release: "12")
+    let old = DownloadOrigin(source: .recommendation, importedSeconds: 100)
+    #expect(try setup.index.mergeDownloadSource(release: 12, old))
+    let outcome = await setup.run().run(try setup.job(upgrade: true))
+    #expect(outcome == .imported(setup.folders.destinations))
+    #expect(try setup.index.downloadOrigins() == [12: old, 77: old])
+    #expect(
+        try loggedSources(setup.index) == [
+            .downloadSource(release: 77, source: .recommendation, at: 100)
+        ])
 }

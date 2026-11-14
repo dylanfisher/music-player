@@ -34,6 +34,9 @@ enum SyncEvent: Equatable, Sendable {
     case playlistDelete(playlist: String)
     /// A Discogs release marked Never Upgrade, or cleared (ADR 0200). The latest wins.
     case neverUpgrade(release: Int, never: Bool)
+    /// A Discogs release's first import from a music-recommender job, at `at` (ADR 0207). The
+    /// earliest wins.
+    case downloadSource(release: Int, source: DownloadSource, at: Double)
 }
 
 /// The highest play count, imported or set by hand, that a log carries.
@@ -139,6 +142,7 @@ extension SyncEvent {
         case .playlistEntries: .playlistEntries
         case .playlistDelete: .playlistDelete
         case .neverUpgrade: .neverUpgrade
+        case .downloadSource: .downloadSource
         }
     }
 
@@ -177,6 +181,11 @@ extension SyncEvent {
         case .playlistDelete(let playlist): [(.playlist, .string(playlist))]
         case .neverUpgrade(let release, let never):
             [(.release, .integer(Int64(release))), (.never, .bool(never))]
+        case .downloadSource(let release, let source, let at):
+            [
+                (.release, .integer(Int64(release))), (.source, .string(source.rawValue)),
+                (.at, .number(at)),
+            ]
         }
     }
 }
@@ -188,7 +197,7 @@ enum SyncKey: String {
     case playlist
     case name, rules, paths
     case folder, names
-    case release, never
+    case release, never, source
 }
 
 /// What `event` names in a log line.
@@ -198,7 +207,7 @@ enum SyncEventName: String {
     /// What an import added, which earlier builds logged and this one skips (`retiredCounts`).
     case counts
     case playlistRules, playlistEntries, playlistDelete, playCount
-    case neverUpgrade
+    case neverUpgrade, downloadSource
 }
 
 /// A line's keys not yet decoded.
@@ -303,6 +312,15 @@ extension SyncEvent {
                 release: Int(
                     try fields.take(.release).integer(.release, in: SyncRecord.releaseRange)),
                 never: try fields.take(.never).bool(.never))
+        case .downloadSource:
+            let source = try fields.take(.source).string(.source)
+            guard let known = DownloadSource(rawValue: source) else {
+                throw .bad(.source, "isn't a download source")
+            }
+            self = .downloadSource(
+                release: Int(
+                    try fields.take(.release).integer(.release, in: SyncRecord.releaseRange)),
+                source: known, at: try fields.take(.at).seconds(.at))
         }
     }
 }
