@@ -109,6 +109,9 @@ that phase's Result line, and delete its line here.
 
 ### Owner checks in the running app
 
+- **88** ([phase](plan-archive.md#88-where-a-download-came-from)): download an album from
+  Recommendations and approve it; a smart playlist with Download Source is Recommendation
+  holds it on this Mac, and on the 2015 MacBook Pro after its next sync.
 - **87** ([phase](plan-archive.md#87-rediscover)): Rediscover on this Mac and the 2015 MacBook
   Pro over two days, against the real service: the panel, Not Now's undo, a resend from the
   other Mac, and whether the albums, reasons and threads hold up.
@@ -390,30 +393,6 @@ detail of each item.
       playback rows.
 - [ ] **Code review** of phase 84's 52 commits, which landed without one: `/code-review high`
       on `5fb2cabe..` the landing commit, its confirmed findings fixed.
-
-### 88. Where a download came from
-
-The owner (2026-11-14) wants new music from recommended albums in a smart playlist,
-"Download Source is Recommendation, Date Added in the last 90 days", on every Mac sharing the
-library and through an index rebuild. ADR 0207.
-
-- [ ] **88.1 The real source.** `JobOrder.recommendation(policy)`, sent as
-      `source: "recommendation"` with `upgrade: null`; Recommendations' Download… queues with
-      it, a whole-library list and a seed's alike. Tests: the body's shape; the recommended
-      choices order it.
-- [ ] **88.2 The record.** A `downloadSources` part, `download_sources` by Discogs release id,
-      written by `ImportRun` in the transaction that queues `imported`, so every approve path
-      writes it: the first import wins, an upgrade makes no row of its own and gives a new
-      release id the old release's. Tests: Approve records it; a second job leaves it; an
-      upgrade carries it; a rebuild of the index part keeps it.
-- [ ] **88.3 Synced.** A `downloadSource` event (release, source, imported time) logged with
-      each row; the merge keeps each release's earliest import, and an unknown source is a
-      problem with its line. Tests: a round trip between two indexes, the earliest winning,
-      an unknown source reported.
-- [ ] **88.4 The smart field.** Download Source, text, `Recommendation` or `Manual`, empty for
-      a track whose release has no row, matched through `discogs_release_id`. Tests: `is`,
-      `isn't` and empty.
-- [ ] **88.5 Docs.** ADR 0207; README and docs where they list smart fields or sync events.
 
 ### 10. Web remote
 

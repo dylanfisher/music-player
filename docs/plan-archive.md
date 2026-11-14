@@ -12884,3 +12884,41 @@ profile sent on its own. `./scripts/check` failed only on tests the phase didn't
 base, and HALOutputTests `aDeviceCallNamesTheDeviceAndNoFile` failed 1 of 3 runs on main; that
 flake still needs its cause found. Built against stand-ins only; the service side is
 music-recommender's phase 9. Pending: the owner check.
+
+### 88. Where a download came from
+
+The owner (2026-11-14) wants new music from recommended albums in a smart playlist,
+"Download Source is Recommendation, Date Added in the last 90 days", on every Mac sharing the
+library and through an index rebuild. ADR 0207.
+
+- [x] **88.1 The real source.** `JobOrder.recommendation(policy)`, sent as
+      `source: "recommendation"` with `upgrade: null`; Recommendations' Download… queues with
+      it, a whole-library list and a seed's alike. Tests: the body's shape; the recommended
+      choices order it.
+      Commit `30646e9b`.
+- [x] **88.2 The record.** A `downloadSources` part, `download_sources` by Discogs release id,
+      written by `ImportRun` in the transaction that queues `imported`, so every approve path
+      writes it: the first import wins, an upgrade makes no row of its own and gives a new
+      release id the old release's. Tests: Approve records it; a second job leaves it; an
+      upgrade carries it; a rebuild of the index part keeps it.
+      Commits `f74c0da3`, `eb166e20`.
+- [x] **88.3 Synced.** A `downloadSource` event (release, source, imported time) logged with
+      each row; the merge keeps each release's earliest import, and an unknown source is a
+      problem with its line. Tests: a round trip between two indexes, the earliest winning,
+      an unknown source reported.
+      Commit `f74c0da3`.
+- [x] **88.4 The smart field.** Download Source, text, `Recommendation` or `Manual`, empty for
+      a track whose release has no row, matched through `discogs_release_id`. Tests: `is`,
+      `isn't` and empty.
+      Commit `12a464e5`.
+- [x] **88.5 Docs.** ADR 0207; README and docs where they list smart fields or sync events.
+      Commit `169c9200`.
+
+Result (2026-11-14): one Opus builder, about 395k tokens over the build and one fix round (93
+tool calls, 32 minutes), and one Sonnet correctness reviewer, 70k. The review found two real
+bugs, both fixed with tests that fail without them: a resumed upgrade to a new release lost
+the old release's source, and another job's bad ledger row could fail an import. The full gate
+passes every step but `test`, whose failures (HALOutputTests' StepWatch, 10 of 10 alone;
+MusicPlayerTests' frosted glass headers; TagWriterTests' quarantine flag) also fail on main on
+this Mac. Bench skipped: the new LEFT JOIN is on a primary key, and SQLite drops it from a
+query that doesn't use the field. Pending: the owner check.
