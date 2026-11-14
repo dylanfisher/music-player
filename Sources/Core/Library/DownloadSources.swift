@@ -51,13 +51,23 @@ extension LibraryIndex {
     /// Records where `job` came from, now that its files are in the library, and logs it for
     /// the other Macs. Keyed by the release its files carry: the one the tagger tagged them
     /// as, where it did (ADR 0178). The first import of a release wins. An upgrade gives a new
-    /// release id the source of the release it replaces; it records nothing of its own. Call
-    /// inside a transaction.
+    /// release id the source of the release it replaces; it records nothing of its own. The
+    /// replaced releases come from the job's ledger, not the sheet's `upgrade`, which a resume
+    /// after the old files are gone can't rebuild. Call inside a transaction.
     func recordDownloadSource(of job: ApprovedImport) throws {
-        let release = try taggedReleases()[job.jobID]?.releaseID ?? job.releaseID
-        let replaced = Set(
-            (job.upgrade?.old ?? []).compactMap { $0.release.flatMap { Int($0) } }
-        ).subtracting([release])
+        // Only this job's steps, so another job's bad row can't fail this import.
+        let steps = try importSteps(job: job.jobID)
+        var release = job.releaseID
+        if let retagged = steps.first(where: { $0.kind == .retagged }) {
+            let text = retagged.destination ?? ""
+            guard let id = Int(text) else { throw LibraryError.notAReleaseID(text) }
+            release = id
+        }
+        // The old files held to another release than the job's carry it; the others, the job's.
+        var replaced = Set(
+            steps.filter { $0.kind == .held }.compactMap { $0.destination.flatMap { Int($0) } })
+        if steps.contains(where: { $0.kind == .trashed }) { replaced.insert(job.releaseID) }
+        replaced.remove(release)
         let origins = try downloadOrigins()
         let origin: DownloadOrigin
         if let carried = replaced.compactMap({ origins[$0] }).min(by: earlier) {

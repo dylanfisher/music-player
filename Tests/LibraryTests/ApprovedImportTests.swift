@@ -727,7 +727,8 @@ private func loggedSources(_ index: LibraryIndex) throws -> [SyncEvent] {
 }
 
 @Test func anUpgradeRecordsNoSourceOfItsOwn() async throws {
-    let setup = try ImportFolders()
+    // The old files are of release 12, which has no row, and the job of 77.
+    let setup = try ImportFolders(release: "12")
     let outcome = await setup.run().run(try setup.job(upgrade: true))
     #expect(outcome == .imported(setup.folders.destinations))
     try setup.expectUpgraded()
@@ -746,4 +747,57 @@ private func loggedSources(_ index: LibraryIndex) throws -> [SyncEvent] {
         try loggedSources(setup.index) == [
             .downloadSource(release: 77, source: .recommendation, at: 100)
         ])
+}
+
+@Test func aResumedUpgradeStillGivesItTheOldReleasesSource() async throws {
+    let setup = try ImportFolders(release: "12")
+    let old = DownloadOrigin(source: .recommendation, importedSeconds: 100)
+    #expect(try setup.index.mergeDownloadSource(release: 12, old))
+    let job = try setup.job(upgrade: true)
+    struct Down: Error {}
+    guard case .failed(.carry, _) = await setup.run(carry: { _ in throw Down() }).run(job) else {
+        Issue.record("the carry didn't fail")
+        return
+    }
+    // After a relaunch the sheet can't find the old files, which are gone; the ledger can.
+    var resumed = job
+    resumed.state = .importing
+    resumed.upgrade = nil
+    #expect(await setup.run().run(resumed) == .imported(setup.folders.destinations))
+    #expect(try setup.index.downloadOrigins()[77] == old)
+}
+
+@Test func oldFilesOfTwoReleasesGiveTheEarlierImportsSource() throws {
+    let folders = try MoveFolders()
+    let index = folders.index
+    let later = DownloadOrigin(source: .manual, importedSeconds: 200)
+    let earlier = DownloadOrigin(source: .recommendation, importedSeconds: 100)
+    #expect(try index.mergeDownloadSource(release: 12, later))
+    #expect(try index.mergeDownloadSource(release: 13, earlier))
+    try index.database.transaction {
+        for (path, release) in [("a.mp3", "12"), ("b.mp3", "13")] {
+            try index.recordImportStep(
+                ImportStep(jobID: 7, releaseID: 77, kind: .trashed, path: path))
+            try index.recordImportStep(
+                ImportStep(
+                    jobID: 7, releaseID: 77, kind: .held, path: path, destination: release))
+        }
+        try index.recordDownloadSource(
+            of: ApprovedImport(
+                jobID: 7, releaseID: 77, source: .upgrade, state: .importing, folder: "job-7",
+                files: [], upgrade: nil))
+    }
+    #expect(try index.downloadOrigins()[77] == earlier)
+}
+
+@Test func aTieOnTheImportTimeGoesToTheSourceThatSortsFirst() throws {
+    for order in [[DownloadSource.recommendation, .manual], [.manual, .recommendation]] {
+        let folders = try MoveFolders()
+        let index = folders.index
+        for source in order {
+            _ = try index.mergeDownloadSource(
+                release: 5, DownloadOrigin(source: source, importedSeconds: 100))
+        }
+        #expect(try index.downloadOrigins()[5]?.source == .manual, "\(order)")
+    }
 }
