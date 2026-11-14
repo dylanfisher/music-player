@@ -42,6 +42,9 @@ public final class LibraryIndex {
     /// The day's albums of Rediscover, best first, which a `.rediscover` source lists; in
     /// memory, as each connection's own (ADR 0206).
     var rediscoverAlbums: [Int64] = []
+    /// The albums Threads connects to its seed, in the reply's or the chosen thread's order,
+    /// which a `.threads` source lists; in memory, as Rediscover's (ADR 0208).
+    var threadsAlbums: [Int64] = []
     /// Files moved aside for one reason that are kept beside the library: unreadable ones, or
     /// those a restore replaced; older ones are deleted when another is moved.
     static let keptUnreadableFiles = 3

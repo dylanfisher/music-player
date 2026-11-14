@@ -22,6 +22,9 @@ public struct TrackFilter: Equatable, Sendable {
     /// moves a rolling period on (ADR 0109); nil reads the period's days at query time. Only
     /// read with a `.stats` source.
     public var statsSpan: PlaySpan?
+    /// The album Threads shows the connections of, its seed (ADR 0208); only read with a
+    /// `.threads` source, whose albums the index is told apart from the filter.
+    public var threadsSeed: Int64?
 
     public init(
         source: BrowserSource? = nil, genre: Int64? = nil, artist: Int64? = nil,

@@ -232,3 +232,24 @@ private func albumKey(_ index: LibraryIndex, _ path: String) throws -> String {
         #expect(album.discogsReleaseID == seed.releaseID)
     }
 }
+
+@Test func threadsSeedsOnlyFromOneAlbumWithOneReleaseOnEveryTrack() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/m/a/1.flac", album: "A", number: 1, custom: [DiscogsKey.releaseID: "42"])
+            .scanned,
+        Crafted(path: "/m/a/2.flac", album: "A", number: 2, custom: [DiscogsKey.releaseID: "42"])
+            .scanned,
+        Crafted(path: "/m/b/1.flac", album: "B", number: 1, custom: [DiscogsKey.releaseID: "7"])
+            .scanned,
+        Crafted(path: "/m/b/2.flac", album: "B", number: 2).scanned,
+        Crafted(path: "/m/c/1.flac", album: "C").scanned,
+    ])
+    let a = try #require(try index.track(path: "/m/a/1.flac")?.albumID)
+    #expect(try index.threadsSeed(trackIDs: ids(index, ["/m/a/2.flac"])) == a)
+    #expect(try index.threadsSeed(trackIDs: ids(index, ["/m/a/1.flac", "/m/a/2.flac"])) == a)
+    // Its other track names no release, so B has none; C has none at all.
+    #expect(try index.threadsSeed(trackIDs: ids(index, ["/m/b/1.flac"])) == nil)
+    #expect(try index.threadsSeed(trackIDs: ids(index, ["/m/c/1.flac"])) == nil)
+    #expect(try index.threadsSeed(trackIDs: ids(index, ["/m/a/1.flac", "/m/b/1.flac"])) == nil)
+    #expect(try index.threadsSeed(trackIDs: []) == nil)
+}

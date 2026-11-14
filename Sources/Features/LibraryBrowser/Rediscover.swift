@@ -34,10 +34,14 @@ extension LibraryBrowser {
         set { rediscover.service = newValue }
     }
 
-    /// Sends the library profile, if it changed unless forced, before Rediscover asks for a day.
+    /// Sends the library profile, if it changed unless forced, before Rediscover asks for a day
+    /// and Threads for a seed's threads.
     package var sendProfile: (_ force: Bool) async -> ProfileSender.Outcome {
         get { rediscover.sendProfile }
-        set { rediscover.sendProfile = newValue }
+        set {
+            rediscover.sendProfile = newValue
+            threads.sendProfile = newValue
+        }
     }
 
     /// `library.showRediscover`: whether the sidebar lists Rediscover.
@@ -59,7 +63,7 @@ extension LibraryBrowser {
 
     /// Whether the panel shown takes the height Listening Stats' does.
     var showsPanelOfStatsHeight: Bool {
-        shownPanel === statsPanel || shownPanel === rediscoverPanel
+        shownPanel === statsPanel || shownPanel === rediscoverPanel || shownPanel === threadsPanel
     }
 
     /// Whether Not Now applies: Rediscover shows a day and tracks are selected.
@@ -96,15 +100,18 @@ extension LibraryBrowser {
     /// Shows the reasons of the first selected track's album while Rediscover shows.
     func rediscoverSelectionChanged() {
         guard model.filter.source == .rediscover else { return }
+        readFirstSelectedAlbum { [weak self] in self?.rediscover.selectedAlbumID = $0 }
+    }
+
+    /// Reads the album of the first selected track for `take`, nil when none is selected:
+    /// whose reasons or threads a panel shows.
+    func readFirstSelectedAlbum(_ take: @escaping (Int64?) -> Void) {
         guard let first = table.table.selectedRowIndexes.first,
             let id = model.ids(ofRows: IndexSet(integer: first)).first
-        else {
-            rediscover.selectedAlbumID = nil
-            return
-        }
+        else { return take(nil) }
         Task {
             do {
-                rediscover.selectedAlbumID = try await reader.albumIDs(ids: [id])[id]
+                take(try await reader.albumIDs(ids: [id])[id])
             } catch {
                 report("couldn't read the selected track's album: \(error)")
             }

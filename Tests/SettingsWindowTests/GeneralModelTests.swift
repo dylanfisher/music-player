@@ -314,7 +314,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(
         sections.first { $0.section == .browsing }?.rows.map(\.key) == [
             schema.groupByAlbumArtist.key, schema.separateReleases.key,
-            schema.showRediscover.key, schema.fileViewer.key,
+            schema.showRediscover.key, schema.showThreads.key, schema.fileViewer.key,
         ])
     #expect(
         sections.first { $0.section == .database }?.rows.map(\.key) == [

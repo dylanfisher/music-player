@@ -1,7 +1,7 @@
 /// What the sidebar shows instead of the whole library: a playlist, History, the play timeline,
-/// its plays in a span, a health check, Listening Stats or Rediscover. Saved as one string:
-/// `playlist:<id>`, `history`, `timeline`, `plays:<start>-<end>`, `health:<check>`,
-/// `stats:<period>` or `rediscover`.
+/// its plays in a span, a health check, Listening Stats, Rediscover or Threads. Saved as one
+/// string: `playlist:<id>`, `history`, `timeline`, `plays:<start>-<end>`, `health:<check>`,
+/// `stats:<period>`, `rediscover` or `threads`.
 public enum BrowserSource: SettingValue, Hashable {
     /// A playlist's ID, which an index rebuild keeps (ADR 0018).
     case playlist(Int64)
@@ -17,11 +17,15 @@ public enum BrowserSource: SettingValue, Hashable {
     case stats(StatsPeriod)
     /// The tracks of the day's albums music-recommender's Rediscover chose (ADR 0206).
     case rediscover
+    /// The tracks of the albums music-recommender connects to one album, the seed, which the
+    /// filter holds (ADR 0208).
+    case threads
 
     public static let playlistPrefix = "playlist:"
     private static let historyText = "history"
     private static let timelineText = "timeline"
     private static let rediscoverText = "rediscover"
+    private static let threadsText = "threads"
     private static let healthPrefix = "health:"
     private static let playsPrefix = "plays:"
     private static let statsPrefix = "stats:"
@@ -37,6 +41,7 @@ public enum BrowserSource: SettingValue, Hashable {
         case .plays(let span): Self.playsPrefix + span.text
         case .stats(let period): Self.statsPrefix + period.text
         case .rediscover: Self.rediscoverText
+        case .threads: Self.threadsText
         }
     }
 
@@ -44,7 +49,7 @@ public enum BrowserSource: SettingValue, Hashable {
     public var listsPlays: Bool {
         switch self {
         case .timeline, .plays: true
-        case .playlist, .history, .health, .stats, .rediscover: false
+        case .playlist, .history, .health, .stats, .rediscover, .threads: false
         }
     }
 
@@ -56,6 +61,8 @@ public enum BrowserSource: SettingValue, Hashable {
             self = .timeline
         } else if text == Self.rediscoverText {
             self = .rediscover
+        } else if text == Self.threadsText {
+            self = .threads
         } else if text.hasPrefix(Self.playlistPrefix),
             let id = Int64(text.dropFirst(Self.playlistPrefix.count))
         {
@@ -98,7 +105,7 @@ public enum BrowserSource: SettingValue, Hashable {
     public static var typeName: String {
         "\"\(playlistPrefix)<id>\", \"\(historyText)\", \"\(timelineText)\","
             + " \"\(playsPrefix)<start>-<end>\", \"\(healthPrefix)<check>\","
-            + " \"\(statsPrefix)<period>\" or \"\(rediscoverText)\""
+            + " \"\(statsPrefix)<period>\", \"\(rediscoverText)\" or \"\(threadsText)\""
     }
     public static var kind: SettingKind { .windowState }
 }

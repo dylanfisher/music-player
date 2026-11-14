@@ -6,6 +6,10 @@ import LocalNetwork
 package let serviceNotSetText = "Set music-recommender's address and token in Settings."
 /// What Service Status says while the service's address isn't set.
 package let serviceAddressNotSetText = "Set music-recommender's address in Settings."
+/// What a window or panel says for the refusal `no_catalog`.
+package let noCatalogText =
+    "The service has no Discogs catalog, or one from another version of the service. Import"
+    + " the dumps on the service, then try again."
 
 /// Why a call to music-recommender failed, naming the address it went to and never the token.
 package struct RecommenderError: Error, Equatable, CustomStringConvertible {

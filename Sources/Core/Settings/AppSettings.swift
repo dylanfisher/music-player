@@ -121,6 +121,9 @@ public struct AppSettings: SettingsSchema {
     public let showRediscover = Setting(
         "library.showRediscover", title: "Show Rediscover in Sidebar", default: true,
         "List Rediscover in the sidebar; Show Rediscover opens it either way.")
+    public let showThreads = Setting(
+        "library.showThreads", title: "Show Threads in Sidebar", default: true,
+        "List Threads in the sidebar; Show Threads opens it either way.")
     public let fileViewer = Setting(
         "library.fileViewer", title: "File Viewer", default: FileViewer.searcher,
         "Where Reveal in Finder shows tracks; without Searcher, it uses Finder.")

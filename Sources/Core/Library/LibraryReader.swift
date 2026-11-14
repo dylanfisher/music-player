@@ -100,6 +100,20 @@ public actor LibraryReader {
         return unknown
     }
 
+    /// Lists Threads' `albums`, in order, for the `.threads` source, as `showRediscover` lists
+    /// Rediscover's.
+    public func showThreads(_ albums: [(id: Int64, title: String)]) async throws -> [Int64] {
+        let unknown = try index.showThreads(albums)
+        _ = try await refreshConnection?.showThreads(albums)
+        return unknown
+    }
+
+    /// The album Show Threads seeds from with the tracks `ids` selected, or nil when the
+    /// selection isn't one album with one release on every track.
+    public func threadsSeed(trackIDs ids: [Int64]) throws -> Int64? {
+        try index.threadsSeed(trackIDs: ids)
+    }
+
     public func trackIDs(_ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool)
         throws -> [Int64]
     {

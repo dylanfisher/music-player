@@ -56,6 +56,20 @@ this source and Rediscover's card.
   it changed; a key the index doesn't have under the reply's title sends this Mac's profile,
   forced, and asks once more; the header says Not answering or Token refused, and the threads
   read before stay under the error.
+- **Built (2026-11-14).** The seed is the window filter's `threadsSeed`, an album id; Back
+  and Forward's steps tell two places apart by source and seed, so Show Threads on another
+  album is a step and on the one shown is none. The browser model keeps the seed shown last,
+  which its sidebar row shows again. Each time Threads shows, or its
+  seed changes, the seed's threads are read again; another seed's are cleared at once, so the
+  table empties while it reads, and Refresh keeps the same seed's under an error. A reply
+  lists All; Refresh keeps the chosen thread until its reply lands. `no_seed` is the seed's
+  unknown key: this Mac's profile is sent, forced, and the seed asked once more, as an
+  unknown album's key is. Show Threads' enabling reads the selection's seed off the main
+  thread after each change of the selection, stopping at a second album, and is off until it
+  lands. The Threads card is a list as Listening Stats' are, each thread with the count of
+  its albums this library has; a thread none of them is in is dimmed and can't be chosen.
+  Back to an earlier seed shows its threads once they're read again, so the selection that
+  step had is kept only where the list read before still holds its tracks.
 - **No Not Now and no marks.** Threads only follows connections; the albums are the library's.
 - **Show Threads in Sidebar,** `library.showThreads`, on by default, in Settings' Browsing
   section, as Show Rediscover in Sidebar is.

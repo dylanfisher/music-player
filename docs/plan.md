@@ -429,8 +429,9 @@ owner's answers are in [ADR 0208](decisions/0208-threads.md).
   - `Core/Library`: `threadsAlbums` beside `rediscoverAlbums` with `showThreads`, listed by a
     `.threads` source in its order; `threadsSeed(trackIDs:)`, the selection's one album when
     every track has its one release, from the same read as `recommendationSeeds`.
-  - `Core/Settings`: `BrowserSource.threads` (`threads`), `TrackFilter.threadsSeed` (an album
-    id, compared with the source by Back and Forward's steps), `library.showThreads`.
+  - `Core/Settings`: `BrowserSource.threads` (`threads`), `library.showThreads`; in
+    `Core/Library`, `TrackFilter.threadsSeed` (an album id, compared with the source by Back
+    and Forward's steps).
   - `Core/Commands`: `library.threads`, Show Threads, in the File menu after Show Rediscover
     and in the track menu after Recommendations for Artist.
   - `Features/LibraryBrowser`: `ThreadsModel` (seed, reply, chosen thread, the forced

@@ -57,9 +57,9 @@ struct StepHistory: Equatable, Sendable {
     var canGoForward: Bool { position < steps.count - 1 }
 
     /// A source shown, `window` as it shows first; `leaving` is the window before it. The source
-    /// already shown adds nothing.
+    /// already shown adds nothing; Threads of another seed is another place.
     mutating func visit(_ window: WindowPlace, leaving: WindowPlace) {
-        guard window.filter.source != steps[position].window.filter.source else { return }
+        guard !window.filter.isPlace(of: steps[position].window.filter) else { return }
         add(Step(window: window), leaving: leaving)
     }
 
@@ -122,11 +122,19 @@ struct StepHistory: Equatable, Sendable {
             }
             let repeats =
                 step.play == nil
-                && kept.last.map { $0.window.filter.source == step.window.filter.source } == true
+                && kept.last.map { $0.window.filter.isPlace(of: step.window.filter) } == true
             if !repeats { kept.append(step) }
             if index <= position { place = kept.count - 1 }
         }
         steps = kept.isEmpty ? [Step(window: WindowPlace(filter: TrackFilter()))] : kept
         position = place
+    }
+}
+
+extension TrackFilter {
+    /// Whether this filter shows the place `other` does: the same source, and for Threads the
+    /// same seed.
+    func isPlace(of other: TrackFilter) -> Bool {
+        source == other.source && threadsSeed == other.threadsSeed
     }
 }

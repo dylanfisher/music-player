@@ -10,7 +10,8 @@ import Recommender
 /// a session number, so one a newer read started after is dropped.
 @MainActor
 final class RediscoverModel {
-    /// Why the panel shows no day, or not all of it.
+    /// Why the panel shows no day, or not all of it; Threads' panel says the same of its
+    /// threads.
     enum Problem: Equatable {
         /// The service's address or token isn't set.
         case notSet
@@ -23,9 +24,18 @@ final class RediscoverModel {
         case tokenRefused(String)
         /// Any other error, as its text, which names the address.
         case failed(String)
-        /// This many of the day's albums aren't in this library, even after its profile was
+        /// This many of the reply's albums aren't in this library, even after its profile was
         /// sent again.
         case unknownAlbums(Int)
+
+        init(_ error: RecommenderError) {
+            switch error.kind {
+            case .refused(let refusal): self = .refused(refusal)
+            case .unreachable, .offSubnet: self = .notAnswering("\(error)")
+            case .unauthorized: self = .tokenRefused("\(error)")
+            default: self = .failed("\(error)")
+            }
+        }
     }
 
     /// The day shown, as the service answered it.
@@ -99,7 +109,7 @@ final class RediscoverModel {
                 do throws(RecommenderError) {
                     reply = try await service.day(today)
                 } catch {
-                    return finish(problem(error), mine)
+                    return finish(Problem(error), mine)
                 }
                 guard mine == session else { return }
                 let unknown: Int
@@ -188,14 +198,5 @@ final class RediscoverModel {
         self.problem = problem
         isReading = false
         changed()
-    }
-
-    private func problem(_ error: RecommenderError) -> Problem {
-        switch error.kind {
-        case .refused(let refusal): return .refused(refusal)
-        case .unreachable, .offSubnet: return .notAnswering("\(error)")
-        case .unauthorized: return .tokenRefused("\(error)")
-        default: return .failed("\(error)")
-        }
     }
 }

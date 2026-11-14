@@ -34,21 +34,33 @@ extension AppDelegate {
         dispatcher.handle(.showRediscover, enabled: hasWindow) { [weak self] in
             self?.browser?.showRediscover()
         }
+        let canShowThreads = { [weak self] in self?.browser?.canShowThreads == true }
+        dispatcher.handle(.showThreads, enabled: canShowThreads) { [weak self] in
+            self?.browser?.showThreadsOfSelection()
+        }
         let canNotNow = { [weak self] in self?.browser?.canNotNow == true }
         dispatcher.handle(.notNow, enabled: canNotNow) { [weak self] in
             self?.browser?.notNowSelection()
         }
     }
 
-    /// Rediscover in `browser` (ADR 0206): the service's calls as set now, the profile sent
-    /// through Recommendations' sender, and its row in the sidebar as the setting says.
+    /// Rediscover and Threads in `browser` (ADR 0206, 0208): the service's calls as set now, the
+    /// profile sent through Recommendations' sender, and their rows in the sidebar as the
+    /// settings say.
     func wireRediscover(_ browser: LibraryBrowser, _ settings: ConfigStore<AppSettings>) {
         browser.rediscoverService = { [weak self] in self?.rediscoverService() }
+        browser.threadsService = { [weak self] in
+            guard let (address, port, token) = self?.serviceAddress() else { return nil }
+            return ThreadsService { () throws(RecommenderError) in
+                try RecommenderClient(address: address, port: port, token: token)
+            }
+        }
         browser.sendProfile = { [weak self] force in
             guard let self else { return .notSet }
             return await recommendations.sendProfile(force: force)
         }
         browser.showsRediscoverInSidebar = settings[\.showRediscover]
+        browser.showsThreadsInSidebar = settings[\.showThreads]
     }
 
     /// `events`, the Library Analysis standing shown again and the profile sent, if it

@@ -36,3 +36,44 @@ func verticalScroll(_ document: NSView, height: NSLayoutConstraint? = nil) -> NS
         ] + (height.map { [$0] } ?? []))
     return scroll
 }
+
+/// A panel's header of `views` over its cards in `flow`, which scroll up and down: Listening
+/// Stats', Rediscover's and Threads'. No background of its own, as the health panel: the
+/// window's shows around the cards.
+@MainActor
+func cardsPanel(header views: [NSView], cards flow: StatsFlowView) -> NSView {
+    let header = NSStackView(views: views)
+    header.alignment = .centerY
+    header.spacing = 8
+    header.setHuggingPriority(.defaultLow, for: .horizontal)
+    let scroll = verticalScroll(flow, height: flow.height)
+    let panel = NSView()
+    for view in [header, scroll] {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        panel.addSubview(view)
+    }
+    let inset = StatsCard.insetPoints
+    NSLayoutConstraint.activate([
+        header.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: inset),
+        header.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -inset),
+        header.topAnchor.constraint(equalTo: panel.topAnchor, constant: 8),
+        scroll.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
+        scroll.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
+        scroll.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
+        scroll.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
+    ])
+    return panel
+}
+
+/// A panel header's small Refresh button, saying `toolTip`.
+@MainActor
+func panelRefreshButton(toolTip: String) -> NSButton {
+    let button = NSButton(title: "Refresh", target: nil, action: nil)
+    button.bezelStyle = .rounded
+    button.controlSize = .small
+    button.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+    button.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+    button.imagePosition = .imageLeading
+    button.toolTip = toolTip
+    return button
+}

@@ -12,6 +12,8 @@ import Settings
 final class RediscoverPanel: NSViewController, SourcePanel {
     /// The panel's title, and the sidebar row's.
     static let title = "Rediscover"
+    /// The title of the card of the selected album, which Threads' panel shares.
+    static let albumCardTitle = "Why This Album"
 
     /// Refresh clicked: send the profile if it changed, and read the day again.
     var refresh: () -> Void = {}
@@ -20,16 +22,17 @@ final class RediscoverPanel: NSViewController, SourcePanel {
 
     let dayLabel = NSTextField(labelWithString: "")
     let statusLabel = NSTextField(labelWithString: "")
-    let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
+    let refreshButton = panelRefreshButton(
+        toolTip: "Send the library profile if it changed, and read today's albums again")
     let factsText = NSTextField(wrappingLabelWithString: "")
     let threadsText = NSTextField(wrappingLabelWithString: "")
     let reasonsText = NSTextField(wrappingLabelWithString: "")
     let notNowButton = NSButton(title: AppCommands.title(of: .notNow), target: nil, action: nil)
     private(set) lazy var dayCard = StatsCard(title: "Today", body: factsText)
     private(set) lazy var threadsCard = StatsCard(
-        title: "Threads", body: threadsText, columns: 2)
+        title: ThreadsPanel.title, body: threadsText, columns: 2)
     private(set) lazy var albumCard = StatsCard(
-        title: "Why This Album", body: reasonsText, accessory: notNowButton)
+        title: Self.albumCardTitle, body: reasonsText, accessory: notNowButton)
     private let flow = StatsFlowView()
     private let target = ControlTarget()
 
@@ -41,14 +44,6 @@ final class RediscoverPanel: NSViewController, SourcePanel {
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingTail
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        refreshButton.bezelStyle = .rounded
-        refreshButton.controlSize = .small
-        refreshButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        refreshButton.image = NSImage(
-            systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
-        refreshButton.imagePosition = .imageLeading
-        refreshButton.toolTip =
-            "Send the library profile if it changed, and read today's albums again"
         refreshButton.target = target
         refreshButton.action = #selector(ControlTarget.act(_:))
         target.handlers[ObjectIdentifier(refreshButton)] = { [weak self] in self?.refresh() }
@@ -67,29 +62,9 @@ final class RediscoverPanel: NSViewController, SourcePanel {
         }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let header = NSStackView(views: [title, dayLabel, statusLabel, spacer, refreshButton])
-        header.alignment = .centerY
-        header.spacing = 8
-        header.setHuggingPriority(.defaultLow, for: .horizontal)
-
         flow.cards = [dayCard, threadsCard, albumCard]
-        let scroll = verticalScroll(flow, height: flow.height)
-        let panel = NSView()
-        for view in [header, scroll] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            panel.addSubview(view)
-        }
-        let inset = StatsCard.insetPoints
-        NSLayoutConstraint.activate([
-            header.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: inset),
-            header.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -inset),
-            header.topAnchor.constraint(equalTo: panel.topAnchor, constant: 8),
-            scroll.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
-            scroll.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
-        ])
-        view = panel
+        view = cardsPanel(
+            header: [title, dayLabel, statusLabel, spacer, refreshButton], cards: flow)
     }
 
     func sourceShown(_ source: BrowserSource) { _ = view }

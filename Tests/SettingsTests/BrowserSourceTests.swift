@@ -11,7 +11,9 @@ private func decode(_ json: String) throws -> BrowserSource {
     let periods = [StatsPeriod.week, .month, .year, .chosenYear(2024), .all]
     for source in [BrowserSource.playlist(42), .history, .timeline]
         + HealthCheck.allCases.map(BrowserSource.health)
-        + periods.map(BrowserSource.stats) + [.plays(PlaySpan(start: 100, end: 200)), .rediscover]
+        + periods.map(BrowserSource.stats) + [
+            .plays(PlaySpan(start: 100, end: 200)), .rediscover, .threads,
+        ]
     {
         let data = try JSONEncoder().encode(source)
         #expect(try JSONDecoder().decode(BrowserSource.self, from: data) == source)
@@ -24,6 +26,8 @@ private func decode(_ json: String) throws -> BrowserSource {
     #expect(try decode(#""stats:2019""#) == .stats(.chosenYear(2019)))
     #expect(try decode(#""rediscover""#) == .rediscover)
     #expect(!BrowserSource.rediscover.listsPlays)
+    #expect(try decode(#""threads""#) == .threads)
+    #expect(!BrowserSource.threads.listsPlays)
     #expect(
         try decode(#""plays:1700000000-1700086400""#)
             == .plays(PlaySpan(start: 1_700_000_000, end: 1_700_086_400)))
@@ -38,7 +42,8 @@ private func decode(_ json: String) throws -> BrowserSource {
         #""health:""#,
         #""health:NoArt""#, #""health:noArt ""#, "3", "{}",
         #""stats""#, #""stats:""#, #""stats:Month""#, #""stats:decade""#, #""plays:""#,
-        #""Rediscover""#, #""rediscover:""#, #""plays:5-5""#, #""plays:9-2""#, #""plays:-1-2""#,
+        #""Rediscover""#, #""rediscover:""#, #""Threads""#, #""threads:4""#, #""plays:5-5""#,
+        #""plays:9-2""#, #""plays:-1-2""#,
         #""plays:1-2-3""#, #""plays:a-b""#,
     ] {
         #expect(throws: DecodingError.self, "\(json)") { try decode(json) }

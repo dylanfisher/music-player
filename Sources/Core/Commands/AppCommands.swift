@@ -71,6 +71,9 @@ extension CommandID {
     public static let showYearInReview = CommandID("library.yearInReview")
     /// Shows Rediscover, whether or not the sidebar lists it (ADR 0206).
     public static let showRediscover = CommandID("library.rediscover")
+    /// Shows Threads of the selection's one album, whether or not the sidebar lists it; enabled
+    /// only for an album with one Discogs release on every track (ADR 0208).
+    public static let showThreads = CommandID("library.threads")
     /// Leaves the selected tracks' albums out of Rediscover for 30 days (ADR 0206).
     public static let notNow = CommandID("library.notNow")
     /// Opens the Discogs tagger, which writes tags only after the user confirms (ADR 0133).
@@ -285,6 +288,7 @@ public enum AppCommands {
                 .showStats, "Show Listening Stats", argument: statsPeriodArgument, replies: true),
             Command(.showYearInReview, "Show Year in Review"),
             Command(.showRediscover, "Show Rediscover"),
+            Command(.showThreads, "Show Threads"),
             Command(.notNow, "Not Now"),
             Command(.showDiscogsTagger, "Discogs Tagger…"),
             Command(.showDownloads, "Downloads…"),

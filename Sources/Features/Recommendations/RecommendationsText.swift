@@ -60,9 +60,7 @@ func problemText(_ problem: ListProblem, seed: RecommendationQuery.Seed) -> Stri
         case .noProfile:
             return "The service has no library profile yet. Send it, and the list is scored"
                 + " from it in a few minutes."
-        case .noCatalog:
-            return "The service has no Discogs catalog, or one from another version of the"
-                + " service. Import the dumps on the service, then try again."
+        case .noCatalog: return noCatalogText
         case .noList:
             return "The library's list hasn't been scored yet. It is scored after a profile"
                 + " or a catalog arrives; try again in a few minutes."

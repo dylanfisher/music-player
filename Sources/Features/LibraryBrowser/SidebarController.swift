@@ -5,10 +5,10 @@ import KeyChord
 import Library
 import Settings
 
-/// The source list: the library, History, the timeline, Listening Stats and Rediscover, and the
-/// playlists. Library Health isn't here: it opens from a command, and while it or a span of the
-/// timeline shows no row is selected; neither is one for Rediscover while Show Rediscover in
-/// Sidebar is off.
+/// The source list: the library, History, the timeline, Listening Stats, Rediscover and
+/// Threads, and the playlists. Library Health isn't here: it opens from a command, and while it
+/// or a span of the timeline shows no row is selected; neither is one for Rediscover or Threads
+/// while its Show in Sidebar setting is off.
 /// Tracks dragged from the table onto a manual playlist are added to it; playlist files dropped
 /// anywhere on it are imported. A playlist's name is edited in its row after its context menu's
 /// Rename or Return; a click only selects it. The context menu also copies or deletes it. The
@@ -21,6 +21,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private let library = SidebarNode(.library, title: "Music")
     private let libraryGroup = SidebarNode(.group, title: "Library")
     private let rediscover = SidebarNode(.rediscover, title: RediscoverPanel.title)
+    private let threads = SidebarNode(.threads, title: ThreadsPanel.title)
     private let groups: [SidebarNode]
     private let playlistGroup = SidebarNode(.group, title: "Playlists")
     private let selectSource: (BrowserSource?) -> Void
@@ -55,6 +56,14 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             show(playlists: playlists, source: source)
         }
     }
+    /// `library.showThreads`: whether Threads has a row.
+    var showsThreads = true {
+        didSet {
+            guard showsThreads != oldValue else { return }
+            libraryGroup.children = libraryRows
+            show(playlists: playlists, source: source)
+        }
+    }
 
     init(
         selectSource: @escaping (BrowserSource?) -> Void,
@@ -74,6 +83,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         stats.toolTip = "What you've played most, and when, by week, month or year."
         rediscover.toolTip =
             "Albums you have and haven't played for a long time, or ever, a new set each day."
+        threads.toolTip =
+            "Albums of yours connected to one you chose with Show Threads, by what they share."
         playlistGroup.toolTip =
             "Your playlists and smart playlists. Drop playlist files here to import them."
         groups = [libraryGroup, playlistGroup]
@@ -83,9 +94,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 
     private let libraryRowsWithoutRediscover: [SidebarNode]
 
-    /// The Library group's rows, Rediscover's last while it has one.
+    /// The Library group's rows, Rediscover's and then Threads' last while each has one.
     private var libraryRows: [SidebarNode] {
         libraryRowsWithoutRediscover + (showsRediscover ? [rediscover] : [])
+            + (showsThreads ? [threads] : [])
     }
 
     @available(*, unavailable)
@@ -137,11 +149,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         case .health, .plays:
             outline.deselectAll(nil)
             return
-        case .rediscover where !showsRediscover:
+        case .rediscover where !showsRediscover, .threads where !showsThreads:
             outline.deselectAll(nil)
             return
         case .stats(let period): statsPeriod = period
-        case .playlist, .history, .timeline, .rediscover, nil: break
+        case .playlist, .history, .timeline, .rediscover, .threads, nil: break
         }
         let selected = source.flatMap(row(for:)) ?? outline.row(forItem: library)
         outline.selectRowIndexes([selected], byExtendingSelection: false)
@@ -216,7 +228,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         guard let node = item as? SidebarNode else { return false }
         switch node.kind {
         case .group: return true
-        case .library, .history, .timeline, .stats, .rediscover, .playlist: return false
+        case .library, .history, .timeline, .stats, .rediscover, .threads, .playlist:
+            return false
         }
     }
 
@@ -340,7 +353,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         switch selectedNode?.kind {
         case .library: selectSource(nil)
         case .group, nil: break
-        case .history, .timeline, .stats, .rediscover, .playlist: selectSource(selectedSource)
+        case .history, .timeline, .stats, .rediscover, .threads, .playlist:
+            selectSource(selectedSource)
         }
     }
 }
@@ -467,7 +481,7 @@ func playlistFileURLs(_ pasteboard: NSPasteboard) -> [URL] {
 /// A row of the source list. A class, since NSOutlineView tells items apart by identity.
 private final class SidebarNode {
     enum Kind: Equatable {
-        case group, library, history, timeline, stats, rediscover
+        case group, library, history, timeline, stats, rediscover, threads
         case playlist(Playlist)
     }
 
@@ -484,6 +498,7 @@ private final class SidebarNode {
         case .history: .history
         case .timeline: .timeline
         case .rediscover: .rediscover
+        case .threads: .threads
         case .group, .library, .stats: nil
         }
     }
@@ -497,6 +512,7 @@ private final class SidebarNode {
         case .timeline: "list.bullet"
         case .stats: "chart.bar"
         case .rediscover: "clock.arrow.circlepath"
+        case .threads: "point.3.connected.trianglepath.dotted"
         case .playlist(let playlist):
             switch playlist.kind {
             case .manual: SymbolName.playlist

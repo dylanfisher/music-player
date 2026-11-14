@@ -10,10 +10,11 @@ private func album(_ index: LibraryIndex, _ path: String) throws -> Int64 {
 }
 
 /// The paths the source lists, in its own order or in `column`'s.
-private func listed(_ index: LibraryIndex, by column: TrackColumn = .playlistOrder) throws
-    -> [String]
-{
-    let ids = try index.trackIDs(TrackFilter(source: .rediscover), sortedBy: column)
+private func listed(
+    _ index: LibraryIndex, by column: TrackColumn = .playlistOrder,
+    source: BrowserSource = .rediscover
+) throws -> [String] {
+    let ids = try index.trackIDs(TrackFilter(source: source), sortedBy: column)
     return try index.rows(ids: ids).map(\.path)
 }
 
@@ -66,4 +67,21 @@ private func listed(_ index: LibraryIndex, by column: TrackColumn = .playlistOrd
             TrackFilter(source: .rediscover), sortedBy: .playlistOrder, ascending: true)
         #expect(ids.count == 1)
     }
+}
+
+@Test func threadsListsItsOwnAlbumsInTheirOrderApartFromRediscovers() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/m/a/2.flac", album: "A", number: 2).scanned,
+        Crafted(path: "/m/a/1.flac", album: "A", number: 1).scanned,
+        Crafted(path: "/m/b/1.flac", album: "B").scanned,
+    ])
+    let a = try album(index, "/m/a/1.flac")
+    let b = try album(index, "/m/b/1.flac")
+    _ = try index.showRediscover([(a, "A")])
+    #expect(try index.showThreads([(b, "B"), (a, "A"), (999_999, "Gone")]) == [999_999])
+    #expect(
+        try listed(index, source: .threads) == ["/m/b/1.flac", "/m/a/1.flac", "/m/a/2.flac"])
+    #expect(try listed(index) == ["/m/a/1.flac", "/m/a/2.flac"], "Rediscover's stay its own")
+    _ = try index.showThreads([])
+    #expect(try listed(index, source: .threads).isEmpty)
 }

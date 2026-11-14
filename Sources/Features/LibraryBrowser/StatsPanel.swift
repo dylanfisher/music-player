@@ -82,32 +82,11 @@ final class StatsPanel: NSViewController, SourcePanel {
         }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let header = NSStackView(views: [
-            title, periods, years, filterButton, statusLabel, spacer, rankings, reviewButton,
-        ])
-        header.alignment = .centerY
-        header.spacing = 8
-        header.setHuggingPriority(.defaultLow, for: .horizontal)
-
         flow.cards = cards.all
-        let scroll = verticalScroll(flow, height: flow.height)
-        // No background of its own, as the health panel: the window's shows around the cards.
-        let panel = NSView()
-        for view in [header, scroll] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            panel.addSubview(view)
-        }
-        let inset = StatsCard.insetPoints
-        NSLayoutConstraint.activate([
-            header.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: inset),
-            header.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -inset),
-            header.topAnchor.constraint(equalTo: panel.topAnchor, constant: 8),
-            scroll.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
-            scroll.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
-        ])
-        view = panel
+        view = cardsPanel(
+            header: [
+                title, periods, years, filterButton, statusLabel, spacer, rankings, reviewButton,
+            ], cards: flow)
         showPeriod(period, years: [Calendar.current.component(.year, from: Date())])
     }
 

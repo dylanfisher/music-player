@@ -95,8 +95,8 @@ struct SelectionHistory: Equatable, Sendable {
         self.position = kept.isEmpty ? nil : place ?? 0
     }
 
-    /// Whether `place` shows `step`: the same selection in the same source.
+    /// Whether `place` shows `step`: the same selection in the same place.
     private static func place(_ place: WindowPlace, shows step: WindowPlace) -> Bool {
-        place.selection == step.selection && place.filter.source == step.filter.source
+        place.selection == step.selection && place.filter.isPlace(of: step.filter)
     }
 }

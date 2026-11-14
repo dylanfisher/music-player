@@ -86,6 +86,9 @@ public final class BrowserModel {
     private var sortBeforeDefault: (column: TrackColumn, ascending: Bool)?
     /// Entries of the shown manual playlist with no track in the library, which it can't list.
     private(set) var missingTracks = 0
+    /// The seed Threads showed last, which it shows again; not saved, since an album id can
+    /// change at an index rebuild (ADR 0208).
+    private(set) var threadsSeed: Int64?
 
     /// `groupByAlbumArtist` is `library.groupByAlbumArtist`.
     public init(
@@ -282,8 +285,8 @@ public final class BrowserModel {
         return playlists.contains { $0.id == id }
     }
 
-    /// A manual playlist and Rediscover open in their own order, History with the latest play
-    /// first and Stats with the most played. Other sources keep the sort the table has, and
+    /// A manual playlist, Rediscover and Threads open in their own order, History with the
+    /// latest play first and Stats with the most played. Other sources keep the sort the table has, and
     /// leaving one of these puts back the sort it replaced, unless the user chose another.
     func defaultSort(_ source: BrowserSource?) -> (column: TrackColumn, ascending: Bool)? {
         switch source {
@@ -292,7 +295,7 @@ public final class BrowserModel {
         case .history: (.lastPlayed, false)
         // The tracks played most first, as the panel ranks them.
         case .stats: (.playCount, false)
-        case .rediscover: (.playlistOrder, true)
+        case .rediscover, .threads: (.playlistOrder, true)
         case .timeline, .plays, .health, nil: nil
         }
     }
@@ -480,6 +483,7 @@ public final class BrowserModel {
         pending.search = window.filter.search
         pending.stats = window.filter.stats
         pending.statsSpan = window.filter.statsSpan
+        pending.threadsSeed = window.filter.threadsSeed
         pending.selections = window.filter.selections.filter { pendingColumns.contains($0.key) }
         await reload(panesFrom: 0, reason: .user)
     }
@@ -495,7 +499,7 @@ public final class BrowserModel {
     private func enter(_ source: BrowserSource?) {
         changeSort(from: pending.source, to: source)
         switch source {
-        case .health, .stats, .rediscover: pending.selections = [:]
+        case .health, .stats, .rediscover, .threads: pending.selections = [:]
         case .playlist, .history, .timeline, .plays, nil: break
         }
         switch (pending.source, source, pending.stats?.item) {
@@ -503,7 +507,20 @@ public final class BrowserModel {
         default: pending.stats = nil
         }
         if pending.source != source { pending.statsSpan = nil }
+        // Threads shown again from its row shows the seed it showed last.
+        if source != .threads { pending.threadsSeed = nil }
+        if source == .threads, pending.source != .threads { pending.threadsSeed = threadsSeed }
         pending.source = source
+    }
+
+    /// Shows Threads of the album `seed`, as a step Back can undo, so Back and Forward walk
+    /// the seeds (ADR 0208).
+    func showThreads(of seed: Int64) async {
+        guard pending.source != .threads || pending.threadsSeed != seed else { return }
+        pendingVisit = .some(.threads)
+        enter(.threads)
+        pending.threadsSeed = seed
+        await reload(panesFrom: 0, reason: .user)
     }
 
     /// Keeps Stats' table for `period` to `span`, the days of the report its panel shows, and
@@ -943,6 +960,7 @@ public final class BrowserModel {
                     || columns != self.columns)
             filter = next
             pending = next
+            if next.source == .threads { threadsSeed = next.threadsSeed }
             sortColumn = sort.column
             ascending = sort.ascending
             pendingPanes = nil

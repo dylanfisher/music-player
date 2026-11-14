@@ -177,6 +177,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Rediscover's panel, shown while it's the source, and its model (ADR 0206).
     let rediscoverPanel = RediscoverPanel()
     private(set) lazy var rediscover = makeRediscover()
+    /// Threads' panel and its model (ADR 0208).
+    let threadsPanel = ThreadsPanel()
+    private(set) lazy var threads = makeThreads()
+    /// The album Show Threads takes from the selection, once it's read; nil for a selection
+    /// that gives none.
+    var selectionSeed: Int64?
+    /// Counts the reads of `selectionSeed`, so one an older selection started is dropped.
+    var seedReads = 0
+    /// The latest read of `selectionSeed`, which tests wait for.
+    var selectionSeedRead: Task<Void, Never>?
     /// The panel slot's height while Stats shows, apart from the columns' (ADR 0102).
     public var statsHeight = AppState().statsHeight.defaultValue
     /// The slot's height as last placed or dragged, so a change of panel moves the divider
@@ -283,6 +293,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             owner?.readSelectionTotals()
             owner?.recordSelection()
             owner?.rediscoverSelectionChanged()
+            owner?.threadsSelectionChanged()
             owner?.selectionChanged()
         }
         table.dropFiles = { urls in Task { await owner?.addFiles(urls) } }
@@ -399,6 +410,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         wireStats()
         content.addChild(statsPanel)
         wireRediscover()
+        wireThreads()
     }
 
     private func makeContent() -> NSView {
@@ -866,6 +878,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showPanelOfTheSource()
         readStatsIfShownFirst()
         readRediscoverIfShownFirst()
+        readThreadsIfShown()
         runHealthIfShownFirst()
         readTotals(
             of: model.trackIDs, into: \.listTotals,
@@ -2182,6 +2195,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         case .health: healthPanel
         case .stats: statsPanel
         case .rediscover: rediscoverPanel
+        case .threads: threadsPanel
         case .playlist, .history, .timeline, .plays, nil: nil
         }
     }

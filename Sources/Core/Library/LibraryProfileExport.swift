@@ -62,10 +62,28 @@ extension LibraryIndex {
     package func recommendationSeeds(trackIDs ids: [Int64]) throws -> [(
         title: String, artist: String, releaseID: Int?
     )] {
+        try seedAlbums(trackIDs: ids).map { ($0.title, $0.artist, $0.releaseID) }
+    }
+
+    /// The album Threads seeds from with the tracks `ids` selected: their one album, when the
+    /// profile sends a release id for it, one Discogs release on every track (ADR 0208); nil
+    /// for any other selection.
+    package func threadsSeed(trackIDs ids: [Int64]) throws -> Int64? {
+        // Two albums are enough to know there's no seed, which a whole library selected has
+        // in its first tracks.
+        let albums = try seedAlbums(trackIDs: ids, atMost: 2)
+        guard albums.count == 1, albums[0].releaseID != nil else { return nil }
+        return albums[0].id
+    }
+
+    /// The albums of the tracks `ids`, as `recommendationSeeds` reads them, the first `limit`.
+    private func seedAlbums(trackIDs ids: [Int64], atMost limit: Int = .max) throws -> [(
+        id: Int64, title: String, artist: String, releaseID: Int?
+    )] {
         let albumOf = try statement(
             "SELECT album_id FROM tracks WHERE file_id = ? AND album_id IS NOT NULL")
         var albums: [Int64] = []
-        for id in ids {
+        for id in ids where albums.count < limit {
             for album in try albumOf.map(id, row: { try $0.int64(0) }) where !albums.contains(album)
             {
                 albums.append(album)
@@ -84,7 +102,7 @@ extension LibraryIndex {
             }
             guard let first = rows.first else { return nil }
             let identity = profileIdentity(artist: first.artist, releases: rows.map(\.release))
-            return (first.title, identity.artist, identity.releaseID)
+            return (album, first.title, identity.artist, identity.releaseID)
         }
     }
 

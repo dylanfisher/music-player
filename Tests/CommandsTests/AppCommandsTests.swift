@@ -35,7 +35,7 @@ import Testing
             "Play Next", "Add to Playback Queue", "Play Now", "-", "Show Album", "Show Artist",
             "Show in All Music", "Open Discogs Release", "Get Discogs Artwork…",
             "Combine Albums for Tagging…", "Never Upgrade", "-", "Recommendations for Album",
-            "Recommendations for Artist", "Not Now", "-", "Like",
+            "Recommendations for Artist", "Show Threads", "Not Now", "-", "Like",
             "Dislike", "-", "Rating ▸ 6",
             "-", "Get Info", "Show Spectrum",
             "Reveal in Finder", "-",
