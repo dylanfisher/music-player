@@ -1,4 +1,5 @@
 import Foundation
+import Metadata
 import Settings
 import Testing
 
@@ -161,6 +162,33 @@ private func smartPaths(_ index: LibraryIndex, _ rules: SmartRules) throws -> Se
     #expect(try paths(.grouping, .has, "warp") == ["none"])
     #expect(SmartRule(.title, .has, .text("a")).problem != nil)
     #expect(SmartComparison.comparisons(for: .title).contains(.has) == false)
+}
+
+@Test func downloadSourceMatchesThroughTheTracksRelease() throws {
+    let index = try craftedIndex(
+        [("recommended", "42"), ("manual", "43"), ("unrecorded", "44"), ("untagged", nil)].map {
+            Crafted(
+                path: "/m/\($0.0)", custom: $0.1.map { [DiscogsKey.releaseID: $0] } ?? [:]
+            ).scanned
+        })
+    #expect(
+        try index.mergeDownloadSource(
+            release: 42, DownloadOrigin(source: .recommendation, importedSeconds: 1)))
+    #expect(
+        try index.mergeDownloadSource(
+            release: 43, DownloadOrigin(source: .manual, importedSeconds: 1)))
+    func names(_ comparison: SmartComparison, _ text: String) throws -> [String] {
+        try smartPaths(
+            index,
+            SmartRules(match: .all, rules: [.init(.downloadSource, comparison, .text(text))])
+        )
+        .map { ($0 as NSString).lastPathComponent }.sorted()
+    }
+    #expect(try names(.is, "Recommendation") == ["recommended"])
+    #expect(try names(.is, "manual") == ["manual"], "whatever its case")
+    #expect(try names(.isNot, "Recommendation") == ["manual", "unrecorded", "untagged"])
+    #expect(try names(.is, "") == ["unrecorded", "untagged"])
+    #expect(SmartField.downloadSource.title == "Download Source")
 }
 
 @Test func statsRulesAndALimitPickByPlays() throws {

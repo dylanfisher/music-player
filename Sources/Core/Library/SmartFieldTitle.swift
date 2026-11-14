@@ -6,7 +6,8 @@ extension SmartField {
         case .trackNumber: "Track Number"
         case .discNumber: "Disc Number"
         case .bitDepth: "Bit Depth"
-        default: column.title
+        case .downloadSource: "Download Source"
+        default: column!.title
         }
     }
 }

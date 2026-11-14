@@ -138,7 +138,7 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
     case title, artist, album, albumArtist, genre, composer, comment, codec, path
     case grouping, mood, work, conductor, lyricist, movementName, originalDate, discSubtitle,
         key, publisher, catalogNumber, barcode, copyright, encoder, description, fileName, fileType,
-        discogsReleaseID, discogsMasterID
+        discogsReleaseID, discogsMasterID, downloadSource
     case year, trackNumber, discNumber, duration, sampleRate, bitDepth, playCount, skipCount,
         rating
     case trackTotal, discTotal, movementNumber, bpm, bitRate, channels, size, loved, compilation
@@ -162,7 +162,7 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
             .grouping, .mood, .work, .conductor, .lyricist, .movementName, .originalDate,
             .discSubtitle,
             .key, .publisher, .catalogNumber, .barcode, .copyright, .encoder, .description,
-            .fileName, .fileType, .discogsReleaseID, .discogsMasterID:
+            .fileName, .fileType, .discogsReleaseID, .discogsMasterID, .downloadSource:
             .text
         case .year, .trackNumber, .discNumber, .duration, .sampleRate, .bitDepth, .playCount,
             .skipCount, .rating, .trackTotal, .discTotal, .movementNumber, .bpm, .bitRate,
@@ -180,8 +180,9 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
     /// measured: rounded to a whole decibel, "is more than 0" would miss an over of 0.4 dB.
     var isSigned: Bool { self == .truePeak }
 
-    /// The track table column the field compares: the names match.
-    public var column: TrackColumn { TrackColumn(rawValue: rawValue)! }
+    /// The track table column the field compares, where the names match; nil for Download
+    /// Source, which no column shows (ADR 0207).
+    public var column: TrackColumn? { TrackColumn(rawValue: rawValue) }
 
     /// The SQL the rule compares, over the tables `TrackColumn.expression` names. The names and
     /// titles are the folded sort columns, which a folded value matches whatever its case and
@@ -189,14 +190,19 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
     /// "is 200", as the table shows it; sizes compare in megabytes, bit rates in kilobits a
     /// second and cutoffs in hertz. A file not analyzed has no measures, so no rule on one
     /// holds for it but "isn't". The Discogs IDs compare as written, not as the numbers they
-    /// sort by, so "Discogs Release ID is" nothing picks the tracks without one.
+    /// sort by, so "Discogs Release ID is" nothing picks the tracks without one. Download
+    /// Source is its title, nil for a release with no row, as the empty text.
     var expression: String {
         let expression =
             switch self {
             case .size: "f.size_bytes / 1000000.0"
             case .discogsReleaseID: "t.discogs_release_id"
             case .discogsMasterID: "t.discogs_master_id"
-            default: column.expression
+            case .downloadSource:
+                "CASE ds.source "
+                    + DownloadSource.allCases.map { "WHEN '\($0.rawValue)' THEN '\($0.title)'" }
+                    .joined(separator: " ") + " END"
+            default: column!.expression
             }
         return kind == .number && !isSigned ? "CAST(\(expression) AS INTEGER)" : expression
     }
@@ -299,7 +305,8 @@ public enum SmartOrder: String, Codable, CaseIterable, Sendable {
 
 /// Every join a rule or a sort can need, from tracks `t`. Each joins on a unique key, so SQLite
 /// leaves out the ones a statement doesn't use. Every track has a file, so files is a left join
-/// only so that it can be left out too. Measures join only when made from the file as the index
+/// only so that it can be left out too. A release id is text in tracks; the integer key
+/// compares it as a number, so "42" finds release 42 and "42x" none. Measures join only when made from the file as the index
 /// has it, so a file changed since reads as not analyzed.
 let trackJoins = """
     LEFT JOIN files f ON f.id = t.file_id
@@ -312,6 +319,7 @@ let trackJoins = """
     LEFT JOIN plays p ON p.path_id = t.file_id
     LEFT JOIN ratings r ON r.path_id = t.file_id
     LEFT JOIN \(lovedTable) lv ON lv.path_id = t.file_id
+    LEFT JOIN \(downloadSourcesTable) ds ON ds.release_id = t.discogs_release_id
     LEFT JOIN \(currentMeasuresJoin)
     """
 

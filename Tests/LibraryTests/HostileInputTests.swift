@@ -128,6 +128,8 @@ private func expected(
             case .codec: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.codec) })
             case .fileName: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.fileName) })
             case .fileType: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.fileType) })
+            // No track here was downloaded, so each has none.
+            case .downloadSource: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, "") })
             default: tagValues
             }
         for (word, text) in hostile {
