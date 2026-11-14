@@ -420,6 +420,25 @@ owner's answers are in [ADR 0208](decisions/0208-threads.md).
 - [ ] **Hardware checkpoint (owner):** on this Mac and the 2015 MacBook Pro, seed Threads from
       a few albums, walk three albums deep and back, and judge the threads.
 
+  Plan:
+  - `Core/Recommender`: `AlbumThreads` (seed, `computed_at`, albums, threads) beside
+    `RediscoverDay`, whose `Album` decodes unscored (no `score`, no `reasons`, either one
+    there failing the reply) for Threads; `ThreadsRoute.swift` with `threads(key:)`; the
+    refusal code `untagged`; a `threads-reply` fuzz target; `threads.json` recorded; tests in
+    `ThreadsRouteTests`.
+  - `Core/Library`: `threadsAlbums` beside `rediscoverAlbums` with `showThreads`, listed by a
+    `.threads` source in its order; `threadsSeed(trackIDs:)`, the selection's one album when
+    every track has its one release, from the same read as `recommendationSeeds`.
+  - `Core/Settings`: `BrowserSource.threads` (`threads`), `TrackFilter.threadsSeed` (an album
+    id, compared with the source by Back and Forward's steps), `library.showThreads`.
+  - `Core/Commands`: `library.threads`, Show Threads, in the File menu after Show Rediscover
+    and in the track menu after Recommendations for Artist.
+  - `Features/LibraryBrowser`: `ThreadsModel` (seed, reply, chosen thread, the forced
+    profile, errors), `ThreadsPanel`, `ThreadsText`, `ThreadsService`, `Threads.swift`
+    wiring; BrowserModel keeps the last seed for the sidebar row. Tests: model, text, browser
+    (disabled for an untagged album, two albums and none; a walk of three seeds back), index.
+  - `App`: the command's handler and enabling, the service, the sidebar setting.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
