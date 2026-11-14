@@ -28,7 +28,8 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   the short `a:`, `ar:`, `t:`, `g:` and `p:`.
 - **Playlists** (⌘N, or ⇧⌘N from the selection) take tracks dragged onto them in the sidebar,
   and reorder by dragging while sorted by Order. **Smart playlists** (⌥⌘N) pick tracks by rules
-  and follow the library as it changes. Click a selected playlist's name, or press Return, to
+  and follow the library as it changes; Download Source picks the albums downloaded from
+  Recommendations or by hand. Click a selected playlist's name, or press Return, to
   rename it in place; its context menu also duplicates and deletes it. Plays, skips, ratings and History are kept in the
   library database, never in the music files; a play counts once 75% of the track has played (Count as
   Played At in Settings), or 4 minutes when its length isn't known.
@@ -56,7 +57,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   a tile lists its tracks below. It runs after a scan and on Show Library Health. ⌘R reveals the selected tracks
   in Searcher, or in Finder when Searcher isn't installed or the File Viewer setting says so.
 - **Sync Folder** (Settings): Macs that play the same library on a share share their plays,
-  ratings, loved tracks, playlists and Date Added through a folder outside the music, where
+  ratings, loved tracks, playlists, Date Added and where downloads came from through a folder outside the music, where
   each writes only its own log. They sync at launch, after each rescan and on wake; a Mac
   away from the share keeps its changes and sends them when it's back.
 - **`music-player`**, in `Music Player.app/Contents/MacOS`, runs any command in the app and
