@@ -1,6 +1,7 @@
 import DisplayText
 import Foundation
 import Recommender
+import Settings
 
 /// What Threads says before Show Threads has given it a seed.
 let threadsNoSeedText =
@@ -11,20 +12,28 @@ func threadsSeedTitle(_ seed: RediscoverDay.Album) -> String {
     terminalSafe("\(seed.title) – \(seed.artist)") + (seed.year.map { ", \($0)" } ?? "")
 }
 
-/// The Threads card's lines: All, then each thread of `reply` in the service's words, with
-/// its albums' count. The count is of the albums the table lists, the service's ids `listed`,
-/// so it matches the table.
-func threadsRows(_ reply: AlbumThreads, listed: Set<String>) -> [StatsListView.Row] {
-    let counts = reply.threads.map { $0.ids.filter(listed.contains).count }
-    let most = max(1, listed.count)
-    return [
-        StatsListView.Row(rank: nil, name: "All", value: number(listed.count), fraction: 1)
-    ]
-        + zip(reply.threads, counts).map { thread, count in
-            StatsListView.Row(
-                rank: nil, name: terminalSafe(thread.words), value: number(count),
+/// The Threads card's lines: All, then each thread `shown` lists in the service's words, with
+/// its albums' count. The count is of the albums the filters pass that this library has, the
+/// service's ids `listed`, so it matches the table.
+func threadsRows(_ shown: ShownThreads, listed: Set<String>) -> [StatsListView.Row] {
+    let all = shown.albums.filter(listed.contains).count
+    let most = max(1, all)
+    return [StatsListView.Row(rank: nil, name: "All", value: number(all), fraction: 1)]
+        + shown.threads.map { thread in
+            let count = thread.ids.filter(listed.contains).count
+            return StatsListView.Row(
+                rank: nil, name: terminalSafe(thread.thread.words), value: number(count),
                 fraction: Double(count) / Double(most), dimmed: count == 0)
         }
+}
+
+/// The Kinds pull-down's title: "All Kinds", or the kinds `hidden` names, "Kinds: no Labels
+/// or Styles".
+func threadsKindsTitle(hidden: Set<ThreadsKind>) -> String {
+    let titles = ThreadsKind.allCases.filter(hidden.contains).map(\.title)
+    guard let last = titles.last else { return "All Kinds" }
+    let rest = titles.dropLast().joined(separator: ", ")
+    return "Kinds: no " + (rest.isEmpty ? last : "\(rest) or \(last)")
 }
 
 /// The selected album and the threads it's in, a thread a line.

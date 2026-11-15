@@ -92,6 +92,8 @@ private var appearanceChoices: [SettingKind.Choice] {
         schema.discogsMapping.key, schema.discogsSavedMappings.key,
         schema.discogsKeepExistingValues.key, schema.discogsSkipVideo.key,
         schema.discogsFillSortArtist.key, schema.discogsArtwork.key, schema.recommenderToken.key,
+        schema.threadsOtherArtistsOnly.key, schema.threadsHiddenKinds.key,
+        schema.threadsPlayed.key, schema.threadsYears.key,
     ]
     #expect(
         model.rows.map(\.key) == schema.settings.map(\.key).filter { !inTheFileOnly.contains($0) })
@@ -348,7 +350,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
     #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
     let listed = sections.flatMap(\.rows).map(\.key)
-    #expect(listed.count == AppSettings().settings.count - 15)
+    #expect(listed.count == AppSettings().settings.count - 19)
     #expect(!listed.contains(AppSettings().resume.key))
     #expect(!listed.contains(AppSettings().browserGroupings.key))
     #expect(!listed.contains(AppSettings().watchedFolders.key))

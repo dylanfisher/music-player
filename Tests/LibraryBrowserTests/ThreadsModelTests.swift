@@ -1,4 +1,5 @@
 import Foundation
+import Settings
 import Testing
 
 @testable import LibraryBrowser
@@ -38,12 +39,14 @@ private final class ThreadsCalls {
 @MainActor
 private func threadsModel(
     _ replies: [Result<AlbumThreads, RecommenderError>], known: Set<Int64>, calls: ThreadsCalls,
-    profile: ProfileSender.Outcome = .unchanged
+    profile: ProfileSender.Outcome = .unchanged, now: Date = Date()
 ) -> ThreadsModel {
-    let model = ThreadsModel(show: { albums in
-        calls.calls.append("show \(albums.map(\.id))")
-        return albums.filter { !known.contains($0.id) || $0.title != "Album a\($0.id)" }.map(\.id)
-    })
+    let model = ThreadsModel(
+        show: { albums in
+            calls.calls.append("show \(albums.map(\.id))")
+            return albums.filter { !known.contains($0.id) || $0.title != "Album a\($0.id)" }
+                .map(\.id)
+        }, now: { now })
     calls.replies = replies
     model.service = {
         ThreadsService(threads: { key throws(RecommenderError) in
@@ -175,6 +178,107 @@ private func threadsModel(
     let failing = threadsModel([], known: [], calls: calls, profile: .failed("didn't answer"))
     await failing.read(2).value
     #expect(failing.problem == .failed("didn't answer"))
+}
+
+/// Threads of the seed a2 over the albums a7, a3 and a5: Engineer: Dee, a credit, of a5 and
+/// a7, and Seed Records, a label, of a3; a7 played twice, last a day before `now`.
+private func filteredReply(now: Date) -> AlbumThreads {
+    var reply = albumThreads(
+        "a2", ["a7", "a3", "a5"],
+        threads: [("Engineer: Dee", ["a5", "a7"]), ("Seed Records", ["a3"])])
+    reply.threads[1].kind = .label
+    reply.albums[0].plays = 2
+    reply.albums[0].lastPlayed = Int(now.timeIntervalSince1970) - 86_400
+    return reply
+}
+
+private func filter(
+    otherArtistsOnly: Bool = false, hidden: Set<ThreadsKind> = [],
+    played: ThreadsPlayed = .anyTime
+) -> ThreadsFilter {
+    var filter = ThreadsFilter.defaults
+    filter.otherArtistsOnly = otherArtistsOnly
+    filter.hiddenKinds = hidden
+    filter.played = played
+    return filter
+}
+
+@MainActor
+@Test func aFilterListsWhatItPassesOfTheReplyHeldAndAsksNothing() async throws {
+    let calls = ThreadsCalls()
+    let now = Date()
+    let model = threadsModel(
+        [.success(filteredReply(now: now))], known: [3, 5, 7], calls: calls, now: now)
+    await model.read(2).value
+    calls.calls = []
+    var listed = 0
+    model.listed = { listed += 1 }
+    await model.apply(filter(played: .notInAYear))?.value
+    #expect(calls.calls == ["show [3, 5]"], "the reply held, listed again")
+    #expect(model.albumIDs == [3, 5] && listed == 1)
+    #expect(model.shown?.threads.map(\.ids) == [["ka5"], ["ka3"]])
+    #expect(model.apply(filter(played: .notInAYear)) == nil, "the filters as they are")
+    await model.apply(filter())?.value
+    #expect(model.albumIDs == [7, 3, 5])
+}
+
+@MainActor
+@Test func aChosenThreadTheFiltersHideOrEmptyGoesBackToAll() async throws {
+    let calls = ThreadsCalls()
+    let now = Date()
+    let model = threadsModel(
+        [.success(filteredReply(now: now))], known: [3, 5, 7], calls: calls, now: now)
+    await model.read(2).value
+    await model.choose(1)?.value
+    #expect(model.albumIDs == [3])
+    await model.apply(filter(hidden: [.label]))?.value
+    #expect(model.chosen == nil && model.albumIDs == [7, 5], "hidden")
+    #expect(model.choose(1) == nil, "a thread not listed")
+    // Seed Records emptied: its one album played.
+    var played = try #require(model.reply)
+    played.albums[1].plays = 1
+    let emptied = threadsModel([.success(played)], known: [3, 5, 7], calls: calls, now: now)
+    await emptied.read(2).value
+    await emptied.choose(1)?.value
+    await emptied.apply(filter(played: .neverPlayed))?.value
+    #expect(emptied.chosen == nil && emptied.albumIDs == [5], "emptied")
+    #expect(emptied.choose(1) == nil, "an emptied thread")
+}
+
+@MainActor
+@Test func aReplyReadUnderTheFiltersListsWhatTheyPassAndCountsEveryUnknownAlbum() async {
+    let calls = ThreadsCalls()
+    let now = Date()
+    var reply = filteredReply(now: now)
+    var missing = reply.albums[1]
+    missing.id = "ka99"
+    missing.key = "a99"
+    reply.albums.append(missing)
+    let model = threadsModel(
+        [.success(reply), .success(reply)], known: [3, 5, 7], calls: calls, now: now)
+    #expect(model.apply(filter(played: .neverPlayed)) == nil, "no reply to list yet")
+    await model.read(2).value
+    #expect(calls.calls.contains("show [3, 5]"))
+    #expect(model.albumIDs == [3, 5])
+    #expect(model.problem == .unknownAlbums(1), "an album the filters leave out still counts")
+}
+
+@MainActor
+@Test func otherArtistsOnlyAndWhyThisAlbumFollowTheKindsShown() async {
+    let calls = ThreadsCalls()
+    var reply = albumThreads(
+        "a2", ["a7", "a3"],
+        threads: [("More by the artist", ["a7"]), ("Engineer: Dee", ["a7", "a3"])])
+    reply.threads[0].kind = .artist
+    let model = threadsModel([.success(reply)], known: [3, 7], calls: calls)
+    await model.read(2).value
+    model.selectedAlbumID = 7
+    #expect(model.selectedThreads.map(\.words) == ["More by the artist", "Engineer: Dee"])
+    await model.apply(filter(otherArtistsOnly: true))?.value
+    #expect(model.selectedThreads.map(\.words) == ["Engineer: Dee"])
+    #expect(model.albumIDs == [7, 3], "a7 is in another thread too")
+    await model.apply(filter(otherArtistsOnly: true, hidden: [.credit]))?.value
+    #expect(model.selectedThreads.isEmpty && model.albumIDs.isEmpty)
 }
 
 /// Holds the first call that waits on it until `open()`.

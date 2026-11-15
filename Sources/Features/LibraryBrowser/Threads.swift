@@ -29,6 +29,11 @@ extension LibraryBrowser {
             threads.read(seed)
         }
         threadsPanel.choose = { [weak self] in self?.threads.choose($0) }
+        threadsPanel.chooseFilter = { [weak self] filter in
+            guard let self else { return }
+            threads.apply(filter)
+            threads.filterChosen(filter)
+        }
         threadsPanel.show(threads)
     }
 
@@ -36,6 +41,19 @@ extension LibraryBrowser {
     package var threadsService: () -> ThreadsService? {
         get { threads.service }
         set { threads.service = newValue }
+    }
+
+    /// The Threads panel's filters, as the settings have them (ADR 0209).
+    package var threadsFilter: ThreadsFilter {
+        get { threads.filter }
+        set { threads.apply(newValue) }
+    }
+
+    /// Called with the Threads panel's filters as one is changed there, for the settings to
+    /// keep.
+    package var threadsFilterChosen: (ThreadsFilter) -> Void {
+        get { threads.filterChosen }
+        set { threads.filterChosen = newValue }
     }
 
     /// `library.showThreads`: whether the sidebar lists Threads.

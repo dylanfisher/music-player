@@ -41,6 +41,19 @@ album's plays and its year.
   `library.threadsPlayed` and `library.threadsYears`, set from the panel and not listed in the
   Settings window.
 - **No new request.** Each filter is applied to the reply held; changing one reads nothing.
+- **Built (2026-11-14).** The rule is `AlbumThreads.shown(by:now:)` in Recommender, beside
+  the reply it reads: the threads of the kinds shown, each with its albums that pass, and
+  All's albums, those that pass in a thread shown. All also keeps an album in no thread,
+  which the contract doesn't send, and leaves out one whose every thread is hidden, whatever
+  its kind. Not in a Year takes an album with plays but a `null` last play, whose plays the
+  player never saw, as not played in the year. A reply read under a filter is listed whole
+  first, to learn which albums the index lacks, then as the filters pass it; the count of
+  albums this library lacks is of the whole reply. The keys hold `true` or `false`, a list
+  of `credit`, `related`, `label` and `styles`, `anyTime`, `neverPlayed` or `notInAYear`,
+  and `anyYear`, `within5Years` or `within10Years`. They're kept out of the Settings window
+  as the Discogs tagger's choices are, set beside their own window (ADR 0132); as every bool
+  and choice setting does, they give the palette Turn On Other Artists Only in Threads and
+  commands such as Never Played Thread Plays.
 
 ## Alternatives considered
 

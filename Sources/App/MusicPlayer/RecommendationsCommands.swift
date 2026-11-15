@@ -45,8 +45,8 @@ extension AppDelegate {
     }
 
     /// Rediscover and Threads in `browser` (ADR 0206, 0208): the service's calls as set now, the
-    /// profile sent through Recommendations' sender, and their rows in the sidebar as the
-    /// settings say.
+    /// profile sent through Recommendations' sender, and their rows in the sidebar and Threads'
+    /// filters as the settings say.
     func wireRediscover(_ browser: LibraryBrowser, _ settings: ConfigStore<AppSettings>) {
         browser.rediscoverService = { [weak self] in self?.rediscoverService() }
         browser.threadsService = { [weak self] in
@@ -61,6 +61,14 @@ extension AppDelegate {
         }
         browser.showsRediscoverInSidebar = settings[\.showRediscover]
         browser.showsThreadsInSidebar = settings[\.showThreads]
+        browser.threadsFilter = ThreadsFilter(settings)
+        browser.threadsFilterChosen = { [weak self] filter in
+            do {
+                try filter.save(to: settings)
+            } catch {
+                self?.fail("Couldn't save Threads' filters", error)
+            }
+        }
     }
 
     /// `events`, the Library Analysis standing shown again and the profile sent, if it

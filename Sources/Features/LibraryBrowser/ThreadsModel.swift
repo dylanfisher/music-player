@@ -7,7 +7,8 @@ import Recommender
 /// wrong. Reading, mapping back and the errors are Rediscover's: each read sends the profile
 /// first if it changed, and a seed or an album the service's profile doesn't have as this
 /// Mac's sends this Mac's, forced, and asks once more. Each read takes a session number, so
-/// one a newer read started after is dropped.
+/// one a newer read started after is dropped. The panel's filters (ADR 0209) apply to the
+/// reply held, so changing one reads nothing.
 @MainActor
 final class ThreadsModel {
     typealias Problem = RediscoverModel.Problem
@@ -18,8 +19,11 @@ final class ThreadsModel {
     private(set) var reply: AlbumThreads?
     /// The reply's albums the index has, by album id.
     private(set) var albums: [Int64: RediscoverDay.Album] = [:]
+    /// What the threads list under `filter`, read with `reply`.
+    private(set) var shown: ShownThreads?
     /// The thread of the reply the table lists, by its place; nil for All.
     private(set) var chosen: Int?
+    private(set) var filter = ThreadsFilter.defaults
     private(set) var problem: Problem?
     private(set) var isReading = false
     /// The album of the first selected track, whose threads the panel shows.
@@ -32,6 +36,8 @@ final class ThreadsModel {
     var changed: () -> Void = {}
     /// Hears that the index lists another set of albums, for the table to read again.
     var listed: () -> Void = {}
+    /// Hears the filters chosen in the panel, for the settings to keep.
+    var filterChosen: (ThreadsFilter) -> Void = { _ in }
 
     /// The call to the service as set now; nil while its address or token isn't set.
     var service: () -> ThreadsService? = { nil }
@@ -39,33 +45,39 @@ final class ThreadsModel {
     var sendProfile: (_ force: Bool) async -> ProfileSender.Outcome = { _ in .notSet }
 
     private let show: ([(id: Int64, title: String)]) async throws -> [Int64]
+    /// For Not in a Year.
+    private let now: () -> Date
     private var session = 0
     /// Counts the lists given to the index, so a list an earlier choice made is dropped.
     private var listing = 0
 
     /// `show` lists albums for the `.threads` source, in order, and answers those the index
-    /// doesn't have.
-    init(show: @escaping ([(id: Int64, title: String)]) async throws -> [Int64]) {
+    /// doesn't have; `now` is when Not in a Year counts back from.
+    init(
+        show: @escaping ([(id: Int64, title: String)]) async throws -> [Int64],
+        now: @escaping () -> Date = Date.init
+    ) {
         self.show = show
+        self.now = now
     }
 
     /// The selected album as the reply has it, if it's one of the reply's.
     var selected: RediscoverDay.Album? { selectedAlbumID.flatMap { albums[$0] } }
 
-    /// The threads the selected album is in.
+    /// The threads of the kinds shown the selected album is in.
     var selectedThreads: [RediscoverDay.Thread] {
-        guard let selected, let reply else { return [] }
-        return reply.threads.filter { $0.ids.contains(selected.id) }
+        guard let selected, let shown else { return [] }
+        return shown.threads.map(\.thread).filter { $0.ids.contains(selected.id) }
     }
 
-    /// The albums the table lists, by album id: the chosen thread's in its order, or else every
-    /// album of the reply in the reply's, each one the index has.
+    /// The albums the table lists, by album id: the chosen thread's that pass the filters in
+    /// its order, or else All's in the reply's, each one the index has.
     var albumIDs: [Int64] {
-        guard let reply else { return [] }
+        guard let shown else { return [] }
         let byService = Dictionary(
             albums.map { ($0.value.id, $0.key) }, uniquingKeysWith: { first, _ in first })
-        let ids = chosen.map { reply.threads[$0].ids } ?? reply.albums.map(\.id)
-        return ids.compactMap { byService[$0] }
+        let ids = chosen.flatMap { place in shown.threads.first { $0.place == place }?.ids }
+        return (ids ?? shown.albums).compactMap { byService[$0] }
     }
 
     /// Reads the threads of `seed`: when Threads starts showing, when its seed changes, and on
@@ -80,6 +92,7 @@ final class ThreadsModel {
         if isNew {
             chosen = nil
             reply = nil
+            shown = nil
             albums = [:]
             problem = nil
         }
@@ -132,14 +145,42 @@ final class ThreadsModel {
         }
     }
 
-    /// Lists only the albums of the reply's thread at `place`, or every album for nil.
+    /// Lists only the albums of the reply's thread at `place`, or All's for nil. A thread
+    /// not listed or emptied by the filters can't be chosen.
     @discardableResult
     func choose(_ place: Int?) -> Task<Void, Never>? {
-        guard let reply, place.map(reply.threads.indices.contains) ?? true, place != chosen
+        guard let shown, place.map({ isChoosable($0, in: shown) }) ?? true, place != chosen
         else { return nil }
         chosen = place
         changed()
-        return Task {
+        return relist()
+    }
+
+    /// Takes `filter` as the panel's filters and lists what they pass of the reply held; a
+    /// chosen thread they hide or empty goes back to All.
+    @discardableResult
+    func apply(_ filter: ThreadsFilter) -> Task<Void, Never>? {
+        guard filter != self.filter else { return nil }
+        self.filter = filter
+        guard let reply else {
+            changed()
+            return nil
+        }
+        let shown = reply.shown(by: filter, now: now())
+        self.shown = shown
+        if let chosen, !isChoosable(chosen, in: shown) { self.chosen = nil }
+        changed()
+        return relist()
+    }
+
+    /// Whether the reply's thread at `place` is listed with an album or more that pass.
+    private func isChoosable(_ place: Int, in shown: ShownThreads) -> Bool {
+        shown.threads.contains { $0.place == place && !$0.ids.isEmpty }
+    }
+
+    /// Lists `albumIDs` for the table.
+    private func relist() -> Task<Void, Never> {
+        Task {
             do {
                 try await list(albumIDs)
             } catch {
@@ -149,9 +190,9 @@ final class ThreadsModel {
         }
     }
 
-    /// Takes `reply` as the threads shown, lists those of its albums the index has, and
-    /// answers how many it doesn't; nil, taking nothing, when a newer read than `session`
-    /// started while the index listed them.
+    /// Takes `reply` as the threads shown, lists those of its albums the index has that the
+    /// filters pass, and answers how many of all its albums the index doesn't have; nil,
+    /// taking nothing, when a newer read than `session` started while the index listed them.
     private func take(_ reply: AlbumThreads, _ session: Int) async throws -> Int? {
         let keyed = reply.albums.compactMap { album in
             albumID(profileKey: album.key).map { (id: $0, album: album) }
@@ -160,12 +201,18 @@ final class ThreadsModel {
         let mine = listing
         let missing = Set(try await show(keyed.map { ($0.id, $0.album.title) }))
         guard session == self.session else { return nil }
+        let had = keyed.filter { !missing.contains($0.id) }
         self.reply = reply
+        shown = reply.shown(by: filter, now: now())
         chosen = nil
-        albums = Dictionary(
-            keyed.filter { !missing.contains($0.id) }.map { ($0.id, $0.album) },
-            uniquingKeysWith: { first, _ in first })
-        if mine == listing { listed() }
+        albums = Dictionary(had.map { ($0.id, $0.album) }, uniquingKeysWith: { first, _ in first })
+        // Every album is listed first, to learn which the index lacks; the filters may then
+        // leave some out.
+        if albumIDs != had.map(\.id) {
+            try await list(albumIDs)
+        } else if mine == listing {
+            listed()
+        }
         return reply.albums.count - albums.count
     }
 

@@ -230,15 +230,17 @@ public final class GeneralModel {
     /// in the config file (ADR 0067). The Discogs window picks the dumps folder, and the
     /// catalog's path is for a Mac short of space, so both are edited there or in the file
     /// (ADR 0130); the field mappings are edited in its Field Mapping sheet, and its choices
-    /// beside it (ADR 0132). The Discogs and service tokens are secrets, kept in the file only
-    /// (ADR 0137, ADR 0144).
+    /// beside it (ADR 0132), as Threads' filters are in its panel (ADR 0209). The Discogs and
+    /// service tokens are secrets, kept in the file only (ADR 0137, ADR 0144).
     private static func isShown(_ key: String, searcherInstalled: Bool) -> Bool {
         return switch key {
         case schema.networkScanReaders.key, schema.discogsDumpsFolder.key,
             schema.discogsCatalogPath.key, schema.discogsToken.key, schema.discogsMapping.key,
             schema.discogsSavedMappings.key, schema.discogsKeepExistingValues.key,
             schema.discogsSkipVideo.key, schema.discogsFillSortArtist.key,
-            schema.discogsArtwork.key, schema.recommenderToken.key:
+            schema.discogsArtwork.key, schema.recommenderToken.key,
+            schema.threadsOtherArtistsOnly.key, schema.threadsHiddenKinds.key,
+            schema.threadsPlayed.key, schema.threadsYears.key:
             false
         case schema.fileViewer.key: searcherInstalled
         default: true

@@ -124,6 +124,18 @@ public struct AppSettings: SettingsSchema {
     public let showThreads = Setting(
         "library.showThreads", title: "Show Threads in Sidebar", default: true,
         "List Threads in the sidebar; Show Threads opens it either way.")
+    public let threadsOtherArtistsOnly = Setting(
+        "library.threadsOtherArtistsOnly", title: "Other Artists Only in Threads", default: false,
+        "Leave out the seed artist's thread and the albums only it has.")
+    public let threadsHiddenKinds = Setting<[ThreadsKind]>(
+        "library.threadsHiddenKinds", title: "Hidden Thread Kinds", default: [],
+        "The kinds of thread the Threads panel doesn't list.")
+    public let threadsPlayed = Setting(
+        "library.threadsPlayed", title: "Thread Plays", default: ThreadsPlayed.anyTime,
+        "Albums Threads lists: any, never played, or not played in a year.")
+    public let threadsYears = Setting(
+        "library.threadsYears", title: "Thread Years", default: ThreadsYears.anyYear,
+        "Threads lists any year, or within 5 or 10 of the seed's.")
     public let fileViewer = Setting(
         "library.fileViewer", title: "File Viewer", default: FileViewer.searcher,
         "Where Reveal in Finder shows tracks; without Searcher, it uses Finder.")

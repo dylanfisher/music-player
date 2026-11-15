@@ -168,3 +168,45 @@ private func waitForThreads(of seed: Int64, _ all: [Int64], in browser: LibraryB
     #expect(browser.sidebarController.selectedSource == .threads)
     #expect(asked.keys.isEmpty)
 }
+
+@MainActor @Test func theFilterRowNarrowsTheTableAndTheCountsAndKeepsItsChoice() async throws {
+    let (browser, window, asked, tagged) = try await threadsBrowser()
+    defer { window.orderOut(nil) }
+    var chosen: [ThreadsFilter] = []
+    browser.threadsFilterChosen = { chosen.append($0) }
+    try await select(album: tagged[0], in: browser)
+    browser.showThreadsOfSelection()
+    try await waitForThreads(of: tagged[0], tagged, in: browser)
+    let panel = browser.threadsPanel
+    #expect(!panel.yearsMenu.isEnabled, "a seed without a year")
+    window.layoutIfNeeded()
+    let row = try #require(panel.otherArtistsBox.superview)
+    #expect(
+        row.fittingSize.width <= panel.threadsCard.frame.width,
+        "\(row.fittingSize.width) in \(panel.threadsCard.frame.width)")
+    #expect(panel.kindsMenu.item(at: 0)?.title == "All Kinds")
+    panel.threadsList.clicked(1)
+    try await waitFor("Seed Records chosen") { panel.threadsList.marked == 1 }
+    // Hiding Labels hides Seed Records, the one thread, and sends the table back to All,
+    // which then lists nothing.
+    let labels = try #require(ThreadsKind.allCases.firstIndex(of: .label))
+    panel.kindsMenu.selectItem(at: labels + 1)
+    panel.kindsMenu.sendAction(panel.kindsMenu.action, to: panel.kindsMenu.target)
+    try await waitFor("the table emptied") { browser.model.trackIDs.isEmpty }
+    #expect(panel.threadsList.rows.map(\.name) == ["All"])
+    #expect(panel.threadsList.rows.map(\.value) == ["0"] && panel.threadsList.marked == 0)
+    #expect(panel.kindsMenu.item(at: 0)?.title == "Kinds: no Labels")
+    #expect(chosen.map(\.hiddenKinds) == [[.label]])
+    #expect(browser.threadsFilter.hiddenKinds == [.label])
+    // A filter changes what the reply held lists, asking the service nothing.
+    #expect(asked.keys.count == 1)
+    panel.kindsMenu.selectItem(at: labels + 1)
+    panel.kindsMenu.sendAction(panel.kindsMenu.action, to: panel.kindsMenu.target)
+    try await waitForThreads(of: tagged[0], tagged, in: browser)
+    #expect(panel.threadsList.rows.map(\.name) == ["All", "Seed Records"])
+    panel.playedMenu.selectItem(
+        at: try #require(ThreadsPlayed.allCases.firstIndex(of: .neverPlayed)))
+    panel.playedMenu.sendAction(panel.playedMenu.action, to: panel.playedMenu.target)
+    #expect(chosen.last?.played == .neverPlayed)
+    #expect(asked.keys.count == 1)
+}

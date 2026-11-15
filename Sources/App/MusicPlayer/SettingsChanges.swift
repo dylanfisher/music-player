@@ -2,6 +2,7 @@ import AppKit
 import Commands
 import Library
 import LibraryBrowser
+import Recommender
 import Settings
 import SettingsWindow
 import UniformTypeIdentifiers
@@ -166,6 +167,13 @@ extension AppDelegate {
         }
         if keys.contains(schema.showThreads.key) {
             browser?.showsThreadsInSidebar = settings[\.showThreads]
+        }
+        let threadsFilter = [
+            schema.threadsOtherArtistsOnly.key, schema.threadsHiddenKinds.key,
+            schema.threadsPlayed.key, schema.threadsYears.key,
+        ]
+        if !keys.isDisjoint(with: threadsFilter) {
+            browser?.threadsFilter = ThreadsFilter(settings)
         }
         if keys.contains(schema.separateReleases.key) { askToSeparateReleases(settings) }
         // A file that stops naming the key leaves the columns as they are, as a launch without
