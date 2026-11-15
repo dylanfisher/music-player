@@ -12983,3 +12983,39 @@ TagWriterTests' quarantine flag, and RecommendationsTests' process exiting partw
 0, 2 of 8 runs on main and 2 of 5 on the branch, run alone; that one still needs its cause
 found. Bench and release bundle skipped: no budgeted path, Package.swift or `#available`
 changed. Pending: the owner check.
+
+### 90. Filtering threads
+
+The owner (2026-11-14): threads "often" list "a bunch of other albums by that same artist";
+filters "like only other artists". The decisions are
+[ADR 0209](decisions/0209-filtering-threads.md); music-recommender's phase 11 (its ADR 0036)
+keeps the seed artist's albums in `artist` threads only, with no change to the reply's shape,
+so this phase builds against the reply as it is.
+
+- [x] **The filter's rule,** in Core beside `AlbumThreads` or in `ThreadsModel`, whichever the
+      neighbors say: the reply and the four filters in, the shown threads with each one's
+      passing albums, and All's albums out. Tests for each filter alone, for Other Artists
+      Only with an album in an `artist` thread and another kind, for a thread emptied, and
+      for an album without a year under Within 5 Years.
+- [x] **The settings,** the four keys of ADR 0209, set from the panel and not listed in the
+      Settings window, with their defaults.
+- [x] **The panel:** the filter row in the Threads card above All; a chosen thread hidden or
+      emptied goes back to All; the table, the counts and Why This Album follow the filters;
+      Years disabled for a seed without a year. Tests in `ThreadsModelTests` and
+      `ThreadsBrowserTests`, as phase 89's are.
+- [ ] **Checkpoint (owner):** with music-recommender's phase 11 running, follow threads from a
+      few albums of an artist with many records, with and without Other Artists Only, and
+      judge whether the filters find records worth playing.
+
+Result (2026-11-14): `d9ae5e74` and `f81af194`. The rule is `AlbumThreads.shown(by:now:)`
+in `Core/Recommender`; the four settings are kept out of the Settings window as the Discogs
+tagger's are, and give palette commands such as Never Played Thread Albums. The cost was an Opus
+build and one fix round of 210k tokens (94 tool calls, 33 minutes) and one Sonnet correctness
+reviewer, 63k. The review found that a filter changed during a Refresh could leave the table
+on the old reply, and that every read listed the albums the filters leave out before hiding
+them; both are fixed with tests. The service side, music-recommender's phase 11 (its ADR 0036),
+landed first. The full gate passes every step but `test`, whose failures also fail on main on
+this Mac: HALOutputTests' StepWatch, MusicPlayerTests' frosted glass headers and TagWriterTests'
+quarantine flag; DeviceOutput's seeks and BrowserModelTests' search during a refresh failed
+under another session's test load and passed run alone. Bench and release bundle skipped: no
+budgeted path, Package.swift or `#available` changed. Pending: the owner check.
