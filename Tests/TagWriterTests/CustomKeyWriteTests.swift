@@ -212,3 +212,13 @@ func id3OnlyKeysAreRefusedInFormatsWithoutThem(_ sample: Sample) throws {
     }
     #expect(try Data(contentsOf: url) == original)
 }
+
+@Test func aVorbisCommentOfAnID3OnlyKeysNameIsRemoved() throws {
+    let url = try flac(comments: ["TITLE=Kept", "TIPL=Producer;;;A"], padding: 512)
+    #expect(try tags(url).custom[ID3CustomKey.involvedPeople] == "Producer;;;A")
+    let writer = scratchWriter()
+    let removed = TagEdit(custom: [ID3CustomKey.involvedPeople: ""])
+    expectChanged(writer.write(removed, to: [url.path]), [url])
+    #expect(try tags(url).custom[ID3CustomKey.involvedPeople] == nil)
+    #expect(try tags(url).title == "Kept")
+}

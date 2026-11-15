@@ -44,8 +44,12 @@ enum TagFile {
     func rewrite(_ groups: [TagGroup], from tags: TrackTags, art: ArtChange?, artOffset: Int?)
         throws(ParseFailure) -> [Segment]
     {
+        // Another format's file may hold a comment of an ID3-only key's name, such as a Vorbis
+        // TIPL a peer's tagger wrote; clearing it is fine, only a value can't be written.
         if case .id3 = self {
-        } else if let name = groups.compactMap(\.customName).first(where: ID3CustomKey.isID3Only) {
+        } else if let name = groups.first(where: {
+            $0.customName.map(ID3CustomKey.isID3Only) == true && $0.text(in: tags) != nil
+        })?.customName {
             throw .unsupported(at: nil, "\(name) is an ID3 frame, which this format doesn't hold")
         }
         switch self {
