@@ -68,7 +68,7 @@ private let release = CatalogRelease(
 
 /// The files as the window reads them, ids from 1 in order.
 private func albumFiles(_ urls: [URL]) throws -> [AlbumFile] {
-    let (files, problems) = readAlbumFiles(
+    let (files, problems, _) = readAlbumFiles(
         urls.enumerated().map { (id: Int64($0.offset + 1), path: $0.element.path) })
     try #require(problems == [])
     return files
@@ -100,7 +100,7 @@ func aMappingsEditsWriteAndReadBackAsMeant(_ sample: WrittenSample, _ preset: St
     let missing = urls[0].deletingLastPathComponent().appendingPathComponent(
         "gone.flac", isDirectory: false)
     let read = Counted()
-    let (files, problems) = readAlbumFiles(
+    let (files, problems, _) = readAlbumFiles(
         [(1, urls[0].path), (2, missing.path), (3, urls[1].path)], read: { read.set($0) })
     #expect(files.map(\.id) == [1, 3])
     #expect(problems.count == 1)

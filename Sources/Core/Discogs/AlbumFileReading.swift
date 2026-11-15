@@ -3,12 +3,14 @@ import Metadata
 
 /// Reads the tags of `files`, an album's or a match set's, as the change set compares them,
 /// `filesReadAtOnce` at a time; blocks on the reads, so call it off the main thread. A file
-/// that can't be read is a problem, by its path, and isn't in the files; `isStopped` ends the
-/// reads before the next file.
+/// that can't be read is a problem, by its path, and isn't in the files; `damaged` says whether
+/// one of those was read and isn't audio this reads, empty, of no format it knows, or
+/// malformed, rather than unreadable or using a feature this lacks. `isStopped` ends the reads
+/// before the next file.
 public func readAlbumFiles(
     _ files: [(id: Int64, path: String)], isStopped: @escaping @Sendable () -> Bool = { false },
     read: @escaping @Sendable (Int) -> Void = { _ in }
-) -> (files: [AlbumFile], problems: [String]) {
+) -> (files: [AlbumFile], problems: [String], damaged: Bool) {
     let results = AlbumFileResults(count: files.count)
     DispatchQueue.concurrentPerform(iterations: min(filesReadAtOnce, files.count)) { _ in
         while !isStopped(), let index = results.claim() {
@@ -20,7 +22,9 @@ public func readAlbumFiles(
                     .success(AlbumFile(id: file.id, path: file.path, metadata: parsed.metadata)),
                     at: index)
             } catch {
-                results.store(.failure(ReadProblem(text: error.description)), at: index)
+                let damaged = [.unrecognizedFormat, .malformed].contains(error.kind)
+                results.store(
+                    .failure(ReadProblem(text: error.description, damaged: damaged)), at: index)
             }
             let done = results.done
             if isReported(done, of: files.count) { read(done) }
@@ -28,19 +32,23 @@ public func readAlbumFiles(
     }
     var read: [AlbumFile] = []
     var problems: [String] = []
+    var damaged = false
     for result in results.all {
         switch result {
         case .success(let file): read.append(file)
-        case .failure(let problem): problems.append(problem.text)
+        case .failure(let problem):
+            problems.append(problem.text)
+            damaged = damaged || problem.damaged
         case nil: break
         }
     }
-    return (read, problems)
+    return (read, problems, damaged)
 }
 
-/// A problem reading one file, as text.
+/// A problem reading one file, as text, and whether the file isn't audio this reads.
 private struct ReadProblem: Error {
     var text: String
+    var damaged: Bool
 }
 
 /// The files `readAlbumFiles` has handed out, and what each read returned.

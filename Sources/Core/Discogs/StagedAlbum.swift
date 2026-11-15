@@ -67,6 +67,9 @@ package struct StagedAlbum: Sendable {
     /// the service staged nor the one recorded after the player's tag write. Empty when every
     /// file was read.
     package var problems: [String]
+    /// Whether one of `problems` is a file read that isn't audio this reads: the peer's copy is
+    /// broken, and another peer's may not be (ADR 0210).
+    package var damaged: Bool
 
     /// Reads `job`'s files under `stagingRoot`. Blocks on the reads, so call it off the main
     /// thread.
@@ -109,15 +112,18 @@ package struct StagedAlbum: Sendable {
             staged[id] = file
         }
         var files: [AlbumFile] = []
+        var damaged = false
         if problems.isEmpty {
             let read = readAlbumFiles(named)
             files = read.files
             problems += read.problems
+            damaged = read.damaged
         }
         self.stagingRoot = stagingRoot
         self.files = files
         self.staged = staged
         self.problems = problems
+        self.damaged = damaged
         album = Self.album(files, staged: staged, artist: job.artist)
     }
 

@@ -195,7 +195,7 @@ private func cover(_ mimeType: String) throws -> Cover { try Cover(checking: try
 @Test(arguments: [WrittenSample.flac, .mp3v24, .mp4])
 func aCoverIsWrittenWithTheTagsAndUndoneWithThem(_ sample: WrittenSample) throws {
     let urls = try sample.copies()
-    let (before, problems) = readAlbumFiles(
+    let (before, problems, _) = readAlbumFiles(
         urls.enumerated().map { (id: Int64($0.offset + 1), path: $0.element.path) })
     try #require(problems == [])
     let originalArt = try before.map { file in
@@ -213,7 +213,7 @@ func aCoverIsWrittenWithTheTagsAndUndoneWithThem(_ sample: WrittenSample) throws
                     "discogs-cover-journal-\(UUID().uuidString)", isDirectory: true)))
         let report = writer.write(try set.edits())
         #expect(report.failures == [], "\(sample) \(mimeType)")
-        let (after, _) = readAlbumFiles(
+        let (after, _, _) = readAlbumFiles(
             urls.enumerated().map { (id: Int64($0.offset + 1), path: $0.element.path) })
         for file in after {
             let art = try #require(file.metadata.art, "\(sample)")
@@ -222,7 +222,7 @@ func aCoverIsWrittenWithTheTagsAndUndoneWithThem(_ sample: WrittenSample) throws
         }
         // One undo puts back the art and the tags together.
         #expect(writer.undoLast().failures == [])
-        let (undone, _) = readAlbumFiles(
+        let (undone, _, _) = readAlbumFiles(
             urls.enumerated().map { (id: Int64($0.offset + 1), path: $0.element.path) })
         #expect(undone.map(\.metadata.tags) == before.map(\.metadata.tags), "\(sample)")
         let undoneArt = try undone.map { file in

@@ -5,6 +5,8 @@
 - **Amends:** [0193](0193-approving-safe-matches-unasked.md) (a job left for a lossy-origin
   finding), [0195](0195-approving-a-clearly-better-replacement-unasked.md) (what is queued
   to be approved)
+- **Amended by:** [0210](0210-requeuing-a-damaged-download.md): a staged copy with a damaged
+  file is requeued for any job, by the tag run.
 - **See also:** music-recommender's ADR 0023 (its main at `2d448e6`: requeue and tried peers),
   [0147](0147-moving-downloads-into-the-library.md) (Approve)
 

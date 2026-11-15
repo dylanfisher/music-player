@@ -114,7 +114,7 @@ public final class DiscogsTagger {
                         stop.set()
                     }
                     try Task.checkCancellation()
-                    return read
+                    return (read.files, read.problems)
                 },
                 checkCatalog: { await catalogState(at: catalog) },
                 unfinishedImport: { await blockingFileWork { unfinishedImport(of: catalog) } },

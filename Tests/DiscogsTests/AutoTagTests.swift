@@ -69,6 +69,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     #expect(reasons.count == 1)
     #expect(reasons.first?.contains("03 Third Song.flac") == true)
     #expect(run.match == nil)
+    #expect(run.staged.damaged)
 }
 
 @Test func aDSDFileCantBeWrittenSoItsADiscrepancy() async throws {
@@ -93,6 +94,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     }
     let run = try await StagedSetup().run(files)
     #expect(run.verdict == .clean)
+    #expect(!run.staged.damaged)
     #expect(run.staged.album.tracks.map(\.title) == stagedSongs.map(\.title))
 }
 

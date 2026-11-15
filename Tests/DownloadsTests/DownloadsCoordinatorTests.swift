@@ -690,3 +690,72 @@ private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
             == ["01 First Song.flac": 250, "02 Second Song.flac": 250])
     #expect(setup.service.job(1)?.tagging.status == .discrepancy)
 }
+
+/// Job 1 with files of 100 bytes, as `Setup.stage` writes them: read, they aren't audio.
+private func damagedJob() -> DownloadJob {
+    job(1) {
+        $0.files = $0.files.map { file in
+            DownloadJob.File(name: file.name, sizeBytes: 100, position: file.position)
+        }
+    }
+}
+
+@Test func aDamagedCopyIsReportedThenRequeued() async throws {
+    let setup = try Setup([damagedJob()])
+    setup.verdict = .error(["01 First Song.flac doesn't start like a FLAC file"])
+    try setup.stage(1)
+    try setup.index.recordStagedSizes(job: 1, release: 4242, folder: "job-1", sizes: firstSizes)
+    let coordinator = setup.coordinator()
+    await coordinator.take([damagedJob()])
+    #expect(
+        setup.service.eventTypes == ["lease", "tagging running", "tagging error", "release_lease"])
+    #expect(setup.service.requeued == [1])
+    #expect(setup.service.job(1)?.state == .queued)
+    #expect(await coordinator.damaged.isEmpty)
+    #expect(try setup.index.stagedSizes(job: 1, folder: "job-1") == [:])
+}
+
+@Test func aRequeueNotAnsweredIsSentAgainAtTheNextPoll() async throws {
+    let setup = try Setup([damagedJob()])
+    setup.verdict = .error(["01 First Song.flac doesn't start like a FLAC file"])
+    try setup.stage(1)
+    var calls = setup.service.service
+    let requeue = calls.requeue
+    let tries = Counter()
+    calls.requeue = { id throws(RecommenderError) in
+        guard tries.next() > 1 else {
+            throw RecommenderError(service: "fake", kind: .unreachable(.timedOut))
+        }
+        return try await requeue(id)
+    }
+    let coordinator = setup.coordinator(calls: calls)
+    await coordinator.take([damagedJob()])
+    #expect(setup.service.requeued.isEmpty)
+    #expect(await coordinator.damaged == [1])
+    await coordinator.take([try #require(setup.service.job(1))])
+    #expect(setup.service.requeued == [1])
+    #expect(await coordinator.damaged.isEmpty)
+}
+
+@Test func anErrorWithNoDamagedFileIsLeftForTheOwner() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .error(["release 4242 isn't in the Discogs catalog"])
+    try setup.stage(1)
+    await setup.coordinator().take([job(1)])
+    #expect(setup.service.requeued.isEmpty)
+    #expect(setup.service.job(1)?.tagging.status == .error)
+}
+
+/// Counts calls from any thread.
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    /// The count, this call included.
+    func next() -> Int {
+        lock.withLock {
+            count += 1
+            return count
+        }
+    }
+}

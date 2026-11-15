@@ -9,9 +9,10 @@ private let logger = moduleLogger()
 /// This Mac's part of the downloads, run in the background from launch to quit (the service's
 /// `docs/downloads.md`, Claims and Auto-tagging). It tags each staged job no run holds, under
 /// the service's 10-minute tagging lease, renewed every 3; it writes a clean run's tags and
-/// nothing else; it sends the reports the index's outbox holds, in order, until each is
-/// answered; and it runs Approve's import under the 24-hour review claim. Every effect is
-/// injected, the clock's waits too.
+/// nothing else; it requeues a job whose staged copy is damaged, for another peer's (ADR 0210);
+/// it sends the reports the index's outbox holds, in order, until each is answered; and it
+/// runs Approve's import under the 24-hour review claim. Every effect is injected, the clock's
+/// waits too.
 actor DownloadsCoordinator {
     /// Waits about this many seconds. Throws when cancelled.
     typealias Sleep = @Sendable (TimeInterval) async throws -> Void
@@ -61,6 +62,9 @@ actor DownloadsCoordinator {
     private var tagging: Int?
     /// The jobs whose lease a renewal found another Mac holding.
     private var lostLeases: Set<Int> = []
+    /// The jobs a tag run found a damaged file in, reported as an error, to requeue; kept while
+    /// the service doesn't answer the requeue, which each poll sends again.
+    private(set) var damaged: Set<Int> = []
     /// The outbox send in progress; another waits for it, then sends what is left.
     private var sending: Task<Bool, Never>?
     /// The reports the service refused in the sends since `deliver` last looked.
@@ -105,6 +109,9 @@ actor DownloadsCoordinator {
             }
         }
         if outboxMayHold { await flush() }
+        for job in jobs where damaged.contains(job.id) {
+            if job.state == .staged { await requeue(job.id) } else { damaged.remove(job.id) }
+        }
         guard let autoTag = effects.autoTag else { return }
         let recovering: Task<Void, Never>
         if let recovery {
@@ -151,10 +158,12 @@ actor DownloadsCoordinator {
         defer { renewal.cancel() }
 
         let verdict: AutoTagRun.Verdict
+        var isDamaged = false
         if let staged = stagedJob(job) {
             do {
                 let run = try await autoTag(staged)
                 guard !lostLeases.contains(job.id) else { return }
+                if case .error = run.verdict { isDamaged = run.staged.damaged }
                 if run.verdict == .clean {
                     verdict = await effects.write(run)
                     // The write can grow a file, so what the files measure now is recorded
@@ -176,6 +185,36 @@ actor DownloadsCoordinator {
         queue(.tagging(Self.tagging(verdict)), job)
         await flush()
         await releaseLease(job.id)
+        if isDamaged {
+            damaged.insert(job.id)
+            await requeue(job.id)
+        }
+    }
+
+    /// Sends job `id`, whose staged copy is damaged, back to its search, which leaves out the
+    /// peers it tried; the service deletes the copy. One the service refuses, held by a Mac,
+    /// moved on or gone, is left as it is, its error for the owner.
+    private func requeue(_ id: Int) async {
+        do throws(RecommenderError) {
+            _ = try await effects.service.requeue(id)
+        } catch {
+            guard case .refused = error.kind else {
+                logger.info("job \(id), whose copy is damaged, waits to be requeued: \(error)")
+                return
+            }
+            damaged.remove(id)
+            note("job \(id)'s copy is damaged, but it wasn't requeued: \(error)")
+            return
+        }
+        damaged.remove(id)
+        logger.notice("job \(id) requeued unasked: its copy is damaged")
+        // A new copy is staged in the same folder; the old one's sizes and release go.
+        do {
+            try index().forgetImportJob(id)
+            taggedReleases = nil
+        } catch {
+            note("job \(id)'s import ledger couldn't be forgotten: \(error)")
+        }
     }
 
     /// `job` as AutoTag and the tagger take it, with the sizes its files have had since a tag
