@@ -7,6 +7,14 @@ import AppKit
 final class DividerDragSplitView: NSSplitView {
     var isDragging = false
 
+    /// Fits the subviews to the split after one hid or showed, and the divider with them: the
+    /// split draws it in a layer of its own, over the subviews, which adjusting leaves where it
+    /// was, a line over the rows once the slot above them hides. Only layout moves it.
+    func adjustSubviewsAndDivider() {
+        adjustSubviews()
+        needsLayout = true
+    }
+
     override func mouseDown(with event: NSEvent) {
         isDragging = true
         defer { isDragging = false }

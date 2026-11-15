@@ -612,3 +612,23 @@ func statsKeepsItsHeightAcrossSources(browserVisible: Bool) async throws {
     try await waitFor("the library") { browser.shownPanel == nil || split.needsDisplay }
     #expect(split.needsDisplay)
 }
+
+/// Leaving a panel, Stats or Rediscover, with the columns off hides the slot and puts away its
+/// divider: the split draws it in a layer of its own over the rows, which hiding the slot left
+/// at the panel's edge.
+@MainActor @Test func leavingAPanelWithTheColumnsOffLeavesNoDividerOverTheRows() async throws {
+    let (browser, window, split, _) = try await playedBrowser()
+    browser.toggleBrowser()
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+    browser.statsHeight = 300
+    browser.showStats(.all)
+    try await waitFor("Stats") { browser.shownPanel === browser.statsPanel }
+    window.layoutIfNeeded()
+    let divider = try #require(split.layer?.sublayers?.first { $0.delegate === split })
+    try #require(divider.frame.height > 0)
+    browser.show(nil)
+    try await waitFor("the library") { browser.shownPanel == nil }
+    window.layoutIfNeeded()
+    #expect(divider.isHidden || divider.frame.height == 0, "\(divider.frame)")
+}

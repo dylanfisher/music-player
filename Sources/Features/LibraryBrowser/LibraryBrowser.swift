@@ -2229,7 +2229,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let height = slotHeight
         guard shows == panelSlot.isHidden || (shows && placedHeight != height) else { return }
         panelSlot.isHidden = !shows
-        split.adjustSubviews()
+        split.adjustSubviewsAndDivider()
         guard shows else { return }
         placeDivider(at: height)
     }
