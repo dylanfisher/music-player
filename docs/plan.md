@@ -377,7 +377,30 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
+Phase 90 is the owner's of 2026-11-14. Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
+
+### 90. Filtering threads
+
+The owner (2026-11-14): threads "often" list "a bunch of other albums by that same artist";
+filters "like only other artists". The decisions are
+[ADR 0209](decisions/0209-filtering-threads.md); music-recommender's phase 11 (its ADR 0036)
+keeps the seed artist's albums in `artist` threads only, with no change to the reply's shape,
+so this phase builds against the reply as it is.
+
+- [ ] **The filter's rule,** in Core beside `AlbumThreads` or in `ThreadsModel`, whichever the
+      neighbors say: the reply and the four filters in, the shown threads with each one's
+      passing albums, and All's albums out. Tests for each filter alone, for Other Artists
+      Only with an album in an `artist` thread and another kind, for a thread emptied, and
+      for an album without a year under Within 5 Years.
+- [ ] **The settings,** the four keys of ADR 0209, set from the panel and not listed in the
+      Settings window, with their defaults.
+- [ ] **The panel:** the filter row in the Threads card above All; a chosen thread hidden or
+      emptied goes back to All; the table, the counts and Why This Album follow the filters;
+      Years disabled for a seed without a year. Tests in `ThreadsModelTests` and
+      `ThreadsBrowserTests`, as phase 89's are.
+- [ ] **Checkpoint (owner):** with music-recommender's phase 11 running, follow threads from a
+      few albums of an artist with many records, with and without Other Artists Only, and
+      judge whether the filters find records worth playing.
 
 ### 85. The file splits and the performance rerun
 
