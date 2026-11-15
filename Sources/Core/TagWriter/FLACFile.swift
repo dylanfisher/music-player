@@ -2,7 +2,8 @@ import Foundation
 import Log
 import Metadata
 
-/// A FLAC file's metadata blocks, in memory, before audio frames that are left in the file.
+/// A FLAC file's metadata blocks, in memory, before audio frames that are left in the file. An
+/// ID3v2 tag in front of them is kept as it is.
 struct FLACFile {
     enum BlockType: UInt8 {
         case streamInfo = 0
@@ -23,13 +24,16 @@ struct FLACFile {
     static let marker = Array(flacMarker.utf8)
 
     var size: Int
+    /// Where "fLaC" is: 0, or the end of an ID3v2 tag in front.
+    var start: Int
     var blocks: [Block]
     /// Where the audio frames start.
     var audioStart: Int
 
     init(_ reader: ByteReader) throws(ParseFailure) {
         size = reader.size
-        var offset = Self.marker.count
+        start = try requiredFLACStart(reader)
+        var offset = start + Self.marker.count
         var blocks: [Block] = []
         var isLast = false
         while !isLast {
@@ -104,7 +108,9 @@ struct FLACFile {
             bytes += bigEndianBytes(block.body.count, 3)
             bytes += block.body
         }
-        return [.bytes(bytes), .original(audioStart..<size)]
+        return (start > 0 ? [.original(0..<start)] : []) + [
+            .bytes(bytes), .original(audioStart..<size),
+        ]
     }
 
     private func apply(_ art: ArtChange, to blocks: inout [Block], artOffset: Int?) {
@@ -185,7 +191,8 @@ struct FLACFile {
     // MARK: Layout
 
     func layout() throws(ParseFailure) -> TagLayout {
-        var blocks = [TagBlock(flacMarker, 0..<4, .header)]
+        var blocks = start > 0 ? [TagBlock(id3v2Identifier, 0..<start, .other)] : []
+        blocks.append(TagBlock(flacMarker, start..<start + 4, .header))
         for block in self.blocks {
             let range = block.original!
             let name = BlockType(rawValue: block.type).map { "\($0)" } ?? "block\(block.type)"

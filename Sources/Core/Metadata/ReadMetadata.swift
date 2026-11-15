@@ -85,7 +85,7 @@ package enum FileFormat: String, Sendable {
             throw ParseFailure(kind: .unrecognizedFormat, offset: nil, detail: "the file is empty")
         }
         let start = try reader.bytes(0..<min(16, reader.size))
-        if start.matches(flacMarker, at: 0) {
+        if try flacStart(reader) != nil {
             self = .flac
         } else if start.matches("ftyp", at: 4) {
             self = .mp4

@@ -30,6 +30,23 @@ private func growAndUndo(_ url: URL) throws {
     #expect(try readTagLayout(at: url).paddingBytes > 0, "a shorter title leaves padding")
 }
 
+@Test func anID3TagInFrontOfAFLACIsKept() throws {
+    let plain = try flac(comments: ["TITLE=Plain"], padding: 64)
+    let tag = id3Tag([id3TextFrame("TIT2", "ID3 title")], padding: 900)
+    let url = try scratchCopy(of: plain)
+    try (Data(tag) + Data(contentsOf: plain)).write(to: url)
+    let original = try Data(contentsOf: url)
+    #expect(try tags(url).title == "Plain")
+    #expect(try readTagLayout(at: url).blocks.first?.range == 0..<tag.count)
+    let writer = scratchWriter()
+    expectChanged(writer.write(TagEdit(values: [.title: "Written"]), to: [url.path]), [url])
+    #expect(try tags(url).title == "Written")
+    #expect(try Data(contentsOf: url).prefix(tag.count) == Data(tag))
+    expectChanged(writer.undoLast(), [url])
+    #expect(try Data(contentsOf: url) == original)
+    try growAndUndo(url)
+}
+
 @Test(arguments: [Sample.aiffV24, .wavID3])
 func anID3ChunkBeforeTheAudioMovesIt(_ sample: Sample) throws {
     let url = try formWithID3BeforeAudio(sample)

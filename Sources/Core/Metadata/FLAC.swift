@@ -1,10 +1,35 @@
 /// The first four bytes of a FLAC file.
 package let flacMarker = "fLaC"
 
+/// Where a FLAC file's "fLaC" is: at the start, or just past an ID3v2 tag in front of it, which
+/// some taggers write and decoders skip. Nil when the file isn't FLAC.
+func flacStart(_ reader: ByteReader) throws(ParseFailure) -> Int? {
+    let head = try reader.bytes(0..<min(10, reader.size))
+    if head.matches(flacMarker, at: 0) { return 0 }
+    guard head.count == 10, head.matches(id3v2Identifier, at: 0), let size = try head.syncsafe(6)
+    else { return nil }
+    let version = try head.uint8(3)
+    let flags = try head.uint8(5)
+    let footer = version == 4 && flags & 0x10 != 0 ? 10 : 0
+    let end = 10 + size + footer
+    guard end + 4 <= reader.size else { return nil }
+    return try reader.bytes(end..<end + 4).matches(flacMarker, at: 0) ? end : nil
+}
+
+/// `flacStart`, failing when the file isn't FLAC.
+package func requiredFLACStart(_ reader: ByteReader) throws(ParseFailure) -> Int {
+    guard let start = try flacStart(reader) else {
+        throw .malformed(at: 0, "doesn't start like a FLAC file")
+    }
+    return start
+}
+
 /// FLAC: "fLaC", then metadata blocks, each a type byte (the top bit marks the last) and a 24-bit
-/// length. Reads STREAMINFO, VORBIS_COMMENT and PICTURE, and skips the rest by length.
+/// length. Reads STREAMINFO, VORBIS_COMMENT and PICTURE, and skips the rest by length. An ID3v2
+/// tag in front is skipped, unread.
 func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
-    var offset = 4
+    let start = try requiredFLACStart(reader)
+    var offset = start + 4
     var audio: TrackAudio?
     var tags: TrackTags?
     var pictures: [EmbeddedPicture] = []
@@ -21,7 +46,7 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
                 "FLAC metadata block (type \(type)) of \(body.count) bytes runs past the end of"
                     + " the file (\(reader.size) bytes)")
         }
-        guard (type == 0) == (offset == 4) else {
+        guard (type == 0) == (offset == start + 4) else {
             throw .malformed(at: offset, "FLAC STREAMINFO isn't the first metadata block")
         }
         switch type {
@@ -43,7 +68,7 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         offset = body.upperBound
     }
     guard let audio else {
-        throw .malformed(at: 4, "FLAC without a STREAMINFO block")
+        throw .malformed(at: start + 4, "FLAC without a STREAMINFO block")
     }
     return TrackMetadata(
         tags: tags ?? TrackTags(), audio: audio, art: preferredPicture(pictures),

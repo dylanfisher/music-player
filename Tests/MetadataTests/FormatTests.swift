@@ -38,6 +38,22 @@ import Testing
     #expect(Array(file[art.offset..<art.offset + art.byteCount]) == Array(repeating: 2, count: 20))
 }
 
+@Test(arguments: [UInt8(3), 4])
+func flacBehindAnID3TagReadsItsVorbisComment(_ version: UInt8) throws {
+    let tag = id3Tag(
+        version: version, flags: version == 4 ? 0x10 : 0,
+        [id3Frame("TIT2", Data([0]) + ascii("ID3 title"), version: version)], padding: 900)
+    let file =
+        tag
+        + flac([
+            (0, streamInfo(rate: 44_100, channels: 2, bits: 16, total: 44_100)),
+            (4, vorbisComment(["TITLE=Vorbis title"])),
+        ])
+    let metadata = try parse(file).metadata
+    #expect(metadata.audio.codec == .flac)
+    #expect(metadata.tags.title == "Vorbis title")
+}
+
 @Test func flacSkipsALargePictureWithoutReadingIt() throws {
     let file = flac([
         (0, streamInfo()),
