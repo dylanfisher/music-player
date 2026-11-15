@@ -42,8 +42,8 @@ private func threadsModel(
     profile: ProfileSender.Outcome = .unchanged, now: Date = Date()
 ) -> ThreadsModel {
     let model = ThreadsModel(
-        show: { albums in
-            calls.calls.append("show \(albums.map(\.id))")
+        show: { albums, listing in
+            calls.calls.append("show \(albums.map(\.id).filter(listing.contains))")
             return albums.filter { !known.contains($0.id) || $0.title != "Album a\($0.id)" }
                 .map(\.id)
         }, now: { now })
@@ -258,7 +258,10 @@ private func filter(
         [.success(reply), .success(reply)], known: [3, 5, 7], calls: calls, now: now)
     #expect(model.apply(filter(played: .neverPlayed)) == nil, "no reply to list yet")
     await model.read(2).value
-    #expect(calls.calls.contains("show [3, 5]"))
+    #expect(calls.calls.contains("show [3, 5, 99]"), "a99 is in no thread, so in All")
+    #expect(
+        !calls.calls.contains { $0.hasPrefix("show [7") },
+        "the album the filters leave out is never in the table: \(calls.calls)")
     #expect(model.albumIDs == [3, 5])
     #expect(model.problem == .unknownAlbums(1), "an album the filters leave out still counts")
 }
@@ -307,7 +310,7 @@ private final class Gate {
 @Test func aReplyListedAfterAnotherSeedWasAskedForIsDropped() async throws {
     let calls = ThreadsCalls()
     let gate = Gate()
-    let model = ThreadsModel(show: { albums in
+    let model = ThreadsModel(show: { albums, _ in
         // The first seed's albums wait in the index while Back shows another seed.
         if !albums.isEmpty { await gate.wait() }
         return []
@@ -331,7 +334,7 @@ private final class Gate {
 @Test func aSeedRetryAfterAnotherSeedWasAskedForAsksNothing() async throws {
     let calls = ThreadsCalls()
     let gate = Gate()
-    let model = ThreadsModel(show: { _ in [] })
+    let model = ThreadsModel(show: { _, _ in [] })
     model.sendProfile = { force in
         if force { await gate.wait() }
         return .unchanged
@@ -363,4 +366,43 @@ private func threadsService(_ calls: ThreadsCalls) -> () -> ThreadsService? {
             return try reply.get()
         })
     }
+}
+
+@MainActor
+@Test func aFilterChangedWhileARefreshListsLeavesTheTableTheNewReplys() async throws {
+    let now = Date()
+    let first = filteredReply(now: now)
+    // By the refresh, a7's plays are gone, so Never Played passes every album of it.
+    var second = first
+    second.albums[0].plays = 0
+    second.albums[0].lastPlayed = nil
+    let gate = Gate()
+    var holding = false
+    var shows: [[Int64]] = []
+    var listed = 0
+    let model = ThreadsModel(
+        show: { albums, listing in
+            // The index lists in the order it's asked, whenever the caller hears back.
+            shows.append(albums.map(\.id).filter(listing.contains))
+            if holding {
+                holding = false
+                await gate.wait()
+            }
+            return []
+        }, now: { now })
+    model.sendProfile = { _ in .unchanged }
+    let calls = ThreadsCalls()
+    calls.replies = [.success(first), .success(second)]
+    model.service = threadsService(calls)
+    await model.read(2).value
+    model.listed = { listed += 1 }
+    holding = true
+    let refresh = model.read(2)
+    try await waitFor("the refresh's listing") { gate.held }
+    await model.apply(filter(played: .neverPlayed))?.value
+    #expect(shows.suffix(2) == [[7, 3, 5], [3, 5]], "the refresh's, then the first reply's")
+    gate.open()
+    await refresh.value
+    #expect(shows.last == [7, 3, 5], "\(shows)")
+    #expect(model.albumIDs == [7, 3, 5] && listed == 2)
 }

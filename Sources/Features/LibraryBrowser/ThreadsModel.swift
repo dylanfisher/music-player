@@ -44,17 +44,18 @@ final class ThreadsModel {
     /// Sends the profile, only if it changed unless forced.
     var sendProfile: (_ force: Bool) async -> ProfileSender.Outcome = { _ in .notSet }
 
-    private let show: ([(id: Int64, title: String)]) async throws -> [Int64]
+    private let show: ([(id: Int64, title: String)], Set<Int64>) async throws -> [Int64]
     /// For Not in a Year.
     private let now: () -> Date
     private var session = 0
     /// Counts the lists given to the index, so a list an earlier choice made is dropped.
     private var listing = 0
 
-    /// `show` lists albums for the `.threads` source, in order, and answers those the index
-    /// doesn't have; `now` is when Not in a Year counts back from.
+    /// `show` lists those of its albums in its set for the `.threads` source, in order, and
+    /// answers those of all of them the index doesn't have; `now` is when Not in a Year counts
+    /// back from.
     init(
-        show: @escaping ([(id: Int64, title: String)]) async throws -> [Int64],
+        show: @escaping ([(id: Int64, title: String)], Set<Int64>) async throws -> [Int64],
         now: @escaping () -> Date = Date.init
     ) {
         self.show = show
@@ -197,20 +198,28 @@ final class ThreadsModel {
         let keyed = reply.albums.compactMap { album in
             albumID(profileKey: album.key).map { (id: $0, album: album) }
         }
+        // The index checks every album, to say which it lacks, and lists only those the
+        // filters pass.
+        let passing = Set(reply.shown(by: filter, now: now()).albums)
+        let filter = self.filter
         listing += 1
         let mine = listing
-        let missing = Set(try await show(keyed.map { ($0.id, $0.album.title) }))
+        let missing = Set(
+            try await show(
+                keyed.map { ($0.id, $0.album.title) },
+                Set(keyed.filter { passing.contains($0.album.id) }.map(\.id))))
         guard session == self.session else { return nil }
-        let had = keyed.filter { !missing.contains($0.id) }
         self.reply = reply
-        shown = reply.shown(by: filter, now: now())
+        shown = reply.shown(by: self.filter, now: now())
         chosen = nil
-        albums = Dictionary(had.map { ($0.id, $0.album) }, uniquingKeysWith: { first, _ in first })
-        // Every album is listed first, to learn which the index lacks; the filters may then
-        // leave some out.
-        if albumIDs != had.map(\.id) {
+        albums = Dictionary(
+            keyed.filter { !missing.contains($0.id) }.map { ($0.id, $0.album) },
+            uniquingKeysWith: { first, _ in first })
+        // A filter changed, or another list was given, while the index listed these: what it
+        // holds may not be this reply's.
+        if mine != listing || filter != self.filter {
             try await list(albumIDs)
-        } else if mine == listing {
+        } else {
             listed()
         }
         return reply.albums.count - albums.count
@@ -220,7 +229,7 @@ final class ThreadsModel {
     private func list(_ ids: [Int64]) async throws {
         listing += 1
         let mine = listing
-        _ = try await show(ids.compactMap { id in albums[id].map { (id, $0.title) } })
+        _ = try await show(ids.compactMap { id in albums[id].map { (id, $0.title) } }, Set(ids))
         if mine == listing { listed() }
     }
 

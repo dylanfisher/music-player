@@ -100,11 +100,13 @@ public actor LibraryReader {
         return unknown
     }
 
-    /// Lists Threads' `albums`, in order, for the `.threads` source, as `showRediscover` lists
-    /// Rediscover's.
-    public func showThreads(_ albums: [(id: Int64, title: String)]) async throws -> [Int64] {
-        let unknown = try index.showThreads(albums)
-        _ = try await refreshConnection?.showThreads(albums)
+    /// Lists those of Threads' `albums` in `listing`, in order, for the `.threads` source, and
+    /// answers which of all of them the index lacks, as `showRediscover` does.
+    public func showThreads(_ albums: [(id: Int64, title: String)], listing: Set<Int64>)
+        async throws -> [Int64]
+    {
+        let unknown = try index.showThreads(albums, listing: listing)
+        _ = try await refreshConnection?.showThreads(albums, listing: listing)
         return unknown
     }
 

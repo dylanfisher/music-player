@@ -8,7 +8,7 @@ import Settings
 /// click narrowing it, and the selected album's threads in the panel.
 extension LibraryBrowser {
     func makeThreads() -> ThreadsModel {
-        ThreadsModel(show: { [reader] in try await reader.showThreads($0) })
+        ThreadsModel(show: { [reader] in try await reader.showThreads($0, listing: $1) })
     }
 
     func wireThreads() {

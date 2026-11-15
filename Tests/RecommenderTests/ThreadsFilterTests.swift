@@ -134,3 +134,27 @@ private func filter(
     #expect(ThreadsFilter(settings) == chosen)
     #expect(settings[\.threadsHiddenKinds] == [.credit, .styles], "in the pull-down's order")
 }
+
+@Test func notInAYearTakesAnAlbumLastPlayedExactly365DaysAgoAsPlayedInTheYear() {
+    let at = Int(now.timeIntervalSince1970)
+    let year = 365 * 86_400
+    let threads = reply(
+        [
+            album("edge", plays: 1, lastPlayed: at - year),
+            album("past", plays: 1, lastPlayed: at - year - 1),
+        ], [thread(.credit, ["edge", "past"])])
+    #expect(threads.shown(by: filter(played: .notInAYear), now: now).albums == ["past"])
+}
+
+@Test func yearsTakeAnAlbumExactlyTheSpanFromTheSeedInEitherDirection() {
+    for (years, span) in [(ThreadsYears.within5Years, 5), (.within10Years, 10)] {
+        let threads = reply(
+            [
+                album("before", year: 1990 - span), album("after", year: 1990 + span),
+                album("beyond", year: 1990 + span + 1), album("under", year: 1990 - span - 1),
+            ], [thread(.credit, ["before", "after", "beyond", "under"])])
+        #expect(
+            threads.shown(by: filter(years: years), now: now).albums == ["before", "after"],
+            "\(years)")
+    }
+}

@@ -46,14 +46,17 @@ album's plays and its year.
   All's albums, those that pass in a thread shown. All also keeps an album in no thread,
   which the contract doesn't send, and leaves out one whose every thread is hidden, whatever
   its kind. Not in a Year takes an album with plays but a `null` last play, whose plays the
-  player never saw, as not played in the year. A reply read under a filter is listed whole
-  first, to learn which albums the index lacks, then as the filters pass it; the count of
-  albums this library lacks is of the whole reply. The keys hold `true` or `false`, a list
+  player never saw, as not played in the year, and one last played exactly 365 days ago as
+  played in it; Within 5 and 10 Years take an album exactly that many years from the seed's.
+  The index checks every album of a reply, to count those it lacks, but lists only those
+  the filters pass, so a left-out album never shows in the table; a filter changed while a
+  reply is listed lists it again under the new filters. The keys hold `true` or `false`, a list
   of `credit`, `related`, `label` and `styles`, `anyTime`, `neverPlayed` or `notInAYear`,
   and `anyYear`, `within5Years` or `within10Years`. They're kept out of the Settings window
   as the Discogs tagger's choices are, set beside their own window (ADR 0132); as every bool
-  and choice setting does, they give the palette Turn On Other Artists Only in Threads and
-  commands such as Never Played Thread Plays.
+  and choice setting does, they give the palette Turn On Other Artists Only in Threads,
+  Never Played Thread Albums, Not in a Year Thread Albums and Within 5 Years of the Seed in
+  Threads, among others.
 
 ## Alternatives considered
 

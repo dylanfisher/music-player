@@ -131,10 +131,10 @@ public struct AppSettings: SettingsSchema {
         "library.threadsHiddenKinds", title: "Hidden Thread Kinds", default: [],
         "The kinds of thread the Threads panel doesn't list.")
     public let threadsPlayed = Setting(
-        "library.threadsPlayed", title: "Thread Plays", default: ThreadsPlayed.anyTime,
+        "library.threadsPlayed", title: "Thread Albums", default: ThreadsPlayed.anyTime,
         "Albums Threads lists: any, never played, or not played in a year.")
     public let threadsYears = Setting(
-        "library.threadsYears", title: "Thread Years", default: ThreadsYears.anyYear,
+        "library.threadsYears", title: "of the Seed in Threads", default: ThreadsYears.anyYear,
         "Threads lists any year, or within 5 or 10 of the seed's.")
     public let fileViewer = Setting(
         "library.fileViewer", title: "File Viewer", default: FileViewer.searcher,

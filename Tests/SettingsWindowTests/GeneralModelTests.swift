@@ -284,6 +284,12 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(!keys.contains(schema.discogsSkipVideo.key))
     #expect(!keys.contains(schema.discogsFillSortArtist.key))
     #expect(!keys.contains(schema.discogsArtwork.key))
+    for key in [
+        schema.threadsOtherArtistsOnly.key, schema.threadsHiddenKinds.key,
+        schema.threadsPlayed.key, schema.threadsYears.key,
+    ] {
+        #expect(!keys.contains(key), "\(key) is set from the Threads panel")
+    }
     #expect(keys.contains(schema.groupByAlbumArtist.key))
 }
 

@@ -164,3 +164,19 @@ import Testing
     // ⌫ stays Remove…'s.
     #expect(delete.first?.chord == nil)
 }
+
+@Test func threadsFiltersReadAsCommandsInThePalette() {
+    let schema = AppSettings()
+    let keys: Set<String> = [
+        schema.threadsOtherArtistsOnly.key, schema.threadsHiddenKinds.key,
+        schema.threadsPlayed.key, schema.threadsYears.key,
+    ]
+    let titles = SettingCommand.all(schema).filter { keys.contains($0.key) }.map(\.command.title)
+    #expect(
+        titles == [
+            "Other Artists Only in Threads", "Any Time Thread Albums",
+            "Never Played Thread Albums", "Not in a Year Thread Albums",
+            "Any Year of the Seed in Threads", "Within 5 Years of the Seed in Threads",
+            "Within 10 Years of the Seed in Threads",
+        ])
+}

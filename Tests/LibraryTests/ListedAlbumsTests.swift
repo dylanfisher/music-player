@@ -78,10 +78,13 @@ private func listed(
     let a = try album(index, "/m/a/1.flac")
     let b = try album(index, "/m/b/1.flac")
     _ = try index.showRediscover([(a, "A")])
-    #expect(try index.showThreads([(b, "B"), (a, "A"), (999_999, "Gone")]) == [999_999])
+    let all: [(id: Int64, title: String)] = [(b, "B"), (a, "A"), (999_999, "Gone")]
+    #expect(try index.showThreads(all, listing: [a, b, 999_999]) == [999_999])
     #expect(
         try listed(index, source: .threads) == ["/m/b/1.flac", "/m/a/1.flac", "/m/a/2.flac"])
+    #expect(try index.showThreads(all, listing: [a]) == [999_999], "every album checked")
+    #expect(try listed(index, source: .threads) == ["/m/a/1.flac", "/m/a/2.flac"])
     #expect(try listed(index) == ["/m/a/1.flac", "/m/a/2.flac"], "Rediscover's stay its own")
-    _ = try index.showThreads([])
+    _ = try index.showThreads([], listing: [])
     #expect(try listed(index, source: .threads).isEmpty)
 }
