@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The details of a playback problem, opened from the status bar.
     private(set) lazy var problemWindow = makeProblemWindow()
     /// Media keys, headphone buttons, Now Playing in Control Center, and the Dock menu.
-    private var mediaControls: MediaControls?
+    var mediaControls: MediaControls?
     private var dockMenu: DockMenu?
     private(set) var queue: QueuePanel?
     /// What Edit ▸ Copy last copied, for Paste.
@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Held while the app runs, so a restore at another copy's launch waits (ADR 0142).
     var indexInUse: IndexInUse?
     private var shareChanges: ShareChangeObserver?
-    private(set) var output: DeviceOutput?
+    var output: DeviceOutput?
     /// Each device's state before playback first changed it, shared by every provider made for
     /// it, since a settings change makes a new one.
     let deviceSnapshots = DeviceSnapshots()
@@ -116,11 +116,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var volumeKeyTap: MediaKeyTap?
     var explainedAccessibility = false
     /// The device output's latest path, shown again when playback comes back from a renderer.
-    private(set) var devicePath: SignalPath?
-    private(set) var engine: PlaybackEngine?
-    private var activity = PlaybackActivity.stopped
+    var devicePath: SignalPath?
+    var engine: PlaybackEngine?
+    var activity = PlaybackActivity.stopped
     /// The engine's latest state, for the menus' check marks.
-    private(set) var playback = PlaybackState()
+    var playback = PlaybackState()
     /// Whether the device in use has a digital volume, from its profile.
     var digitalVolume = false
     /// The digital volume, in dB below full.
@@ -130,9 +130,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set while the config is being made to show the device in use, so those writes aren't
     /// taken as edits.
     var showingInUse = false
-    private var playbackUpdates: Task<Void, Never>?
-    private var signalPathUpdates: Task<Void, Never>?
-    private var returnUpdates: Task<Void, Never>?
+    var playbackUpdates: Task<Void, Never>?
+    var signalPathUpdates: Task<Void, Never>?
+    var returnUpdates: Task<Void, Never>?
     /// Plays and skips, counted from the engine's updates.
     private(set) var playTracker: PlayTracker?
     /// The smart playlist editor while it's open.
@@ -681,62 +681,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return browser.resumePoint(playing: playing)
     }
 
-    /// Opens nothing yet: the device is held only once something plays.
-    func startPlayback(_ settings: ConfigStore<AppSettings>) {
-        do {
-            let recordURL = restoreRecordURL(in: paths.dataDirectory)
-            if let recovered = try HALDeviceProvider.recoverAfterCrash(restoreRecordURL: recordURL)
-            {
-                logger.notice("\(recovered)")
-            }
-            let profile = try outputProfile(settings, switched: false)
-            try save(profile)
-            let output = try DeviceOutput(try deviceChoice(profile))
-            let engine = PlaybackEngine(output: output)
-            showInUse(profile, settings)
-            self.output = output
-            self.engine = engine
-            nowPlaying?.connect(engine)
-            mediaControls?.connect(engine)
-            queue?.connect(engine)
-            // The output's stream ends when it closes, so a reopened output replaces this.
-            signalPathUpdates?.cancel()
-            signalPathUpdates = Task { [weak self] in
-                for await path in output.signalPaths {
-                    self?.devicePath = path
-                    // While a renderer plays, the panel shows its path instead.
-                    if self?.rendererOutput == nil { self?.signalPath?.show(path) }
-                    self?.recordFormats(path)
-                }
-            }
-            returnUpdates = Task { [weak self] in
-                for await uid in output.returns { self?.outputReturned(to: uid) }
-            }
-            playbackUpdates = Task { [weak self] in
-                for await update in await engine.updates() {
-                    self?.playback = update.state
-                    self?.playbackChanged(update.state)
-                    self?.remote.queue.note(update.state, at: Date().timeIntervalSince1970)
-                    self?.browser?.showPlaying(path: self?.currentTrackPath)
-                    self?.playTracker?.handle(update)
-                    if case .trackStarted(let index) = update.event {
-                        self?.countPlay(update.state.queue[index].path)
-                    }
-                    switch update.event {
-                    case .trackStarted, .paused, .stopped, .seeked, .finished:
-                        self?.resumeSaver?.changed()
-                    default: break
-                    }
-                }
-            }
-        } catch {
-            logger.error("no output: \(error)")
-            mediaControls?.refreshCommands()
-            nowPlaying?.showUnavailable("No output device: \(error)")
-            signalPath?.show(nil)
-        }
-    }
-
     private func makeTagEditing() -> TagEditing {
         let editing = TagEditing(
             writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)),
@@ -847,15 +791,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fail("Couldn't play the queue", error)
             }
         }
-    }
-
-    /// Tells the watcher, so network rescans stay off the NAS while a track starts.
-    private func playbackChanged(_ state: PlaybackState) {
-        let now = watcherActivity(state)
-        guard now != activity, let settings else { return }
-        activity = now
-        watcher?.playbackChanged(
-            now, pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback])
     }
 
     // MARK: Watched folders
