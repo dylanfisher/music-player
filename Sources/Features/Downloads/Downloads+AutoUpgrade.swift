@@ -87,11 +87,8 @@ extension Downloads {
             guard goesOn(session, epoch) else { return }
             if await take(step, session) { inFlight += 1 }
         }
+        // Read with every slot taken too, for the window's count of what's left to queue.
         guard goesOn(session, epoch) else { return }
-        guard inFlight < autoUpgradesInFlight else {
-            if settled.steps.isEmpty { await keepIdle(seen, session, epoch, until: .distantFuture) }
-            return
-        }
         let candidates: [UpgradeCandidate]
         let missed: [Int: UpgradeMiss]
         do {
@@ -118,6 +115,12 @@ extension Downloads {
             return logger.error("the upgrade candidates couldn't be read: \(error)")
         }
         guard goesOn(session, epoch) else { return }
+        // Counted once the pass has queued what it could, from the jobs as they are then.
+        defer {
+            upgradesLeft = AutoUpgrades.queueable(
+                candidates, jobs: session.model.jobs.rows.values, never: never, misses: missed,
+                skipped: unqueueable, now: now())
+        }
         let chosen = AutoUpgrades.next(
             candidates, jobs: session.model.jobs.rows.values, never: never, misses: missed,
             skipped: unqueueable, now: now(), room: autoUpgradesInFlight - inFlight)

@@ -205,6 +205,7 @@ package final class Downloads {
     package var autoUpgrade = false {
         didSet {
             guard autoUpgrade != oldValue else { return }
+            if !autoUpgrade { upgradesLeft = nil }
             refresh()
             upgradeAutomatically()
         }
@@ -215,6 +216,11 @@ package final class Downloads {
     }
     /// Hears the window's box for it turned on or off, to save it.
     package var autoUpgradeChosen: (Bool) -> Void = { _ in }
+    /// How many albums the last pass found it could still queue, shown beside the box; nil
+    /// before a pass has counted them.
+    var upgradesLeft: Int? {
+        didSet { if upgradesLeft != oldValue { refresh() } }
+    }
     /// The pass running, and whether a poll or a change came during it, which runs another.
     var upgrading: Task<Void, Never>?
     var upgradeAgain = false
@@ -325,6 +331,7 @@ package final class Downloads {
         unqueueable = []
         candidatesRead = nil
         idlePass = nil
+        upgradesLeft = nil
         session?.model.stop()
         session = nil
         refresh()
@@ -487,7 +494,7 @@ package final class Downloads {
         defer { offerSelection() }
         controller.showSlskd(session?.slskdPage)
         controller.showAutoApprove(autoApprove)
-        controller.showAutoUpgrade(autoUpgrade)
+        controller.showAutoUpgrade(autoUpgrade, left: upgradesLeft)
         guard let session else {
             return controller.show([], status: Self.notSet, canAdd: false)
         }

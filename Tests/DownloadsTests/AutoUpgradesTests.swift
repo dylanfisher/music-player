@@ -109,6 +109,26 @@ private let clean = DownloadJob.Tagging(status: .clean, reasons: [])
         ).isEmpty)
 }
 
+@Test func theCountLeftIsTheChoiceWithRoomForEveryOne() {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let candidates = (1...7).map { candidate($0, plays: $0) }
+    let jobs = [listed(1, release: 6, .downloading), listed(2, release: 5, .imported)]
+    let misses = [
+        4: UpgradeMiss(misses: 4, retryAt: nil),
+        3: UpgradeMiss(misses: 1, retryAt: now.timeIntervalSince1970 + day),
+    ]
+    let left = AutoUpgrades.queueable(
+        candidates, jobs: jobs, never: [7], misses: misses, skipped: [1], now: now)
+    // Not 7 (Never Upgrade), 6 (on its way), 4 (set aside), 3 (waiting) or 1 (skipped).
+    #expect(left == 2)
+    #expect(
+        left
+            == AutoUpgrades.next(
+                candidates, jobs: jobs, never: [7], misses: misses, skipped: [1], now: now,
+                room: 7
+            ).count)
+}
+
 @Test func twoAlbumsOfOneReleaseMakeOneChoice() {
     let twin = UpgradeCandidate(
         albumID: 9, title: "Album 1", artist: "Made-Up Artist", releaseID: 1,
@@ -196,6 +216,30 @@ private func settled(_ downloads: Downloads) async {
     await session.model.poll()
     await settled(downloads)
     #expect(fake.created.count == 4, "turned off, nothing more is queued")
+    downloads.stop()
+}
+
+/// The window's count after each pass: what's left once the slots are filled, with every slot
+/// taken too.
+@MainActor
+@Test func eachPassCountsTheAlbumsLeftToQueue() async throws {
+    let fake = FakeService()
+    let library = Library((1...5).map { candidate($0, plays: $0) })
+    let (downloads, session) = try await upgrading(fake, library, inFlight: 2)
+    #expect(downloads.upgradesLeft == nil, "not counted before a pass")
+    downloads.autoUpgrade = true
+    await eventually("two queued") { fake.created.count == 2 }
+    await settled(downloads)
+    #expect(downloads.upgradesLeft == 3)
+    let landed = try #require(fake.job(1))
+    fake.put(listed(landed.id, release: landed.release.releaseID, .imported))
+    library.upgraded(landed.release.releaseID)
+    await session.model.poll()
+    await eventually("a third queued") { fake.created.count == 3 }
+    await settled(downloads)
+    #expect(downloads.upgradesLeft == 2)
+    downloads.autoUpgrade = false
+    #expect(downloads.upgradesLeft == nil, "hidden while it's off")
     downloads.stop()
 }
 

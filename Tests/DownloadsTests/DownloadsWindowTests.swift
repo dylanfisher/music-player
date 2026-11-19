@@ -610,6 +610,22 @@ private func type(_ text: String, in window: DownloadsWindow) {
     window.window?.close()
 }
 
+/// Beside it, while it's on, the albums the upgrades could still queue.
+@MainActor
+@Test func theUpgradeCountShowsOnlyWhileTheBoxIsOn() {
+    let window = DownloadsWindow()
+    window.showAutoUpgrade(true, left: 12)
+    #expect(!window.upgradesLeft.isHidden)
+    #expect(window.upgradesLeft.stringValue == "12 albums left to upgrade")
+    window.showAutoUpgrade(true, left: 1)
+    #expect(window.upgradesLeft.stringValue == "1 album left to upgrade")
+    window.showAutoUpgrade(true, left: nil)
+    #expect(window.upgradesLeft.isHidden, "not counted yet")
+    window.showAutoUpgrade(false, left: 12)
+    #expect(window.upgradesLeft.isHidden)
+    window.window?.close()
+}
+
 /// The Upgrades sheet's Never Upgrade ends it with the ticked albums, and Not Found's one
 /// policy is no choice to show.
 @MainActor

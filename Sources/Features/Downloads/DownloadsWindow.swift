@@ -74,6 +74,12 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         + " lowest-quality albums first. A copy that isn't clean is thrown away and searched"
         + " for again from another peer; approving the clean ones is Approve Safe Matches"
         + " Automatically's."
+    /// How many albums Upgrade to FLAC Automatically could still queue, while it's on.
+    let upgradesLeft = NSTextField(labelWithString: "")
+    static let upgradesLeftHelp =
+        "Lossy albums on the share with a Discogs release that the upgrades could still queue:"
+        + " none marked Never Upgrade, waiting after a copy that wasn't found, or with a job on"
+        + " its way."
     private(set) var buttons: [DownloadAction: NSButton] = [:]
     /// The rows shown, in the window's order: those of `given` the search keeps.
     private(set) var rows: [DownloadRow] = []
@@ -161,7 +167,12 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         search.toolTip = ListFilter.help
         search.delegate = self
         search.widthAnchor.constraint(equalToConstant: 220).isActive = true
-        let boxes = NSStackView(views: [autoApproveBox, autoUpgradeBox, NSView(), search])
+        upgradesLeft.textColor = .secondaryLabelColor
+        upgradesLeft.toolTip = Self.upgradesLeftHelp
+        upgradesLeft.isHidden = true
+        let boxes = NSStackView(views: [
+            autoApproveBox, autoUpgradeBox, upgradesLeft, NSView(), search,
+        ])
         boxes.spacing = 20
 
         for column in DownloadColumn.allCases {
@@ -241,8 +252,17 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
 
     @objc private func autoApproveClicked() { autoApproveChanged(autoApproveBox.state == .on) }
 
-    func showAutoUpgrade(_ on: Bool) {
+    /// Ticks Upgrade to FLAC Automatically as the setting is, with `left`, the albums it could
+    /// still queue, beside it while it's on; nil before they're counted.
+    func showAutoUpgrade(_ on: Bool, left: Int?) {
         autoUpgradeBox.state = on ? .on : .off
+        upgradesLeft.stringValue = left.map(Self.upgradesLeftText) ?? ""
+        upgradesLeft.isHidden = !on || left == nil
+    }
+
+    /// "1 album left to upgrade", "1,204 albums left to upgrade".
+    static func upgradesLeftText(_ albums: Int) -> String {
+        "\(count(albums, "album")) left to upgrade"
     }
 
     @objc private func autoUpgradeClicked() { autoUpgradeChanged(autoUpgradeBox.state == .on) }

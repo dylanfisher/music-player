@@ -175,4 +175,16 @@ enum AutoUpgrades {
         }
         return chosen
     }
+
+    /// How many of `candidates` a pass could still queue were there room for every one: `next`
+    /// with no room limit, so the window's count and the pass can't disagree.
+    static func queueable(
+        _ candidates: [UpgradeCandidate], jobs: some Sequence<DownloadJob>, never: Set<Int>,
+        misses: [Int: UpgradeMiss], skipped: Set<Int>, now: Date
+    ) -> Int {
+        next(
+            candidates, jobs: jobs, never: never, misses: misses, skipped: skipped, now: now,
+            room: .max
+        ).count
+    }
 }
