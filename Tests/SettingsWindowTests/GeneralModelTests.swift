@@ -459,6 +459,11 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     searching = false
     pane.reload()
     #expect(popUp.itemTitles == ["System Default"])
+    // Opening the popup starts a search, which the popup shows without a reload.
+    let menu = try #require(popUp.menu)
+    searching = true
+    pane.menuWillOpen(menu)
+    #expect(popUp.itemTitles == ["System Default", searchingForRenderers])
 }
 
 @MainActor @Test func theReceiversRowsFollowItsSwitch() throws {

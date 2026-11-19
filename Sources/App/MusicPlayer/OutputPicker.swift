@@ -89,7 +89,9 @@ extension AppDelegate {
             self?.outputSearch = nil
             self?.outputsChanged()
         }
-        outputsChanged()
+        // Only the open menu: the Settings popup that opened shows it itself, and reloading
+        // the whole window inside its menuWillOpen would rebuild every pane.
+        outputMenu?.refresh()
     }
 
     /// Lists the devices off the main thread, then calls `then`. Reads run in order on a serial

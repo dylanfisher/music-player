@@ -689,7 +689,12 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         popUp.selectItem(at: options.firstIndex { $0.choice == picked } ?? -1)
     }
 
-    func menuWillOpen(_ menu: NSMenu) { actions.searchOutputs() }
+    /// Starts a search, and shows it in this popup alone; the window reloads when it ends.
+    func menuWillOpen(_ menu: NSMenu) {
+        actions.searchOutputs()
+        controls.values.lazy.compactMap { $0 as? NSPopUpButton }.first { $0.menu === menu }
+            .map(showOutputs)
+    }
 
     /// Scrolls to a setting's row and gives its control the keys, for the palette.
     func focus(_ key: String) {
