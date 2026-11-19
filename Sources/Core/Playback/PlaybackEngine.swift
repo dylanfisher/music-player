@@ -107,13 +107,16 @@ public actor PlaybackEngine {
     /// Plays through `fallback` after the output in use was lost, paused where the loss left
     /// it, until Play. The lost output isn't stopped, so it goes on watching for its return (a
     /// renderer asks whether it answers), and when it reports one, playback moves back to it,
-    /// paused or playing as it is then (ADR 0211). `use(_:)` ends the fallback.
-    public func fallBack(to fallback: any Output) {
-        guard state.device == .lost, fallback !== output else { return }
+    /// paused or playing as it is then (ADR 0211). `use(_:)` ends the fallback. Returns false,
+    /// moving nothing, when the output in use isn't lost or is `fallback`.
+    @discardableResult
+    public func fallBack(to fallback: any Output) -> Bool {
+        guard state.device == .lost, fallback !== output else { return false }
         lostOutput = output
         output = fallback
         if reading.insert(ObjectIdentifier(fallback)).inserted { Self.read(fallback, into: self) }
         publish(.fellBack)
+        return true
     }
 
     /// Whether playback is on the output `fallBack(to:)` moved it to.

@@ -1218,7 +1218,7 @@ private func fallenBack(_ renderer: FakeOutput, to device: FakeOutput) async -> 
     await engine.handle(.trackStarted(1, info))
     await engine.handle(.deviceLost(1, positionSeconds: 42))
     _ = renderer.takeCalls()
-    await engine.fallBack(to: device)
+    #expect(await engine.fallBack(to: device))
     // The lost output isn't stopped, so it goes on watching for its return.
     #expect(renderer.takeCalls() == [])
     #expect(device.takeCalls() == [])
@@ -1305,9 +1305,13 @@ private func fallenBack(_ renderer: FakeOutput, to device: FakeOutput) async -> 
     let engine = await playing(urls, renderer)
     await engine.handle(.trackStarted(1, info))
     _ = renderer.takeCalls()
-    await engine.fallBack(to: device)
-    await engine.pause()
-    #expect(renderer.takeCalls() == [.pause])
+    let moved = await engine.fallBack(to: device)
+    #expect(!moved)
+    await engine.handle(.deviceLost(1, positionSeconds: 42))
+    let ontoItself = await engine.fallBack(to: renderer)
+    #expect(!ontoItself)
+    await engine.play()
+    #expect(renderer.takeCalls().first == .load(3, urls[0], startSeconds: 42, playing: true))
     #expect(device.takeCalls() == [])
 }
 

@@ -47,7 +47,17 @@ extension AppDelegate {
         signalPath?.show(devicePath)
         receiverFollowsOutput()
         outputsChanged()
-        Task { await engine.fallBack(to: output) }
+        Task {
+            guard await !engine.fallBack(to: output), let renderer = outputFallback.abandon()
+            else { return }
+            // The engine wasn't lost on the renderer, so it plays there still.
+            logger.error("the engine didn't fall back from \(renderer.renderer.name)")
+            rendererOutput = renderer
+            outputUID = nil
+            outputSettingsChanged(switched: true)
+            receiverFollowsOutput()
+            outputsChanged()
+        }
     }
 
     /// The device output moved to System Default's device, so the volume is that device's.

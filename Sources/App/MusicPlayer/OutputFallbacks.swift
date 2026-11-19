@@ -77,8 +77,14 @@ struct OutputFallbacks<Renderer: AnyObject> {
         return Plan(profile: target, device: uid == inUse ? .stay : .use, leavesRenderer: true)
     }
 
-    /// A plan that couldn't be made, as when its profile wasn't saved: playback stays lost.
-    mutating func abandon() { phase = nil }
+    /// A plan that couldn't be made, as when its profile wasn't saved or the engine didn't
+    /// move: playback stays lost. Returns the renderer it would have left, the one playing
+    /// again.
+    @discardableResult
+    mutating func abandon() -> Renderer? {
+        defer { phase = nil }
+        return renderer
+    }
 
     /// The device output moved to System Default's device. Returns its profile, which the
     /// volume becomes, without writing the config.

@@ -201,3 +201,16 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
         profile: { profile($0) })
     #expect(none == nil && stuck.phase == nil)
 }
+
+@Test func aRenderersFallbackTheEngineDidntMakeHandsTheRendererBack() {
+    let denon = Renderer()
+    let named = OutputChoice.renderer(udn: "uuid:denon")
+    var fallbacks = OutputFallbacks<Renderer>()
+    _ = fallbacks.lost(
+        named: named, inUse: "DAC", renderer: denon, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    let back = fallbacks.abandon()
+    #expect(back === denon)
+    #expect(fallbacks.inUse(named: named) == named)
+    #expect(fallbacks.renderersToClose(denon).count == 1)
+}
