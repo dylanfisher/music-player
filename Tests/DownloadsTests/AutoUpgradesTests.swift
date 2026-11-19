@@ -258,6 +258,34 @@ private final class SnapshotGate: @unchecked Sendable {
     }
 }
 
+/// Thrown by a stand-in read of the candidates.
+private struct ReadFailed: Error {}
+
+@MainActor
+@Test func aPassThatCantCountLeavesNoCount() async throws {
+    let fake = FakeService()
+    let library = Library([candidate(1), candidate(2)])
+    let (downloads, session) = try await upgrading(fake, library, inFlight: 1)
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    #expect(downloads.upgradesLeft == 1)
+    downloads.upgradeCandidates = { _, _ in throw ReadFailed() }
+    downloads.candidatesRead = nil
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    #expect(downloads.upgradesLeft == nil, "the candidates couldn't be read")
+    downloads.upgradeCandidates = { _, _ in library.candidates }
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    #expect(downloads.upgradesLeft == 1)
+    fake.down = true
+    await session.model.poll()
+    downloads.upgradeAutomatically()
+    #expect(downloads.upgradesLeft == nil, "the service isn't answering")
+    downloads.stop()
+}
+
 @MainActor
 @Test func aPassUntickedWhileQueueingLeavesNoCount() async throws {
     let fake = FakeService()

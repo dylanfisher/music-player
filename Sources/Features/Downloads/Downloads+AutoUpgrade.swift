@@ -18,7 +18,11 @@ extension Downloads {
         guard autoUpgrade, let session, session.canTag, session.coordinator != nil,
             let share = session.setup.share, session.model.connection == .answering,
             session.model.jobs.epoch != nil
-        else { return }
+        else {
+            // No pass, so no count to show: the service isn't answering, or this Mac can't.
+            upgradesLeft = nil
+            return
+        }
         guard upgrading == nil else {
             upgradeAgain = true
             return
@@ -40,6 +44,10 @@ extension Downloads {
     }
 
     private func upgradePass(_ session: Session, share: String) async {
+        // A pass that ends before it counts, its reads failing or the epoch changing, leaves
+        // no count from an earlier one.
+        var counted = false
+        defer { if !counted { upgradesLeft = nil } }
         let database = session.setup.databaseURL
         // Before any read: a commit after it changes the stamp a pass is kept by.
         let stamp = await indexStamp(database)
@@ -123,6 +131,7 @@ extension Downloads {
         // by a pass that resumed after the box was unticked or the session stopped.
         defer {
             if goesOn(session, epoch) {
+                counted = true
                 upgradesLeft = AutoUpgrades.queueable(
                     candidates, jobs: session.model.jobs.rows.values, never: never,
                     misses: missed, skipped: unqueueable, now: now())
