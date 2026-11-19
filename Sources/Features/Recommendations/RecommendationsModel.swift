@@ -182,15 +182,15 @@ final class RecommendationsModel {
         changed()
     }
 
-    /// The rows of `rows` that `filter`, the window's search field, keeps, matched on their
-    /// artists, title, year, label and styles as the columns show them.
-    nonisolated static func filtered(_ rows: [RecommendationRow], by filter: ListFilter)
-        -> [RecommendationRow]
-    {
+    /// The rows of `rows` that `filter`, the window's search field, keeps, matched on the text
+    /// `columns`, those shown, show; `downloads` is the Download column's states.
+    nonisolated static func filtered(
+        _ rows: [RecommendationRow], by filter: ListFilter, columns: [RecommendationColumn],
+        downloads: [Int: String]
+    ) -> [RecommendationRow] {
         guard !filter.isEmpty else { return rows }
-        let columns: [RecommendationColumn] = [.artist, .title, .year, .label, .styles]
         return rows.filter { row in
-            filter.matches(columns.map { $0.text(row, download: nil) })
+            filter.matches(columns.map { $0.text(row, downloads: downloads) })
         }
     }
 

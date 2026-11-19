@@ -248,15 +248,10 @@ final class DownloadsModel {
     func job(_ id: Int) -> DownloadJob? { jobs.rows[id] }
 
     /// The rows of `rows` that `filter`, the window's search field, keeps, matched on the text
-    /// they show for the album (artist, title and year), format, user and state.
-    nonisolated static func filtered(_ rows: [DownloadRow], by filter: ListFilter)
-        -> [DownloadRow]
-    {
+    /// each column shows.
+    static func filtered(_ rows: [DownloadRow], by filter: ListFilter) -> [DownloadRow] {
         guard !filter.isEmpty else { return rows }
-        return rows.filter {
-            filter.matches(
-                [$0.album, $0.format, $0.user, $0.state] + [$0.claimedElsewhere].compactMap { $0 })
-        }
+        return rows.filter { row in filter.matches(DownloadColumn.allCases.map { $0.text(row) }) }
     }
 
     /// Each release's newest job's state in words, by release id, for the Recommendations

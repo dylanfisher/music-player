@@ -731,6 +731,7 @@ private func filterable() -> [DownloadRow] {
     ].compactMap { DownloadRow($0, machine: FakeService.machine) }
 }
 
+@MainActor
 @Test func theFilterMatchesAWordInAnyColumnItShows() {
     let rows = filterable()
     func ids(_ text: String) -> [Int] {
@@ -740,6 +741,8 @@ private func filterable() -> [DownloadRow] {
     #expect(ids("1997") == [1], "the year")
     #expect(ids("other-peer") == [2], "the user")
     #expect(ids("move") == [3], "the state")
+    #expect(ids("pending") == [1], "the tagging")
+    #expect(ids("by hand") == [1, 2, 3], "the source")
     #expect(ids("bjork flac") == [1], "two words in two columns, without the accent")
     #expect(ids("bjork other-peer").isEmpty, "every word, in one row")
     #expect(ids(" ") == [1, 2, 3])

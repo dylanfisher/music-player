@@ -259,6 +259,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             withIdentifier: NSUserInterfaceItemIdentifier(RecommendationColumn.download.rawValue))
         table.reloadData(
             forRowIndexes: IndexSet(integersIn: 0..<rows.count), columnIndexes: [column])
+        // The search matches the Download column's text too.
+        showRows()
     }
 
     /// Shows the list: `rows` of `query` in `headerSort`'s order, the pop-up's `seeds`,
@@ -324,7 +326,11 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     /// discography read again as its values come in reorders; the selection follows its
     /// albums, and the scroll stays where it is unless `resorted`.
     private func showRows(resorted: Bool = false) {
-        let shown = RecommendationsModel.filtered(given, by: ListFilter(search.stringValue))
+        let columns = table.tableColumns.filter { !$0.isHidden }.compactMap {
+            RecommendationColumn(rawValue: $0.identifier.rawValue)
+        }
+        let shown = RecommendationsModel.filtered(
+            given, by: ListFilter(search.stringValue), columns: columns, downloads: downloads)
         if shown != rows {
             let selected = Set(
                 selectedRows.map { MarkedAlbum(kind: $0.album.kind, id: $0.album.id) })
@@ -496,6 +502,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         else { return }
         column.isHidden.toggle()
         chosenHidden[shown] = column.isHidden
+        showRows()
     }
 
     /// Hides each column the list shown has nothing for, and shows the rest as last chosen.
@@ -596,8 +603,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         if row == rows.count - 1, ListFilter(search.stringValue).isEmpty { reachedEnd() }
         let album = rows[row].album
         let label = NSTextField(
-            labelWithString: column.text(
-                rows[row], download: album.releaseID.flatMap { downloads[$0] }))
+            labelWithString: column.text(rows[row], downloads: downloads))
         label.lineBreakMode = .byTruncatingTail
         label.toolTip = column == .why ? reasonsText(album) : label.stringValue
         return label

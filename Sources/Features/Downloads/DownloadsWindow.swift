@@ -33,6 +33,34 @@ enum DownloadColumn: String, CaseIterable {
         case .added: 120
         }
     }
+
+    private static let addedFormat: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    /// The text of the cell in this column of `shown`, which the search matches too.
+    @MainActor
+    func text(_ shown: DownloadRow) -> String {
+        switch self {
+        case .source:
+            switch shown.source {
+            case .upgrade: return "Upgrade"
+            case .manual: return "Queued by hand"
+            case .recommendation: return DownloadSource.recommendation.title
+            }
+        case .album: return shown.album
+        case .format: return shown.format
+        case .state:
+            return shown.claimedElsewhere.map { "\(shown.state) · \($0)" } ?? shown.state
+        case .tagging: return shown.tagging.label
+        case .user: return shown.user
+        case .candidate: return shown.candidate
+        case .added: return Self.addedFormat.string(from: shown.added)
+        }
+    }
 }
 
 /// The Downloads window (54.12): the service's jobs, a row each, with the actions on the
@@ -107,13 +135,6 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     /// Hears the columns' widths after one changes, once `keepWidths` has set them.
     var columnsResized: (ColumnWidths) -> Void = { _ in }
     private var keepsWidths = false
-
-    private static let added: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter
-    }()
 
     init() {
         let window = NSWindow(
@@ -380,25 +401,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     }
 
     /// The text of the cell in `column` of `row`.
-    func text(_ column: DownloadColumn, _ row: Int) -> String {
-        let shown = rows[row]
-        switch column {
-        case .source:
-            switch shown.source {
-            case .upgrade: return "Upgrade"
-            case .manual: return "Queued by hand"
-            case .recommendation: return DownloadSource.recommendation.title
-            }
-        case .album: return shown.album
-        case .format: return shown.format
-        case .state:
-            return shown.claimedElsewhere.map { "\(shown.state) · \($0)" } ?? shown.state
-        case .tagging: return shown.tagging.label
-        case .user: return shown.user
-        case .candidate: return shown.candidate
-        case .added: return Self.added.string(from: shown.added)
-        }
-    }
+    func text(_ column: DownloadColumn, _ row: Int) -> String { column.text(rows[row]) }
 
     func tooltip(_ column: DownloadColumn, _ row: Int) -> String? {
         let shown = rows[row]

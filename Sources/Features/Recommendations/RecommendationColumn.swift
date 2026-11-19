@@ -62,6 +62,12 @@ enum RecommendationColumn: String, CaseIterable {
         }
     }
 
+    /// The text of the cell, which the search matches too; `downloads` is the state of each
+    /// release's newest download job.
+    func text(_ row: RecommendationRow, downloads: [Int: String]) -> String {
+        text(row, download: row.album.releaseID.flatMap { downloads[$0] })
+    }
+
     /// `download` is the state of the newest job of the row's album's release, nil for none.
     func text(_ row: RecommendationRow, download: String?) -> String {
         let album = row.album
