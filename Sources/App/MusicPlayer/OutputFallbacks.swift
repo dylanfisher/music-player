@@ -117,6 +117,12 @@ struct OutputFallbacks<Renderer: AnyObject> {
         hasMoved && !switched && profile.uid != inUse
     }
 
+    /// The renderers to close at quit: `current`, the one playing, and the one fallen back
+    /// from, whose server, probe and sleep assertion run until it's closed.
+    func renderersToClose(_ current: Renderer?) -> [Renderer] {
+        [current, renderer].compactMap { $0 }
+    }
+
     /// The hog mode a problem's details show for the device in use: the config's, which
     /// mirrors that device's profile, `inUse`, except once playback is on System Default, when
     /// the config shows the chosen device's (ADR 0211).

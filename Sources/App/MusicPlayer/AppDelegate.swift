@@ -628,7 +628,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // reads the file it serves, so a hung share holds that too. Both close together within
         // one bound; the device's restore record puts it back at the next launch instead.
         var outputs: [any Output] = []
-        if let rendererOutput { outputs.append(rendererOutput) }
+        outputs += outputFallback.renderersToClose(rendererOutput).map { $0 as any Output }
         if let output { outputs.append(output) }
         let closing = outputs
         if !finishes(

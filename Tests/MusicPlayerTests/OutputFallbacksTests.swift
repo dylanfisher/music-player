@@ -166,3 +166,14 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     #expect(none.hogModeShown(config: true, inUse: false) == true)
     #expect(none.takesHogModeFix)
 }
+
+@Test func aQuitClosesTheRendererFallenBackFrom() {
+    let denon = Renderer()
+    var fallbacks = OutputFallbacks<Renderer>()
+    #expect(fallbacks.renderersToClose(denon).map(ObjectIdentifier.init) == [.init(denon)])
+    _ = fallbacks.lost(
+        named: .renderer(udn: "uuid:denon"), inUse: "DAC", renderer: denon,
+        systemDefault: { "Speakers" }, profile: { profile($0) })
+    // The app no longer holds it as the one playing.
+    #expect(fallbacks.renderersToClose(nil).map(ObjectIdentifier.init) == [.init(denon)])
+}
