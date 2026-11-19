@@ -277,6 +277,21 @@ extension LibraryIndex {
             .first?.flatMap { Int($0) }
     }
 
+    /// The album whose tracks carry Discogs release `release`, for Show in All Music in the
+    /// Downloads and Recommendations windows; the lowest id when two albums do, nil when none.
+    package func albumID(discogsRelease release: Int) throws -> Int64? {
+        try statement(
+            "SELECT min(album_id) FROM tracks WHERE discogs_release_id = ? AND album_id IS NOT NULL"
+        )
+        .map(String(release)) { $0.optionalInt(0).map(Int64.init) }
+        .first ?? nil
+    }
+
+    /// What Show in All Music says when no album carries `release`.
+    package static func releaseNotInLibrary(_ release: Int) -> String {
+        "No album in the library carries Discogs release \(release)."
+    }
+
     /// The rows for `ids`, in the same order. An ID with no track, such as one a rescan just
     /// removed, is left out.
     public func rows(ids: [Int64]) throws -> [TrackRow] {

@@ -12,18 +12,19 @@ import Testing
 
 private struct NoFolder: Error {}
 
-/// Downloads started on `service`, with its first poll taken, and a staging folder that is
-/// there only if `places` says so.
+/// Downloads started on `service`, with its first poll taken, a staging folder that is there
+/// only if `places` says so, and an index `prepare` has written to before the start.
 @MainActor
 func started(
     _ service: DownloadsService, statusBarShown: Bool = false, share: String? = nil,
+    prepare: (LibraryIndex) throws -> Void = { _ in },
     places: @escaping @Sendable () async throws -> ImportPlaces
 ) async throws -> (Downloads, Downloads.Session) {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
         "review-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let database = folder.appendingPathComponent("library.sqlite", isDirectory: false)
-    _ = try LibraryIndex(at: database)
+    try prepare(LibraryIndex(at: database))
     let downloads = Downloads()
     downloads.setStatusBarShown(statusBarShown)
     downloads.start(

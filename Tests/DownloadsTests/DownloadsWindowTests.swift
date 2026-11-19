@@ -4,6 +4,7 @@ import Testing
 
 @testable import Downloads
 @testable import Fixtures
+@testable import Library
 @testable import Recommender
 @testable import Settings
 @testable import WindowPlacement
@@ -465,6 +466,58 @@ private func type(_ text: String, in window: DownloadsWindow) {
     #expect(shown.isEmpty)
     window.close()
     downloads.stop()
+}
+
+/// Show in All Music finds the album by the release its files carry, and says in the status
+/// line when the library has none.
+@MainActor
+@Test func showInAllMusicShowsTheAlbumOfTheReleaseOrSaysItIsntThere() async throws {
+    let service = FakeService([
+        job(1, .imported), job(2, .imported) { $0.release.releaseID = 5 },
+        job(3, .downloading) {
+            $0.release.releaseID = 6
+            $0.upgrade = DownloadJob.Upgrade(
+                currentQuality: "MP3 320 kbps", oldPaths: ["library/a/01.mp3"])
+        },
+    ])
+    let (downloads, session) = try await started(
+        service.service,
+        prepare: { try $0.recordTaggedRelease(job: 1, queued: 4242, folder: "job-1", release: 77) },
+        places: { ImportPlaces(stagingRoot: "/nowhere", libraryFolder: "/nowhere", shareRoot: "/") }
+    )
+    await eventually("the release tagged as") { session.model.taggedAs(1) == 77 }
+    var asked: [Int] = []
+    downloads.albumOfRelease = { _, release in
+        await MainActor.run { asked.append(release) }
+        return release == 5 ? nil : Int64(release * 10)
+    }
+    var shown: [Int64] = []
+    downloads.showInAllMusic = { shown.append($0) }
+    downloads.show()
+    let window = try #require(downloads.controller)
+    downloads.showInLibrary(try #require(session.model.job(1)), session)
+    await eventually("the album tagged as") { shown == [770] }
+    downloads.showInLibrary(try #require(session.model.job(2)), session)
+    await eventually("the status line") {
+        window.statusLabel.stringValue.contains(LibraryIndex.releaseNotInLibrary(5))
+    }
+    #expect(shown == [770], "nothing shown")
+    downloads.showInLibrary(try #require(session.model.job(3)), session)
+    await eventually("the album the upgrade replaces") { shown == [770, 60] }
+    #expect(asked == [77, 5, 6])
+    #expect(!window.statusLabel.stringValue.contains(LibraryIndex.releaseNotInLibrary(5)))
+    window.window?.close()
+    downloads.stop()
+}
+
+/// The toolbar's buttons all show at the window's smallest width.
+@MainActor
+@Test func theToolbarFitsTheSmallestWindow() throws {
+    let window = DownloadsWindow()
+    let content = try #require(window.window?.contentView)
+    let smallest = try #require(window.window?.minSize.width)
+    #expect(content.fittingSize.width <= smallest)
+    window.window?.close()
 }
 
 @Test func onlyOneFolderNameIsAStagedFolder() {

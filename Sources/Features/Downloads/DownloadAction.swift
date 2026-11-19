@@ -1,9 +1,10 @@
+import Commands
 import Recommender
 
 /// What the Downloads window's toolbar and context menu do to one job. Whether each applies is
 /// a pure function of the job, this Mac and the service, table-tested, so the window only asks.
 enum DownloadAction: CaseIterable, Sendable {
-    case approve, reject, retry, cancel, openInTagger, resumeHere, revealInFinder
+    case approve, reject, retry, cancel, openInTagger, resumeHere, revealInFinder, showInAllMusic
 
     var title: String {
         switch self {
@@ -14,6 +15,7 @@ enum DownloadAction: CaseIterable, Sendable {
         case .openInTagger: "Open in Tagger"
         case .resumeHere: "Resume Here"
         case .revealInFinder: "Reveal in Finder"
+        case .showInAllMusic: AppCommands.title(of: .showInAllMusic)
         }
     }
 
@@ -31,15 +33,17 @@ enum DownloadAction: CaseIterable, Sendable {
         case .openInTagger: "Resolve the discrepancy in the Discogs Tagger."
         case .resumeHere: "Finish an import another Mac, or an earlier run, left."
         case .revealInFinder: "Show the album's staged folder in the Finder."
+        case .showInAllMusic: "Select the album in the library's All Music."
         }
     }
 
     /// Whether the action, on several rows, acts on each one it applies to. Approve, Resume
-    /// Here and Open in Tagger each open one review, so they act on the first (ADR 0218).
+    /// Here and Open in Tagger each open one review, and Show in All Music selects one album,
+    /// so they act on the first (ADR 0218).
     var actsOnEach: Bool {
         switch self {
         case .reject, .retry, .cancel, .revealInFinder: true
-        case .approve, .resumeHere, .openInTagger: false
+        case .approve, .resumeHere, .openInTagger, .showInAllMusic: false
         }
     }
 
@@ -49,7 +53,8 @@ enum DownloadAction: CaseIterable, Sendable {
     /// discrepancy or an error, on a Mac with a catalog (`canTag`); Retry, besides a job that
     /// failed or wasn't found, a staged one once it's tagged, clean too, which it requeues
     /// (ADR 0211, ADR 0222). Reveal in Finder, which only
-    /// looks, needs a staged folder, from `staged` until the import, and not the service.
+    /// looks, needs a staged folder, from `staged` until the import, and not the service; Show
+    /// in All Music an album in the library, the one imported or the one an upgrade replaces.
     static func applies(
         _ action: DownloadAction, to job: DownloadJob, machine: String, answering: Bool,
         canTag: Bool
@@ -58,6 +63,7 @@ enum DownloadAction: CaseIterable, Sendable {
             return job.stagedPath != nil
                 && [.staged, .approved, .importing, .failed].contains(job.state)
         }
+        if action == .showInAllMusic { return job.state == .imported || job.upgrade != nil }
         guard answering else { return false }
         let elsewhere = DownloadRow.claimedElsewhere(job.review, machine: machine) != nil
         switch action {
@@ -84,7 +90,7 @@ enum DownloadAction: CaseIterable, Sendable {
         case .resumeHere:
             return job.state == .approved || job.state == .importing
         // Answered before the service's guard.
-        case .revealInFinder: return false
+        case .revealInFinder, .showInAllMusic: return false
         }
     }
 

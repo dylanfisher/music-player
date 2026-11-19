@@ -141,6 +141,18 @@ package final class Downloads {
     /// Hears `confirm`'s question, by its message, in place of the owner, with what to run
     /// for a yes; nil asks the owner. Tests stand in for them.
     var answer: ((String, @escaping () -> Void) -> Void)?
+    /// Show in All Music: selects the album `id` in the main window's All Music.
+    package var showInAllMusic: (_ albumID: Int64) -> Void = { _ in }
+    /// The library's album carrying a Discogs release, read from the index off the main
+    /// thread; tests stand in for it.
+    var albumOfRelease: @Sendable (URL, Int) async throws -> Int64? = { database, release in
+        try await blockingFileWork {
+            Result { try LibraryIndex(at: database).albumID(discogsRelease: release) }
+        }.get()
+    }
+    /// Why the last Show in All Music showed nothing, in the status line until the next one.
+    var notShown: String?
+
     /// Shows files in the Finder, and opens a web page; tests stand in for both.
     var showInFinder: ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
     var openPage: (URL) -> Void = { url in
@@ -478,7 +490,7 @@ package final class Downloads {
         }
         let status = DownloadsModel.status(
             session.model.connection, canAdd: session.canTag || session.coordinator == nil,
-            problems: session.problems,
+            problems: session.problems + [notShown].compactMap { $0 },
             formatted: {
                 DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short)
             })
@@ -534,6 +546,7 @@ package final class Downloads {
             }
         case .retry: retry(job, row, session)
         case .revealInFinder: reveal([job], session)
+        case .showInAllMusic: showInLibrary(job, session)
         case .openInTagger:
             guard let coordinator = session.coordinator else { return }
             let heading = "\(row.album) can't open in the tagger"

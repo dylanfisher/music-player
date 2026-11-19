@@ -101,6 +101,28 @@ func aFailedJobCancelsUpToTaggingAndSearchesAgainOnlyFromItsDownload(
 }
 
 @Test(arguments: [
+    (JobState.imported, false, true), (.imported, true, true), (.staged, true, true),
+    (.downloading, true, true), (.staged, false, false), (.downloading, false, false),
+    (.failed, false, false),
+])
+func showInAllMusicNeedsAnAlbumInTheLibraryButNotTheService(
+    state: JobState, upgrade: Bool, applies: Bool
+) {
+    let job = job(1, state) {
+        if upgrade {
+            $0.upgrade = DownloadJob.Upgrade(
+                currentQuality: "MP3 320 kbps", oldPaths: ["library/a/01.mp3"])
+        }
+    }
+    for answering in [true, false] {
+        #expect(
+            DownloadAction.applies(
+                .showInAllMusic, to: job, machine: me, answering: answering, canTag: false)
+                == applies)
+    }
+}
+
+@Test(arguments: [
     (JobState.staged, true), (.approved, true), (.importing, true), (.failed, true),
     (.downloaded, false), (.downloading, false), (.imported, false),
 ])

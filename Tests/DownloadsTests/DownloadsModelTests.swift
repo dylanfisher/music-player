@@ -87,10 +87,12 @@ func jobsRejectedOrCancelledAreNotListed(state: JobState) {
     let lastDay = importedAt.addingTimeInterval(30 * 86_400)
     #expect(DownloadRow(imported, machine: "Studio", now: lastDay) != nil)
     #expect(DownloadRow(imported, machine: "Studio", now: lastDay.addingTimeInterval(1)) == nil)
+    // Only Show in All Music, which looks in the library.
     for action in DownloadAction.allCases {
         #expect(
-            !DownloadAction.applies(
-                action, to: imported, machine: "Studio", answering: true, canTag: true))
+            DownloadAction.applies(
+                action, to: imported, machine: "Studio", answering: true, canTag: true)
+                == (action == .showInAllMusic))
     }
 }
 

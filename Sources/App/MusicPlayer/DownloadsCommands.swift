@@ -95,6 +95,7 @@ extension AppDelegate {
         downloads.releaseStatesChanged = { [weak self] in
             self?.recommendations.show(downloads: $0)
         }
+        downloads.showInAllMusic = { [weak self] in self?.showInAllMusic(album: $0) }
         downloads.openInTagger = { [weak self] job, stagingRoot, resolved in
             guard let self, let settings else { return }
             stagedTagger?.window?.close()
@@ -110,6 +111,14 @@ extension AppDelegate {
             tagger.show()
         }
         return downloads
+    }
+
+    /// Show in All Music from the Downloads or Recommendations window: the main window comes
+    /// forward with the album's first track selected in All Music.
+    func showInAllMusic(album id: Int64) {
+        guard let browser else { return }
+        window?.window.makeKeyAndOrderFront(nil)
+        Task { await browser.showFirstTrack(of: .album, id: id) }
     }
 
     /// What the downloads are made from, or nil while the service's address or token isn't

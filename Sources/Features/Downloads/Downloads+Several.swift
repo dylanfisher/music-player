@@ -50,7 +50,7 @@ extension Downloads {
                 }
             }
         case .revealInFinder: reveal(jobs.map(\.job), session)
-        case .approve, .resumeHere, .openInTagger:
+        case .approve, .resumeHere, .openInTagger, .showInAllMusic:
             preconditionFailure("\(action) acts on one job")
         }
     }

@@ -35,6 +35,18 @@ private func track(_ path: String, album: String, release: String?, master: Stri
     #expect(try index.discogsReleaseID(ofTrack: -1) == nil)
 }
 
+@Test func anAlbumIsFoundByTheReleaseItsTracksCarry() throws {
+    let index = try craftedIndex([
+        track("/m/a/1.flac", album: "A", release: "42"),
+        track("/m/b/1.flac", album: "B", release: "420"),
+        track("/m/c/1.flac", album: "C", release: nil),
+    ])
+    let album = try index.database.prepare("SELECT id FROM albums WHERE title = 'A'")
+        .map { try $0.int64(0) }.first
+    #expect(try index.albumID(discogsRelease: 42) == album)
+    #expect(try index.albumID(discogsRelease: 7) == nil)
+}
+
 @Test func anAlbumIsMatchedOnlyWhenEveryTrackHasOneReleaseID() throws {
     let index = try craftedIndex([
         track("/m/a/1.flac", album: "Matched", release: "1"),

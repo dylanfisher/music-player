@@ -111,11 +111,12 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1100, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 1180, height: 480),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
             defer: false)
         window.title = Self.title
-        window.minSize = NSSize(width: 960, height: 300)
+        // The toolbar's buttons, each wide enough for its title.
+        window.minSize = NSSize(width: 1100, height: 300)
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
