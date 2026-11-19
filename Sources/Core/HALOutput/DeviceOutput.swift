@@ -344,10 +344,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             if case .connected(let signal) = state { knownFormats = signal.formats }
             signalDirty = true
         case .use(let choice): use(choice, remembering: true)
-        // Dropped once the device is back, or when the fallback's went too: it stays lost.
-        case .fallBack(let choice) where deviceMissing && choice.provider.isConnected():
-            use(choice, remembering: true, falling: true)
-        case .fallBack: break
+        case .fallBack(let choice):
+            let why = whyNotFallBack(missing: deviceMissing, to: choice.provider)
+            guard let why else { return use(choice, remembering: true, falling: true) }
+            logger.notice("no fallback to \(choice.provider.deviceName, privacy: .public): \(why)")
         case .close(let done):
             unload()
             closeDevice()

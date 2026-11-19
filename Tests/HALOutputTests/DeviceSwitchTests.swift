@@ -383,6 +383,18 @@ private func fellBackFromTheDAC(playing: Bool) async throws -> (TwoDevices, resu
     #expect(again.map { if case .deviceReturned = $0 { false } else { true } } ?? true)
 }
 
+@Test func aDroppedFallbackSaysWhy() {
+    let speakers = NullDevice(name: "Speakers")
+    #expect(whyNotFallBack(missing: true, to: speakers) == nil)
+    #expect(
+        whyNotFallBack(missing: false, to: speakers)
+            == "the device in use is back, so there's nothing to fall back from")
+    speakers.unplug()
+    #expect(
+        whyNotFallBack(missing: true, to: speakers)
+            == "it isn't connected either, so playback stays lost")
+}
+
 /// A provider whose state reports outlive `stopWatching`, as one queued by the HAL just before it
 /// would.
 private final class LingeringProvider: PCMDeviceProvider, @unchecked Sendable {
