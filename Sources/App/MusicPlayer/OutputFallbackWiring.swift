@@ -48,7 +48,8 @@ extension AppDelegate {
         receiverFollowsOutput()
         outputsChanged()
         Task {
-            guard await !engine.fallBack(to: output), let renderer = outputFallback.abandon()
+            guard await !engine.fallBack(to: output),
+                outputFallback.abandon(ifRenderer: renderer)
             else { return }
             // The engine wasn't lost on the renderer, so it plays there still.
             logger.error("the engine didn't fall back from \(renderer.renderer.name)")

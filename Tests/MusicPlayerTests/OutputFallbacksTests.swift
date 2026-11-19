@@ -209,10 +209,27 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     _ = fallbacks.lost(
         named: named, inUse: "DAC", renderer: denon, systemDefault: { "Speakers" },
         profile: { profile($0) })
-    let back = fallbacks.abandon()
-    #expect(back === denon)
+    let ended = fallbacks.abandon(ifRenderer: denon)
+    #expect(ended)
     #expect(fallbacks.inUse(named: named) == named)
     #expect(fallbacks.renderersToClose(denon).count == 1)
+}
+
+@Test func aStaleRendererAbandonLeavesANewerFallback() {
+    let denon = Renderer()
+    let sonos = Renderer()
+    var fallbacks = OutputFallbacks<Renderer>()
+    _ = fallbacks.lost(
+        named: .renderer(udn: "uuid:denon"), inUse: "DAC", renderer: denon,
+        systemDefault: { "Speakers" }, profile: { profile($0) })
+    // The user picks the Sonos, which goes too, before the engine's answer for the Denon.
+    _ = fallbacks.outputChanged(byApp: false)
+    _ = fallbacks.lost(
+        named: .renderer(udn: "uuid:sonos"), inUse: "DAC", renderer: sonos,
+        systemDefault: { "Speakers" }, profile: { profile($0) })
+    let stale = fallbacks.abandon(ifRenderer: denon)
+    #expect(!stale)
+    #expect(fallbacks.renderer === sonos)
 }
 
 @Test func pickingTheChosenOutputDuringAFallbackEndsIt() {

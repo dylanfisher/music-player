@@ -77,13 +77,17 @@ struct OutputFallbacks<Renderer: AnyObject> {
         return Plan(profile: target, device: uid == inUse ? .stay : .use, leavesRenderer: true)
     }
 
-    /// A plan that couldn't be made, as when its profile wasn't saved or the engine didn't
-    /// move: playback stays lost. Returns the renderer it would have left, the one playing
-    /// again.
-    @discardableResult
-    mutating func abandon() -> Renderer? {
-        defer { phase = nil }
-        return renderer
+    /// A plan that couldn't be made, as when its profile wasn't saved: playback stays lost.
+    mutating func abandon() { phase = nil }
+
+    /// A renderer's fallback the engine didn't make, as when Play reached the renderer first:
+    /// it ends, and the renderer plays still, if the fallback is still `renderer`'s. A pick
+    /// and another loss since may have started another fallback, which it leaves. True when
+    /// it ended one.
+    mutating func abandon(ifRenderer renderer: Renderer) -> Bool {
+        guard self.renderer === renderer else { return false }
+        phase = nil
+        return true
     }
 
     /// The device output moved to System Default's device. Returns its profile, which the
