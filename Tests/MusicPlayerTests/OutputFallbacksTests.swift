@@ -108,11 +108,11 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
 
 @Test func theUsersPickEndsTheFallback() {
     var fallbacks = fellBackFromTheDAC()
-    let (ended, renderer) = fallbacks.end()
+    let (ended, renderer) = fallbacks.outputChanged(byApp: false)
     #expect(ended && renderer == nil)
     #expect(fallbacks.inUse(named: .systemDefault) == .systemDefault)
     #expect(fallbacks.inUse(named: dac) == dac)
-    let again = fallbacks.end()
+    let again = fallbacks.outputChanged(byApp: false)
     #expect(!again.ended)
     // A renderer's ending hands the renderer back to the app.
     let denon = Renderer()
@@ -120,7 +120,7 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     _ = fromRenderer.lost(
         named: .renderer(udn: "uuid:denon"), inUse: "DAC", renderer: denon,
         systemDefault: { "Speakers" }, profile: { profile($0) })
-    let handedBack = fromRenderer.end().renderer
+    let handedBack = fromRenderer.outputChanged(byApp: false).renderer
     #expect(handedBack === denon)
 }
 
@@ -140,4 +140,19 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     fallbacks.deviceOutputReturned()
     #expect(!fallbacks.hasMoved)
     #expect(fallbacks.inUse(named: dac) == dac)
+}
+
+@Test func theAppsOwnWriteOfTheOutputLeavesTheFallback() {
+    let denon = Renderer()
+    let named = OutputChoice.renderer(udn: "uuid:denon")
+    var fallbacks = OutputFallbacks<Renderer>()
+    _ = fallbacks.lost(
+        named: named, inUse: "DAC", renderer: denon, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    // As when the device output returns to a device on its own and the config is made to
+    // show it.
+    let shown = fallbacks.outputChanged(byApp: true)
+    #expect(!shown.ended && shown.renderer == nil)
+    #expect(fallbacks.renderer === denon)
+    #expect(fallbacks.inUse(named: named) == .systemDefault)
 }

@@ -117,10 +117,12 @@ struct OutputFallbacks<Renderer: AnyObject> {
         hasMoved && !switched && profile.uid != inUse
     }
 
-    /// Ends the fallback for a change of output. Returns whether there was one, and the
-    /// renderer fallen back from, which is the app's again to close or keep.
-    mutating func end() -> (ended: Bool, renderer: Renderer?) {
-        guard phase != nil else { return (false, nil) }
+    /// Ends the fallback for a change of `output.deviceUID` or `output.renderer`, unless the
+    /// app made it `byApp` to show the device in use: only the user's change ends one. Returns
+    /// whether it ended, and the renderer fallen back from, which is the app's again to close
+    /// or keep.
+    mutating func outputChanged(byApp: Bool) -> (ended: Bool, renderer: Renderer?) {
+        guard phase != nil, !byApp else { return (false, nil) }
         defer { phase = nil }
         return (true, renderer)
     }

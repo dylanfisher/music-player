@@ -74,9 +74,10 @@ extension AppDelegate {
         }
     }
 
-    /// Ends a fallback for a change of output setting, and returns whether there was one.
+    /// Ends a fallback for the user's change of output setting, and returns whether it did. The
+    /// app's own writes, which show the device in use, leave it.
     func endFallback() -> Bool {
-        let (ended, renderer) = outputFallback.end()
+        let (ended, renderer) = outputFallback.outputChanged(byApp: showingInUse)
         guard ended else { return false }
         if let renderer { rendererOutput = renderer }
         // So the switch that follows isn't skipped as one to the device in use.
