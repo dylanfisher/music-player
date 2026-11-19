@@ -102,7 +102,7 @@ public final class MediaControls {
         case .seeked(let seconds): show(elapsedSeconds: seconds)
         // The output may not report the new track's position yet.
         case .trackStarted: show(elapsedSeconds: positionSeconds ?? 0)
-        case nil, .resumed, .paused, .deviceLost, .deviceReturned, .fellBack:
+        case nil, .resumed, .paused, .deviceLost, .deviceReturned, .fellBack, .outputChanged:
             show(elapsedSeconds: positionSeconds)
         default: show(elapsedSeconds: nil)
         }

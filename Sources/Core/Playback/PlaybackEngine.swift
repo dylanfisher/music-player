@@ -87,11 +87,18 @@ public actor PlaybackEngine {
     /// Plays through `newOutput` from now on: what's loaded moves to it at the position it had,
     /// playing or paused as it was, and the old output is stopped. Events from any output but
     /// the current one are ignored, so the old one can stay open to be used again.
+    /// When it replaces a lost output, or keeps the fallback from one as the choice, the loss is
+    /// over: the device reads connected, and `outputChanged` says so.
     public func use(_ newOutput: any Output) {
-        // The output lost is replaced, or the fallback from it is kept as a choice.
-        if state.device == .lost, newOutput !== output || lostOutput != nil {
-            state.device = .connected
-        }
+        let replacesLost = state.device == .lost && (newOutput !== output || lostOutput != nil)
+        move(to: newOutput)
+        guard replacesLost else { return }
+        state.device = .connected
+        publish(.outputChanged)
+    }
+
+    /// `use(_:)` without its change of device state.
+    private func move(to newOutput: any Output) {
         lostOutput = nil
         guard newOutput !== output else { return }
         let resume = currentItem.map { ($0.position, resumeSeconds ?? position() ?? 0) }
@@ -594,9 +601,8 @@ public actor PlaybackEngine {
     private func handle(_ event: OutputEvent, from id: ObjectIdentifier) {
         if let lostOutput, id == ObjectIdentifier(lostOutput) {
             guard case .deviceReturned = event else { return }
-            let wasLost = state.device == .lost
-            use(lostOutput)
-            if wasLost { state.device = .returned }
+            move(to: lostOutput)
+            if state.device == .lost { state.device = .returned }
             return publish(.deviceReturned)
         }
         guard id == ObjectIdentifier(output) else { return }

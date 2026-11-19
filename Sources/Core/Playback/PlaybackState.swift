@@ -64,6 +64,9 @@ public enum PlaybackEvent: Sendable, Equatable {
     /// Playback moved, paused, to System Default after the output it played on was lost, and
     /// moves back once that returns (ADR 0211).
     case fellBack
+    /// Another output took the place of the one lost, or the fallback from it became the
+    /// choice, so the loss is over.
+    case outputChanged
     /// The output stopped because of an error.
     case failed(PlaybackProblem)
     /// The queue played to its end.

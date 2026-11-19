@@ -221,7 +221,7 @@ private final class Player: @unchecked Sendable {
             log(update.event == .finished ? "done" : "stopped")
             if beginQuitting() { finish(status: 0) }
         // The command line never falls back: only the app does (ADR 0211).
-        case .queueChanged, .trackEnded, .seeked, .fellBack, nil: break
+        case .queueChanged, .trackEnded, .seeked, .fellBack, .outputChanged, nil: break
         }
     }
 
