@@ -344,8 +344,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             if case .connected(let signal) = state { knownFormats = signal.formats }
             signalDirty = true
         case .use(let choice): use(choice, remembering: true)
-        // Dropped once the device is back, as by a plug-in before the app asked.
-        case .fallBack(let choice) where deviceMissing:
+        // Dropped once the device is back, or when the fallback's went too: it stays lost.
+        case .fallBack(let choice) where deviceMissing && choice.provider.isConnected():
             use(choice, remembering: true, falling: true)
         case .fallBack: break
         case .close(let done):

@@ -331,6 +331,28 @@ private func fellBackFromTheDAC(playing: Bool) async throws -> (TwoDevices, resu
     #expect(!rig.events.contains(.fellBack))
 }
 
+@Test func aFallbackToADeviceThatWentTooLeavesOutputLostWhereItWas() async throws {
+    let album = try album(44_100, 16)
+    let rig = try await TwoDevices()
+    await rig.engine.setQueue(album.tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    // System Default's device goes after the app resolved it, before the output moves.
+    rig.speakers.unplug()
+    rig.dac.unplug()
+    try await rig.wait(for: .deviceLost)
+    rig.output.fallBack(to: rig.speakersChoice)
+    try await Task.sleep(nanoseconds: 300_000_000)
+    #expect(!rig.events.contains(.fellBack))
+    // Still lost on the DAC, so its return is reported as one, not as output going back.
+    rig.dac.plugIn()
+    try await rig.wait(for: .deviceReturned)
+    #expect((try? await rig.returns.next(within: 0.5)) == nil)
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    #expect(rig.dac.captured.count == 2)
+}
+
 /// A provider whose state reports outlive `stopWatching`, as one queued by the HAL just before it
 /// would.
 private final class LingeringProvider: PCMDeviceProvider, @unchecked Sendable {
