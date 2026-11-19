@@ -126,6 +126,8 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     /// A row's Show Discography item, through its release; nil leaves it out.
     var discographyItem: (Int) -> NSMenuItem? = { _ in nil }
     var openSlskd: () -> Void = {}
+    /// Hears the selected row change.
+    var selectionChanged: () -> Void = {}
     /// Hears Approve Safe Matches Automatically turned on or off.
     var autoApproveChanged: (Bool) -> Void = { _ in }
     /// Hears Upgrade to FLAC Automatically turned on or off.
@@ -433,7 +435,10 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
             ? NSColor.secondaryLabelColor.withAlphaComponent(0.5) : .labelColor
     }
 
-    func tableViewSelectionDidChange(_ notification: Notification) { enableButtons() }
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        enableButtons()
+        selectionChanged()
+    }
 
     /// Gives the columns `widths`, a column not listed keeping its own, and reports each
     /// change after. Called once the window has its frame: laid out at that size first, so the

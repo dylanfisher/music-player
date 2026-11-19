@@ -507,12 +507,23 @@ private func type(_ text: String, in window: DownloadsWindow) {
         window.statusLabel.stringValue.contains(LibraryIndex.releaseNotInLibrary(5))
     }
     #expect(shown == [770], "nothing shown")
-    downloads.showInLibrary(try #require(session.model.job(3)), session)
-    await eventually("the album the upgrade replaces") { shown == [770, 60] }
-    #expect(asked == [77, 5, 6])
+    window.table.selectRowIndexes([1], byExtendingSelection: false)
     #expect(!window.statusLabel.stringValue.contains(LibraryIndex.releaseNotInLibrary(5)))
-    window.window?.close()
+    downloads.showInLibrary(try #require(session.model.job(2)), session)
+    await eventually("said again") {
+        window.statusLabel.stringValue.contains(LibraryIndex.releaseNotInLibrary(5))
+    }
+    downloads.showInLibrary(try #require(session.model.job(3)), session)
+    #expect(
+        !window.statusLabel.stringValue.contains(LibraryIndex.releaseNotInLibrary(5)),
+        "gone as the next lookup starts")
+    await eventually("the album the upgrade replaces") { shown == [770, 60] }
+    #expect(asked == [77, 5, 5, 6])
+    downloads.showInLibrary(try #require(session.model.job(2)), session)
+    await eventually("said once more") { downloads.notShown != nil }
     downloads.stop()
+    #expect(downloads.notShown == nil, "gone with the session")
+    window.window?.close()
 }
 
 /// The toolbar's buttons all show at the window's smallest width.

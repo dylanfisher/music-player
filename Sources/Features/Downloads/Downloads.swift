@@ -332,6 +332,7 @@ package final class Downloads {
         candidatesRead = nil
         idlePass = nil
         upgradesLeft = nil
+        notShown = nil
         session?.model.stop()
         session = nil
         refresh()
@@ -451,6 +452,7 @@ package final class Downloads {
         made.add = { [weak self] addition in self?.add(addition) }
         made.discographyItem = { [weak self] in self?.discographyItem($0) }
         made.openSlskd = { [weak self] in self?.openSlskd() }
+        made.selectionChanged = { [weak self] in self?.forgetNotShown() }
         made.autoApproveChanged = { [weak self] on in
             self?.autoApproveChosen(on)
             // The box shows the setting, which a save that failed left as it was.
