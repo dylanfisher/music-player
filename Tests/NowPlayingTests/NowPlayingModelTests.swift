@@ -84,6 +84,17 @@ private func update(
     #expect(model.message == nil)
 }
 
+@MainActor @Test func theLossEndingClearsOnlyWhatTheLossSaid() {
+    let model = NowPlayingModel { row($0) }
+    model.apply(update(.trackFailed(urls[1], entry: 1, PlaybackProblem(NotAudio()))))
+    model.apply(update(.deviceReturned, status: .playing))
+    model.apply(update(.outputChanged, status: .playing))
+    #expect(model.message == "Couldn't play b.flac: not audio")
+    model.apply(update(.deviceLost, status: .paused))
+    model.apply(update(.outputChanged, status: .paused))
+    #expect(model.message == nil)
+}
+
 @MainActor @Test func saysWhatWentWrongUntilPlaybackCarriesOn() {
     let model = NowPlayingModel { row($0) }
     model.apply(update(.deviceLost, status: .paused))

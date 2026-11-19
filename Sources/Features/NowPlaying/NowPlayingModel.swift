@@ -43,12 +43,12 @@ public final class NowPlayingModel {
                 ShownProblem(
                     problem: failure, track: url, entry: entry, trackFormat: format(of: url),
                     headline: "Couldn't play \(url.lastPathComponent): \(failure.message)"))
-        case .deviceLost:
-            show("The output device went away, so playback paused. Plug it back in to resume.")
-        case .deviceReturned:
-            // Playing, it took over what played on System Default (ADR 0211).
-            show(isPlaying ? nil : "The output device is back. Press Play to resume.")
+        case .deviceLost: show(Self.lostMessage)
+        // Playing, it took over what played on System Default (ADR 0211).
+        case .deviceReturned where isPlaying: endLoss()
+        case .deviceReturned: show(Self.returnedMessage)
         case .fellBack: show(fellBackMessage)
+        case .outputChanged: endLoss()
         case .failed(let failure):
             // The output stops on the track it was playing; tracks failing in a row are
             // about the first of them.
@@ -64,6 +64,17 @@ public final class NowPlayingModel {
         }
         guard currentURL != before else { return }
         lookUpTrack()
+    }
+
+    private static let lostMessage =
+        "The output device went away, so playback paused. Plug it back in to resume."
+    private static let returnedMessage = "The output device is back. Press Play to resume."
+
+    /// Clears what the loss of the output said, and nothing else that went wrong.
+    private func endLoss() {
+        let loss = [Self.lostMessage, Self.returnedMessage, fellBackMessage]
+        guard let message, loss.contains(message) else { return }
+        show(nil)
     }
 
     private func show(_ message: String?) {
