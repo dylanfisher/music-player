@@ -177,3 +177,27 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     // The app no longer holds it as the one playing.
     #expect(fallbacks.renderersToClose(nil).map(ObjectIdentifier.init) == [.init(denon)])
 }
+
+@Test func aNewLossAfterTheDeviceOutputDroppedTheFallbackFallsBack() {
+    var fallbacks = OutputFallbacks<Renderer>()
+    // Asked, and dropped by the device output: System Default's device had gone too.
+    _ = fallbacks.lost(
+        named: dac, inUse: "DAC", renderer: nil, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    // Play on the lost DAC loses it again, with another device now the default.
+    let plan = fallbacks.lost(
+        named: dac, inUse: "DAC", renderer: nil, systemDefault: { "Headphones" },
+        profile: { profile($0) })
+    #expect(plan?.profile == profile("Headphones"))
+    let moved = fallbacks.fellBack()
+    #expect(moved == profile("Headphones"))
+    // And one with nothing to fall back to leaves no fallback asked.
+    var stuck = OutputFallbacks<Renderer>()
+    _ = stuck.lost(
+        named: dac, inUse: "DAC", renderer: nil, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    let none = stuck.lost(
+        named: dac, inUse: "DAC", renderer: nil, systemDefault: { "DAC" },
+        profile: { profile($0) })
+    #expect(none == nil && stuck.phase == nil)
+}

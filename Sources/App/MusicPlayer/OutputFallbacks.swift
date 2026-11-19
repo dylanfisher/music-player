@@ -56,16 +56,18 @@ struct OutputFallbacks<Renderer: AnyObject> {
     /// the config names, `named`.
     func inUse(named: OutputChoice) -> OutputChoice { hasMoved ? .systemDefault : named }
 
-    /// Decides the fallback after the output in use went away, or nil to stay lost: during a
-    /// fallback, when the config names System Default, when System Default resolves to the
-    /// device that went (`inUse`, the device output's), or when it can't be resolved.
-    /// `renderer` is the one playing, when one is.
+    /// Decides the fallback after the output in use went away, or nil to stay lost: once
+    /// playback has moved, when the config names System Default, when System Default resolves
+    /// to the device that went (`inUse`, the device output's), or when it can't be resolved.
+    /// `renderer` is the one playing, when one is. A fallback still asked was dropped by the
+    /// device output, as when System Default's device went too, so a new loss decides afresh.
     mutating func lost(
         named: OutputChoice, inUse: String?, renderer: Renderer?,
         systemDefault: () throws -> String, profile: (String) -> DeviceProfile
     ) -> Plan? {
-        guard phase == nil, let uid = Self.target(named, lost: inUse, systemDefault)
-        else { return nil }
+        guard !hasMoved else { return nil }
+        phase = nil
+        guard let uid = Self.target(named, lost: inUse, systemDefault) else { return nil }
         let target = profile(uid)
         guard let renderer else {
             phase = .asked(target)
