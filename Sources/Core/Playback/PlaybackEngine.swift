@@ -24,6 +24,8 @@ public actor PlaybackEngine {
     private var currentFailed = false
     /// Where to pick up after the device was lost, since the output dropped everything.
     private var resumeSeconds: Double?
+    /// The output lost while in use, after `fallBack(to:)`: its return moves playback back to it.
+    private var lostOutput: (any Output)?
     /// Tracks that failed since one last started. Once it reaches `failureLimit`, or the queue's
     /// length, the engine stops instead of trying more.
     private var failuresInARow: [FailedTrack] = []
@@ -86,6 +88,7 @@ public actor PlaybackEngine {
     /// playing or paused as it was, and the old output is stopped. Events from any output but
     /// the current one are ignored, so the old one can stay open to be used again.
     public func use(_ newOutput: any Output) {
+        lostOutput = nil
         guard newOutput !== output else { return }
         let resume = currentItem.map { ($0.position, resumeSeconds ?? position() ?? 0) }
         unload()
@@ -96,6 +99,21 @@ public actor PlaybackEngine {
         guard let (position, seconds) = resume else { return }
         load(position, startSeconds: seconds, playing: state.status == .playing)
     }
+
+    /// Plays through `fallback` after the output in use was lost, paused where the loss left
+    /// it, until Play. The lost output isn't stopped, so it goes on watching for its return (a
+    /// renderer asks whether it answers), and when it reports one, playback moves back to it,
+    /// paused or playing as it is then (ADR 0211). `use(_:)` ends the fallback.
+    public func fallBack(to fallback: any Output) {
+        guard state.device == .lost, fallback !== output else { return }
+        lostOutput = output
+        output = fallback
+        if reading.insert(ObjectIdentifier(fallback)).inserted { Self.read(fallback, into: self) }
+        publish(.fellBack)
+    }
+
+    /// Whether playback is on the output `fallBack(to:)` moved it to.
+    public var isFallenBack: Bool { lostOutput != nil }
 
     /// Every change from now on, starting with the current state.
     public func updates() -> AsyncStream<PlaybackUpdate> {
@@ -567,6 +585,12 @@ public actor PlaybackEngine {
     }
 
     private func handle(_ event: OutputEvent, from id: ObjectIdentifier) {
+        if let lostOutput, id == ObjectIdentifier(lostOutput) {
+            guard case .deviceReturned = event else { return }
+            use(lostOutput)
+            if state.device == .lost { state.device = .returned }
+            return publish(.deviceReturned)
+        }
         guard id == ObjectIdentifier(output) else { return }
         handle(event)
     }
@@ -680,6 +704,7 @@ public actor PlaybackEngine {
             guard state.device == .lost else { return }
             state.device = .returned
             publish(.deviceReturned)
+        case .fellBack: publish(.fellBack)
         case .seekFailed(let id, let seconds):
             guard id == currentItem?.id else { return }
             logger.error("a seek failed; playback stays at \(seconds) s")

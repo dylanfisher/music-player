@@ -45,7 +45,10 @@ public final class NowPlayingModel {
                     headline: "Couldn't play \(url.lastPathComponent): \(failure.message)"))
         case .deviceLost:
             show("The output device went away, so playback paused. Plug it back in to resume.")
-        case .deviceReturned: show("The output device is back. Press Play to resume.")
+        case .deviceReturned:
+            // Playing, it took over what played on System Default (ADR 0211).
+            show(isPlaying ? nil : "The output device is back. Press Play to resume.")
+        case .fellBack: show(fellBackMessage)
         case .failed(let failure):
             // The output stops on the track it was playing; tracks failing in a row are
             // about the first of them.

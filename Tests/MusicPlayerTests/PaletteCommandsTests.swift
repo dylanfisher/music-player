@@ -61,6 +61,18 @@ import Testing
     #expect(items.map { OutputChoice(text: $0.key) } == options.map(\.choice))
 }
 
+@Test func duringAFallbackSystemDefaultIsInUseAndTheChosenDeviceStaysListed() {
+    let options = outputOptions(
+        devices: [FoundOutput(id: "Speakers", name: "Speakers")], renderers: [],
+        current: .device(uid: "DAC"))
+    let items = outputItems(options, current: .systemDefault)
+    #expect(
+        items.map(\.title) == [
+            "Output: System Default", "Output: Speakers", "Output: DAC (not connected)",
+        ])
+    #expect(items.map(\.detail) == ["In use", "Output", "Output"])
+}
+
 @MainActor @Test func goToItemsListingIsKeptUntilTheLibraryChanges() async throws {
     var builds = 0
     let listing = LibraryListing<Int> {

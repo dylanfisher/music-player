@@ -18,6 +18,9 @@ public enum OutputEvent: Sendable {
     case deviceLost(OutputItem.ID?, positionSeconds: Double)
     /// The lost device is connected again.
     case deviceReturned
+    /// After a loss, the output moved to another device the user didn't choose, with nothing
+    /// loaded, and it goes back to the lost one when that returns (ADR 0211).
+    case fellBack
     /// The device failed, so the output stopped after putting back what it could.
     case failed(OutputItem.ID?, any Error)
     /// A seek didn't happen; playback is still `positionSeconds` into the item.

@@ -92,7 +92,7 @@ enum DoPRefusal: Sendable {
 ///
 /// `use(_:)` moves playback to another device mid-track. When the device in use goes away and
 /// another is chosen, the first is watched, and output goes back to it once it returns, unless
-/// the other one is playing (ADR 0037).
+/// the other one is playing (ADR 0037); after `fallBack(to:)`, even then (ADR 0211).
 ///
 /// Unchecked Sendable: `condition` guards what callers share with the control thread, and the
 /// rest belongs to the one control thread, which `step()` runs (`DeviceOutput+Control.swift`).
@@ -124,6 +124,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private var provider: any PCMDeviceProvider { choice.provider }
     /// The device that went away while in use before another was chosen, to go back to.
     private var returnTo: DeviceChoice?
+    /// Whether output left `returnTo` by `fallBack(to:)`, so it goes back even while playing.
+    private var fellBack = false
     /// Set when the device list changed or playback stopped, so the pass ends by checking whether
     /// to go back to `returnTo`.
     var returnDue = false
@@ -252,6 +254,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// Plays on `choice` from now on: the track playing carries on there from where it is. For the
     /// device in use, it only applies the new settings.
     public func use(_ choice: DeviceChoice) { post(.use(choice)) }
+    /// `use(_:)` for a device the user didn't choose, after the one in use went away: output goes
+    /// back to the lost device when it returns, whatever plays here (ADR 0211).
+    public func fallBack(to choice: DeviceChoice) { post(.fallBack(choice)) }
     public func position() -> OutputPosition? {
         condition.withLock {
             guard var position = published else { return nil }
@@ -278,6 +283,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         case devicesChanged
         case deviceState(DeviceState, from: ObjectIdentifier)
         case use(DeviceChoice)
+        case fallBack(DeviceChoice)
         case close(DispatchSemaphore)
     }
 
@@ -338,6 +344,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             if case .connected(let signal) = state { knownFormats = signal.formats }
             signalDirty = true
         case .use(let choice): use(choice, remembering: true)
+        // Dropped once the device is back, as by a plug-in before the app asked.
+        case .fallBack(let choice) where deviceMissing:
+            use(choice, remembering: true, falling: true)
+        case .fallBack: break
         case .close(let done):
             unload()
             closeDevice()
@@ -1036,20 +1046,23 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// Goes back to the device that went away, now that it's here, unless this output is playing
     /// on the one chosen since.
     func checkReturn() {
-        guard let returnTo, returnTo.provider.isConnected(), !(playing && !segments.isEmpty)
+        guard let returnTo, returnTo.provider.isConnected(),
+            fellBack || !(playing && !segments.isEmpty)
         else { return }
+        let wasFallback = fellBack
         let uid = returnTo.provider.deviceUID
         logger.notice(
             "\(returnTo.provider.deviceName, privacy: .public) is back, so output returns to it")
         returnTo.provider.deviceReturned()
         use(returnTo, remembering: false)
+        if wasFallback { emit(.deviceReturned) }
         returnContinuation.yield(uid)
     }
 
     /// Moves to `next`'s device and settings, reloading the track playing at the same place and
     /// handing it the same next track. `remembering` sets the device in use as the one to return
-    /// to when it has gone away and the user chose another.
-    private func use(_ next: DeviceChoice, remembering: Bool) {
+    /// to when it has gone away and the user chose another; `falling`, when the app chose it.
+    private func use(_ next: DeviceChoice, remembering: Bool, falling: Bool = false) {
         let previous = choice
         let previousReturn = returnTo
         let wasMissing = deviceMissing
@@ -1066,6 +1079,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         } else if remembering, wasMissing, uid != previous.provider.deviceUID {
             returnTo = previous
         }
+        fellBack = falling && returnTo != nil
         choice = next
         // Watching again reports each device's state now, which a device watched only for its
         // return had its reports dropped.
@@ -1087,7 +1101,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         signalDirty = true
         deviceMissing = false
         failedResume = nil
-        if wasMissing, next.provider.isConnected() { emit(.deviceReturned) }
+        if wasMissing, next.provider.isConnected() { emit(falling ? .fellBack : .deviceReturned) }
         guard let resume else { return }
         loadTrack(
             resume.item, startSeconds: resume.seconds, playing: wasPlaying, announcing: false)

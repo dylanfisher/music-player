@@ -52,6 +52,9 @@ extension AppDelegate {
                     switch update.event {
                     case .trackStarted, .paused, .stopped, .seeked, .finished:
                         self?.resumeSaver?.changed()
+                    case .deviceLost: self?.fallBack()
+                    case .fellBack: self?.fellBack()
+                    case .deviceReturned: self?.fallbackReturned()
                     default: break
                     }
                 }

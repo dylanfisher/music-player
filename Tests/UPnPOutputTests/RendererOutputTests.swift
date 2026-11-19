@@ -120,7 +120,7 @@ private final class EventLog: @unchecked Sendable {
             case .seekFailed(let id, let seconds): events.append("seekFailed \(id) at \(seconds)")
             case .transportChanged(let id, let playing):
                 events.append("\(playing ? "playing" : "paused") \(id)")
-            case .formatChanged, .underrun: events.append("\(event)")
+            case .formatChanged, .underrun, .fellBack: events.append("\(event)")
             }
         }
     }
@@ -1164,6 +1164,63 @@ private final class ShiftedClock: @unchecked Sendable {
     #expect(
         reason?.hasPrefix("Denon AVR-X1800H doesn't take AIFF (PCM) files") == true,
         "\(String(describing: reason))")
+}
+
+/// An output that plays nothing and keeps what it's asked to load, for the engine to fall back
+/// to.
+private final class SpareOutput: Output, @unchecked Sendable {
+    let events: AsyncStream<OutputEvent>
+    private let lock = NSLock()
+    private var loaded: [Double] = []
+
+    init() { (events, _) = AsyncStream.makeStream(of: OutputEvent.self) }
+
+    var loads: [Double] { lock.withLock { loaded } }
+    var hasVolume: Bool { false }
+    func load(_ item: OutputItem, startSeconds: Double, playing: Bool) {
+        lock.withLock { loaded.append(startSeconds) }
+    }
+    func setNext(_ item: OutputItem?) {}
+    func play() {}
+    func pause() {}
+    func stop() {}
+    func seek(toSeconds seconds: Double) {}
+    func setVolume(_ gain: Double) {}
+    func position() -> OutputPosition? { nil }
+    func close() {}
+}
+
+@Test func aLostRendererTheEngineFellBackFromGetsPlaybackBackWhenItAnswers() async throws {
+    let fake = try await FakeRenderer.denon()
+    // The engine reads the events itself, so no log shares them.
+    let output = try RendererOutput(
+        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
+        timeoutSeconds: 0.3, sleepAssertions: FakeSleepAssertions().calls)
+    defer { output.close() }
+    let engine = PlaybackEngine(output: output)
+    let updates = await engine.updates()
+    await engine.setQueue([audio["flac"]!])
+    await engine.play()
+    var events: [PlaybackEvent] = []
+    for await update in updates {
+        guard let event = update.event else { continue }
+        events.append(event)
+        switch event {
+        case .trackStarted: fake.stall("GetTransportInfo")
+        case .deviceLost:
+            await engine.fallBack(to: SpareOutput())
+            fake.answersAgain()
+        default: break
+        }
+        if event == .deviceReturned { break }
+    }
+    #expect(events.suffix(3) == [.deviceLost, .fellBack, .deviceReturned])
+    #expect(await engine.state.status == .paused)
+    // Back on the renderer, which is handed the track again, paused where it was lost.
+    await eventually("the track handed over again") {
+        fake.actions.filter { $0 == "SetAVTransportURI" }.count == 2
+    }
+    #expect(!fake.actions.suffix(3).contains("Play"))
 }
 
 /// The head and body `GET path` gets from the server at `port`.

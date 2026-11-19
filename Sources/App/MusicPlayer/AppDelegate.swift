@@ -164,6 +164,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var foundDevices: [FoundOutput] = []
     var foundRenderers: [FoundOutput] = []
     var outputSearch: Task<Void, Never>?
+    /// What playback fell back to System Default from, while it does (ADR 0211).
+    var outputFallback: OutputFallback?
     var deviceListWatch: DeviceListWatch?
     var outputMenu: OutputMenu?
     var playlistMenus: [PlaylistMenu] = []

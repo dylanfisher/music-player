@@ -15,7 +15,7 @@ extension AppDelegate {
         let outputMenu = OutputMenu()
         outputMenu.options = { [weak self] in
             guard let self else { return ([], .systemDefault) }
-            return (outputOptionsNow(), currentOutput)
+            return (outputOptionsNow(), outputInUse)
         }
         outputMenu.choose = { [weak self] in self?.chooseOutput($0) }
         outputMenu.opened = { [weak self] in self?.searchOutputs() }
@@ -43,6 +43,15 @@ extension AppDelegate {
         guard let settings else { return .systemDefault }
         return OutputChoice(
             deviceUID: settings[\.outputDeviceUID], renderer: settings[\.outputRenderer])
+    }
+
+    /// The output playing: System Default during a fallback, while the config names the output
+    /// that went away (ADR 0211).
+    var outputInUse: OutputChoice {
+        switch outputFallback {
+        case .device, .renderer: .systemDefault
+        case .asked, nil: currentOutput
+        }
     }
 
     func outputOptionsNow() -> [OutputOption] {
@@ -112,7 +121,7 @@ extension AppDelegate {
     private static let deviceReads = DispatchQueue(
         label: "\(bundleIdentifier).device-list", qos: .userInitiated)
 
-    private func outputsChanged() {
+    func outputsChanged() {
         outputMenu?.refresh()
         if let dispatcher { settingsWindow?.reload(bindings: dispatcher.bindings) }
     }

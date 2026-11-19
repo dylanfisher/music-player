@@ -105,6 +105,12 @@ public let emptyStar = "☆"
 /// What a field, or Get Info's stars, shows when the selected tracks differ in it.
 public let mixedPlaceholder = "Mixed"
 
+/// Now Playing's line once playback has moved, paused, to System Default because the output it
+/// played on went away (ADR 0211).
+public let fellBackMessage =
+    "The output went away, so playback paused and moved to System Default. Press Play to play"
+    + " there; it moves back once the output returns."
+
 /// `text` as one line for a terminal. A file name or a tag can hold control characters, which
 /// would move the cursor, retitle the window or write the clipboard, or a line break, which
 /// would print a line that looks like the app's own; each prints as `\u{1B}`, `\u{A}` and so on.

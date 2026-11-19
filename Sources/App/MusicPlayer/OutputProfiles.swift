@@ -15,6 +15,11 @@ extension AppDelegate {
         guard let settings, let output, !showingInUse else { return }
         do {
             let profile = try outputProfile(settings, switched: switched)
+            // While System Default plays in its place, the config shows the chosen device's
+            // settings, so an edit is that device's (ADR 0211).
+            if outputFallback != nil, !switched, profile.uid != outputUID {
+                return try save(profile)
+            }
             if let inUse = inUseProfile, inUse.uid == profile.uid, inUse.hogMode == profile.hogMode,
                 inUse.digitalVolume == profile.digitalVolume
             {
@@ -39,7 +44,10 @@ extension AppDelegate {
         } catch {
             logger.error("couldn't save \(uid)'s profile: \(error)")
         }
+        // A device fallen back from is back; a renderer's fallback ends when the engine says.
+        if outputFallback?.renderer == nil { outputFallback = nil }
         showInUse(profile, settings)
+        outputsChanged()
     }
 
     var inUseProfile: DeviceProfile? {
@@ -95,9 +103,7 @@ extension AppDelegate {
     /// Makes `profile` the one in use, and the config's output settings show it, so the menus
     /// and the settings window read what the device plays with.
     func showInUse(_ profile: DeviceProfile, _ settings: ConfigStore<AppSettings>) {
-        outputUID = profile.uid
-        digitalVolume = profile.digitalVolume
-        volumeDecibels = profile.volumeDecibels
+        setInUse(profile)
         showingInUse = true
         defer { showingInUse = false }
         do {
@@ -118,6 +124,13 @@ extension AppDelegate {
         } catch {
             logger.error("couldn't show \(profile.uid)'s settings in the config: \(error)")
         }
+    }
+
+    /// Makes `profile` the one the volume changes, without writing the config.
+    func setInUse(_ profile: DeviceProfile) {
+        outputUID = profile.uid
+        digitalVolume = profile.digitalVolume
+        volumeDecibels = profile.volumeDecibels
     }
 
     /// Records the rates and formats the device in the path reported, when they changed.

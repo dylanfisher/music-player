@@ -1197,6 +1197,119 @@ private func eventually(_ what: String, _ check: @escaping @Sendable () async ->
     #expect(await engine.state.status == .playing)
 }
 
+/// Playing on `renderer`, which is lost 42 s into the first track, and the engine fallen back
+/// to `device`.
+private func fallenBack(_ renderer: FakeOutput, to device: FakeOutput) async -> PlaybackEngine {
+    let engine = await playing(urls, renderer)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.deviceLost(1, positionSeconds: 42))
+    _ = renderer.takeCalls()
+    await engine.fallBack(to: device)
+    return engine
+}
+
+@Test func aLostOutputFallsBackPausedAndPlaysThereOnlyOnPlay() async {
+    let renderer = FakeOutput()
+    let device = FakeOutput()
+    let engine = PlaybackEngine(output: renderer)
+    let updates = await Updates(engine)
+    await engine.setQueue(urls)
+    await engine.play()
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.deviceLost(1, positionSeconds: 42))
+    _ = renderer.takeCalls()
+    await engine.fallBack(to: device)
+    // The lost output isn't stopped, so it goes on watching for its return.
+    #expect(renderer.takeCalls() == [])
+    #expect(device.takeCalls() == [])
+    #expect(await engine.state.status == .paused)
+    #expect(await engine.state.device == .lost)
+    #expect(await engine.position() == 42)
+    #expect(await eventually { updates.events.last == .fellBack })
+
+    await engine.play()
+    #expect(
+        device.takeCalls() == [
+            .load(3, urls[0], startSeconds: 42, playing: true), .setNext(4, urls[1]),
+        ])
+    #expect(renderer.takeCalls() == [])
+}
+
+@Test func theLostOutputsReturnMovesPlaybackBackStillPaused() async {
+    let renderer = FakeOutput()
+    let device = FakeOutput()
+    let engine = await fallenBack(renderer, to: device)
+    let updates = await Updates(engine)
+    // The lost output's other events don't count.
+    renderer.emit.yield(.failed(nil, Broken()))
+    renderer.emit.yield(.deviceReturned)
+    await eventually("playback back on the renderer") { await engine.state.device == .returned }
+    #expect(updates.events == [.deviceReturned])
+    #expect(device.takeCalls() == [.stop])
+    #expect(
+        renderer.takeCalls() == [
+            .load(3, urls[0], startSeconds: 42, playing: false), .setNext(4, urls[1]),
+        ])
+    #expect(await engine.state.status == .paused)
+    await engine.play()
+    #expect(renderer.takeCalls() == [.play])
+}
+
+@Test func theLostOutputsReturnTakesOverWhatPlaysOnTheFallback() async {
+    let renderer = FakeOutput()
+    let device = FakeOutput()
+    let engine = await fallenBack(renderer, to: device)
+    await engine.play()
+    await engine.handle(.trackStarted(3, info))
+    device.setPosition(OutputPosition(item: 3, seconds: 50))
+    _ = device.takeCalls()
+    let updates = await Updates(engine)
+    renderer.emit.yield(.deviceReturned)
+    #expect(await eventually { updates.events == [.deviceReturned] })
+    #expect(device.takeCalls() == [.stop])
+    #expect(
+        renderer.takeCalls() == [
+            .load(5, urls[0], startSeconds: 50, playing: true), .setNext(6, urls[1]),
+        ])
+    #expect(await engine.state.status == .playing)
+    #expect(await engine.state.device == .connected)
+}
+
+@Test func choosingAnotherOutputEndsTheFallback() async {
+    let renderer = FakeOutput()
+    let device = FakeOutput()
+    let engine = await fallenBack(renderer, to: device)
+    await engine.use(device)
+    renderer.emit.yield(.deviceReturned)
+    // Long enough for the return to have been handled.
+    try? await Task.sleep(nanoseconds: 100_000_000)
+    #expect(renderer.takeCalls() == [])
+    #expect(await engine.state.device == .lost)
+}
+
+@Test func onlyALostOutputFallsBack() async {
+    let renderer = FakeOutput()
+    let device = FakeOutput()
+    let engine = await playing(urls, renderer)
+    await engine.handle(.trackStarted(1, info))
+    _ = renderer.takeCalls()
+    await engine.fallBack(to: device)
+    await engine.pause()
+    #expect(renderer.takeCalls() == [.pause])
+    #expect(device.takeCalls() == [])
+}
+
+@Test func anOutputThatFellBackOnItsOwnIsPublished() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.deviceLost(1, positionSeconds: 42))
+    let seen = await published(engine) { await engine.handle(.fellBack) }
+    #expect(seen.map(\.event) == [.fellBack])
+    #expect(seen.map(\.state.device) == [.lost])
+    #expect(seen.map(\.state.status) == [.paused])
+}
+
 @Test func aFailedSeekIsCorrectedToWherePlaybackIs() async {
     let output = FakeOutput()
     let engine = await playing(urls, output)

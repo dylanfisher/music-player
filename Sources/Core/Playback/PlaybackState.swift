@@ -8,7 +8,8 @@ public struct PlaybackState: Sendable, Equatable {
 
     public enum Device: Sendable, Equatable {
         case connected
-        /// Unplugged or gone. Playback paused instead of moving to another device.
+        /// Unplugged or gone. Playback paused, and stays paused if it moved to System Default
+        /// (ADR 0211).
         case lost
         /// Back after being lost, so playback can resume where it paused.
         case returned
@@ -60,6 +61,9 @@ public enum PlaybackEvent: Sendable, Equatable {
     case underrun(frames: Int)
     case deviceLost
     case deviceReturned
+    /// Playback moved, paused, to System Default after the output it played on was lost, and
+    /// moves back once that returns (ADR 0211).
+    case fellBack
     /// The output stopped because of an error.
     case failed(PlaybackProblem)
     /// The queue played to its end.

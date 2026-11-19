@@ -220,8 +220,11 @@ extension AppDelegate {
             applyRemoteSetting()
         }
         let output = [schema.outputDeviceUID.key, schema.hogMode.key, schema.digitalVolume.key]
-        if !keys.isDisjoint(with: output) {
-            outputSettingsChanged(switched: keys.contains(schema.outputDeviceUID.key))
+        // A change of output ends a fallback, and output goes where the settings say (ADR 0211).
+        let choice = [schema.outputDeviceUID.key, schema.outputRenderer.key]
+        let ending = !keys.isDisjoint(with: choice) && endFallback()
+        if ending || !keys.isDisjoint(with: output) {
+            outputSettingsChanged(switched: ending || keys.contains(schema.outputDeviceUID.key))
         }
         if keys.contains(schema.outputRenderer.key) { applyRendererSetting() }
         if keys.contains(schema.playedPercent.key) {

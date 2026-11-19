@@ -44,7 +44,10 @@ extension AppDelegate {
         rendererOutput = output
         rendererPathUpdates?.cancel()
         rendererPathUpdates = Task { [weak self] in
-            for await path in output.signalPaths { self?.signalPath?.show(path) }
+            for await path in output.signalPaths {
+                // During a fallback, the device's path shows (ADR 0211).
+                if self?.rendererOutput === output { self?.signalPath?.show(path) }
+            }
         }
         logger.notice("playing to \(output.renderer.name) at \(output.renderer.address)")
         receiverFollowsOutput()

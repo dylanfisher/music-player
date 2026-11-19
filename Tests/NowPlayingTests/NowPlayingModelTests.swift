@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import DisplayText
 @testable import Library
 @testable import NowPlaying
 @testable import Playback
@@ -67,6 +68,20 @@ private func update(
     #expect(model.title == "b")
     #expect(model.subtitle == "")
     #expect(model.formatLine == "")
+}
+
+@MainActor @Test func saysPlaybackFellBackToSystemDefaultAndCameBack() {
+    let model = NowPlayingModel { row($0) }
+    model.apply(update(.deviceLost, status: .paused))
+    model.apply(update(.fellBack, status: .paused))
+    #expect(model.message == fellBackMessage)
+    #expect(model.message?.contains("Press Play to play there") == true)
+    model.apply(update(.deviceReturned, status: .paused))
+    #expect(model.message == "The output device is back. Press Play to resume.")
+    // Back while System Default played, it plays on; there's nothing to press.
+    model.apply(update(.fellBack, status: .paused))
+    model.apply(update(.deviceReturned, status: .playing))
+    #expect(model.message == nil)
 }
 
 @MainActor @Test func saysWhatWentWrongUntilPlaybackCarriesOn() {

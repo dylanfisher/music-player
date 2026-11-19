@@ -56,7 +56,7 @@ extension AppDelegate {
         let session = palette.show(
             mode,
             items: paletteCommands(commandItems(), showsAllMusic: browser.showsAllMusic)
-                + outputItems(outputOptionsNow(), current: currentOutput)
+                + outputItems(outputOptionsNow(), current: outputInUse)
                 + playlistItems(browser.playlists),
             over: window, place: state[\.palettePlace])
         let panes = listedPanes(.commands)

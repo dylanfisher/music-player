@@ -231,6 +231,106 @@ private func dacBackWhileSpeakersPlay() async throws -> TwoDevices {
     #expect(try await rig.returns.next() == "DAC")
 }
 
+/// The DAC lost, playing or paused, and output fallen back to the speakers.
+private func fellBackFromTheDAC(playing: Bool) async throws -> (TwoDevices, resumeAt: Double) {
+    let album = try album(44_100, 16)
+    let rig = try await TwoDevices()
+    await rig.engine.setQueue(album.tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    try await Task.sleep(nanoseconds: 200_000_000)
+    if !playing { await rig.engine.pause() }
+    rig.dac.unplug()
+    try await rig.wait(for: .deviceLost)
+    let resumeAt = try #require(await rig.engine.position())
+    rig.output.fallBack(to: rig.speakersChoice)
+    try await rig.wait(for: .fellBack)
+    try await rig.waitForSink("Speakers")
+    return (rig, resumeAt)
+}
+
+@Test func aDeviceLostWhilePlayingFallsBackPausedAndPlaysThereOnlyOnPlay() async throws {
+    let (rig, resumeAt) = try await fellBackFromTheDAC(playing: true)
+    #expect(await rig.engine.state.status == .paused)
+    #expect(await rig.engine.state.device == .lost)
+    // Long enough for anything loaded to have played.
+    try await Task.sleep(nanoseconds: 300_000_000)
+    #expect(rig.speakers.openedSessionCount == 0)
+    #expect(!rig.events.contains(.deviceReturned))
+
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    let first = try #require(rig.speakers.captured.first)
+    #expect(first.sampleRateHz == 44_100)
+    #expect(await rig.engine.position().map { $0 >= resumeAt } == true)
+}
+
+@Test func aDeviceLostWhilePausedFallsBackPaused() async throws {
+    let (rig, _) = try await fellBackFromTheDAC(playing: false)
+    try await Task.sleep(nanoseconds: 300_000_000)
+    #expect(await rig.engine.state.status == .paused)
+    #expect(rig.speakers.openedSessionCount == 0)
+}
+
+@Test func theDeviceFallenBackFromGetsOutputBackStillPaused() async throws {
+    let (rig, _) = try await fellBackFromTheDAC(playing: true)
+    rig.dac.plugIn()
+    #expect(try await rig.returns.next() == "DAC")
+    try await rig.wait(for: .deviceReturned)
+    try await rig.waitForSink("DAC")
+    #expect(await rig.engine.state.status == .paused)
+    #expect(await rig.engine.state.device == .returned)
+
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    #expect(rig.speakers.captured.isEmpty)
+    #expect(rig.dac.captured.count == 2)
+}
+
+@Test func theDeviceFallenBackFromTakesBackWhatPlaysThere() async throws {
+    let (rig, _) = try await fellBackFromTheDAC(playing: true)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    rig.dac.plugIn()
+    // Unlike a device the user chose since (ADR 0037), the fallback gives way while it plays.
+    #expect(try await rig.returns.next() == "DAC")
+    try await rig.waitForSink("DAC")
+    #expect(await rig.engine.state.status == .playing)
+    try await rig.wait(for: .finished)
+    #expect(rig.dac.captured.count == 2)
+    #expect(rig.speakers.openSessionCount == 0)
+}
+
+@Test func theFallbackLostTooWaitsForTheDeviceFallenBackFrom() async throws {
+    let (rig, _) = try await fellBackFromTheDAC(playing: false)
+    // Nothing is open on the speakers, so their loss is found at the next open, or not at all.
+    rig.speakers.unplug()
+    rig.dac.plugIn()
+    #expect(try await rig.returns.next() == "DAC")
+    try await rig.wait(for: .deviceReturned)
+    try await rig.waitForSink("DAC")
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    #expect(rig.dac.captured.count == 2)
+}
+
+@Test func aFallbackAfterTheDeviceCameBackIsDropped() async throws {
+    let album = try album(44_100, 16)
+    let rig = try await TwoDevices()
+    await rig.engine.setQueue(album.tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    rig.dac.unplug()
+    try await rig.wait(for: .deviceLost)
+    rig.dac.plugIn()
+    try await rig.wait(for: .deviceReturned)
+    rig.output.fallBack(to: rig.speakersChoice)
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    #expect(rig.speakers.captured.isEmpty)
+    #expect(!rig.events.contains(.fellBack))
+}
+
 /// A provider whose state reports outlive `stopWatching`, as one queued by the HAL just before it
 /// would.
 private final class LingeringProvider: PCMDeviceProvider, @unchecked Sendable {
