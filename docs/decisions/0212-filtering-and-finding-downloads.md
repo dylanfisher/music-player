@@ -50,3 +50,5 @@ pass with nothing read yet, after a launch with the slots full, reads them.
 - While the slots are full, the count can lag the library: an album just upgraded is counted
   until a slot frees and the pass reads the candidates again.
 - An imported album retagged since as another release isn't found, and the window says so.
+- In Recommendations, Show in All Music knows only the imports Downloads still lists, for 30
+  days after each import; an album imported before that, or added by hand, isn't offered.
