@@ -71,5 +71,10 @@ private func type(_ text: String, in window: RecommendationsWindow) {
     type("", in: window)
     #expect(window.rows.count == 4)
     #expect(window.messageLabel.isHidden)
+    type("zzz", in: window)
+    // The cancel button: the field emptied and its action sent, with no text change.
+    window.search.stringValue = ""
+    window.search.sendAction(window.search.action, to: window.search.target)
+    #expect(window.rows.count == 4, "cleared by the cancel button")
     window.window?.close()
 }

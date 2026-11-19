@@ -339,6 +339,11 @@ private func type(_ text: String, in window: DownloadsWindow) {
     #expect(window.empty.stringValue == DownloadsWindow.noneMatch)
     type("", in: window)
     #expect(window.rows.map(\.id) == [1, 2, 3])
+    type("move", in: window)
+    // The cancel button: the field emptied and its action sent, with no text change.
+    window.search.stringValue = ""
+    window.search.sendAction(window.search.action, to: window.search.target)
+    #expect(window.rows.map(\.id) == [1, 2, 3], "cleared by the cancel button")
     window.show([], status: "", canAdd: true)
     #expect(window.empty.stringValue == DownloadsWindow.noDownloads)
     window.window?.close()

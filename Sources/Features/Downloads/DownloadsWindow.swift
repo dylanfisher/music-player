@@ -166,6 +166,9 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         search.placeholderString = ListFilter.placeholder
         search.toolTip = ListFilter.help
         search.delegate = self
+        // The cancel button clears the field with its action alone, no text change.
+        search.target = self
+        search.action = #selector(searchChanged)
         search.widthAnchor.constraint(equalToConstant: 220).isActive = true
         upgradesLeft.textColor = .secondaryLabelColor
         upgradesLeft.toolTip = Self.upgradesLeftHelp
@@ -235,6 +238,8 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     }
 
     func controlTextDidChange(_ notification: Notification) { showRows() }
+
+    @objc private func searchChanged() { showRows() }
 
     /// Enables Open slskd for `page`, slskd's web page, or says why it's off.
     func showSlskd(_ page: URL?) {

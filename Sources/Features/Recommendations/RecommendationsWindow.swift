@@ -178,6 +178,9 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         search.placeholderString = ListFilter.placeholder
         search.toolTip = ListFilter.help
         search.delegate = self
+        // The cancel button clears the field with its action alone, no text change.
+        search.target = self
+        search.action = #selector(searchChanged)
         search.widthAnchor.constraint(equalToConstant: 160).isActive = true
         let actions = NSStackView(views: [
             notInterestedButton, alreadyHaveButton, downloadButton, discogsButton,
@@ -341,6 +344,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         messageLabel.isHidden = said == nil
         showDetail()
     }
+
+    @objc private func searchChanged() { showRows() }
 
     func controlTextDidChange(_ notification: Notification) {
         // The token fields' typing comes here too; they apply at Return, through `filterEdited`.
