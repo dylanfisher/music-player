@@ -54,6 +54,11 @@ import Testing
     #expect(shown == [70])
     #expect(recommendations.model.notice == LibraryIndex.releaseNotInLibrary(1008))
     #expect(asked.releases == [2007, 1008])
+    await recommendations.showInLibrary(RecommendationRow(album: album(7)))?.value
+    #expect(recommendations.model.notice == nil, "its own notice taken back")
+    recommendations.model.show(notice: "Couldn't mark the album: refused")
+    await recommendations.showInLibrary(RecommendationRow(album: album(7)))?.value
+    #expect(recommendations.model.notice == "Couldn't mark the album: refused", "another's kept")
 }
 
 /// The releases a stand-in lookup was asked for.

@@ -47,6 +47,8 @@ public final class Recommendations {
     private var downloads: [Int: String] = [:]
     /// The release each imported job's files carry, by the release it was queued for.
     private var imported: [Int: Int] = [:]
+    /// What the last Show in All Music said it didn't find, which the next takes back.
+    private var notShown: String?
     private var sendingProfile = false
     /// Every send of the profile, asked or not, one at a time.
     private(set) lazy var profileSender = makeProfileSender()
@@ -348,8 +350,14 @@ public final class Recommendations {
             } catch {
                 return report(terminalSafe("\(AppCommands.title(of: .showInAllMusic)): \(error)"))
             }
-            model.show(notice: album == nil ? LibraryIndex.releaseNotInLibrary(release) : nil)
-            if let album { showInAllMusic(album) }
+            // Only its own notice: a mark's failure said meanwhile stays.
+            if let said = notShown, model.notice == said { model.show(notice: nil) }
+            notShown = nil
+            guard let album else {
+                notShown = LibraryIndex.releaseNotInLibrary(release)
+                return model.show(notice: notShown)
+            }
+            showInAllMusic(album)
         }
     }
 
