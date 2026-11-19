@@ -15,9 +15,10 @@ eligible for Upgrade to FLAC Automatically while it's on.
 ## Decision
 
 **The filter is local.** Each window has a search field that keeps the rows it was given whose
-visible text holds every typed word, ignoring case and accents. Downloads matches the album
-(artist, title, year), format, user and state; Recommendations the artists, title, year, label
-and styles. The rule is `ListFilter`, in DisplayText, which the Shortcuts pane and Other
+visible text holds every typed word, ignoring case and accents. Each matches the text of the
+columns shown, from the function that fills their cells, the Download column's states
+included, except Downloads' Added, whose date and time hold a "1" or "pm" in nearly every
+row. The rule is `ListFilter`, in DisplayText, which the Shortcuts pane and Other
 Releases… now share. Neither the service's query nor a stored setting changes, and the field's
 text isn't kept. In Recommendations, the last row coming into view doesn't read the next page
 while the field has words: with few rows kept, it would read the whole list a page at a time.
