@@ -743,6 +743,7 @@ private func filterable() -> [DownloadRow] {
     #expect(ids("move") == [3], "the state")
     #expect(ids("pending") == [1], "the tagging")
     #expect(ids("by hand") == [1, 2, 3], "the source")
+    #expect(ids(DownloadColumn.added.text(rows[0])).isEmpty, "not the date added")
     #expect(ids("bjork flac") == [1], "two words in two columns, without the accent")
     #expect(ids("bjork other-peer").isEmpty, "every word, in one row")
     #expect(ids(" ") == [1, 2, 3])

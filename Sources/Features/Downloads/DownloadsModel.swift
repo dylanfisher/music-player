@@ -248,10 +248,11 @@ final class DownloadsModel {
     func job(_ id: Int) -> DownloadJob? { jobs.rows[id] }
 
     /// The rows of `rows` that `filter`, the window's search field, keeps, matched on the text
-    /// each column shows.
+    /// each column shows but Added, whose date and time hold a "1" or "pm" in nearly every row.
     static func filtered(_ rows: [DownloadRow], by filter: ListFilter) -> [DownloadRow] {
         guard !filter.isEmpty else { return rows }
-        return rows.filter { row in filter.matches(DownloadColumn.allCases.map { $0.text(row) }) }
+        let columns = DownloadColumn.allCases.filter { $0 != .added }
+        return rows.filter { row in filter.matches(columns.map { $0.text(row) }) }
     }
 
     /// Each release's newest job's state in words, by release id, for the Recommendations
