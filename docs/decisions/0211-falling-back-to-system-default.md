@@ -54,9 +54,10 @@ On the return, Now Playing says the device is back, as now, unless something pla
 
 **When there's nothing to fall back to, it stays lost, as before:** `output.deviceUID` is null
 and no renderer is set (System Default is the device that went), System Default resolves to the
-device that went, or macOS has no default output. A System Default device that goes before
-the device output moves to it leaves the fallback undone, on the device that went. A System
-Default device lost during a fallback is lost the same way, and the chosen output still gets playback back when it returns.
+device that went, or macOS has no default output. If System Default's device goes before the
+device output moves to it, the fallback is dropped and playback stays lost on the device that
+went; the next loss decides again. If it goes during a fallback, playback is lost there too,
+and the chosen output still takes playback back when it returns.
 
 **Ending a fallback.** A pick, or an edit of `output.deviceUID` or `output.renderer`, ends it:
 output moves as for any change, and a pick of the chosen output, which changes no setting,
