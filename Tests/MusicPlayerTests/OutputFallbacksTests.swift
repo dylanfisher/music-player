@@ -278,3 +278,22 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
         profile: { profile($0) })
     #expect(later?.leavesRenderer == true)
 }
+
+@Test func aRendererTakingOverEndsTheFallback() {
+    let denon = Renderer()
+    let named = OutputChoice.renderer(udn: "uuid:denon")
+    // The DAC went while the search for the Denon ran, and playback fell back.
+    var fallbacks = fellBackFromTheDAC()
+    let leftBehind = fallbacks.rendererTookOver()
+    #expect(leftBehind == nil)
+    #expect(!fallbacks.hasMoved)
+    #expect(fallbacks.inUse(named: named) == named)
+    // So the Denon's own loss falls back.
+    let plan = fallbacks.lost(
+        named: named, inUse: "Speakers", renderer: denon, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    #expect(plan?.leavesRenderer == true)
+    // A renderer's fallback hands back the renderer it left, for the app to close.
+    let handedBack = fallbacks.rendererTookOver()
+    #expect(handedBack === denon)
+}

@@ -40,7 +40,9 @@ extension AppDelegate {
             browser?.report("Couldn't play to the network renderer: \(error)")
             return
         }
-        let replaced = rendererOutput
+        // A fallback made during the search ends: the renderer plays in its place.
+        let fallenBackFrom = outputFallback.rendererTookOver()
+        let replaced = rendererOutput ?? fallenBackFrom
         rendererOutput = output
         rendererPathUpdates?.cancel()
         rendererPathUpdates = Task { [weak self] in
@@ -51,6 +53,7 @@ extension AppDelegate {
         }
         logger.notice("playing to \(output.renderer.name) at \(output.renderer.address)")
         receiverFollowsOutput()
+        outputsChanged()
         Task {
             await engine.use(output)
             replaced?.close()

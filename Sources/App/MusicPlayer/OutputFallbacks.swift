@@ -153,6 +153,15 @@ struct OutputFallbacks<Renderer: AnyObject> {
     /// lost, and its losses fall back to nothing until it returns.
     mutating func pickedAgain(_ renderer: Renderer) { repicked = renderer }
 
+    /// A renderer found by a search took over from whatever played, so a fallback made while
+    /// it searched ends, and a later loss of it can fall back. Returns the renderer fallen
+    /// back from, if that's what it was, for the app to close.
+    mutating func rendererTookOver() -> Renderer? {
+        repicked = nil
+        defer { phase = nil }
+        return renderer
+    }
+
     /// Whether a pick of `choice` ends the fallback, though it changes no setting: it's the
     /// output the config names, `named`, listed as not connected while System Default plays
     /// in its place, so picking it asks for that output again (ADR 0211).
