@@ -1284,7 +1284,19 @@ private func fallenBack(_ renderer: FakeOutput, to device: FakeOutput) async -> 
     // Long enough for the return to have been handled.
     try? await Task.sleep(nanoseconds: 100_000_000)
     #expect(renderer.takeCalls() == [])
-    #expect(await engine.state.device == .lost)
+    #expect(await engine.state.device == .connected)
+}
+
+@Test func anotherOutputInPlaceOfALostOneIsConnected() async {
+    let renderer = FakeOutput()
+    let device = FakeOutput()
+    let engine = await playing(urls, renderer)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.deviceLost(1, positionSeconds: 42))
+    await engine.use(device)
+    #expect(await engine.state.device == .connected)
+    #expect(await engine.state.status == .paused)
+    #expect(device.takeCalls().first == .load(3, urls[0], startSeconds: 42, playing: false))
 }
 
 @Test func onlyALostOutputFallsBack() async {

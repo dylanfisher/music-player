@@ -88,6 +88,10 @@ public actor PlaybackEngine {
     /// playing or paused as it was, and the old output is stopped. Events from any output but
     /// the current one are ignored, so the old one can stay open to be used again.
     public func use(_ newOutput: any Output) {
+        // The output lost is replaced, or the fallback from it is kept as a choice.
+        if state.device == .lost, newOutput !== output || lostOutput != nil {
+            state.device = .connected
+        }
         lostOutput = nil
         guard newOutput !== output else { return }
         let resume = currentItem.map { ($0.position, resumeSeconds ?? position() ?? 0) }
@@ -587,8 +591,9 @@ public actor PlaybackEngine {
     private func handle(_ event: OutputEvent, from id: ObjectIdentifier) {
         if let lostOutput, id == ObjectIdentifier(lostOutput) {
             guard case .deviceReturned = event else { return }
+            let wasLost = state.device == .lost
             use(lostOutput)
-            if state.device == .lost { state.device = .returned }
+            if wasLost { state.device = .returned }
             return publish(.deviceReturned)
         }
         guard id == ObjectIdentifier(output) else { return }
