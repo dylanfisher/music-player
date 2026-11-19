@@ -1,6 +1,5 @@
 import Testing
 
-@testable import DisplayText
 @testable import Library
 @testable import LibraryBrowser
 @testable import MusicPlayer
@@ -55,7 +54,7 @@ import Testing
     let options = outputOptions(
         devices: [FoundOutput(id: "DAC", name: "ADI-2 DAC")],
         renderers: [FoundOutput(id: "uuid:denon", name: "Denon")], current: .device(uid: "DAC"))
-    let items = outputItems(options, current: .device(uid: "DAC"), searching: false)
+    let items = outputItems(options, current: .device(uid: "DAC"))
     #expect(items.map(\.title) == ["Output: System Default", "Output: ADI-2 DAC", "Output: Denon"])
     #expect(items.map(\.detail) == ["Output", "In use", "Output"])
     #expect(items.map(\.kind) == [.output, .output, .output])
@@ -66,21 +65,12 @@ import Testing
     let options = outputOptions(
         devices: [FoundOutput(id: "Speakers", name: "Speakers")], renderers: [],
         current: .device(uid: "DAC"))
-    let items = outputItems(options, current: .systemDefault, searching: false)
+    let items = outputItems(options, current: .systemDefault)
     #expect(
         items.map(\.title) == [
             "Output: System Default", "Output: Speakers", "Output: DAC (not connected)",
         ])
     #expect(items.map(\.detail) == ["In use", "Output", "Output"])
-}
-
-@Test func whileRenderersAreSearchedForALastRowSaysSoAndPicksNothing() {
-    let options = outputOptions(devices: [], renderers: [], current: .systemDefault)
-    let items = outputItems(options, current: .systemDefault, searching: true)
-    #expect(items.map(\.title) == ["Output: System Default", "Output: \(searchingForRenderers)"])
-    #expect(items.map(\.isEnabled) == [true, false])
-    #expect(OutputChoice(text: items[1].key) == nil)
-    #expect(Set(items.map(\.key)).count == 2)
 }
 
 @MainActor @Test func goToItemsListingIsKeptUntilTheLibraryChanges() async throws {

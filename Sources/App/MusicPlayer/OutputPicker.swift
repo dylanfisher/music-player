@@ -1,6 +1,5 @@
 import AppKit
 import Commands
-import DisplayText
 import HALOutput
 import Log
 import Palette
@@ -129,22 +128,12 @@ extension AppDelegate {
     }
 }
 
-/// The palette rows that pick an output, "Output: <name>", and while a search for renderers
-/// runs, a last row that says so and picks nothing.
-func outputItems(_ options: [OutputOption], current: OutputChoice, searching: Bool)
-    -> [PaletteItem]
-{
-    let title = AppMenus.outputMenuTitle
-    let rows = options.map {
+/// The palette rows that pick an output, "Output: <name>". No Searching row: the palette's rows
+/// are listed once as it opens, so one would stay after the search ended (ADR 0211).
+func outputItems(_ options: [OutputOption], current: OutputChoice) -> [PaletteItem] {
+    options.map {
         PaletteItem(
-            kind: .output, key: $0.choice.text, title: "\(title): \($0.title)",
-            detail: $0.choice == current ? "In use" : title)
+            kind: .output, key: $0.choice.text, title: "\(AppMenus.outputMenuTitle): \($0.title)",
+            detail: $0.choice == current ? "In use" : AppMenus.outputMenuTitle)
     }
-    guard searching else { return rows }
-    // A key no output reads back as.
-    return rows + [
-        PaletteItem(
-            kind: .output, key: "\(title):searching", title: "\(title): \(searchingForRenderers)",
-            detail: title, isEnabled: false)
-    ]
 }

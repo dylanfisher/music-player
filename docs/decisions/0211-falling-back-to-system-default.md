@@ -68,9 +68,11 @@ its Turn On Hog Mode fix beeps rather than turn hog mode on for the chosen devic
 System Default ends the fallback, and the fix works then.
 
 **The Searching row.** While a renderer search runs, Controls ▸ Output, the toolbar's Output
-menu, the ⌘K output rows and the Settings popup end with a disabled "Searching for network
-players…" row. An open menu or popup updates when the search starts and when it ends. Searches
-still start only when one of the menus or the popup opens; ⌘K shows the row only while one runs.
+menu and the Settings popup end with a disabled "Searching for network players…" row. An open
+menu or popup updates when the search starts and when it ends. Searches still start only when
+one of the menus or the popup opens. The ⌘K output rows have no Searching row: the palette
+lists its rows once as it opens and has no rows that change while it's open, so one would stay
+after the search ended.
 
 ## Alternatives considered
 
