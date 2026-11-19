@@ -117,6 +117,16 @@ struct OutputFallbacks<Renderer: AnyObject> {
         hasMoved && !switched && profile.uid != inUse
     }
 
+    /// The hog mode a problem's details show for the device in use: the config's, which
+    /// mirrors that device's profile, `inUse`, except once playback is on System Default, when
+    /// the config shows the chosen device's (ADR 0211).
+    func hogModeShown(config: Bool, inUse: Bool?) -> Bool? { hasMoved ? inUse : config }
+
+    /// Whether Turn On Hog Mode, which sets the config's hog mode, reaches the device in use.
+    /// Not once playback is on System Default: it would turn it on for the chosen device. The
+    /// user's pick of System Default ends the fallback, and the fix works then.
+    var takesHogModeFix: Bool { !hasMoved }
+
     /// Ends the fallback for a change of `output.deviceUID` or `output.renderer`, unless the
     /// app made it `byApp` to show the device in use: only the user's change ends one. Returns
     /// whether it ended, and the renderer fallen back from, which is the app's again to close

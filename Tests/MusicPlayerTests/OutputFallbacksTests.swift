@@ -156,3 +156,13 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     #expect(fallbacks.renderer === denon)
     #expect(fallbacks.inUse(named: named) == .systemDefault)
 }
+
+@Test func duringAFallbackTheHogModeShownAndFixedIsTheDeviceInUsesOrNone() {
+    let fallbacks = fellBackFromTheDAC()
+    // The config shows the DAC's hog mode; the speakers play with their own.
+    #expect(fallbacks.hogModeShown(config: true, inUse: false) == false)
+    #expect(!fallbacks.takesHogModeFix)
+    let none = OutputFallbacks<Renderer>()
+    #expect(none.hogModeShown(config: true, inUse: false) == true)
+    #expect(none.takesHogModeFix)
+}

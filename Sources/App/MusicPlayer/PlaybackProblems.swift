@@ -16,12 +16,15 @@ extension AppDelegate {
     }
 
     /// Opens the details of `shown` with the output's last signal path and, for a device, its
-    /// hog mode setting, which the config mirrors from the device in use.
+    /// hog mode setting, which the config mirrors from the device in use, or during a fallback
+    /// that device's profile.
     func showProblem(_ shown: ShownProblem) {
+        let hogMode = settings.flatMap {
+            outputFallback.hogModeShown(config: $0[\.hogMode], inUse: inUseProfile?.hogMode)
+        }
         problemWindow.show(
             ProblemReport(
-                shown, path: signalPath?.path,
-                hogMode: rendererOutput == nil ? settings?[\.hogMode] : nil))
+                shown, path: signalPath?.path, hogMode: rendererOutput == nil ? hogMode : nil))
     }
 
     /// Makes `fix` through the settings the user would change, then plays the problem's track
@@ -33,6 +36,10 @@ extension AppDelegate {
             // The config's hog mode is the device in use's, so it fixes only that device.
             guard let settings, uid == outputUID, rendererOutput == nil else {
                 logger.error("hog mode wasn't turned on: \(uid) is no longer the output")
+                return NSSound.beep()
+            }
+            guard outputFallback.takesHogModeFix else {
+                logger.error("hog mode wasn't turned on: \(uid) plays in the chosen one's place")
                 return NSSound.beep()
             }
             do {
