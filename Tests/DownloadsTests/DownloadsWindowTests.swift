@@ -313,6 +313,36 @@ private func labels(in view: NSView?) -> [String] {
     window.window?.close()
 }
 
+/// Types `text` in the window's search field.
+@MainActor
+private func type(_ text: String, in window: DownloadsWindow) {
+    window.search.stringValue = text
+    window.controlTextDidChange(
+        Notification(name: NSControl.textDidChangeNotification, object: window.search))
+}
+
+@MainActor
+@Test func theSearchFieldFiltersTheRowsAndAShowKeepsIt() throws {
+    let window = DownloadsWindow()
+    window.show(rows(), status: "", canAdd: true)
+    window.table.selectRowIndexes([2], byExtendingSelection: false)
+    type("move", in: window)
+    #expect(window.rows.map(\.id) == [3])
+    #expect(window.table.selectedRow == 0, "the selected job stays selected")
+    #expect(window.empty.isHidden)
+    window.show(rows(), status: "", canAdd: true)
+    #expect(window.rows.map(\.id) == [3], "the rows of a poll are filtered too")
+    type("zzz", in: window)
+    #expect(window.rows.isEmpty)
+    #expect(!window.empty.isHidden)
+    #expect(window.empty.stringValue == DownloadsWindow.noneMatch)
+    type("", in: window)
+    #expect(window.rows.map(\.id) == [1, 2, 3])
+    window.show([], status: "", canAdd: true)
+    #expect(window.empty.stringValue == DownloadsWindow.noDownloads)
+    window.window?.close()
+}
+
 @MainActor
 @Test func everyColumnHasAHeaderWideEnoughToShowIt() throws {
     let window = DownloadsWindow()

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import DisplayText
 @testable import Downloads
 @testable import Library
 @testable import Recommender
@@ -698,4 +699,34 @@ private final class HeldList: @unchecked Sendable {
     }
     #expect(DownloadsModel.releaseStates(rows) == [4242: "Queued", 99: "Staged"])
     #expect(DownloadsModel.releaseStates(rows.reversed()) == [4242: "Queued", 99: "Staged"])
+}
+
+/// Three rows: a staged FLAC by Björk, a download from another peer, and a failure.
+private func filterable() -> [DownloadRow] {
+    [
+        job(1) {
+            $0.release.artist = "Björk"
+            $0.release.title = "Homogenic"
+            $0.release.year = 1997
+        },
+        job(2, .downloading) { $0.candidate?.peer = "other-peer" },
+        job(3, .failed) {
+            $0.failedStage = .move
+            $0.reason = "already in the library"
+        },
+    ].compactMap { DownloadRow($0, machine: FakeService.machine) }
+}
+
+@Test func theFilterMatchesAWordInAnyColumnItShows() {
+    let rows = filterable()
+    func ids(_ text: String) -> [Int] {
+        DownloadsModel.filtered(rows, by: ListFilter(text)).map(\.id)
+    }
+    #expect(ids("homogenic") == [1], "the title")
+    #expect(ids("1997") == [1], "the year")
+    #expect(ids("other-peer") == [2], "the user")
+    #expect(ids("move") == [3], "the state")
+    #expect(ids("bjork flac") == [1], "two words in two columns, without the accent")
+    #expect(ids("bjork other-peer").isEmpty, "every word, in one row")
+    #expect(ids(" ") == [1, 2, 3])
 }

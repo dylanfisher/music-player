@@ -41,13 +41,17 @@ enum DownloadColumn: String, CaseIterable {
 /// clicks; `Downloads` does the rest.
 @MainActor
 final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate,
-    NSMenuDelegate, NSWindowDelegate
+    NSMenuDelegate, NSWindowDelegate, NSSearchFieldDelegate
 {
     static let title = "Downloads"
 
     let table = NSTableView()
     let statusLabel = NSTextField(wrappingLabelWithString: "")
-    let empty = NSTextField(labelWithString: "No downloads.")
+    let empty = NSTextField(labelWithString: "")
+    static let noDownloads = "No downloads."
+    static let noneMatch = "No downloads match the search."
+    /// Filters the rows shown, leaving the service's jobs as they are.
+    let search = NSSearchField()
     let addButton = NSPopUpButton(frame: .zero, pullsDown: true)
     /// Opens slskd's web page, where Soulseek's searches and transfers can be watched.
     let slskdButton = NSButton(title: "Open slskd", target: nil, action: nil)
@@ -71,8 +75,10 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         + " for again from another peer; approving the clean ones is Approve Safe Matches"
         + " Automatically's."
     private(set) var buttons: [DownloadAction: NSButton] = [:]
-    /// The rows shown, in the window's order.
+    /// The rows shown, in the window's order: those of `given` the search keeps.
     private(set) var rows: [DownloadRow] = []
+    /// The rows `show` was last given.
+    private var given: [DownloadRow] = []
     /// How many times the table has reloaded its rows.
     private(set) var reloads = 0
     private var canAdd = false
@@ -150,7 +156,11 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         autoUpgradeBox.target = self
         autoUpgradeBox.action = #selector(autoUpgradeClicked)
         autoUpgradeBox.toolTip = Self.autoUpgradeHelp
-        let boxes = NSStackView(views: [autoApproveBox, autoUpgradeBox])
+        search.placeholderString = ListFilter.placeholder
+        search.toolTip = ListFilter.help
+        search.delegate = self
+        search.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        let boxes = NSStackView(views: [autoApproveBox, autoUpgradeBox, NSView(), search])
         boxes.spacing = 20
 
         for column in DownloadColumn.allCases {
@@ -174,35 +184,45 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         page.alignment = .leading
         page.spacing = 10
         page.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
-        for view in [bar, scroll, statusLabel] {
+        for view in [boxes, bar, scroll, statusLabel] {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -28).isActive = true
         }
         scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
         window.contentView = page
     }
 
-    /// Shows `rows`, keeping the selected jobs selected while they're there, and `status`
-    /// below.
+    /// Shows the rows of `rows` the search keeps, keeping the selected jobs selected while
+    /// they're there, and `status` below.
     func show(_ rows: [DownloadRow], status: String, canAdd: Bool) {
-        let selected = Set(selectedRows.map(\.id))
         self.canAdd = canAdd
-        if rows != self.rows {
+        given = rows
+        statusLabel.stringValue = status
+        statusLabel.isHidden = status.isEmpty
+        for (index, _) in DownloadAddition.allCases.enumerated() {
+            addButton.item(at: index + 1)?.isEnabled = canAdd
+        }
+        addButton.isEnabled = canAdd
+        showRows()
+    }
+
+    /// Lists the rows given that the search keeps, and says when there are none.
+    private func showRows() {
+        let selected = Set(selectedRows.map(\.id))
+        let shown = DownloadsModel.filtered(given, by: ListFilter(search.stringValue))
+        if shown != rows {
             reloads += 1
-            self.rows = rows
+            rows = shown
             table.reloadData()
             table.selectRowIndexes(
                 IndexSet(rows.indices.filter { selected.contains(rows[$0].id) }),
                 byExtendingSelection: false)
         }
-        statusLabel.stringValue = status
-        statusLabel.isHidden = status.isEmpty
+        empty.stringValue = given.isEmpty ? Self.noDownloads : Self.noneMatch
         empty.isHidden = !rows.isEmpty
-        for (index, _) in DownloadAddition.allCases.enumerated() {
-            addButton.item(at: index + 1)?.isEnabled = canAdd
-        }
-        addButton.isEnabled = canAdd
         enableButtons()
     }
+
+    func controlTextDidChange(_ notification: Notification) { showRows() }
 
     /// Enables Open slskd for `page`, slskd's web page, or says why it's off.
     func showSlskd(_ page: URL?) {

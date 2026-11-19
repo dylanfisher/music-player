@@ -4,6 +4,11 @@ import Foundation
 /// texts, ignoring case and accents, so "bjork 1997" finds "Björk - Homogenic (1997)". It
 /// filters the rows a list has; it never changes what the list reads.
 public struct ListFilter: Equatable, Sendable {
+    /// The search field's placeholder and tooltip, the same in each window that has one.
+    public static let placeholder = "Filter"
+    public static let help =
+        "Show only the rows that hold every word typed, ignoring case and accents."
+
     let words: [String]
 
     public init(_ text: String) {
