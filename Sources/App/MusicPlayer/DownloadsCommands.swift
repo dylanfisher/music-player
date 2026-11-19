@@ -93,7 +93,7 @@ extension AppDelegate {
         if let state { downloads.columnWidths = state[\.downloadsColumns] }
         downloads.columnWidthsChanged = { [weak self] in self?.saver?.set(\.downloadsColumns, $0) }
         downloads.releaseStatesChanged = { [weak self] in
-            self?.recommendations.show(downloads: $0)
+            self?.recommendations.show(downloads: $0, imported: $1)
         }
         downloads.showInAllMusic = { [weak self] in self?.showInAllMusic(album: $0) }
         downloads.openInTagger = { [weak self] job, stagingRoot, resolved in

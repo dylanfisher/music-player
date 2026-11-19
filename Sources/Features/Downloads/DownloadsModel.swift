@@ -274,6 +274,20 @@ final class DownloadsModel {
         return newest.mapValues(\.state)
     }
 
+    /// The release each imported job's files carry, by the release it was queued for, for the
+    /// Recommendations window's Show in All Music: the one the owner tagged them as, else its
+    /// own. The newest import of a release queued twice.
+    var importedReleases: [Int: Int] { Self.importedReleases(rows) }
+
+    nonisolated static func importedReleases(_ rows: [DownloadRow]) -> [Int: Int] {
+        var carried: [Int: (added: Date, release: Int)] = [:]
+        for row in rows where row.group == .completed {
+            if let kept = carried[row.releaseID], kept.added > row.added { continue }
+            carried[row.releaseID] = (row.added, row.taggedAs ?? row.releaseID)
+        }
+        return carried.mapValues(\.release)
+    }
+
     /// Starts the job `id` again, with `policy` for a retry that searches again. Nil when the
     /// service took it, else why not.
     func retry(_ id: Int, policy: FormatPolicy?) async -> String? {

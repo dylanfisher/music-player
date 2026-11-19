@@ -153,6 +153,7 @@ extension AppDelegate {
         recommendations.say = { [weak self] in self?.browser?.show(failure: $0) }
         recommendations.report = { [weak self] in self?.browser?.report($0) }
         recommendations.download = { [weak self] in self?.downloads.queue(recommended: $0) }
+        recommendations.showInAllMusic = { [weak self] in self?.showInAllMusic(album: $0) }
         recommendations.catalog = { [weak self] in
             guard let self, let settings else { return nil }
             return paths.discogsCatalogFile(settings[\.discogsCatalogPath])

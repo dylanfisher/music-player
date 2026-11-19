@@ -43,6 +43,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         title: AppCommands.title(of: .showDiscography), target: nil, action: nil)
     /// The rows' Show Discography items.
     let discographyItems = DiscographyItems()
+    let allMusicButton = NSButton(
+        title: AppCommands.title(of: .showInAllMusic), target: nil, action: nil)
     let detailLabel = NSTextField(wrappingLabelWithString: "")
     let progress = NSProgressIndicator()
     let messageLabel = NSTextField(wrappingLabelWithString: "")
@@ -63,6 +65,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     private(set) var headerSort: HeaderSort?
     /// The state of each release's newest download job, by release id.
     private(set) var downloads: [Int: String] = [:]
+    /// The release each imported job's files carry, by the release queued.
+    private(set) var imported: [Int: Int] = [:]
     private var seeds: [RecommendationQuery.Seed] = []
     /// Whether each column is hidden as last chosen, kept while a list without it shows, so it
     /// comes back as it was.
@@ -84,6 +88,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     var discographyChosen: (RecommendationPage.Named) -> Void = { _ in }
     /// Hears Show Discography… clicked.
     var askDiscography: () -> Void = {}
+    /// Hears Show in All Music on a row.
+    var allMusicChosen: (RecommendationRow) -> Void = { _ in }
     /// Hears Marked… clicked.
     var showMarked: () -> Void = {}
     /// Hears Service Status clicked.
@@ -163,17 +169,19 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         discographyButton.toolTip =
             "Every album of a Discogs artist, from a pasted artist, release or master."
         discographyItems.open = { [weak self] in self?.discographyChosen($0) }
+        allMusicButton.action = #selector(allMusicClicked)
+        allMusicButton.toolTip = "Select the first selected album, once downloaded, in All Music."
         let buttons = [
             notInterestedButton, alreadyHaveButton, downloadButton, discogsButton,
-            discographyButton, markedButton,
+            discographyButton, allMusicButton, markedButton,
         ]
         search.placeholderString = ListFilter.placeholder
         search.toolTip = ListFilter.help
         search.delegate = self
-        search.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        search.widthAnchor.constraint(equalToConstant: 160).isActive = true
         let actions = NSStackView(views: [
-            notInterestedButton, alreadyHaveButton, downloadButton, discogsButton, NSView(),
-            discographyButton, search, markedButton,
+            notInterestedButton, alreadyHaveButton, downloadButton, discogsButton,
+            allMusicButton, NSView(), discographyButton, search, markedButton,
         ])
         actions.spacing = 8
         for button in buttons {
@@ -237,8 +245,11 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         window.contentView = page
     }
 
-    /// Shows the states of the download jobs, by release id, in the Download column.
-    func show(downloads: [Int: String]) {
+    /// Shows the states of the download jobs, by release id, in the Download column, and takes
+    /// the releases `imported` carries for Show in All Music.
+    func show(downloads: [Int: String], imported: [Int: Int]) {
+        self.imported = imported
+        showDetail()
         guard downloads != self.downloads else { return }
         self.downloads = downloads
         let column = table.column(
@@ -343,6 +354,12 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         for button in [notInterestedButton, alreadyHaveButton, downloadButton, discogsButton] {
             button.isEnabled = !selectedRows.isEmpty
         }
+        allMusicButton.isEnabled = selectedRows.first.map(isImported) ?? false
+    }
+
+    /// Whether a download of `row`'s release was imported, so its album is in the library.
+    func isImported(_ row: RecommendationRow) -> Bool {
+        row.album.releaseID.map { imported[$0] != nil } ?? false
     }
 
     /// The rows selected, in the list's order.
@@ -381,6 +398,18 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     /// first selected track's.
     @objc func discogsClicked() {
         if let first = selectedRows.first { discogsChosen(first) }
+    }
+
+    /// Show in All Music: the first selected row's album, as Open on Discogs opens its page.
+    @objc private func allMusicClicked() {
+        if let first = selectedRows.first, isImported(first) { allMusicChosen(first) }
+    }
+
+    @objc private func allMusicMenuChosen(_ sender: NSMenuItem) {
+        guard let clicked = sender.representedObject as? Int, clicked < rows.count,
+            isImported(rows[clicked])
+        else { return }
+        allMusicChosen(rows[clicked])
     }
 
     @objc private func discogsMenuChosen(_ sender: NSMenuItem) {
@@ -480,6 +509,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        menu.autoenablesItems = false
         if menu === table.headerView?.menu {
             for column in table.tableColumns
             where RecommendationColumn(rawValue: column.identifier.rawValue)?.applies(to: query)
@@ -517,6 +547,12 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             title: AppMenus.showDiscographyMenuTitle, action: nil, keyEquivalent: "")
         discographyItems.fill(discography, DiscographyChoice(rows[clicked]))
         menu.addItem(discography)
+        let allMusic = NSMenuItem(
+            title: allMusicButton.title, action: #selector(allMusicMenuChosen), keyEquivalent: "")
+        allMusic.target = self
+        allMusic.representedObject = clicked
+        allMusic.isEnabled = isImported(rows[clicked])
+        menu.addItem(allMusic)
         guard query.show == .albums else { return }
         menu.addItem(.separator())
         let album = rows[clicked].album

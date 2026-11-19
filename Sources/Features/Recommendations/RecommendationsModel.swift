@@ -194,6 +194,13 @@ final class RecommendationsModel {
         }
     }
 
+    /// Says `notice` beside the rows, as a mark that failed does, or with nil says none.
+    func show(notice: String?) {
+        guard notice != self.notice else { return }
+        self.notice = notice
+        changed()
+    }
+
     /// Stops the read out, and the wait to read a discography again, for a closed window.
     func stop() {
         reading?.cancel()

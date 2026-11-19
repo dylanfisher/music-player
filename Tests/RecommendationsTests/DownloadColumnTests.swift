@@ -26,6 +26,6 @@ import Testing
         }
     }
     #expect(shown() == ["", "", ""])
-    window.show(downloads: [1007: "Queued", 1009: "Staged"])
+    window.show(downloads: [1007: "Queued", 1009: "Staged"], imported: [:])
     #expect(shown() == ["Queued", "", ""])
 }

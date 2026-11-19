@@ -33,6 +33,10 @@ public final class Recommendations {
     package var catalog: () -> URL? = { nil }
     /// Download…: queues the albums in Downloads' queue sheet.
     package var download: ([RecommendationPage.Album]) -> Void = { _ in }
+    /// Show in All Music: selects the album `id` in the main window's All Music.
+    package var showInAllMusic: (_ albumID: Int64) -> Void = { _ in }
+    /// The library's album carrying a Discogs release, read off the main thread.
+    var albumOfRelease: @Sendable (Int) async throws -> Int64?
     /// music-recommender's status page as set now; nil while its address isn't set.
     package var statusPage: () -> URL? = { nil }
     /// Opens a Discogs page or the status page; tests record it instead.
@@ -41,6 +45,8 @@ public final class Recommendations {
     var beep: () -> Void = { NSSound.beep() }
     /// The state of each release's newest download job, by release id, from Downloads.
     private var downloads: [Int: String] = [:]
+    /// The release each imported job's files carry, by the release it was queued for.
+    private var imported: [Int: Int] = [:]
     private var sendingProfile = false
     /// Every send of the profile, asked or not, one at a time.
     private(set) lazy var profileSender = makeProfileSender()
@@ -72,6 +78,11 @@ public final class Recommendations {
         readSeeds = { ids in
             try await Task.detached {
                 try LibraryIndex(at: databaseURL).recommendationSeeds(trackIDs: ids)
+            }.value
+        }
+        albumOfRelease = { release in
+            try await Task.detached {
+                try LibraryIndex(at: databaseURL).albumID(discogsRelease: release)
             }.value
         }
     }
@@ -266,10 +277,12 @@ public final class Recommendations {
         }
     }
 
-    /// Shows the states of Downloads' jobs, by release id, in the Download column.
-    package func show(downloads: [Int: String]) {
+    /// Shows the states of Downloads' jobs, by release id, in the Download column, and takes
+    /// the releases `imported` carries, by the release queued, for Show in All Music.
+    package func show(downloads: [Int: String], imported: [Int: Int]) {
         self.downloads = downloads
-        controller?.show(downloads: downloads)
+        self.imported = imported
+        controller?.show(downloads: downloads, imported: imported)
     }
 
     // MARK: - The window
@@ -287,7 +300,7 @@ public final class Recommendations {
         controller = made
         made.window?.keepsFrame(as: RecommendationsWindow.title)
         made.keepWidths(columnWidths)
-        made.show(downloads: downloads)
+        made.show(downloads: downloads, imported: imported)
         made.queryChosen = { [weak self] in self?.model.show($0) }
         made.headerSortChosen = { [weak self] in self?.model.sort(by: $0) }
         made.reachedEnd = { [weak self] in self?.model.readMore() }
@@ -298,6 +311,7 @@ public final class Recommendations {
         made.discogsChosen = { [weak self] in self?.open(discogsPage(of: $0.album)) }
         made.discographyChosen = { [weak self] in self?.showDiscography($0) }
         made.askDiscography = { [weak self] in self?.askForDiscography() }
+        made.allMusicChosen = { [weak self] in self?.showInLibrary($0) }
         made.columnsResized = { [weak self] widths in
             self?.columnWidths = widths
             self?.columnWidthsChanged(widths)
@@ -320,6 +334,24 @@ public final class Recommendations {
 
     /// Open Discogs Release while the window is key: the first selected album's page.
     public func openSelectedOnDiscogs() { controller?.discogsClicked() }
+
+    /// Show in All Music: the album an imported download of the row's release brought, found
+    /// by the release its files carry in the index. One not there says so beside the rows.
+    @discardableResult
+    func showInLibrary(_ row: RecommendationRow) -> Task<Void, Never>? {
+        guard let release = row.album.releaseID.flatMap({ imported[$0] }) else { return nil }
+        let find = albumOfRelease
+        return Task {
+            let album: Int64?
+            do {
+                album = try await find(release)
+            } catch {
+                return report(terminalSafe("\(AppCommands.title(of: .showInAllMusic)): \(error)"))
+            }
+            model.show(notice: album == nil ? LibraryIndex.releaseNotInLibrary(release) : nil)
+            if let album { showInAllMusic(album) }
+        }
+    }
 
     /// Service Status: opens music-recommender's status page in the browser, or beeps and says
     /// what to set while its address isn't set.

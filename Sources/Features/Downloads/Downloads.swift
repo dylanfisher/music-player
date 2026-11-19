@@ -133,8 +133,10 @@ package final class Downloads {
     package var columnWidths = ColumnWidths()
     package var columnWidthsChanged: (ColumnWidths) -> Void = { _ in }
     /// Hears each release's newest job's state, by release id, after anything shown changes,
-    /// and none once polling stops: the Recommendations window's Download column.
-    package var releaseStatesChanged: ([Int: String]) -> Void = { _ in }
+    /// and none once polling stops: the Recommendations window's Download column. With them,
+    /// `DownloadsModel.importedReleases`, for its Show in All Music.
+    package var releaseStatesChanged: (_ states: [Int: String], _ imported: [Int: Int]) -> Void =
+        { _, _ in }
 
     /// A row's Show Discography item for its release, from Recommendations (ADR 0217).
     package var discographyItem: (Int) -> NSMenuItem? = { _ in nil }
@@ -479,7 +481,8 @@ package final class Downloads {
     /// `opening`, just before it shows, so it opens on the rows as they are.
     func refresh(opening: Bool = false) {
         showStatus()
-        releaseStatesChanged(session?.model.releaseStates ?? [:])
+        releaseStatesChanged(
+            session?.model.releaseStates ?? [:], session?.model.importedReleases ?? [:])
         guard let controller, opening || controller.window?.isVisible == true else { return }
         defer { offerSelection() }
         controller.showSlskd(session?.slskdPage)

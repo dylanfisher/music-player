@@ -703,6 +703,18 @@ private final class HeldList: @unchecked Sendable {
     #expect(DownloadsModel.releaseStates(rows.reversed()) == [4242: "Queued", 99: "Staged"])
 }
 
+/// Show in All Music in the Recommendations window looks for the release an import's files
+/// carry, which is the one the owner tagged them as when it isn't the job's.
+@Test func eachImportedReleaseNamesTheReleaseItsFilesCarry() {
+    let now = Date(timeIntervalSince1970: 1_794_100_000)
+    let rows = [
+        DownloadRow(job(1, .imported), machine: "Studio", taggedAs: 77, now: now),
+        DownloadRow(job(2, .imported) { $0.release.releaseID = 99 }, machine: "Studio", now: now),
+        DownloadRow(job(3, .staged) { $0.release.releaseID = 5 }, machine: "Studio", now: now),
+    ].compactMap { $0 }
+    #expect(DownloadsModel.importedReleases(rows) == [4242: 77, 99: 99])
+}
+
 /// Three rows: a staged FLAC by Björk, a download from another peer, and a failure.
 private func filterable() -> [DownloadRow] {
     [
