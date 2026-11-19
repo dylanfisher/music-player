@@ -353,6 +353,36 @@ private func fellBackFromTheDAC(playing: Bool) async throws -> (TwoDevices, resu
     #expect(rig.dac.captured.count == 2)
 }
 
+@Test func theDeviceFallenBackFromReturningAfterTheFallbackWentTooIsReportedOnce() async throws {
+    let album = try album(44_100, 16)
+    let dac = NullDevice(name: "DAC")
+    let speakers = NullDevice(name: "Speakers")
+    let output = try DeviceOutput(
+        DeviceChoice(provider: dac, digitalVolume: false, gain: 1, formats: nil))
+    defer { output.close() }
+    let events = Collected(output.events)
+    let returns = Collected(output.returns)
+    func next(_ matches: (OutputEvent) -> Bool) async throws {
+        while true { if matches(try await events.next()) { return } }
+    }
+    output.load(OutputItem(id: 1, url: album.tracks[0]), startSeconds: 0, playing: true)
+    try await next { if case .trackStarted = $0 { true } else { false } }
+    dac.unplug()
+    try await next { if case .deviceLost = $0 { true } else { false } }
+    output.fallBack(
+        to: DeviceChoice(provider: speakers, digitalVolume: false, gain: 1, formats: nil))
+    try await next { if case .fellBack = $0 { true } else { false } }
+    output.load(OutputItem(id: 2, url: album.tracks[0]), startSeconds: 0, playing: true)
+    try await next { if case .trackStarted = $0 { true } else { false } }
+    speakers.unplug()
+    try await next { if case .deviceLost = $0 { true } else { false } }
+    dac.plugIn()
+    #expect(try await returns.next() == "DAC")
+    try await next { if case .deviceReturned = $0 { true } else { false } }
+    let again = try? await events.next(within: 0.5)
+    #expect(again.map { if case .deviceReturned = $0 { false } else { true } } ?? true)
+}
+
 /// A provider whose state reports outlive `stopWatching`, as one queued by the HAL just before it
 /// would.
 private final class LingeringProvider: PCMDeviceProvider, @unchecked Sendable {

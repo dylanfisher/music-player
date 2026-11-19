@@ -1049,13 +1049,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         guard let returnTo, returnTo.provider.isConnected(),
             fellBack || !(playing && !segments.isEmpty)
         else { return }
-        let wasFallback = fellBack
+        let reporting = fellBack && !deviceMissing  // else `use` reports the return
         let uid = returnTo.provider.deviceUID
         logger.notice(
             "\(returnTo.provider.deviceName, privacy: .public) is back, so output returns to it")
         returnTo.provider.deviceReturned()
         use(returnTo, remembering: false)
-        if wasFallback { emit(.deviceReturned) }
+        if reporting { emit(.deviceReturned) }
         returnContinuation.yield(uid)
     }
 
