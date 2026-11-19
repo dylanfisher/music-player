@@ -135,6 +135,26 @@ public actor PlaybackEngine {
         return true
     }
 
+    /// Ends a fallback by going back to the output lost, which is lost still, as when the user
+    /// picks it again: what the fallback plays stops, paused where it is, and nothing loads
+    /// until the lost output reports its return or Play is pressed. Its return is then handled
+    /// as any lost output's (ADR 0211).
+    public func backToLost() {
+        guard let lost = lostOutput else { return }
+        let resume = currentItem.map { ($0, resumeSeconds ?? position() ?? 0) }
+        lostOutput = nil
+        unload()
+        output = lost
+        if let (item, seconds) = resume {
+            currentItem = item
+            resumeSeconds = seconds
+            cursor = item.position
+        }
+        if state.status == .playing { state.status = .paused }
+        state.device = .lost
+        publish(.deviceLost)
+    }
+
     /// Whether playback is on the output `fallBack(to:)` moved it to.
     public var isFallenBack: Bool { lostOutput != nil }
 

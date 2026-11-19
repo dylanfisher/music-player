@@ -94,7 +94,9 @@ extension AppDelegate {
         guard endFallback(repicked: true), let engine else { return }
         outputSettingsChanged(switched: true)
         guard let renderer = rendererOutput else { return }
-        Task { await engine.use(renderer) }
+        outputFallback.pickedAgain(renderer)
+        // Lost still: its return, which its probe watches for, moves playback there.
+        Task { await engine.backToLost() }
     }
 
     /// Ends a fallback for the user's change of output setting, and returns whether it did. The

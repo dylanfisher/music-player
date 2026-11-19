@@ -255,3 +255,26 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     #expect(!fallbacks.pickEnds(.systemDefault, named: dac))
     #expect(!fallbacks.pickEnds(.device(uid: "Speakers"), named: dac))
 }
+
+@Test func aRendererPickedAgainStaysLostUntilItReturns() {
+    let denon = Renderer()
+    let named = OutputChoice.renderer(udn: "uuid:denon")
+    var fallbacks = OutputFallbacks<Renderer>()
+    _ = fallbacks.lost(
+        named: named, inUse: "DAC", renderer: denon, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    _ = fallbacks.outputChanged(byApp: false)
+    fallbacks.pickedAgain(denon)
+    // The engine's move back reports it lost, which doesn't fall back again.
+    let again = fallbacks.lost(
+        named: named, inUse: "DAC", renderer: denon, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    #expect(again == nil)
+    #expect(fallbacks.inUse(named: named) == named)
+    // Once it has returned, a loss falls back as before.
+    _ = fallbacks.deviceReturned()
+    let later = fallbacks.lost(
+        named: named, inUse: "DAC", renderer: denon, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    #expect(later?.leavesRenderer == true)
+}

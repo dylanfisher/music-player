@@ -38,6 +38,9 @@ struct OutputFallbacks<Renderer: AnyObject> {
     }
 
     private(set) var phase: Phase?
+    /// The renderer the user picked again during its fallback, lost still: its loss stays one,
+    /// with no fallback, until it returns or another output is picked.
+    private var repicked: Renderer?
 
     /// The renderer fallen back from, while playback is on the device output in its place.
     var renderer: Renderer? {
@@ -65,7 +68,7 @@ struct OutputFallbacks<Renderer: AnyObject> {
         named: OutputChoice, inUse: String?, renderer: Renderer?,
         systemDefault: () throws -> String, profile: (String) -> DeviceProfile
     ) -> Plan? {
-        guard !hasMoved else { return nil }
+        guard !hasMoved, renderer == nil || renderer !== repicked else { return nil }
         phase = nil
         guard let uid = Self.target(named, lost: inUse, systemDefault) else { return nil }
         let target = profile(uid)
@@ -103,6 +106,7 @@ struct OutputFallbacks<Renderer: AnyObject> {
     /// from, whose return the engine may be reporting.
     mutating func deviceReturned() -> Renderer? {
         if case .asked = phase { phase = nil }
+        repicked = nil
         return renderer
     }
 
@@ -145,6 +149,10 @@ struct OutputFallbacks<Renderer: AnyObject> {
     /// user's pick of System Default ends the fallback, and the fix works then.
     var takesHogModeFix: Bool { !hasMoved }
 
+    /// The user picked `renderer`, the one fallen back from, again: the engine goes back to it
+    /// lost, and its losses fall back to nothing until it returns.
+    mutating func pickedAgain(_ renderer: Renderer) { repicked = renderer }
+
     /// Whether a pick of `choice` ends the fallback, though it changes no setting: it's the
     /// output the config names, `named`, listed as not connected while System Default plays
     /// in its place, so picking it asks for that output again (ADR 0211).
@@ -160,6 +168,7 @@ struct OutputFallbacks<Renderer: AnyObject> {
     mutating func outputChanged(byApp: Bool) -> (
         ended: Bool, renderer: Renderer?, fromDevice: Bool
     ) {
+        if !byApp { repicked = nil }
         guard phase != nil, !byApp else { return (false, nil, false) }
         defer { phase = nil }
         if case .device = phase { return (true, nil, true) }

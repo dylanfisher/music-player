@@ -1301,6 +1301,28 @@ private func fallenBack(_ renderer: FakeOutput, to device: FakeOutput) async -> 
     #expect(device.takeCalls().first == .load(3, urls[0], startSeconds: 42, playing: false))
 }
 
+@Test func goingBackToTheLostOutputKeepsItLostUntilItReturns() async {
+    let renderer = FakeOutput()
+    let device = FakeOutput()
+    let engine = await fallenBack(renderer, to: device)
+    await engine.play()
+    await engine.handle(.trackStarted(3, info))
+    device.setPosition(OutputPosition(item: 3, seconds: 50))
+    _ = device.takeCalls()
+    let seen = await published(engine) { await engine.backToLost() }
+    #expect(seen.map(\.event) == [.deviceLost])
+    #expect(seen.map(\.state.device) == [.lost])
+    #expect(seen.map(\.state.status) == [.paused])
+    #expect(device.takeCalls() == [.stop])
+    #expect(renderer.takeCalls() == [])
+    #expect(await engine.position() == 50)
+    // Its return is the current output's, and Play loads there where it was.
+    renderer.emit.yield(.deviceReturned)
+    await eventually("the return") { await engine.state.device == .returned }
+    await engine.play()
+    #expect(renderer.takeCalls().first == .load(5, urls[0], startSeconds: 50, playing: true))
+}
+
 @Test func onlyALostOutputFallsBack() async {
     let renderer = FakeOutput()
     let device = FakeOutput()
