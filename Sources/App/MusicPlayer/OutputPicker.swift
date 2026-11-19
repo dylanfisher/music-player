@@ -49,12 +49,7 @@ extension AppDelegate {
 
     /// The output playing: System Default during a fallback, while the config names the output
     /// that went away (ADR 0211).
-    var outputInUse: OutputChoice {
-        switch outputFallback {
-        case .device, .renderer: .systemDefault
-        case .asked, nil: currentOutput
-        }
-    }
+    var outputInUse: OutputChoice { outputFallback.inUse(named: currentOutput) }
 
     func outputOptionsNow() -> [OutputOption] {
         outputOptions(devices: foundDevices, renderers: foundRenderers, current: currentOutput)

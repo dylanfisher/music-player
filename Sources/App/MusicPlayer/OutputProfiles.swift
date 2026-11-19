@@ -17,7 +17,7 @@ extension AppDelegate {
             let profile = try outputProfile(settings, switched: switched)
             // While System Default plays in its place, the config shows the chosen device's
             // settings, so an edit is that device's (ADR 0211).
-            if outputFallback != nil, !switched, profile.uid != outputUID {
+            if outputFallback.savesOnly(profile, switched: switched, inUse: outputUID) {
                 return try save(profile)
             }
             if let inUse = inUseProfile, inUse.uid == profile.uid, inUse.hogMode == profile.hogMode,
@@ -44,8 +44,7 @@ extension AppDelegate {
         } catch {
             logger.error("couldn't save \(uid)'s profile: \(error)")
         }
-        // A device fallen back from is back; a renderer's fallback ends when the engine says.
-        if outputFallback?.renderer == nil { outputFallback = nil }
+        outputFallback.deviceOutputReturned()
         showInUse(profile, settings)
         outputsChanged()
     }
