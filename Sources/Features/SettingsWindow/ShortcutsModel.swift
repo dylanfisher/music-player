@@ -1,4 +1,5 @@
 import Commands
+import DisplayText
 import KeyChord
 import Settings
 
@@ -51,17 +52,16 @@ public final class ShortcutsModel {
         bindings.chord(of: id, at: position)
     }
 
-    /// The sections with only the commands whose title contains `text`, or whose chords' symbols
-    /// do ("⇧⌘P"); empty sections go.
+    /// The sections with only the commands whose title or chords' symbols ("⇧⌘P") hold every
+    /// word of `text`; empty sections go.
     func filtered(_ text: String) -> [Section] {
-        let query = text.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return sections }
+        let filter = ListFilter(text)
+        guard !filter.isEmpty else { return sections }
         return sections.compactMap { section in
             let commands = section.commands.filter { id in
-                title(id).localizedCaseInsensitiveContains(query)
-                    || ShortcutPosition.allCases.contains {
-                        chord(id, $0)?.symbols.localizedCaseInsensitiveContains(query) == true
-                    }
+                filter.matches(
+                    [title(id)]
+                        + ShortcutPosition.allCases.compactMap { chord(id, $0)?.symbols })
             }
             return commands.isEmpty ? nil : Section(title: section.title, commands: commands)
         }

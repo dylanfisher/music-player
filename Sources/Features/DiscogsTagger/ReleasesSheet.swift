@@ -1,5 +1,6 @@
 import AppKit
 import Discogs
+import DisplayText
 
 /// Other Releases… (51.11, after YATE's release list): the album's candidates with filters by
 /// artist, title, country, label and format, sorted by any column's header. Choosing one
@@ -248,9 +249,7 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
     private func showCandidates() {
         let kept = candidates.enumerated().filter { _, candidate in
             texts.allSatisfy { filter, text in
-                text.isEmpty
-                    || filter.value(candidate.summary).range(
-                        of: text, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+                ListFilter(text).matches([filter.value(candidate.summary)])
             }
         }
         let descriptor = table.sortDescriptors.first
