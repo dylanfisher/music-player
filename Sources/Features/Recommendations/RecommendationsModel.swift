@@ -182,6 +182,18 @@ final class RecommendationsModel {
         changed()
     }
 
+    /// The rows of `rows` that `filter`, the window's search field, keeps, matched on their
+    /// artists, title, year, label and styles as the columns show them.
+    nonisolated static func filtered(_ rows: [RecommendationRow], by filter: ListFilter)
+        -> [RecommendationRow]
+    {
+        guard !filter.isEmpty else { return rows }
+        let columns: [RecommendationColumn] = [.artist, .title, .year, .label, .styles]
+        return rows.filter { row in
+            filter.matches(columns.map { $0.text(row, download: nil) })
+        }
+    }
+
     /// Stops the read out, and the wait to read a discography again, for a closed window.
     func stop() {
         reading?.cancel()

@@ -12,7 +12,8 @@ import Settings
 /// rest.
 @MainActor
 final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
-    NSTableViewDelegate, NSMenuDelegate, NSWindowDelegate, NSTokenFieldDelegate
+    NSTableViewDelegate, NSMenuDelegate, NSWindowDelegate, NSTokenFieldDelegate,
+    NSSearchFieldDelegate
 {
     static let title = "Recommendations"
 
@@ -48,8 +49,15 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     let actionButton = NSButton(title: "", target: nil, action: nil)
     let factsLabel = NSTextField(labelWithString: "")
     let statusLink = NSButton(title: "Service Status", target: nil, action: nil)
-    /// The rows shown, in the list's order.
+    /// Filters the rows read, leaving the list's query as it is.
+    let search = NSSearchField()
+    static let noneMatch = "No albums read so far match the search."
+    /// The rows shown, in the list's order: those of `given` the search keeps.
     private(set) var rows: [RecommendationRow] = []
+    /// The rows `show` was last given.
+    private var given: [RecommendationRow] = []
+    /// What `show` was last given to say.
+    private var message: String?
     private(set) var query = RecommendationQuery()
     /// The header sort shown, nil for the list's own order.
     private(set) var headerSort: HeaderSort?
@@ -159,9 +167,13 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             notInterestedButton, alreadyHaveButton, downloadButton, discogsButton,
             discographyButton, markedButton,
         ]
+        search.placeholderString = ListFilter.placeholder
+        search.toolTip = ListFilter.help
+        search.delegate = self
+        search.widthAnchor.constraint(equalToConstant: 220).isActive = true
         let actions = NSStackView(views: [
             notInterestedButton, alreadyHaveButton, downloadButton, discogsButton, NSView(),
-            discographyButton, markedButton,
+            discographyButton, search, markedButton,
         ])
         actions.spacing = 8
         for button in buttons {
@@ -283,12 +295,26 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
                     [NSSortDescriptor(key: $0.column.rawValue, ascending: $0.ascending)]
                 } ?? []
         }
-        if rows != self.rows {
-            // A discography read again as its values come in reorders; the selection follows
-            // its albums, and the scroll stays where it is.
+        self.message = message
+        given = rows
+        showRows(resorted: resorted)
+        if !pending { place = nil }
+        if pending { progress.startAnimation(nil) } else { progress.stopAnimation(nil) }
+        self.action = action?.run
+        actionButton.title = action?.title ?? ""
+        actionButton.isHidden = action == nil
+        factsLabel.stringValue = facts ?? ""
+    }
+
+    /// Lists the rows given that the search keeps, and says when it hides every one. A
+    /// discography read again as its values come in reorders; the selection follows its
+    /// albums, and the scroll stays where it is unless `resorted`.
+    private func showRows(resorted: Bool = false) {
+        let shown = RecommendationsModel.filtered(given, by: ListFilter(search.stringValue))
+        if shown != rows {
             let selected = Set(
                 selectedRows.map { MarkedAlbum(kind: $0.album.kind, id: $0.album.id) })
-            self.rows = rows
+            rows = shown
             table.reloadData()
             if let place, !rows.isEmpty {
                 table.selectRowIndexes([min(place, rows.count - 1)], byExtendingSelection: false)
@@ -299,15 +325,16 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
                 table.scrollRowToVisible(first)
             }
         }
-        if !pending { place = nil }
-        if pending { progress.startAnimation(nil) } else { progress.stopAnimation(nil) }
-        messageLabel.stringValue = message ?? ""
-        messageLabel.isHidden = message == nil
-        self.action = action?.run
-        actionButton.title = action?.title ?? ""
-        actionButton.isHidden = action == nil
-        factsLabel.stringValue = facts ?? ""
+        let said = message ?? (rows.isEmpty && !given.isEmpty ? Self.noneMatch : nil)
+        messageLabel.stringValue = said ?? ""
+        messageLabel.isHidden = said == nil
         showDetail()
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        // The token fields' typing comes here too; they apply at Return, through `filterEdited`.
+        guard notification.object as? NSSearchField === search else { return }
+        showRows()
     }
 
     private func showDetail() {
@@ -523,7 +550,9 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
                 RecommendationColumn(rawValue: $0.identifier.rawValue)
             })
         else { return nil }
-        if row == rows.count - 1 { reachedEnd() }
+        // With a search, the last row shown is often in view at once: reading more each time
+        // would read the whole list a page at a time.
+        if row == rows.count - 1, ListFilter(search.stringValue).isEmpty { reachedEnd() }
         let album = rows[row].album
         let label = NSTextField(
             labelWithString: column.text(
