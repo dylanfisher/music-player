@@ -115,11 +115,14 @@ extension Downloads {
             return logger.error("the upgrade candidates couldn't be read: \(error)")
         }
         guard goesOn(session, epoch) else { return }
-        // Counted once the pass has queued what it could, from the jobs as they are then.
+        // Counted once the pass has queued what it could, from the jobs as they are then; not
+        // by a pass that resumed after the box was unticked or the session stopped.
         defer {
-            upgradesLeft = AutoUpgrades.queueable(
-                candidates, jobs: session.model.jobs.rows.values, never: never, misses: missed,
-                skipped: unqueueable, now: now())
+            if goesOn(session, epoch) {
+                upgradesLeft = AutoUpgrades.queueable(
+                    candidates, jobs: session.model.jobs.rows.values, never: never,
+                    misses: missed, skipped: unqueueable, now: now())
+            }
         }
         let chosen = AutoUpgrades.next(
             candidates, jobs: session.model.jobs.rows.values, never: never, misses: missed,

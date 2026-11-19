@@ -243,6 +243,41 @@ private func settled(_ downloads: Downloads) async {
     downloads.stop()
 }
 
+/// Holds each release's snapshot until it's opened, so a pass waits in its queueing.
+private final class SnapshotGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+    private var waiting = 0
+
+    func open() { lock.withLock { opened = true } }
+    var waiters: Int { lock.withLock { waiting } }
+
+    func wait() async {
+        lock.withLock { waiting += 1 }
+        while !lock.withLock({ opened }) { try? await Task.sleep(nanoseconds: 5_000_000) }
+    }
+}
+
+@MainActor
+@Test func aPassUntickedWhileQueueingLeavesNoCount() async throws {
+    let fake = FakeService()
+    let (downloads, _) = try await upgrading(fake, Library([candidate(1), candidate(2)]))
+    let gate = SnapshotGate()
+    downloads.releaseSnapshot = { release, _ in
+        await gate.wait()
+        return ReleaseSnapshot(
+            releaseID: release, artist: "Made-Up Artist", title: "Album \(release)", year: nil,
+            tracklists: [[ReleaseSnapshot.Track(position: "1", title: "One", seconds: 200)]])
+    }
+    downloads.autoUpgrade = true
+    await eventually("the pass waiting in its queueing") { gate.waiters == 1 }
+    downloads.autoUpgrade = false
+    gate.open()
+    await settled(downloads)
+    #expect(downloads.upgradesLeft == nil)
+    downloads.stop()
+}
+
 @MainActor
 @Test func aJobThatFindsNothingIsCancelledAndWaitsADay() async throws {
     let fake = FakeService()
