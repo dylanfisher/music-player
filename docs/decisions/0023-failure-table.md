@@ -5,6 +5,8 @@
 - **See also:** [0025](0025-threat-model.md) records the threats beside these failures: hostile files, links, SQL and the bundle.
 - **Amends:** [0009](0009-scanning-and-watching.md), [0011](0011-playback-engine-and-hal-output.md),
   [0015](0015-config-file.md), [0022](0022-stable-track-identity-and-play-timeline.md)
+- **Amended by:** [0211](0211-falling-back-to-system-default.md): a lost device or renderer the
+  config names falls back to System Default, paused.
 
 ## Context
 
@@ -28,7 +30,7 @@ cover what a test can't do quickly or hermetically.
 | NAS mount dead mid-scan (listings and reads fail, mount stays) | each failed listing and read | unreadable folders and files in Problems; every earlier track kept | next poll reads them again | `aNASThatDropsMidScanKeepsEveryTrack` |
 | NAS missing or empty at a scan | the root doesn't stat, or lists nothing while indexed | status bar problem; index kept | next poll | `missingFolderRemovesNothing`, `emptyMountPointRemovesNothing` |
 | NAS drops mid-playback | the decoder's read fails, or its audio ends well before its length | Now Playing names the track that failed, and where its audio ended; the next one plays | play again once it's back | `aFileCutShortWhilePlayingIsReportedAndSkipped`, `aQueueOfBrokenFilesEndsInsteadOfLooping` |
-| DAC unplugged while playing or before playing | the HAL's alive and device-list listeners | paused, "device lost"; then "device returned" | press Play | `losingTheDevicePausesAndItsReturnLetsPlaybackResume`, `playingWithTheDeviceUnpluggedReportsItLost` |
+| DAC unplugged while playing or before playing | the HAL's alive and device-list listeners | paused, "device lost"; then "device returned" (superseded by [0211](0211-falling-back-to-system-default.md): paused on System Default, which Play plays on, until the DAC returns) | press Play | `losingTheDevicePausesAndItsReturnLetsPlaybackResume`, `playingWithTheDeviceUnpluggedReportsItLost` |
 | DAC gone during a rate switch: stop, format, start | the step fails while the device reads as gone | as unplugged, resuming at the new track's start | press Play | `theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost` |
 | Disk full: database | `SQLITE_FULL`; the transaction rolls back | status bar: the scan or edit failed, with SQLite's reason | free space; a local folder rescans a minute later, then backs off to 15 minutes; a network one at its poll | `aFullDatabaseFailsTheScanAndKeepsTheIndex`, `aTransactionSQLiteRolledBackItselfThrowsWhatCausedIt`, `scripts/full-disk` |
 | Disk full: state file | the atomic write fails | config banner: "couldn't save" | the change is kept and saved with the next one, or at quit | `aFailedSaveIsKeptAndSavedWithTheNext`, `scripts/full-disk` |
@@ -103,7 +105,9 @@ image isn't hermetic; `scripts/full-disk` covers the same saves with `ENOSPC`.
 ## Alternatives considered
 
 - **Following the system default output when the DAC goes mid-switch** — rejected for the
-  reason in 0011: it would play out of the speakers at the DAC's volume.
+  reason in 0011: it would play out of the speakers at the DAC's volume. (Superseded by
+  [0211](0211-falling-back-to-system-default.md): output falls back to System Default, paused,
+  with System Default's own volume.)
 - **Disabling timeline commands when every selected play is missing** — rejected: it reads every
   selected play's track whenever a menu is checked.
 - **`PRAGMA quick_check` at launch,** to catch corruption deeper than the header — rejected: it
