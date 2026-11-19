@@ -214,3 +214,17 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     #expect(fallbacks.inUse(named: named) == named)
     #expect(fallbacks.renderersToClose(denon).count == 1)
 }
+
+@Test func pickingTheChosenOutputDuringAFallbackEndsIt() {
+    var fallbacks = OutputFallbacks<Renderer>()
+    // Lost, not yet moved: the pick is the one in use, and changes nothing.
+    _ = fallbacks.lost(
+        named: dac, inUse: "DAC", renderer: nil, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    #expect(!fallbacks.pickEnds(dac, named: dac))
+    _ = fallbacks.fellBack()
+    #expect(fallbacks.pickEnds(dac, named: dac))
+    // Any other pick changes a setting, which ends it as a change does.
+    #expect(!fallbacks.pickEnds(.systemDefault, named: dac))
+    #expect(!fallbacks.pickEnds(.device(uid: "Speakers"), named: dac))
+}

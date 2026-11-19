@@ -141,6 +141,13 @@ struct OutputFallbacks<Renderer: AnyObject> {
     /// user's pick of System Default ends the fallback, and the fix works then.
     var takesHogModeFix: Bool { !hasMoved }
 
+    /// Whether a pick of `choice` ends the fallback, though it changes no setting: it's the
+    /// output the config names, `named`, listed as not connected while System Default plays
+    /// in its place, so picking it asks for that output again (ADR 0211).
+    func pickEnds(_ choice: OutputChoice, named: OutputChoice) -> Bool {
+        hasMoved && choice == named
+    }
+
     /// Ends the fallback for a change of `output.deviceUID` or `output.renderer`, unless the
     /// app made it `byApp` to show the device in use: only the user's change ends one. Returns
     /// whether it ended, and the renderer fallen back from, which is the app's again to close

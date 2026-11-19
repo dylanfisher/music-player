@@ -84,6 +84,15 @@ extension AppDelegate {
         }
     }
 
+    /// The user picked the output the config names during a fallback, which changes no
+    /// setting: playback moves back to it, lost, as though it was just picked.
+    func choseAgain() {
+        guard endFallback(), let engine else { return }
+        outputSettingsChanged(switched: true)
+        guard let renderer = rendererOutput else { return }
+        Task { await engine.use(renderer) }
+    }
+
     /// Ends a fallback for the user's change of output setting, and returns whether it did. The
     /// app's own writes, which show the device in use, leave it.
     func endFallback() -> Bool {

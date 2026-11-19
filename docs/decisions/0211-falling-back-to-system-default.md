@@ -59,8 +59,9 @@ the device output moves to it leaves the fallback undone, on the device that wen
 Default device lost during a fallback is lost the same way, and the chosen output still gets playback back when it returns.
 
 **Ending a fallback.** A pick, or an edit of `output.deviceUID` or `output.renderer`, ends it:
-output moves as for any change, and ADR 0037's return applies from then on. An edit of
-`output.hogMode` or `output.digitalVolume` during a fallback is saved to the chosen device's
+output moves as for any change, and a pick of the chosen output, which changes no setting,
+moves playback back to it, lost until it returns. ADR 0037's return applies from then on. An
+edit of `output.hogMode` or `output.digitalVolume` during a fallback is saved to the chosen device's
 profile, which the config shows, and output stays on System Default. For the same reason a
 playback problem's details show System Default's device's own hog mode during a fallback, and
 its Turn On Hog Mode fix beeps rather than turn hog mode on for the chosen device; picking

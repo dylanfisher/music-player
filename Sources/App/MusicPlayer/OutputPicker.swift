@@ -59,6 +59,7 @@ extension AppDelegate {
     /// first, so leaving a renderer for a device doesn't play a moment on the device before.
     func chooseOutput(_ choice: OutputChoice) {
         guard let settings else { return }
+        if outputFallback.pickEnds(choice, named: currentOutput) { return choseAgain() }
         let next = choice.settings(deviceUID: settings[\.outputDeviceUID])
         do {
             if settings[\.outputDeviceUID] != next.deviceUID {
