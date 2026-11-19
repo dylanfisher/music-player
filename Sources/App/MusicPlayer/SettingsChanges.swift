@@ -315,6 +315,7 @@ extension AppDelegate {
                 rescanFolders: { [weak self] in self?.rescanFolders(at: $0) },
                 outputs: { [weak self] in self?.outputOptionsNow() ?? [] },
                 searchOutputs: { [weak self] in self?.searchOutputs() },
+                searchingOutputs: { [weak self] in self?.outputSearch != nil },
                 chooseOutput: { [weak self] in self?.chooseOutput($0) },
                 showHealth: { [weak self, weak dispatcher] in
                     // A button that says Show doesn't hide it: with it showing, the main window

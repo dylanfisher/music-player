@@ -172,7 +172,8 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
             openConfigFile: { Issue.record("the pane shows the mapping") }, revealConfigFile: {},
             copyDefaultConfig: {}, chooseSyncFolder: {}, openSyncFolder: {},
             chooseStagingFolder: {}, addFolder: {}, removeFolder: { _ in }, rescanNow: {},
-            rescanFolders: { _ in }, outputs: { [] }, searchOutputs: {}, chooseOutput: { _ in },
+            rescanFolders: { _ in }, outputs: { [] }, searchOutputs: {},
+            searchingOutputs: { false }, chooseOutput: { _ in },
             showHealth: {},
             libraryDatabase: {
                 LibraryDatabase(

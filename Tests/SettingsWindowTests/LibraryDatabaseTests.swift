@@ -48,7 +48,8 @@ private func settingsPane(
             chooseSyncFolder: {}, openSyncFolder: {}, chooseStagingFolder: {}, addFolder: {},
             removeFolder: { _ in },
             rescanNow: {}, rescanFolders: { _ in }, outputs: { [] }, searchOutputs: {},
-            chooseOutput: { _ in }, showHealth: {}, libraryDatabase: { database },
+            searchingOutputs: { false }, chooseOutput: { _ in }, showHealth: {},
+            libraryDatabase: { database },
             revealIndex: revealIndex, backUpNow: backUpNow, restoreSnapshot: restore))
 }
 

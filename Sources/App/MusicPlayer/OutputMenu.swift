@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Settings
 
 /// Controls ▸ Output: the outputs found, listed again each time it opens, the one in use
@@ -8,6 +9,8 @@ final class OutputMenu: NSObject, NSMenuDelegate {
     /// The outputs to list, and the one in use.
     var options: () -> (options: [OutputOption], current: OutputChoice) = { ([], .systemDefault) }
     var choose: (OutputChoice) -> Void = { _ in }
+    /// Whether a search for renderers is running, which a last, disabled row says.
+    var searching: () -> Bool = { false }
     /// Called as the menu opens, to search for renderers.
     var opened: () -> Void = {}
     private weak var openMenu: NSMenu?
@@ -21,7 +24,7 @@ final class OutputMenu: NSObject, NSMenuDelegate {
 
     func menuDidClose(_ menu: NSMenu) { openMenu = nil }
 
-    /// Lists the outputs again in the menu while it's open, after a search found more.
+    /// Lists the outputs again in the menu while it's open, as a search starts and ends.
     func refresh() {
         openMenu.map(fill)
     }
@@ -36,6 +39,10 @@ final class OutputMenu: NSObject, NSMenuDelegate {
             item.representedObject = option.choice.text
             item.state = option.choice == current ? .on : .off
             menu.addItem(item)
+        }
+        // With no action, AppKit shows it disabled.
+        if searching() {
+            menu.addItem(NSMenuItem(title: searchingForRenderers, action: nil, keyEquivalent: ""))
         }
     }
 

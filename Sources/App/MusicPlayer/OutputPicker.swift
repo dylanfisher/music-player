@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import DisplayText
 import HALOutput
 import Log
 import Palette
@@ -18,6 +19,7 @@ extension AppDelegate {
             return (outputOptionsNow(), outputInUse)
         }
         outputMenu.choose = { [weak self] in self?.chooseOutput($0) }
+        outputMenu.searching = { [weak self] in self?.outputSearch != nil }
         outputMenu.opened = { [weak self] in self?.searchOutputs() }
         menu.liveMenus[AppMenus.outputMenuTitle]?.delegate = outputMenu
         toolbar?.outputMenu.delegate = outputMenu
@@ -75,7 +77,8 @@ extension AppDelegate {
         }
     }
 
-    /// Starts one search for renderers, unless one is running, and lists what it finds.
+    /// Starts one search for renderers, unless one is running, and lists what it finds. The
+    /// lists show a Searching row until it ends (ADR 0211).
     func searchOutputs() {
         guard outputSearch == nil else { return }
         outputSearch = Task { [weak self] in
@@ -84,12 +87,13 @@ extension AppDelegate {
                 self?.foundRenderers = RendererChoice.choices(found).map {
                     FoundOutput(id: $0.udn, name: $0.name)
                 }
-                self?.outputsChanged()
             } catch {
                 logger.error("the renderer search for the output picker failed: \(error)")
             }
             self?.outputSearch = nil
+            self?.outputsChanged()
         }
+        outputsChanged()
     }
 
     /// Lists the devices off the main thread, then calls `then`. Reads run in order on a serial
@@ -127,11 +131,22 @@ extension AppDelegate {
     }
 }
 
-/// The palette rows that pick an output, "Output: <name>".
-func outputItems(_ options: [OutputOption], current: OutputChoice) -> [PaletteItem] {
-    options.map {
+/// The palette rows that pick an output, "Output: <name>", and while a search for renderers
+/// runs, a last row that says so and picks nothing.
+func outputItems(_ options: [OutputOption], current: OutputChoice, searching: Bool)
+    -> [PaletteItem]
+{
+    let title = AppMenus.outputMenuTitle
+    let rows = options.map {
         PaletteItem(
-            kind: .output, key: $0.choice.text, title: "\(AppMenus.outputMenuTitle): \($0.title)",
-            detail: $0.choice == current ? "In use" : AppMenus.outputMenuTitle)
+            kind: .output, key: $0.choice.text, title: "\(title): \($0.title)",
+            detail: $0.choice == current ? "In use" : title)
     }
+    guard searching else { return rows }
+    // A key no output reads back as.
+    return rows + [
+        PaletteItem(
+            kind: .output, key: "\(title):searching", title: "\(title): \(searchingForRenderers)",
+            detail: title, isEnabled: false)
+    ]
 }

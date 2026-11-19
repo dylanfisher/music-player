@@ -23,6 +23,8 @@ public struct SettingsActions {
     public var outputs: () -> [OutputOption]
     /// Starts a search for renderers, as the output picker opens; `reload` shows what it finds.
     public var searchOutputs: () -> Void
+    /// Whether that search is running, which the list says in a last row.
+    public var searchingOutputs: () -> Bool
     public var chooseOutput: (OutputChoice) -> Void
     /// Shows Library Health in the main window, from the Browsing section's button.
     public var showHealth: () -> Void
@@ -43,7 +45,8 @@ public struct SettingsActions {
         addFolder: @escaping () -> Void, removeFolder: @escaping (Int) -> Void,
         rescanNow: @escaping () -> Void, rescanFolders: @escaping ([Int]) -> Void,
         outputs: @escaping () -> [OutputOption],
-        searchOutputs: @escaping () -> Void, chooseOutput: @escaping (OutputChoice) -> Void,
+        searchOutputs: @escaping () -> Void, searchingOutputs: @escaping () -> Bool,
+        chooseOutput: @escaping (OutputChoice) -> Void,
         showHealth: @escaping () -> Void,
         libraryDatabase: @escaping () async throws -> LibraryDatabase,
         revealIndex: @escaping () -> Void, backUpNow: @escaping () async -> Void,
@@ -61,6 +64,7 @@ public struct SettingsActions {
         self.rescanFolders = rescanFolders
         self.outputs = outputs
         self.searchOutputs = searchOutputs
+        self.searchingOutputs = searchingOutputs
         self.chooseOutput = chooseOutput
         self.showHealth = showHealth
         self.libraryDatabase = libraryDatabase

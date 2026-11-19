@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import DisplayText
 import Fixtures
 import Foundation
 import Testing
@@ -39,6 +40,7 @@ private func actions(
     addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in },
     rescanNow: @escaping () -> Void = {}, rescanFolders: @escaping ([Int]) -> Void = { _ in },
     outputs: @escaping () -> [OutputOption] = { [] },
+    searchingOutputs: @escaping () -> Bool = { false },
     chooseOutput: @escaping (OutputChoice) -> Void = { _ in },
     showHealth: @escaping () -> Void = {},
     libraryDatabase: @escaping () async throws -> LibraryDatabase = {
@@ -54,7 +56,8 @@ private func actions(
         chooseStagingFolder: chooseStagingFolder, addFolder: addFolder,
         removeFolder: removeFolder, rescanNow: rescanNow,
         rescanFolders: rescanFolders, outputs: outputs,
-        searchOutputs: {}, chooseOutput: chooseOutput, showHealth: showHealth,
+        searchOutputs: {}, searchingOutputs: searchingOutputs, chooseOutput: chooseOutput,
+        showHealth: showHealth,
         libraryDatabase: libraryDatabase, revealIndex: revealIndex, backUpNow: backUpNow,
         restoreSnapshot: restoreSnapshot)
 }
@@ -428,6 +431,34 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
             "System Default", "Speakers", "Speakers", "USB-9 (not connected)", "Denon",
         ])
     #expect(popUp.titleOfSelectedItem == "Denon")
+}
+
+@MainActor @Test func theOutputPopUpSaysWhileRenderersAreSearchedFor() throws {
+    let schema = AppSettings()
+    var searching = true
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil },
+        set: { _, _ in }, isBlocked: { false })
+    let pane = GeneralPane(
+        model: model, configPath: "/tmp/config.json",
+        actions: actions(
+            outputs: { outputOptions(devices: [], renderers: [], current: .systemDefault) },
+            searchingOutputs: { searching }))
+    func find(_ view: NSView) -> NSPopUpButton? {
+        if let popUp = view as? NSPopUpButton,
+            popUp.identifier?.rawValue == schema.outputDeviceUID.key
+        {
+            return popUp
+        }
+        return view.subviews.lazy.compactMap(find).first
+    }
+    let popUp = try #require(find(pane.view))
+    #expect(popUp.itemTitles == ["System Default", searchingForRenderers])
+    #expect(popUp.itemArray.map(\.isEnabled) == [true, false])
+    #expect(popUp.titleOfSelectedItem == "System Default")
+    searching = false
+    pane.reload()
+    #expect(popUp.itemTitles == ["System Default"])
 }
 
 @MainActor @Test func theReceiversRowsFollowItsSwitch() throws {

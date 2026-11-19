@@ -2,6 +2,7 @@ import AppKit
 import Testing
 
 @testable import Commands
+@testable import DisplayText
 @testable import KeyChord
 @testable import Library
 @testable import MusicPlayer
@@ -296,4 +297,35 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     output.menuWillOpen(submenu)
     output.refresh()
     #expect(submenu.items.map(\.title) == ["System Default", "Speakers", "DAC"])
+}
+
+@MainActor @Test func theOutputMenuSaysWhileRenderersAreSearchedFor() throws {
+    let submenu = NSMenu()
+    var searching = false
+    let output = OutputMenu()
+    output.options = {
+        (outputOptions(devices: [], renderers: [], current: .systemDefault), .systemDefault)
+    }
+    output.searching = { searching }
+    submenu.delegate = output
+    output.menuNeedsUpdate(submenu)
+    // The search starts as the menu opens, and the open menu shows it.
+    output.menuWillOpen(submenu)
+    searching = true
+    output.refresh()
+    #expect(submenu.items.map(\.title) == ["System Default", searchingForRenderers])
+    _ = NSApplication.shared
+    submenu.update()
+    #expect(submenu.items.map(\.isEnabled) == [true, false])
+    // It ends with what it found.
+    searching = false
+    output.options = {
+        (
+            outputOptions(
+                devices: [], renderers: [FoundOutput(id: "uuid:denon", name: "Denon")],
+                current: .systemDefault), .systemDefault
+        )
+    }
+    output.refresh()
+    #expect(submenu.items.map(\.title) == ["System Default", "Denon"])
 }

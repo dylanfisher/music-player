@@ -111,6 +111,10 @@ public let fellBackMessage =
     "The output went away, so playback paused and moved to System Default. Press Play to play"
     + " there; it moves back once the output returns."
 
+/// The output pickers' last row, disabled, while a search for network renderers runs
+/// (ADR 0211).
+public let searchingForRenderers = "Searching for network players…"
+
 /// `text` as one line for a terminal. A file name or a tag can hold control characters, which
 /// would move the cursor, retitle the window or write the clipboard, or a line break, which
 /// would print a line that looks like the app's own; each prints as `\u{1B}`, `\u{A}` and so on.

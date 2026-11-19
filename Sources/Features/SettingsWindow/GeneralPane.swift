@@ -547,6 +547,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             popUp.identifier = NSUserInterfaceItemIdentifier(row.key)
             popUp.target = self
             popUp.action = #selector(choseOutput(_:))
+            // So the Searching row can be off while the outputs are on.
+            popUp.autoenablesItems = false
             popUp.menu?.delegate = self
             popUp.setAccessibilityLabel(row.title)
             return popUp
@@ -678,6 +680,11 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             let item = NSMenuItem(title: option.title, action: nil, keyEquivalent: "")
             item.representedObject = option.choice.text
             popUp.menu?.addItem(item)
+        }
+        if actions.searchingOutputs() {
+            let searching = NSMenuItem(title: searchingForRenderers, action: nil, keyEquivalent: "")
+            searching.isEnabled = false
+            popUp.menu?.addItem(searching)
         }
         popUp.selectItem(at: options.firstIndex { $0.choice == picked } ?? -1)
     }
