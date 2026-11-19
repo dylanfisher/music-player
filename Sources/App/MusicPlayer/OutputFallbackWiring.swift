@@ -91,18 +91,20 @@ extension AppDelegate {
     /// The user picked the output the config names during a fallback, which changes no
     /// setting: playback moves back to it, lost, as though it was just picked.
     func choseAgain() {
-        guard endFallback(), let engine else { return }
+        guard endFallback(repicked: true), let engine else { return }
         outputSettingsChanged(switched: true)
         guard let renderer = rendererOutput else { return }
         Task { await engine.use(renderer) }
     }
 
     /// Ends a fallback for the user's change of output setting, and returns whether it did. The
-    /// app's own writes, which show the device in use, leave it.
-    func endFallback() -> Bool {
-        let (ended, renderer) = outputFallback.outputChanged(byApp: showingInUse)
+    /// app's own writes, which show the device in use, leave it. A device's ends its loss too,
+    /// unless the pick was the device that went (`repicked`), which is lost still.
+    func endFallback(repicked: Bool = false) -> Bool {
+        let (ended, renderer, fromDevice) = outputFallback.outputChanged(byApp: showingInUse)
         guard ended else { return false }
         if let renderer { rendererOutput = renderer }
+        if fromDevice, !repicked, let engine { Task { await engine.lossEnded() } }
         // So the switch that follows isn't skipped as one to the device in use.
         outputUID = nil
         return true

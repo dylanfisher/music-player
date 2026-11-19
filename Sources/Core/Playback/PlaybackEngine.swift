@@ -97,6 +97,15 @@ public actor PlaybackEngine {
         publish(.outputChanged)
     }
 
+    /// The output in use moved by itself to a device the user chose in place of the lost one,
+    /// as `DeviceOutput` does when a pick ends its fallback: the loss is over, and
+    /// `outputChanged` says so (ADR 0211).
+    public func lossEnded() {
+        guard state.device == .lost else { return }
+        state.device = .connected
+        publish(.outputChanged)
+    }
+
     /// `use(_:)` without its change of device state.
     private func move(to newOutput: any Output) {
         lostOutput = nil

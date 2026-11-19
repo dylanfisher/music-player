@@ -154,12 +154,16 @@ struct OutputFallbacks<Renderer: AnyObject> {
 
     /// Ends the fallback for a change of `output.deviceUID` or `output.renderer`, unless the
     /// app made it `byApp` to show the device in use: only the user's change ends one. Returns
-    /// whether it ended, and the renderer fallen back from, which is the app's again to close
-    /// or keep.
-    mutating func outputChanged(byApp: Bool) -> (ended: Bool, renderer: Renderer?) {
-        guard phase != nil, !byApp else { return (false, nil) }
+    /// whether it ended; the renderer fallen back from, which is the app's again to close or
+    /// keep; and whether it was a device's fallback the device output made, whose loss the
+    /// engine wasn't told is over, since the device output moves to the pick itself.
+    mutating func outputChanged(byApp: Bool) -> (
+        ended: Bool, renderer: Renderer?, fromDevice: Bool
+    ) {
+        guard phase != nil, !byApp else { return (false, nil, false) }
         defer { phase = nil }
-        return (true, renderer)
+        if case .device = phase { return (true, nil, true) }
+        return (true, renderer, false)
     }
 
     private static func target(

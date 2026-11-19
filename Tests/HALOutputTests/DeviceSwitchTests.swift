@@ -265,6 +265,19 @@ private func fellBackFromTheDAC(playing: Bool) async throws -> (TwoDevices, resu
     #expect(await rig.engine.position().map { $0 >= resumeAt } == true)
 }
 
+@Test func aPickOfAnotherDeviceDuringAFallbackEndsTheLoss() async throws {
+    let (rig, _) = try await fellBackFromTheDAC(playing: true)
+    let headphones = NullDevice(name: "Headphones")
+    // As the app does when the user's pick ends the fallback (ADR 0211).
+    rig.output.use(DeviceChoice(provider: headphones, digitalVolume: false, gain: 1, formats: nil))
+    await rig.engine.lossEnded()
+    try await rig.wait(for: .outputChanged)
+    #expect(await rig.engine.state.device == .connected)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    #expect(!headphones.captured.isEmpty)
+}
+
 @Test func aDeviceLostWhilePausedFallsBackPaused() async throws {
     let (rig, _) = try await fellBackFromTheDAC(playing: false)
     try await Task.sleep(nanoseconds: 300_000_000)

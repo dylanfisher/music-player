@@ -108,8 +108,10 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
 
 @Test func theUsersPickEndsTheFallback() {
     var fallbacks = fellBackFromTheDAC()
-    let (ended, renderer) = fallbacks.outputChanged(byApp: false)
+    let (ended, renderer, fromDevice) = fallbacks.outputChanged(byApp: false)
     #expect(ended && renderer == nil)
+    // The device output moves to the pick itself, so the engine is told the loss is over.
+    #expect(fromDevice)
     #expect(fallbacks.inUse(named: .systemDefault) == .systemDefault)
     #expect(fallbacks.inUse(named: dac) == dac)
     let again = fallbacks.outputChanged(byApp: false)
@@ -120,8 +122,16 @@ private func fellBackFromTheDAC() -> OutputFallbacks<Renderer> {
     _ = fromRenderer.lost(
         named: .renderer(udn: "uuid:denon"), inUse: "DAC", renderer: denon,
         systemDefault: { "Speakers" }, profile: { profile($0) })
-    let handedBack = fromRenderer.outputChanged(byApp: false).renderer
-    #expect(handedBack === denon)
+    let fromRendererEnding = fromRenderer.outputChanged(byApp: false)
+    #expect(fromRendererEnding.renderer === denon)
+    #expect(!fromRendererEnding.fromDevice)
+    // Still asked, playback is lost on the device the config names, which the device output
+    // reports a return from when it moves to the pick.
+    var asked = OutputFallbacks<Renderer>()
+    _ = asked.lost(
+        named: dac, inUse: "DAC", renderer: nil, systemDefault: { "Speakers" },
+        profile: { profile($0) })
+    #expect(!asked.outputChanged(byApp: false).fromDevice)
 }
 
 @Test func aHogModeEditDuringAFallbackIsTheChosenDevicesAndMovesNothing() {
