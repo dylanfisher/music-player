@@ -95,3 +95,17 @@ func readString(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress) 
     let value: Unmanaged<CFString> = try readScalar(object, address)
     return value.takeRetainedValue() as String
 }
+
+/// Whether the device has hog mode at all. An aggregate or multi-output device, as Audio MIDI
+/// Setup makes them, doesn't, so no process can take it.
+func hasHogMode(_ id: AudioObjectID) -> Bool {
+    var address = address(kAudioDevicePropertyHogMode)
+    return AudioObjectHasProperty(id, &address)
+}
+
+/// The process holding the device's exclusive access, or nil when none does or none can.
+func readHogModeOwner(_ id: AudioObjectID) throws -> pid_t? {
+    guard hasHogMode(id) else { return nil }
+    let owner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
+    return owner == -1 ? nil : owner
+}

@@ -58,7 +58,7 @@ public struct AudioDevice: Sendable {
     private init(id: AudioObjectID, streamIDs: [AudioStreamID]) throws {
         let rates: [AudioValueRange] = try readArray(
             id, address(kAudioDevicePropertyAvailableNominalSampleRates))
-        let hogOwner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
+        let hogOwner = try readHogModeOwner(id)
         self.init(
             id: id,
             name: try readString(id, address(kAudioObjectPropertyName)),
@@ -78,7 +78,7 @@ public struct AudioDevice: Sendable {
                     available: available.map(PhysicalFormat.init)
                 )
             },
-            hogModeOwner: hogOwner == -1 ? nil : hogOwner
+            hogModeOwner: hogOwner
         )
     }
 }
