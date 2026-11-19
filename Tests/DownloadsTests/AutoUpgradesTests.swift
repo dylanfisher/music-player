@@ -459,6 +459,30 @@ private final class Reads: @unchecked Sendable {
 }
 
 @MainActor
+@Test func aPassWithEverySlotTakenCountsFromTheLastRead() async throws {
+    let fake = FakeService()
+    let library = Library([candidate(1, plays: 9), candidate(2)])
+    let (downloads, session) = try await upgrading(fake, library, inFlight: 1)
+    let reads = Reads()
+    downloads.upgradeCandidates = { _, _ in
+        reads.read()
+        return library.candidates
+    }
+    downloads.autoUpgrade = true
+    await eventually("queued") { fake.created.count == 1 }
+    await settled(downloads)
+    #expect(reads.made == 1)
+    #expect(downloads.upgradesLeft == 1)
+    fake.put(listed(1, release: 1, .downloading))
+    await session.model.poll()
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    #expect(reads.made == 1, "a job changed, but no slot is free")
+    #expect(downloads.upgradesLeft == 1)
+    downloads.stop()
+}
+
+@MainActor
 @Test func aCopyTaggedWithADiscrepancyIsRequeuedButNotAnUpgradeQueuedByHand() async throws {
     let discrepancy = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
     let byHand = listed(1, release: 99, .staged) { $0.tagging = discrepancy }

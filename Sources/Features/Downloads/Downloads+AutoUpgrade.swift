@@ -105,6 +105,10 @@ extension Downloads {
                 never: never)
             if let kept = candidatesRead?.candidates(for: key, at: now()) {
                 candidates = kept
+            } else if inFlight >= autoUpgradesInFlight, let kept = candidatesRead?.candidates {
+                // Every slot taken: nothing is queued, so the count makes do with the last
+                // read rather than read the whole library at each job's change.
+                candidates = kept
             } else {
                 let at = now()
                 candidates = try await upgradeCandidates(database, share)

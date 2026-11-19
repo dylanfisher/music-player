@@ -32,8 +32,9 @@ to Album does. A release no album carries says so in the window, rather than doi
 **The upgrade count is the pass's own rule.** `AutoUpgrades.queueable` is `next` with no room
 limit, counted at the end of each pass from the jobs as they are then, so Never Upgrade, misses
 not yet due, skipped releases and live jobs are left out exactly as the pass leaves them out.
-To count with every slot taken, a pass now reads the candidates then too, through the same
-cache as before, which a pass with nothing changed reuses.
+With every slot taken, a pass recounts from the candidates it read last, whatever has
+changed since, so it reads the library no more often than it did before the count. Only a
+pass with nothing read yet, after a launch with the slots full, reads them.
 
 ## Alternatives considered
 
@@ -46,6 +47,6 @@ cache as before, which a pass with nothing changed reuses.
 
 ## Consequences
 
-- With Upgrade to FLAC Automatically on and its slots full, a pass after a job changes reads
-  the library's candidates, which it skipped before.
+- While the slots are full, the count can lag the library: an album just upgraded is counted
+  until a slot frees and the pass reads the candidates again.
 - An imported album retagged since as another release isn't found, and the window says so.
