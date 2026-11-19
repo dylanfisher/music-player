@@ -78,6 +78,9 @@ extension AppDelegate {
                 return
             }
             rendererOutput = renderer
+            // System Default's path goes; the renderer's shows once it publishes one, as the
+            // track it's handed back loads.
+            signalPath?.show(nil)
             receiverFollowsOutput()
             outputUID = nil
             outputSettingsChanged(switched: true)
