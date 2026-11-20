@@ -35,9 +35,13 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     static var headSeconds: Double { 10 }
     static var listenSeconds: Double { 5 }
     static var tokenLifetimeSeconds: Double { 24 * 60 * 60 }
-    static var chunkBytes: Int { 64 * 1024 }
+    static var chunkBytes: Int { 512 * 1024 }
 
     private let queue = DispatchQueue(label: "HTTPServer")
+    /// Where a body's chunks are read: a file on the NAS can take seconds to read, which on
+    /// `queue` would hold up every connection's accept, receive and timers.
+    private let reads = DispatchQueue(
+        label: "HTTPServer reads", qos: .userInitiated, attributes: .concurrent)
     private let listener: NWListener
     private let interface: NetworkInterface
     private let accepts: @Sendable (IPAddress) -> Bool
@@ -270,24 +274,40 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     /// final message: a final message sent while another is incomplete never goes. No idle timer
     /// runs while they go: a renderer that has buffered ahead, or is paused, takes nothing for
     /// as long as it likes, and closing on it cuts the track short (ADR 0126).
+    ///
+    /// Each chunk is read on `reads`, then sent from `queue`, unless the connection ended
+    /// meanwhile. The read holds the file, so its descriptor stays open, and can't be reused,
+    /// until the read is done.
     private func send(_ client: Client, from offset: UInt64, through last: UInt64) {
         guard clients[ObjectIdentifier(client)] != nil, let file = client.file else { return }
         client.idle?.cancel()
         client.idle = nil
         let count = Int(min(UInt64(Self.chunkBytes), last - offset + 1))
-        var chunk = [UInt8](repeating: 0, count: count)
-        let read = chunk.withUnsafeMutableBytes {
-            pread(file.fd, $0.baseAddress, count, off_t(offset))
+        reads.async { [self] in
+            var buffer = Data(count: count)
+            let read = buffer.withUnsafeMutableBytes {
+                pread(file.fd, $0.baseAddress, count, off_t(offset))
+            }
+            let chunk = buffer
+            queue.async { [self] in
+                guard clients[ObjectIdentifier(client)] != nil else { return }
+                guard read == count else {
+                    problem(
+                        "couldn't read a file being served: it ended or failed at byte \(offset)")
+                    end(client)
+                    return
+                }
+                send(client, chunk, from: offset + UInt64(count), through: last)
+            }
         }
-        guard read == count else {
-            problem("couldn't read a file being served: it ended or failed at byte \(offset)")
-            end(client)
-            return
-        }
-        let next = offset + UInt64(count)
+    }
+
+    /// Sends a chunk read by `send`, then the next from `next`, or ends the connection when
+    /// it was the last.
+    private func send(_ client: Client, _ chunk: Data, from next: UInt64, through last: UInt64) {
         let isLast = next > last
         client.connection.send(
-            content: Data(chunk), contentContext: .finalMessage, isComplete: isLast,
+            content: chunk, contentContext: .finalMessage, isComplete: isLast,
             completion: .contentProcessed { [self] error in
                 if error != nil || isLast {
                     end(client)
@@ -347,7 +367,7 @@ private final class Client: @unchecked Sendable {
 }
 
 /// A regular file opened read-only without following a link, closed when released.
-final class OpenFile {
+final class OpenFile: Sendable {
     let fd: Int32
     let size: UInt64
 
