@@ -18,7 +18,8 @@ final class SeekBar: NSView {
 
     /// The position, from 0 to 1.
     var fraction = 0.0 {
-        didSet { needsDisplay = true }
+        // The position ticks twice a second; most ticks move the played part less than a pixel.
+        didSet { if playedPixels(fraction) != playedPixels(oldValue) { needsDisplay = true } }
     }
     var isEnabled = true {
         didSet {
@@ -108,10 +109,21 @@ final class SeekBar: NSView {
         NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
         guard isEnabled, fraction > 0 else { return }
         var played = track
-        // At least a round end's width, so the start of a track still shows as played.
-        played.size.width = max(track.width * fraction, Self.trackPoints)
+        played.size.width = playedPoints(fraction)
         Self.playedColor.setFill()
         NSBezierPath(roundedRect: played, xRadius: radius, yRadius: radius).fill()
+    }
+
+    /// The played part's width at `fraction`.
+    private func playedPoints(_ fraction: Double) -> Double {
+        // At least a round end's width, so the start of a track still shows as played.
+        max(bounds.width * fraction, Self.trackPoints)
+    }
+
+    /// The played part's width at `fraction` in whole backing pixels, or nil when none is drawn.
+    private func playedPixels(_ fraction: Double) -> Double? {
+        guard fraction > 0 else { return nil }
+        return convertToBacking(NSSize(width: playedPoints(fraction), height: 0)).width.rounded()
     }
 
     override func accessibilityValue() -> Any? { fraction }

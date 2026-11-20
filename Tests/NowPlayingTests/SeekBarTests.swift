@@ -64,6 +64,57 @@ private func bar() -> (SeekBar, () -> [(Double, Bool)]) {
     #expect(seeks().map(\.1) == [true, false, true, false])
 }
 
+/// Counts each time a key of the objects it watches is set, even to the value it had. AppKit
+/// marks a view as needing display only in an app that draws, so the tests count the sets.
+private final class Sets: NSObject {
+    private(set) var count = 0
+    private var watched: [(NSObject, String)] = []
+
+    init(of key: String, on objects: [NSObject]) {
+        super.init()
+        for object in objects {
+            object.addObserver(self, forKeyPath: key, options: [], context: nil)
+            watched.append((object, key))
+        }
+    }
+
+    deinit {
+        for (object, key) in watched { object.removeObserver(self, forKeyPath: key) }
+    }
+
+    override func observeValue(
+        forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?,
+        context: UnsafeMutableRawPointer?
+    ) { count += 1 }
+}
+
+/// The position ticks twice a second, so a move of less than a pixel draws nothing.
+@MainActor @Test func theBarRedrawsOnlyWhenThePlayedPartMovesAPixel() {
+    let (bar, _) = bar()
+    bar.fraction = 0.5
+    let redraws = Sets(of: "needsDisplay", on: [bar])
+    bar.fraction = 0.5 + 0.1 / bar.bounds.width
+    #expect(redraws.count == 0)
+    bar.fraction = 0.5 + 2 / bar.bounds.width
+    #expect(redraws.count == 1)
+    bar.fraction = 0
+    #expect(redraws.count == 2)
+}
+
+/// Times shown again unchanged, as most ticks show them, leave the labels as they are.
+@MainActor @Test func timesShownAgainUnchangedArentSetAgain() throws {
+    let box = SeekBox(frame: NSRect(x: 0, y: 0, width: 300, height: SeekBox.heightPoints))
+    box.showTimes(elapsed: "1:10", total: "3:20")
+    let labels = box.subviews.compactMap { $0 as? NSTextField }
+    try #require(labels.count == 2)
+    let sets = Sets(of: "stringValue", on: labels)
+    box.showTimes(elapsed: "1:10", total: "3:20")
+    #expect(sets.count == 0)
+    box.showTimes(elapsed: "1:11", total: "3:20")
+    #expect(sets.count == 1)
+    #expect(box.times == ("1:11", "3:20"))
+}
+
 /// The track and the played part are Swinsian's colors, the same in light and dark.
 @MainActor @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
 func theBarDrawsSwinsiansColors(_ appearance: NSAppearance.Name) throws {

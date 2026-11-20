@@ -52,8 +52,10 @@ final class SeekBox: NSView {
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
     func showTimes(elapsed: String, total: String) {
-        elapsedLabel.stringValue = elapsed
-        totalLabel.stringValue = total
+        // Setting a label lays it out and redraws it even when the text is the same, and the
+        // times are shown twice a second.
+        if elapsedLabel.stringValue != elapsed { elapsedLabel.stringValue = elapsed }
+        if totalLabel.stringValue != total { totalLabel.stringValue = total }
     }
 
     /// The times shown, for tests.
