@@ -744,7 +744,7 @@ public final class LibraryIndex {
             })
     }
 
-    private var statements: [String: Statement] = [:]
+    private(set) var statements: [String: Statement] = [:]
 
     /// Prepares each write statement once per connection.
     func statement(_ sql: String) throws -> Statement {

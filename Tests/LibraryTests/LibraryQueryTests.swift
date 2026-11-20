@@ -134,6 +134,22 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     #expect(try index.ratings(ids: []) == [])
 }
 
+/// Rows read for every count of ids up to two chunks come back whole, from one prepared
+/// statement per padded size, not one per count.
+@Test func rowsForEveryCountShareAFewStatements() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let all = try index.trackIDs(sortedBy: .title)
+    let ids = (0..<(2 * inListSize + 3)).map { all[$0 % all.count] }
+    let before = index.statements.count
+    for count in [1, 2, 7, 8, 9, 63, 64, 65, 499, 500, 501, ids.count] {
+        let asked = Array(ids.prefix(count))
+        #expect(Set(try index.rows(ids: asked).map(\.id)) == Set(asked), "\(count)")
+    }
+    #expect(index.statements.count - before == inListSizes.count)
+}
+
 @Test func tracksAtPathsReadEachPathsRowInOrder() throws {
     let library = try TestLibrary()
     _ = try library.scan()

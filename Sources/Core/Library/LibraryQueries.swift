@@ -274,12 +274,13 @@ extension LibraryIndex {
 
     /// Runs `sql`, given the placeholders of one `IN` list, over `ids` a chunk at a time, since
     /// SQLite takes at most 32,766 parameters. The last chunk repeats its last ID to the full
-    /// size, which `IN` ignores, so one prepared statement serves every chunk.
+    /// size, which `IN` ignores, so one prepared statement serves every chunk. The size is one
+    /// of `inListSizes`, so a few cached statements serve every count of `ids`.
     func inChunks<T>(_ ids: [Int64], _ sql: (String) -> String, _ read: (Row) throws -> T)
         throws -> [T]
     {
         guard let last = ids.last else { return [] }
-        let size = min(ids.count, inListSize)
+        let size = inListSizes.first { $0 >= ids.count } ?? inListSize
         let select = try statement(
             sql(Array(repeating: "?", count: size).joined(separator: ", ")))
         var results: [T] = []
@@ -495,6 +496,9 @@ private func whereClause(_ conditions: [String]) -> String {
 
 /// The most IDs one `IN` list binds: well under SQLite's limit, and few statement shapes.
 let inListSize = 500
+
+/// The sizes `inChunks` pads an `IN` list to, the last `inListSize`.
+let inListSizes = [1, 8, 64, inListSize]
 
 /// Selects what `trackRow` reads, from tracks `t` and files `f`.
 private let rowSelect = """
