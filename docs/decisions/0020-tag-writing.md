@@ -98,7 +98,9 @@ every key the reader maps onto it (`TDRC` and `TYER`; `©gen` and `gnre`; `COMME
   size, mtime and inode from before its edit. When undo puts a file back and the file's record
   in an older edit names that identity as what it left, that record takes the restored file's,
   so a file's edits undo one after another; a file changed in between still refuses. The last 50 edits are kept, and
-  fewer when they pass 512 MB, though never fewer than the newest. A record with any key or
+  fewer when they pass 512 MB, though never fewer than the newest. Each edit's folder keeps
+  its byte count once measured, and drops it before any of its files change, so pruning after
+  a write measures only the edits written or changed since. A record with any key or
   value its type doesn't have, or whose bytes file doesn't match it, is deleted and reported.
   A full disk, or a journal that can't be written, stops a batch after that file and reports
   the files not written; a 1000-file batch with 1 MB art each journals in 14 s on Apple Silicon.

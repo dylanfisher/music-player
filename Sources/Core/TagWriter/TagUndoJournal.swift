@@ -26,6 +26,8 @@ public struct TagUndoJournal: Sendable {
     let capacityBytes: Int
     /// Told of each flush through the drive's cache, for the tests to count.
     var driveFlushed: (@Sendable () -> Void)?
+    /// Told of each edit's folder `prune` measures, for the tests to count.
+    var measured: (@Sendable (URL) -> Void)?
 
     public init(dataDirectory: URL) {
         self.init(dataDirectory: dataDirectory, capacityBytes: Self.defaultCapacityBytes)
@@ -44,10 +46,15 @@ public struct TagUndoJournal: Sendable {
         /// whose origin `newestEdit` reads from the folder.
         var origin: TagEditOrigin?
         var originFile: URL { folder.appendingPathComponent(originName) }
+        var sizeFile: URL { folder.appendingPathComponent(sizeName) }
     }
 
     /// The file in an edit's folder that names its origin, which the listing of records skips.
     static let originName = "origin"
+    /// The file in an edit's folder that holds the bytes of its other files as `prune` measured
+    /// them, so a later prune doesn't measure every kept edit again. Whatever changes the
+    /// folder's files removes it first.
+    static let sizeName = "byte-count"
 
     /// One file of an edit: its record and its old bytes, by number in the entry.
     package struct Handle: Equatable, Sendable {
@@ -173,6 +180,7 @@ public struct TagUndoJournal: Sendable {
         throws(TagWriteError) -> Handle
     {
         try makeFolder(of: entry)
+        try forgetSize(of: entry)
         let handle = Handle(entry: entry, number: (try sequences(in: entry.folder).last ?? 0) + 1)
         try writeDurably(oldBytes, to: handle.bytes.path, drive: false)
         try writeDurably([Array(try encode(record))], to: handle.record.path, drive: false)
@@ -191,6 +199,7 @@ public struct TagUndoJournal: Sendable {
         throws(TagWriteError) -> [Handle]
     {
         try makeFolder(of: entry)
+        try forgetSize(of: entry)
         let first = (try sequences(in: entry.folder).last ?? 0) + 1
         var handles: [Handle] = []
         do throws(TagWriteError) {
@@ -292,6 +301,7 @@ public struct TagUndoJournal: Sendable {
     package func update(_ record: FileRecord, at handle: Handle, drive: Bool = true)
         throws(TagWriteError)
     {
+        try forgetSize(of: handle.entry)
         let staging = handle.record.path + ".new"
         try writeDurably([Array(try encode(record))], to: staging, drive: false)
         guard rename(staging, handle.record.path) == 0 else {
@@ -315,6 +325,7 @@ public struct TagUndoJournal: Sendable {
     /// Removes one file of an edit, its marker if it has one, and the edit's folder once it
     /// holds none.
     package func remove(_ handle: Handle) throws(TagWriteError) {
+        try forgetSize(of: handle.entry)
         for url in [handle.record, handle.bytes] where unlink(url.path) != 0 && errno != ENOENT {
             throw systemError(url.path, .journal, "can't remove the undo record")
         }
@@ -444,7 +455,9 @@ public struct TagUndoJournal: Sendable {
     func prune() throws(TagWriteError) {
         var sequences = try sequences(in: directory)
         var sizes = try sequences.map { sequence throws(TagWriteError) in
-            try folderBytes(directory.appendingPathComponent(name(sequence)))
+            try size(
+                of: Entry(
+                    sequence: sequence, folder: directory.appendingPathComponent(name(sequence))))
         }
         while sequences.count > 1,
             sequences.count > Self.capacity || sizes.reduce(0, +) > capacityBytes
@@ -459,13 +472,37 @@ public struct TagUndoJournal: Sendable {
         }
     }
 
-    private func folderBytes(_ folder: URL) throws(TagWriteError) -> Int {
+    /// The bytes of `entry`'s files besides its size file: the number that file holds, or, when
+    /// it's missing or doesn't read as one, measured and kept there.
+    private func size(of entry: Entry) throws(TagWriteError) -> Int {
+        let kept: String?
         do {
-            return try FileManager.default.contentsOfDirectory(
-                at: folder, includingPropertiesForKeys: [.fileSizeKey]
-            ).reduce(0) { $0 + (try $1.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) }
+            kept = try String(contentsOf: entry.sizeFile, encoding: .utf8)
+        } catch CocoaError.fileReadNoSuchFile {
+            kept = nil
         } catch {
-            throw journalError("can't measure \(folder.path): \(error)")
+            throw journalError("can't read \(entry.sizeFile.path): \(error)")
+        }
+        if let kept, let bytes = Int(kept) { return bytes }
+        measured?(entry.folder)
+        do {
+            let bytes = try FileManager.default.contentsOfDirectory(
+                at: entry.folder, includingPropertiesForKeys: [.fileSizeKey]
+            )
+            .filter { $0.lastPathComponent != Self.sizeName }
+            .reduce(0) { $0 + (try $1.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) }
+            // Atomic, so a crash can't leave part of the number behind.
+            try Data(String(bytes).utf8).write(to: entry.sizeFile, options: .atomic)
+            return bytes
+        } catch {
+            throw journalError("can't measure \(entry.folder.path): \(error)")
+        }
+    }
+
+    /// Removes `entry`'s size file before its files change, so `prune` measures it again.
+    private func forgetSize(of entry: Entry) throws(TagWriteError) {
+        guard unlink(entry.sizeFile.path) == 0 || errno == ENOENT else {
+            throw systemError(entry.sizeFile.path, .journal, "can't remove the edit's size")
         }
     }
 

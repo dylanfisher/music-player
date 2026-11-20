@@ -64,6 +64,36 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
     expectChanged(writer.undoLast(), [url])
 }
 
+/// Each prune measures only the edits written or changed since the one before; the others keep
+/// the size it measured.
+@Test func pruningMeasuresOnlyTheEditsThatChanged() throws {
+    let url = try Sample.flac.copy()
+    var journal = TagUndoJournal(dataDirectory: scratchFolder())
+    let measured = Measured()
+    journal.measured = { measured.add($0.lastPathComponent) }
+    let writer = TagWriter(journal: journal)
+    for index in 0..<3 {
+        expectChanged(
+            writer.write(TagEdit(values: [.title: "Take \(index)"]), to: [url.path]), [url])
+    }
+    #expect(measured.all == ["00000001", "00000002", "00000003"])
+    // Undoing the newest edit gives the file's record in the edit before it the restored
+    // file's identity.
+    expectChanged(writer.undoLast(), [url])
+    expectChanged(writer.write(TagEdit(values: [.title: "Again"]), to: [url.path]), [url])
+    #expect(measured.all.dropFirst(3) == ["00000002", "00000003"])
+}
+
+/// The edit folders `prune` measured, by name, from any thread.
+private final class Measured: @unchecked Sendable {
+    // `names` is guarded by `lock`.
+    private let lock = NSLock()
+    private var names: [String] = []
+
+    func add(_ name: String) { lock.withLock { names.append(name) } }
+    var all: [String] { lock.withLock { names } }
+}
+
 /// A journal that can't be written stops the batch: the rewrites in flight finish, and no
 /// file after them starts (ADR 0196).
 @Test func aJournalThatCantBeWrittenStopsTheBatch() throws {
