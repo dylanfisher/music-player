@@ -79,15 +79,18 @@ final class HALDevice: PCMDevice {
         let streams: [AudioStreamID] = try readArray(
             id, address(kAudioDevicePropertyStreams, scope: kAudioObjectPropertyScopeOutput))
         guard let stream = streams.first else { throw HALDeviceError.noOutputStream }
-        let owner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
-        guard owner == -1 || owner == getpid() else { throw HALDeviceError.held(by: owner) }
+        let owner = try readHogModeOwner(id)
+        if let owner, owner != getpid() { throw HALDeviceError.held(by: owner) }
 
         self.id = id
         self.name = name
         self.stream = stream
-        self.hogMode = hogMode
+        self.hogMode = hogMode && hasHogMode(id)
         self.snapshot = snapshot
-        guard hogMode else { return }
+        if hogMode && !self.hogMode {
+            logger.notice("device \(id, privacy: .public): has no hog mode, playing shared")
+        }
+        guard self.hogMode else { return }
         try writeScalar(id, address(kAudioDevicePropertyHogMode), getpid())
         let newOwner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
         guard newOwner == getpid() else { throw HALDeviceError.notTaken(owner: newOwner) }

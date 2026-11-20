@@ -11,7 +11,7 @@ func readSignal(of id: AudioObjectID) throws -> (signal: DeviceSignal, keys: Set
     guard let stream = streams.first else { throw HALDeviceError.noOutputStream }
     let physical: AudioStreamBasicDescription = try readScalar(
         stream, address(kAudioStreamPropertyPhysicalFormat))
-    let owner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
+    let owner = try readHogModeOwner(id)
     let volumes = volumeControls(of: id, channels: physical.mChannelsPerFrame)
     let rates: [AudioValueRange] = try readArray(
         id, address(kAudioDevicePropertyAvailableNominalSampleRates))
@@ -21,7 +21,7 @@ func readSignal(of id: AudioObjectID) throws -> (signal: DeviceSignal, keys: Set
         nominalSampleRateHz: try readScalar(id, address(kAudioDevicePropertyNominalSampleRate)),
         physical: SignalFormat(physical),
         isMixable: physical.mFormatFlags & kAudioFormatFlagIsNonMixable == 0,
-        hogMode: owner == -1 ? .free : owner == getpid() ? .thisProcess : .otherProcess(pid: owner),
+        hogMode: owner.map { $0 == getpid() ? .thisProcess : .otherProcess(pid: $0) } ?? .free,
         volumes: try volumes.map { kind, key in
             VolumeControl(kind, scalar: try readScalar(id, key.address))
         },
@@ -37,12 +37,11 @@ func readSignal(of id: AudioObjectID) throws -> (signal: DeviceSignal, keys: Set
 
 /// The device's own signal properties, which a device whose stream can't be read still has.
 func deviceSignalKeys(_ id: AudioObjectID) -> Set<PropertyKey> {
-    [
+    Set([
         PropertyKey(id, kAudioDevicePropertyNominalSampleRate),
         PropertyKey(id, kAudioDevicePropertyAvailableNominalSampleRates),
-        PropertyKey(id, kAudioDevicePropertyHogMode),
         PropertyKey(id, kAudioDevicePropertyStreams, scope: kAudioObjectPropertyScopeOutput),
-    ]
+    ]).union(hasHogMode(id) ? [PropertyKey(id, kAudioDevicePropertyHogMode)] : [])
 }
 
 /// The output volume controls the device has: the virtual main volume, which the HAL derives from

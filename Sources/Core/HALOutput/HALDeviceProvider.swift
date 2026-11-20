@@ -73,8 +73,7 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
         let id = try AudioDevice.defaultOutputID()
         let hogged = try snapshots.all().filter { snapshot in
             guard let device = try deviceID(uid: snapshot.deviceUID) else { return false }
-            let owner: pid_t = try readScalar(device, address(kAudioDevicePropertyHogMode))
-            return owner == getpid()
+            return try readHogModeOwner(device) == getpid()
         }
         return try systemDefaultUID(
             current: id == kAudioObjectUnknown
