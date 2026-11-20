@@ -66,6 +66,8 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private let shortcuts: ShortcutsPane
     /// Each pane in its scroll view, made as it's first shown.
     private var scrollers: [Pane: PaneScroller] = [:]
+    /// Whether a change came while nothing of the window showed, so it reloads as it opens.
+    private var missedChange = false
 
     /// Reads and writes a setting as JSON holds it, for the Tagging pane's model.
     private let settingValue: (String) -> Any?
@@ -110,6 +112,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
 
     /// Brings the window forward at `pane`, where it was left the first time (ADR 0158).
     public func show(_ pane: Pane = .general) {
+        reloadMissedChange()
         select(pane)
         window.keepsFrame(as: Self.frameName)
         // Placed on another screen, a short one, the pane fits that one.
@@ -136,15 +139,37 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     }
 
     /// Opens the bar builder on the bar layout setting `key`, from Settings ▸ Toolbar.
-    public func showBarBuilder(_ key: String) { toolbarPane.showBarBuilder(key) }
+    public func showBarBuilder(_ key: String) {
+        reloadMissedChange()
+        toolbarPane.showBarBuilder(key)
+    }
 
     /// The bar builder's window for `key`, once opened.
     public func barBuilderWindow(_ key: String) -> NSWindow? {
         toolbarPane.barBuilders[key]?.window
     }
 
-    /// Shows the settings and shortcuts as they are now, after any change.
+    /// Shows the settings and shortcuts as they are now, after any change. While neither the
+    /// window nor a bar builder shows, the panes reload as one opens instead: the resume state
+    /// changes on every track start, pause and seek, and each row's read parses its JSON.
     public func reload(bindings: KeyBindings) {
+        shortcuts.model.update(bindings)
+        let shows =
+            window.isVisible || window.isMiniaturized
+            || toolbarPane.barBuilders.values.contains { $0.window.isVisible }
+        guard shows else {
+            missedChange = true
+            return
+        }
+        reloadPanes()
+    }
+
+    private func reloadMissedChange() {
+        if missedChange { reloadPanes() }
+    }
+
+    private func reloadPanes() {
+        missedChange = false
         general.reload()
         playback.reload()
         appearance.reload()
@@ -152,7 +177,6 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         library.reload()
         if folders.isViewLoaded { folders.reload() }
         if let tagging, tagging.isViewLoaded { tagging.reload() }
-        shortcuts.model.update(bindings)
         if shortcuts.isViewLoaded { shortcuts.reload() }
     }
 

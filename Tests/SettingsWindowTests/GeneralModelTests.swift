@@ -840,6 +840,42 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(kept.minX == saved.minX + 30 && kept.maxY == saved.maxY - 20)
 }
 
+/// Closed, the window reads no setting on a change, as the resume state's on each track start,
+/// and shows the change as it opens again; open, it shows a change at once.
+@MainActor @Test func aClosedSettingsWindowReloadsAsItOpens() throws {
+    let key = AppSettings().receiverEnabled.key
+    nonisolated(unsafe) var stored: [String: Any] = [key: false]
+    nonisolated(unsafe) var reads = 0
+    let model = GeneralModel(
+        settings: AppSettings().settings, searcherInstalled: true,
+        value: {
+            reads += 1
+            return stored[$0]
+        }, set: { _, _ in }, isBlocked: { false })
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
+    let controller = SettingsWindowController(
+        general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
+        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        set: { _, _ in })
+    controller.show(.general)
+    defer { controller.window.close() }
+    let pane = try #require(controller.window.contentViewController?.view)
+    let box = try #require(view(key, in: pane) as? NSButton)
+    #expect(box.state == .off)
+    controller.window.close()
+    stored[key] = true
+    reads = 0
+    for _ in 0..<3 { controller.reload(bindings: bindings) }
+    #expect(reads == 0)
+    #expect(box.state == .off)
+    controller.show(.general)
+    #expect(box.state == .on)
+    stored[key] = false
+    controller.reload(bindings: bindings)
+    #expect(box.state == .off)
+}
+
 @MainActor @Test func thePaletteOpensTheFoldersOrLibraryPaneOrTheConfigFile() throws {
     let schema = AppSettings()
     var opened = 0
