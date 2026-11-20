@@ -631,7 +631,9 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     let runs = RunCount()
     watcher.stop(then: runs.run)
     #expect(try await eventually(within: 20) { runs.count == 1 })
-    #expect(received.stopped == [library.root])
+    // The event goes out from the watcher's queue once the scan returns, which can be after
+    // the job has run on the scan queue.
+    #expect(try await eventually(within: 20) { received.stopped == [library.root] })
     #expect(received.scanned.isEmpty)
 }
 
