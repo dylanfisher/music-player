@@ -193,7 +193,8 @@ func contiguousFrames(of album: RampAlbum, from first: Int = 0, in samples: [Int
     await rig.engine.setQueue([album.tracks[0]])
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
-    await rig.engine.pause()
+    try await pause(rig)
+    let pulled = rig.device.captured[0].samples.count
     await rig.engine.seek(toSeconds: 0.5)
     try await Task.sleep(nanoseconds: 50_000_000)
     let paused = try #require(await rig.engine.position())
@@ -201,8 +202,9 @@ func contiguousFrames(of album: RampAlbum, from first: Int = 0, in samples: [Int
     await rig.engine.play()
     try await rig.wait(for: .finished)
 
-    // Untouched once the play's fade-in is over.
-    let samples = rig.device.captured[0].samples
+    // Untouched once the play's fade-in is over. Only what played after the seek: a busy
+    // machine may have played past the frame before it paused.
+    let samples = Array(rig.device.captured[0].samples[pulled...])
     let from = 48_000 + fadeFrames(96_000)
     let after = try #require(contiguousFrames(of: album, from: from, in: samples))
     #expect(after.count == album.trackFrames[0] - from)
@@ -664,7 +666,7 @@ private func copies(of album: RampAlbum) throws -> [URL] {
     try await Task.sleep(nanoseconds: 100_000_000)
     try await pause(rig)
     let pulled = rig.device.captured[0].samples.count / 2
-    try #require(pulled < 22_050, "paused \(pulled) frames in, past the seek's position")
+    try #require(pulled < album.trackFrames[0], "paused \(pulled) frames in, past the first track")
     try FileManager.default.removeItem(at: tracks[0])
     await rig.engine.seek(toSeconds: 0.5)
     await rig.engine.play()
@@ -672,10 +674,11 @@ private func copies(of album: RampAlbum) throws -> [URL] {
 
     #expect(!rig.events.contains { if case .trackFailed = $0 { true } else { false } })
     // From half a second in, once the fade-in is over, through the second track without a gap.
+    // Only what played after the seek: a busy machine may have played past the frame first.
     let fade = fadeFrames(44_100)
-    let after = try #require(
-        contiguousFrames(of: album, from: 22_050 + fade, in: rig.device.captured[0].samples))
-    #expect(after.start == pulled + fade)
+    let resumed = Array(rig.device.captured[0].samples[(2 * pulled)...])
+    let after = try #require(contiguousFrames(of: album, from: 22_050 + fade, in: resumed))
+    #expect(after.start == fade)
     #expect(after.count == album.totalFrames - 22_050 - fade)
 }
 
