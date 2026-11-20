@@ -1239,9 +1239,16 @@ private struct Track {
     /// header states, or nil when there's none and the length can't be checked.
     let checkedLengthFrames: Int64?
 
-    /// Opens `item`'s file, every call that reads it named to `watch`.
+    /// Opens `item`'s file, every call that reads it named to `watch`. A file that isn't at its
+    /// path fails as missing, saying when its volume isn't mounted, whatever the decoder threw.
     static func open(_ item: OutputItem, latency: FileLatency?, watch: StepWatch) throws -> Track {
-        try watch.run(.opening(item.url)) { try Track(item, latency: latency, watch: watch) }
+        try watch.run(.opening(item.url)) {
+            do {
+                return try Track(item, latency: latency, watch: watch)
+            } catch {
+                throw MissingFileError(item.url) ?? error
+            }
+        }
     }
 
     private init(_ item: OutputItem, latency: FileLatency?, watch: StepWatch) throws {

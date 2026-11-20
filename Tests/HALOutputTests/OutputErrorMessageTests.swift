@@ -37,6 +37,7 @@ private let errors: [any PlaybackFailure] =
     + [
         "ExtAudioFileOpenURL", "ExtAudioFileRead", "AudioConverterNew", "AudioDeviceStart",
     ].map { OSStatusError(operation: $0, status: 1_954_115_647) }
+    + [MissingFileError(unmountedVolume: "music"), MissingFileError(unmountedVolume: nil)]
 
 @Test func everyOutputErrorHasAPlainMessage() {
     for error in errors {
