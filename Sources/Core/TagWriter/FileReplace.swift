@@ -309,8 +309,11 @@ func removeLeftoverTemps(for paths: [String], _ faults: WriteFaults) -> [String:
             }
             continue
         }
-        for path in files {
-            for name in names where isTemp(name, of: path) {
+        // Only temp names can match, and a folder rarely holds any, so a batch of a whole
+        // folder doesn't test every name against every file.
+        let temps = names.filter { $0.hasSuffix(tempSuffix) }
+        for path in files where !temps.isEmpty {
+            for name in temps where isTemp(name, of: path) {
                 faults.called(.remove)
                 guard unlink(folder + "/" + name) == 0 || errno == ENOENT else {
                     failures[path] = systemError(
