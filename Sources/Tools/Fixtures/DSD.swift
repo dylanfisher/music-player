@@ -26,23 +26,25 @@ func bitReversed(_ byte: UInt8) -> UInt8 {
 }
 
 /// A DSF file of `channels`, each given oldest bit highest and stored reversed, as DSF stores it,
-/// in blocks with the last zero-filled. `samplesPerChannel` is every bit unless given; `tag`, an
-/// ID3v2 tag, goes at the end where the metadata pointer says.
-func dsfFile(rateHz: Int, channels: [Data], samplesPerChannel: Int? = nil, tag: Data? = nil)
-    -> Data
-{
+/// in blocks of `blockBytes` with the last zero-filled. `oldestBitLowest` false stores the bytes
+/// as given, with 8 bits per sample in the header. `samplesPerChannel` is every bit unless given;
+/// `tag`, an ID3v2 tag, goes at the end where the metadata pointer says.
+func dsfFile(
+    rateHz: Int, channels: [Data], blockBytes: Int = dsfBlockBytes, oldestBitLowest: Bool = true,
+    samplesPerChannel: Int? = nil, tag: Data? = nil
+) -> Data {
     let bytesPerChannel = channels.map(\.count).max() ?? 0
-    let blocks = (bytesPerChannel + dsfBlockBytes - 1) / dsfBlockBytes
-    var audio = Data(capacity: blocks * dsfBlockBytes * channels.count)
+    let blocks = (bytesPerChannel + blockBytes - 1) / blockBytes
+    var audio = Data(capacity: blocks * blockBytes * channels.count)
     for block in 0..<blocks {
         for channel in channels {
-            let start = block * dsfBlockBytes
-            let end = min(channel.count, start + dsfBlockBytes)
+            let start = block * blockBytes
+            let end = min(channel.count, start + blockBytes)
             let present =
                 start < end
                 ? channel[channel.startIndex + start..<channel.startIndex + end] : Data()
-            audio.append(contentsOf: present.map(bitReversed))
-            audio.append(Data(count: dsfBlockBytes - present.count))
+            audio.append(contentsOf: oldestBitLowest ? Data(present.map(bitReversed)) : present)
+            audio.append(Data(count: blockBytes - present.count))
         }
     }
     let dataStart = 28 + 52 + 12
@@ -59,9 +61,9 @@ func dsfFile(rateHz: Int, channels: [Data], samplesPerChannel: Int? = nil, tag: 
     file.appendLittleEndian(UInt32(channels.count == 1 ? 1 : 2))  // mono or stereo
     file.appendLittleEndian(UInt32(channels.count))
     file.appendLittleEndian(UInt32(rateHz))
-    file.appendLittleEndian(UInt32(1))  // oldest bit lowest
+    file.appendLittleEndian(UInt32(oldestBitLowest ? 1 : 8))
     file.appendLittleEndian(UInt64(samplesPerChannel ?? bytesPerChannel * 8))
-    file.appendLittleEndian(UInt32(dsfBlockBytes))
+    file.appendLittleEndian(UInt32(blockBytes))
     file.appendLittleEndian(UInt32(0))
     file.append(ascii: "data")
     file.appendLittleEndian(UInt64(12 + audio.count))

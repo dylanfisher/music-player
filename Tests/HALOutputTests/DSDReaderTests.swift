@@ -6,15 +6,16 @@ import Testing
 @testable import HALOutput
 @testable import Playback
 
-private func integer(bits: UInt32, bytes: UInt32, alignedHigh: Bool = false, float: Bool = false)
-    -> AudioStreamBasicDescription
-{
+private func integer(
+    bits: UInt32, bytes: UInt32, channels: UInt32 = 2, alignedHigh: Bool = false,
+    float: Bool = false
+) -> AudioStreamBasicDescription {
     AudioStreamBasicDescription(
         mSampleRate: 176_400, mFormatID: kAudioFormatLinearPCM,
         mFormatFlags: (float ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger)
             | kAudioFormatFlagIsPacked | (alignedHigh ? kAudioFormatFlagIsAlignedHigh : 0),
-        mBytesPerPacket: bytes * 2, mFramesPerPacket: 1, mBytesPerFrame: bytes * 2,
-        mChannelsPerFrame: 2, mBitsPerChannel: bits, mReserved: 0)
+        mBytesPerPacket: bytes * channels, mFramesPerPacket: 1, mBytesPerFrame: bytes * channels,
+        mChannelsPerFrame: channels, mBitsPerChannel: bits, mReserved: 0)
 }
 
 /// Writes `data` as a file with `fileExtension` for the duration of the test.
@@ -96,6 +97,48 @@ func theOldestBitGoesHighestUnderAlternatingMarkers(fileExtension: String) throw
                 word == [channels[channel][k + 1], channels[channel][k], dopMarkers[frame & 1]])
         }
     }
+}
+
+/// The DoP words `channels` make, oldest bit highest, from the first frame to the end of the
+/// last pair: the newer byte, the older byte and the marker, idle past each channel's end.
+private func dopWords(_ channels: [[UInt8]], frames: Int) -> [UInt8] {
+    var words: [UInt8] = []
+    for frame in 0..<frames {
+        for channel in channels {
+            let k = frame * 2
+            words += [
+                k + 1 < channel.count ? channel[k + 1] : dsdIdleByte,
+                k < channel.count ? channel[k] : dsdIdleByte, dopMarkers[frame & 1],
+            ]
+        }
+    }
+    return words
+}
+
+// Three channels of 13 bytes: an odd block size puts a frame's two bytes in different blocks,
+// and the odd length ends on half a frame, then a frame of silence to make the pair.
+@Test(arguments: [
+    ("dsf", true), ("dsf", false), ("dff", false),
+])
+func everyByteIsPackedInOrderToTheEnd(fileExtension: String, oldestBitLowest: Bool) throws {
+    let channels = (0..<3).map { channel in
+        (0..<13).map { UInt8(truncatingIfNeeded: $0 * 37 + channel * 101 + 3) }
+    }
+    let data =
+        fileExtension == "dsf"
+        ? dsfFile(
+            rateHz: 2_822_400, channels: channels.map { Data($0) }, blockBytes: 5,
+            oldestBitLowest: oldestBitLowest)
+        : dffFile(rateHz: 2_822_400, channels: channels.map { Data($0) })
+    let reader = try DSDReader(url: try file(data, fileExtension))
+    #expect(reader.stream.lsbFirst == oldestBitLowest)
+    #expect(reader.lengthFrames == 8)
+    try reader.setOutputFormat(integer(bits: 24, bytes: 3, channels: 3))
+    var bytes: [UInt8] = []
+    for frames in [2, 4, 4] {
+        bytes += try read(reader, frames: frames, bytesPerFrame: 9)
+    }
+    #expect(bytes == dopWords(channels, frames: 8))
 }
 
 @Test func theRefusalSaysWhatTheDeviceLacks() {
