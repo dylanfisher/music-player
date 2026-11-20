@@ -205,13 +205,13 @@ private func loadedModel(
     // queries queue behind it.
     let (entered, enter) = AsyncStream.makeStream(of: Void.self)
     let release = DispatchSemaphore(value: 0)
-    // The hold lets go on its own after 10 seconds, which only a search waiting on it outlasts:
+    // The hold lets go on its own after a minute, which only a search waiting on it outlasts:
     // that, not a time a busy machine can take, tells waiting from not.
     let outlasted = DispatchSemaphore(value: 0)
     let held = Task {
         await reader.refreshes.run {
             enter.yield()
-            if release.wait(timeout: .now() + 10) == .timedOut { outlasted.signal() }
+            if release.wait(timeout: .now() + 60) == .timedOut { outlasted.signal() }
         }
     }
     for await _ in entered { break }
@@ -225,8 +225,9 @@ private func loadedModel(
     let refreshedDuringSearch = refreshed
     release.signal()
     await held.value
-    func waited() -> Bool { outlasted.wait(timeout: .now()) == .success }
-    #expect(!waited(), "the search waited for the refresh's queries")
+    func outlastedTheHold() -> Bool { outlasted.wait(timeout: .now()) == .success }
+    let waited = outlastedTheHold()
+    #expect(!waited, "the search waited for the refresh's queries")
     await refresh.value
     #expect(!refreshedDuringSearch)
     #expect(model.filter.search == "zzqx")

@@ -349,12 +349,14 @@ private func joinFrame(_ album: SineAlbum, from frame: Int = 0) -> Int {
 
 @Test func aSeekNearTheEndCarriesOnAcrossTheJoin() async throws {
     let album = try sineAlbum(44_100, 16)
-    let rig = try await Rig(speed: 1, formats: NullDevice.float48k)
+    // At half speed a busy machine still pauses well before the seek's position.
+    let rig = try await Rig(speed: 0.5, formats: NullDevice.float48k)
     await rig.engine.setQueue(album.tracks)
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
     try await pause(rig)
     let before = frames(rig.device.captured[0]).count
+    try #require(Double(before) < 0.8 * deviceRateHz, "paused \(before) frames in")
     // The second track is already queued in the converter, well inside the last 4 s.
     await rig.engine.seek(toSeconds: 0.8)
     await rig.engine.play()
@@ -367,10 +369,11 @@ private func joinFrame(_ album: SineAlbum, from frame: Int = 0) -> Int {
     #expect(abs(position - Double(taken - join) / deviceRateHz) < 1e-6)
     // Between the play's fade-in and the pause's fade-out.
     let fade = fadeFrames(deviceRateHz)
+    let first = before + max(edgeFrames, fade)
+    try #require(first < taken - fade, "played \(taken - before) frames after the seek")
     #expect(
-        largestError(
-            played, album, from: before, atSeconds: 0.8,
-            (before + max(edgeFrames, fade))..<(taken - fade)) < tolerance)
+        largestError(played, album, from: before, atSeconds: 0.8, first..<(taken - fade))
+            < tolerance)
 }
 
 /// The output on its own, with each item's id its index in `urls`.
