@@ -104,20 +104,17 @@ package final class DSDReader: TrackDecoder {
         let channels = stream.channels
         let first = Int(nextFrame) * 2
         let end = min(first + count * 2, stream.bytesPerChannel)
-        // Where byte `k` of channel `c` is in `scratch`, as a stride per byte and per channel
-        // inside the run read, and the size of a block for DSF.
+        // The run of the file that holds bytes `first..<end` of every channel: whole groups of
+        // blocks for DSF.
         let readStart: Int
         let readEnd: Int
-        let blockBytes: Int
         switch stream.interleave {
         case .bytes:
             readStart = first * channels
             readEnd = max(end, first) * channels
-            blockBytes = Int.max
         case .blocks(let block):
             readStart = first / block * block * channels
             readEnd = max(end - 1, first) / block * block * channels + block * channels
-            blockBytes = block
         }
         let fileStart = stream.dataStart + readStart
         let fileEnd = min(stream.dataStart + readEnd, source.size)
@@ -135,39 +132,98 @@ package final class DSDReader: TrackDecoder {
             }
             if let failure { throw failure.error(path: path) }
         }
-        let reverse = stream.lsbFirst
-        let interleave = stream.interleave
-        func byte(_ channel: Int, _ k: Int) -> UInt8 {
-            guard k < end else { return dsdIdleByte }
-            let index: Int
-            switch interleave {
-            case .bytes: index = k * channels + channel - readStart
-            case .blocks:
-                index =
-                    (k / blockBytes * channels + channel) * blockBytes + k % blockBytes - readStart
-            }
-            return reverse ? bitReversal[Int(scratch[index])] : scratch[index]
+        // Byte `k` of channel `c` is at `index + c * channelStride` in `scratch`. `index` moves
+        // `byteStride` a byte from byte `first`, and at the end of each DSF block jumps past the
+        // other channels' blocks, so nothing is divided per byte.
+        let byteStride: Int
+        let channelStride: Int
+        let blockJump: Int
+        let blockLength: Int
+        var index: Int
+        var blockLeft: Int
+        let lastIndex: Int
+        switch stream.interleave {
+        case .bytes:
+            byteStride = channels
+            channelStride = 1
+            blockJump = 0
+            blockLength = Int.max
+            index = 0
+            blockLeft = Int.max
+            lastIndex = (end - 1) * channels + channels - 1 - readStart
+        case .blocks(let block):
+            byteStride = 1
+            channelStride = block
+            blockJump = block * (channels - 1)
+            blockLength = block
+            index = first % block
+            blockLeft = block - first % block
+            lastIndex =
+                ((end - 1) / block * channels + channels - 1) * block + (end - 1) % block
+                - readStart
         }
+        // Frames whose two bytes are both before the end; the rest are idle-padded.
+        let full = max(0, min(count, (end - first) / 2))
+        precondition(first >= end || lastIndex < scratch.count)
+        let markers = (dopMarkers[Int(nextFrame) & 1], dopMarkers[Int(nextFrame + 1) & 1])
+        let zeroByte = layout.sampleBytes == 4
         let output = buffer.assumingMemoryBound(to: UInt8.self)
         var offset = 0
-        for frame in 0..<count {
-            let marker = dopMarkers[(Int(nextFrame) + frame) & 1]
-            let k = first + 2 * frame
-            for channel in 0..<channels {
-                if layout.sampleBytes == 4 {
-                    output[offset] = 0
-                    offset += 1
+        func write(_ newer: UInt8, _ older: UInt8, _ marker: UInt8) {
+            if zeroByte {
+                output[offset] = 0
+                offset += 1
+            }
+            output[offset] = newer
+            output[offset + 1] = older
+            output[offset + 2] = marker
+            offset += 3
+        }
+        func advance() {
+            index += byteStride
+            blockLeft -= 1
+            if blockLeft == 0 {
+                index += blockJump
+                blockLeft = blockLength
+            }
+        }
+        (stream.lsbFirst ? bitReversal : identity).withUnsafeBufferPointer { order in
+            scratch.withUnsafeBufferPointer { bytes in
+                for frame in 0..<full {
+                    let marker = frame & 1 == 0 ? markers.0 : markers.1
+                    let older = index
+                    advance()
+                    let newer = index
+                    advance()
+                    for channel in 0..<channels {
+                        let shift = channel * channelStride
+                        write(
+                            order[Int(bytes[newer + shift])], order[Int(bytes[older + shift])],
+                            marker)
+                    }
                 }
-                output[offset] = byte(channel, k + 1)
-                output[offset + 1] = byte(channel, k)
-                output[offset + 2] = marker
-                offset += 3
+                for frame in full..<count {
+                    let marker = frame & 1 == 0 ? markers.0 : markers.1
+                    let k = first + 2 * frame
+                    let older = index
+                    advance()
+                    for channel in 0..<channels {
+                        let byte =
+                            k < end
+                            ? order[Int(bytes[older + channel * channelStride])] : dsdIdleByte
+                        write(dsdIdleByte, byte, marker)
+                    }
+                    advance()
+                }
             }
         }
         nextFrame += Int64(count)
         return UInt32(count)
     }
 }
+
+/// Each byte as it is, for files whose bytes are already oldest bit highest.
+private let identity: [UInt8] = (0...255).map { UInt8($0) }
 
 /// Each byte with its bits in the opposite order, for DSF's oldest-bit-lowest bytes.
 private let bitReversal: [UInt8] = (0...255).map { value in
