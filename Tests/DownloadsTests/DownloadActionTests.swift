@@ -28,6 +28,9 @@ private func held(_ machine: String) -> DownloadJob.Hold {
     (.retry, .notFound, .none, true),
     (.retry, .failed, .none, true),
     (.retry, .staged, .none, false),
+    (.retry, .staged, .clean, false),
+    (.retry, .staged, .discrepancy, true),
+    (.retry, .staged, .error, true),
     (.cancel, .downloading, .none, true),
     (.cancel, .staged, .clean, true),
     (.cancel, .importing, .clean, false),
@@ -47,13 +50,14 @@ func eachActionAppliesToItsStates(
     (DownloadAction.approve, false),
     (.reject, false),
     (.openInTagger, false),
+    (.retry, false),
     (.cancel, false),
     (.resumeHere, true),
 ])
 func aJobAnotherMacReviewsTakesOnlyResumeHere(action: DownloadAction, applies: Bool) {
     let state: JobState = action == .resumeHere ? .importing : .staged
     let job = job(1, state) {
-        $0.tagging.status = action == .openInTagger ? .discrepancy : .clean
+        $0.tagging.status = [.openInTagger, .retry].contains(action) ? .discrepancy : .clean
         $0.review = held("Living Room")
     }
     #expect(

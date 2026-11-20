@@ -26,6 +26,12 @@ package struct AutoTagRun: Sendable {
     var changes: AlbumChangeSet?
     /// What `StagedWriter` writes: the changes' edits when the run is clean, else none.
     var edits: [(path: String, edit: TagEdit)]
+    /// For a discrepancy, whether another peer's copy might be clean: a reason is about these
+    /// files (their count, a file that fits no track or a track with none, a title or a length
+    /// that differs, the wrong codec), and none would come back with every copy (a file the
+    /// writer can't tag, a format AutoTag can't check). A match only below exact, or a position
+    /// the service gave otherwise, doesn't say the copy is wrong (ADR 0211).
+    package var anotherCopyMightFix = false
 }
 
 /// Matches `job`'s staged files under `stagingRoot` against its release in the catalog at
@@ -60,18 +66,25 @@ package func autoTag(
     let name = { (id: Int64?) in id.flatMap { staged.staged[$0]?.name } ?? "a file" }
 
     var reasons: [String] = []
+    // Whether a reason is about the copy, and whether one would come back with any copy.
+    var aboutTheCopy = false
+    var withEveryCopy = false
     if staged.files.count != match.releaseTrackCount {
         reasons.append("\(staged.files.count) files, release has \(match.releaseTrackCount)")
+        aboutTheCopy = true
     }
     for row in match.comparison(of: staged.album) {
         guard let index = row.track else {
             reasons.append("\(name(row.fileID)) fits no track")
+            aboutTheCopy = true
             continue
         }
         let track = positions[index]
         switch row.state {
         case .matched: break
-        case .missing: reasons.append("track \(track) has no file")
+        case .missing:
+            reasons.append("track \(track) has no file")
+            aboutTheCopy = true
         case .different:
             if let title = row.releaseTitle,
                 TitleSimilarity([row.fileTitle]).similarities(to: title)[0]
@@ -79,12 +92,14 @@ package func autoTag(
             {
                 reasons.append(
                     "track \(track) is titled \(row.fileTitle ?? "nothing"), not \(title)")
+                aboutTheCopy = true
             }
             if let expected = row.releaseSeconds, let seconds = row.fileSeconds,
                 !ReleaseScore.agrees(seconds, expected)
             {
                 reasons.append(
                     "track \(track) is \(Int(abs(seconds - Double(expected)).rounded())) s off")
+                aboutTheCopy = true
             }
         }
     }
@@ -99,13 +114,16 @@ package func autoTag(
             reasons.append(
                 "\(name(file.id)) is \(codecName(file.metadata.audio.codec)), not \(job.format.rawValue.uppercased())"
             )
+            aboutTheCopy = true
         } else if codec(job.format) == nil {
             reasons.append("\(name(file.id)) is \(job.format.rawValue), which can't be checked")
+            withEveryCopy = true
         }
     }
     for file in changes.files {
         if let unwritable = file.unwritable {
             reasons.append("\(name(file.fileID)): \(unwritable)")
+            withEveryCopy = true
         }
     }
     if reasons.isEmpty, match.tier != .exact {
@@ -122,7 +140,8 @@ package func autoTag(
     }
     return AutoTagRun(
         verdict: reasons.isEmpty ? .clean : .discrepancy(reasons), staged: staged, match: match,
-        changes: changes, edits: reasons.isEmpty ? edits : [])
+        changes: changes, edits: reasons.isEmpty ? edits : [],
+        anotherCopyMightFix: aboutTheCopy && !withEveryCopy)
 }
 
 /// The codec a file of the service's `format` holds, as the reader names it; nil for a format

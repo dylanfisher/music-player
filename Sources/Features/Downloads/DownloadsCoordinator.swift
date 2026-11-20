@@ -9,7 +9,9 @@ private let logger = moduleLogger()
 /// This Mac's part of the downloads, run in the background from launch to quit (the service's
 /// `docs/downloads.md`, Claims and Auto-tagging). It tags each staged job no run holds, under
 /// the service's 10-minute tagging lease, renewed every 3; it writes a clean run's tags and
-/// nothing else; it requeues a job whose staged copy is damaged, for another peer's (ADR 0210);
+/// nothing else; it requeues a job whose staged copy is damaged (ADR 0210), or doesn't match
+/// its release while the job has tried fewer than `peerLimit` peers (ADR 0211), for another
+/// peer's;
 /// it sends the reports the index's outbox holds, in order, until each is answered; and it
 /// runs Approve's import under the 24-hour review claim. Every effect is injected, the clock's
 /// waits too.
@@ -19,6 +21,26 @@ actor DownloadsCoordinator {
 
     /// How often a tag run renews its 10-minute lease.
     static let leaseRenewal: TimeInterval = 180
+
+    /// The peers a job may have tried for a copy that doesn't match its release to be
+    /// requeued: the third copy that doesn't match is left for the owner (ADR 0211).
+    static let peerLimit = 3
+
+    /// Why a tag run requeues a job.
+    enum Requeue: Equatable, Sendable {
+        /// A staged file isn't audio the reader knows (ADR 0210).
+        case damaged
+        /// A discrepancy another peer's copy might not have (ADR 0211).
+        case discrepancy
+
+        /// Why, after "job 42's copy" or "its copy".
+        var why: String {
+            switch self {
+            case .damaged: "is damaged"
+            case .discrepancy: "doesn't match its release"
+            }
+        }
+    }
 
     struct Effects: Sendable {
         var service: DownloadsService
@@ -62,9 +84,9 @@ actor DownloadsCoordinator {
     private var tagging: Int?
     /// The jobs whose lease a renewal found another Mac holding.
     private var lostLeases: Set<Int> = []
-    /// The jobs a tag run found a damaged file in, reported as an error, to requeue; kept while
-    /// the service doesn't answer the requeue, which each poll sends again.
-    private(set) var damaged: Set<Int> = []
+    /// The jobs a tag run reported and then sent to be requeued, and why; kept while the
+    /// service doesn't answer the requeue, which each poll sends again.
+    private(set) var requeueing: [Int: Requeue] = [:]
     /// The outbox send in progress; another waits for it, then sends what is left.
     private var sending: Task<Bool, Never>?
     /// The reports the service refused in the sends since `deliver` last looked.
@@ -109,8 +131,13 @@ actor DownloadsCoordinator {
             }
         }
         if outboxMayHold { await flush() }
-        for job in jobs where damaged.contains(job.id) {
-            if job.state == .staged { await requeue(job.id) } else { damaged.remove(job.id) }
+        for job in jobs {
+            guard let why = requeueing[job.id] else { continue }
+            if job.state == .staged {
+                await requeue(job.id, why)
+            } else {
+                requeueing[job.id] = nil
+            }
         }
         guard let autoTag = effects.autoTag else { return }
         let recovering: Task<Void, Never>
@@ -158,12 +185,16 @@ actor DownloadsCoordinator {
         defer { renewal.cancel() }
 
         let verdict: AutoTagRun.Verdict
-        var isDamaged = false
+        var requeue: Requeue?
         if let staged = stagedJob(job) {
             do {
                 let run = try await autoTag(staged)
                 guard !lostLeases.contains(job.id) else { return }
-                if case .error = run.verdict { isDamaged = run.staged.damaged }
+                switch run.verdict {
+                case .error: if run.staged.damaged { requeue = .damaged }
+                case .discrepancy: if run.anotherCopyMightFix { requeue = .discrepancy }
+                case .clean: break
+                }
                 if run.verdict == .clean {
                     verdict = await effects.write(run)
                     // The write can grow a file, so what the files measure now is recorded
@@ -185,30 +216,69 @@ actor DownloadsCoordinator {
         queue(.tagging(Self.tagging(verdict)), job)
         await flush()
         await releaseLease(job.id)
-        if isDamaged {
-            damaged.insert(job.id)
-            await requeue(job.id)
+        if let requeue, await mayTryAnotherPeer(job.id, requeue) {
+            requeueing[job.id] = requeue
+            await self.requeue(job.id, requeue)
         }
     }
 
-    /// Sends job `id`, whose staged copy is damaged, back to its search, which leaves out the
-    /// peers it tried; the service deletes the copy. One the service refuses, held by a Mac,
-    /// moved on or gone, is left as it is, its error for the owner.
-    private func requeue(_ id: Int) async {
+    /// Whether job `id` may be requeued for `why`: always for a damaged copy; for a discrepancy,
+    /// while it has tried fewer than `peerLimit` peers. One whose peers the service doesn't
+    /// give is left for the owner.
+    private func mayTryAnotherPeer(_ id: Int, _ why: Requeue) async -> Bool {
+        guard why == .discrepancy else { return true }
+        let peers: [String]
+        do throws(RecommenderError) {
+            peers = try await effects.service.triedPeers(id)
+        } catch {
+            logger.info("job \(id)'s tried peers weren't given, so it isn't requeued: \(error)")
+            return false
+        }
+        guard peers.count < Self.peerLimit else {
+            logger.info("job \(id) has tried \(peers.count) peers; its discrepancy is left")
+            return false
+        }
+        return true
+    }
+
+    /// Sends job `id`, whose staged copy `why` says is wrong, back to its search, which leaves
+    /// out the peers it tried; the service deletes the copy. One the service refuses, held by a
+    /// Mac, moved on or gone, is left as it is, its verdict for the owner.
+    private func requeue(_ id: Int, _ why: Requeue) async {
         do throws(RecommenderError) {
             _ = try await effects.service.requeue(id)
         } catch {
             guard case .refused = error.kind else {
-                logger.info("job \(id), whose copy is damaged, waits to be requeued: \(error)")
+                logger.info("job \(id), whose copy \(why.why), waits to be requeued: \(error)")
                 return
             }
-            damaged.remove(id)
-            note("job \(id)'s copy is damaged, but it wasn't requeued: \(error)")
+            requeueing[id] = nil
+            note("job \(id)'s copy \(why.why), but it wasn't requeued: \(error)")
             return
         }
-        damaged.remove(id)
-        logger.notice("job \(id) requeued unasked: its copy is damaged")
-        // A new copy is staged in the same folder; the old one's sizes and release go.
+        requeueing[id] = nil
+        logger.notice("job \(id) requeued unasked: its copy \(why.why)")
+        forgetImport(id)
+    }
+
+    /// Retry on a staged job: throws its copy away and searches again from a peer it hasn't
+    /// tried, giving up this Mac's review claim first, since the service refuses a requeue
+    /// while anyone holds one (ADR 0211). Nil when requeued, else why not.
+    func requeue(asked job: DownloadJob) async -> String? {
+        do throws(RecommenderError) {
+            if job.review?.machine == machine { _ = try await releaseReview(job.id) }
+            _ = try await effects.service.requeue(job.id)
+        } catch {
+            return "\(error)"
+        }
+        logger.notice("job \(job.id) requeued, as asked")
+        forgetImport(job.id)
+        return nil
+    }
+
+    /// Forgets requeued job `id`'s import ledger: a new copy is staged in the same folder, and
+    /// the old one's sizes and release go with it.
+    private func forgetImport(_ id: Int) {
         do {
             try index().forgetImportJob(id)
             taggedReleases = nil

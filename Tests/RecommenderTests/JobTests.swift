@@ -212,6 +212,17 @@ private let snapshot = ReleaseSnapshot(
     }
 }
 
+@Test func theTriedPeersAreAsked() async throws {
+    let stub = try await StubService([
+        (200, #"{"ok": true, "id": 42, "tried_peers": ["made-up-peer", "other-made-up-peer"]}"#)
+    ])
+    defer { stub.stop() }
+    let peers = try await stub.client.triedPeers(42)
+    #expect(peers == ["made-up-peer", "other-made-up-peer"])
+    #expect(stub.requests[0].head.hasPrefix("POST /v1/downloads/peers "))
+    #expect(try stub.requests[0].json == json(#"{"id": 42}"#))
+}
+
 @Test func theListPagesUntilThereIsNoMore() async throws {
     let stub = try await StubService([
         (
