@@ -432,8 +432,9 @@ private func copyAttributes(
     for _ in 0..<5 { faults.called(.metadata) }
     let refusal = faults.refusingAttribute?("acl")
     if let refusal { errno = refusal }
-    guard refusal == nil, fcopyfile(source, destination, nil, copyfile_flags_t(COPYFILE_ACL)) == 0
-    else { throw systemError(path, .writeFailed, "can't copy its ACL") }
+    guard refusal == nil, copyACL(from: source, to: destination) else {
+        throw systemError(path, .writeFailed, "can't copy its ACL")
+    }
     try copyExtendedAttributes(from: source, to: destination, path, faults)
     guard fchmod(destination, info.st_mode & 0o7777) == 0 else {
         throw systemError(path, .writeFailed, "can't copy its permissions")
@@ -448,6 +449,14 @@ private func copyAttributes(
     guard fchflags(destination, info.st_flags) == 0 else {
         throw systemError(path, .writeFailed, "can't copy its file flags")
     }
+}
+
+/// Copies the ACL alone, true when the source has none. `fcopyfile` with `COPYFILE_ACL` carries
+/// the quarantine flag over too (macOS 27), which would put back a flag the volume refused.
+private func copyACL(from source: Int32, to destination: Int32) -> Bool {
+    guard let acl = acl_get_fd_np(source, ACL_TYPE_EXTENDED) else { return errno == ENOENT }
+    defer { acl_free(UnsafeMutableRawPointer(acl)) }
+    return acl_set_fd_np(destination, acl, ACL_TYPE_EXTENDED) == 0
 }
 
 /// Copies each extended attribute on its own, rather than in one `fcopyfile`, so a refusal

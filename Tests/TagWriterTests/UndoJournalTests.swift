@@ -331,3 +331,19 @@ private func inode(_ url: URL) throws -> Int? {
     // macOS may flag the new file of its own, as it does any a quarantined process creates.
     #expect(attribute(quarantine, of: url) != Array(value.utf8))
 }
+
+/// A write past the padding keeps the file's ACL.
+@Test func aWritePastThePaddingKeepsTheACL() throws {
+    let url = try Sample.mp3v24.copy()
+    let entry = "!#acl 1\nuser:FFFFEEEE-DDDD-CCCC-BBBB-AAAA00000000:nobody:-2:deny:delete\n"
+    let set = try #require(acl_from_text(entry))
+    defer { acl_free(UnsafeMutableRawPointer(set)) }
+    #expect(acl_set_file(url.path, ACL_TYPE_EXTENDED, set) == 0)
+    let long = TagEdit(values: [.title: String(repeating: "Long ", count: 20_000)])
+    expectChanged(scratchWriter().write(long, to: [url.path]), [url])
+    let kept = try #require(acl_get_file(url.path, ACL_TYPE_EXTENDED))
+    defer { acl_free(UnsafeMutableRawPointer(kept)) }
+    let text = try #require(acl_to_text(kept, nil))
+    defer { acl_free(UnsafeMutableRawPointer(text)) }
+    #expect(String(cString: text).contains("deny:delete"))
+}
