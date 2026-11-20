@@ -40,8 +40,9 @@ becomes All. Search narrows the table only, not the panes. Selections are saved 
 change when the index is rebuilt; a saved name that's gone loads as All and is logged.
 
 **Refreshing.** The watcher reports progress at most once a second and each scan's outcome. The
-window refreshes at most every 2 s during a scan and at once when one ends with changes. The
-selection is kept by ID, read through the IDs the table showed before the change. On a refresh the
+window refreshes at most every 2 s during a scan and at once when one ends with changes. A scan's
+progress refreshes only when the index's change stamp moved since the last refresh, so a rescan
+that stores nothing doesn't query the whole library every 2 s. The selection is kept by ID, read through the IDs the table showed before the change. On a refresh the
 first visible track keeps its place on screen; on a user's change the table scrolls to the
 selection, or the top.
 

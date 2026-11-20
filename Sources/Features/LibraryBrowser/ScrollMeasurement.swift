@@ -198,6 +198,8 @@ extension LibraryBrowser {
         ) { [weak self] in
             guard scrollCase == .scan else { return }
             self?.libraryChanged(.scanning(folder: folder, ScanProgress()))
+            // As when the scan stored rows since the last refresh, which this one doesn't.
+            self?.scheduleRefresh()
         }
         let refreshed = libraryRefreshed
         libraryRefreshed = { [weak measurement] in

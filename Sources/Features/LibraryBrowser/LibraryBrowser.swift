@@ -238,6 +238,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var browserHeight: Int
     private var lastRefresh = Date.distantPast
     private var refreshPending = false
+    /// The index's change stamp when the last refresh started; nil before the first.
+    private var refreshedStamp: [Int]?
     private(set) var problems: ProblemsWindow?
     let health: HealthModel
     /// Set from the read of another player's library until its preview sheet closes.
@@ -589,7 +591,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showStatus()
         switch event {
         case .scanning:
-            scheduleRefresh()
+            // A rescan of an unchanged library stores nothing, and refreshing would query the
+            // whole library every interval for the same rows.
+            if indexChangedSinceRefresh() { scheduleRefresh() }
         case .scanned(_, let summary):
             let changed = summary.read > 0 || summary.removed > 0
             if changed { refreshNow() }
@@ -789,7 +793,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         runHealth()
     }
 
-    private func scheduleRefresh() {
+    func scheduleRefresh() {
         guard !refreshPending else { return }
         let wait = max(0, Self.refreshIntervalSeconds - Date().timeIntervalSince(lastRefresh))
         refreshPending = true
@@ -800,9 +804,27 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
+    /// True when a connection committed to the index since the last refresh started, or when
+    /// the stamp can't be read, which is reported.
+    private func indexChangedSinceRefresh() -> Bool {
+        do {
+            return try index.changeStamp() != refreshedStamp
+        } catch {
+            report("couldn't tell whether the library changed: \(error)")
+            return true
+        }
+    }
+
     func refreshNow() {
         refreshPending = false
         lastRefresh = Date()
+        do {
+            // Read before the refresh's queries, so a commit while they run refreshes again.
+            refreshedStamp = try index.changeStamp()
+        } catch {
+            refreshedStamp = nil
+            report("couldn't read the library's change stamp: \(error)")
+        }
         Task {
             await signposted(.refresh) {
                 await model.refresh()

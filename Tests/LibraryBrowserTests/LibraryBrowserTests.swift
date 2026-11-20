@@ -203,6 +203,48 @@ import Testing
     #expect(refreshes == 1)
 }
 
+/// A scan's progress refreshes the browser only once something was stored since the last
+/// refresh, so a rescan of an unchanged library doesn't query it every interval.
+@MainActor @Test func aScanThatStoredNothingDoesntRefresh() async throws {
+    let source = try browserLibrary.get().databaseURL
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("scan-refresh-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    for suffix in ["", "-wal"] where FileManager.default.fileExists(atPath: source.path + suffix) {
+        try FileManager.default.copyItem(
+            atPath: source.path + suffix, toPath: databaseURL.path + suffix)
+    }
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false, thumbnails: nil)
+    await browser.load(BrowserState(source: nil))
+    var refreshes = 0
+    browser.libraryRefreshed = { refreshes += 1 }
+    func waitForRefreshes(_ count: Int) async throws {
+        let deadline = Date().addingTimeInterval(waitLimit)
+        while refreshes < count, Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+    browser.refreshNow()
+    try await waitForRefreshes(1)
+    browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
+    try await Task.sleep(
+        nanoseconds: UInt64((LibraryBrowser.refreshIntervalSeconds + 0.5) * 1e9))
+    #expect(refreshes == 1)
+    // A commit on another connection, as the scanner's store of a batch is.
+    let scanner = try LibraryIndex(at: databaseURL)
+    try scanner.database.prepare(
+        "INSERT INTO schema_discards (discarded_seconds, detail) VALUES (0, ?)"
+    ).run("stored")
+    browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
+    try await waitForRefreshes(2)
+    #expect(refreshes == 2)
+}
+
 /// Analyze Library stopping refreshes the table once, at once, in place of the refresh its
 /// progress had scheduled.
 @MainActor @Test func analysisStoppingRefreshesOnce() async throws {
