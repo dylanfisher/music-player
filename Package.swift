@@ -437,7 +437,7 @@ let package = Package(
         ),
         .testTarget(
             name: "RecommendationsTests",
-            dependencies: ["Recommendations", "Recommender", "Settings"],
+            dependencies: ["Fixtures", "Recommendations", "Recommender", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(

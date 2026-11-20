@@ -1,3 +1,4 @@
+import Fixtures
 import Foundation
 import LocalNetwork
 import Testing
@@ -22,13 +23,13 @@ import Testing
     recommendations.show()
     let link = try #require(recommendations.controller?.statusLink)
 
-    link.performClick(nil)
+    click(link)
     #expect(opened.isEmpty)
     #expect(beeps == 1)
     #expect(said == ["Set music-recommender's address in Settings."])
 
     page = serviceStatusPage(address: try #require(IPAddress("192.168.1.20")), port: 7878)
-    link.performClick(nil)
+    click(link)
     #expect(opened.map(\.absoluteString) == ["http://192.168.1.20:7878/status"])
 }
 

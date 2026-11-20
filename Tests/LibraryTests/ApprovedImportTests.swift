@@ -337,11 +337,14 @@ func anUpgradeOfAnAlbumOfAnotherReleaseReplacesIt(_ release: String?) async thro
 
 /// An old file the job names outside the share, by `..` or as an absolute path, refuses the
 /// import before anything is reported, moved or given to the Trash, though a file is there
-/// (ADR 0025, row 68).
-@Test(arguments: ["library/../../elsewhere.flac", "/elsewhere.flac"])
-func anOldFileNamedOutsideTheShareIsRefusedUntouched(_ sharePath: String) async throws {
+/// (ADR 0025, row 68). Each case names a file of its own, as the shares sit side by side in the
+/// temporary folder and the cases run at once.
+@Test(arguments: ["library/../../", "/"])
+func anOldFileNamedOutsideTheShareIsRefusedUntouched(_ prefix: String) async throws {
     let setup = try ImportFolders()
-    let outside = (setup.folders.share as NSString).deletingLastPathComponent + "/elsewhere.flac"
+    let name = "elsewhere-\(UUID().uuidString).flac"
+    let sharePath = prefix + name
+    let outside = (setup.folders.share as NSString).deletingLastPathComponent + "/" + name
     #expect(FileManager.default.createFile(atPath: outside, contents: Data("flac".utf8)))
     defer { try? FileManager.default.removeItem(atPath: outside) }
     var job = try setup.job(upgrade: true)

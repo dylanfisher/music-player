@@ -655,7 +655,8 @@ private func copies(of album: RampAlbum) throws -> [URL] {
     let album = try album(44_100, 16)
     let tracks = try copies(of: album)
     defer { try? FileManager.default.removeItem(at: tracks[0].deletingLastPathComponent()) }
-    let rig = try await Rig(speed: 1)
+    // At half speed the first track lasts two seconds, so a busy machine still pauses in it.
+    let rig = try await Rig(speed: 0.5)
     await rig.engine.setQueue(tracks)
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
@@ -663,6 +664,7 @@ private func copies(of album: RampAlbum) throws -> [URL] {
     try await Task.sleep(nanoseconds: 100_000_000)
     try await pause(rig)
     let pulled = rig.device.captured[0].samples.count / 2
+    try #require(pulled < 22_050, "paused \(pulled) frames in, past the seek's position")
     try FileManager.default.removeItem(at: tracks[0])
     await rig.engine.seek(toSeconds: 0.5)
     await rig.engine.play()

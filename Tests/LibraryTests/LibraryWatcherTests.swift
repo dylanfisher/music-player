@@ -17,6 +17,20 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
     return try condition()
 }
 
+/// The index's track count once a paused scan has stored the files it was reading: the first
+/// that holds for a second, however long a busy machine takes to store them.
+private func settledTrackCount(_ index: LibraryIndex) async throws -> Int {
+    var count = try index.trackCount()
+    for _ in 0..<20 {
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        let now = try index.trackCount()
+        if now == count { return count }
+        count = now
+    }
+    Issue.record("the track count still changed after 20 seconds")
+    return count
+}
+
 @Test func scansAtStartThenFollowsFSEvents() async throws {
     let library = try TestLibrary()
     let watcher = LibraryWatcher(databaseURL: library.databaseURL, networkReaders: nil)
@@ -401,9 +415,8 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     try await Task.sleep(nanoseconds: 500_000_000)
     access.open()
     // The files being read when it paused are stored; then nothing more.
-    try await Task.sleep(nanoseconds: 500_000_000)
     let index = try library.index()
-    let paused = try index.trackCount()
+    let paused = try await settledTrackCount(index)
     try await Task.sleep(nanoseconds: 1_500_000_000)
     #expect(try index.trackCount() == paused)
     #expect(paused < library.readableCount)
@@ -562,9 +575,8 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     watcher.playbackChanged(.stopped, pausePollingDuringPlayback: true)
     access.open()
     // The files being read when it paused are stored; then nothing more.
-    try await Task.sleep(nanoseconds: 500_000_000)
     let index = try library.index()
-    let paused = try index.trackCount()
+    let paused = try await settledTrackCount(index)
     try await Task.sleep(nanoseconds: 1_500_000_000)
     #expect(try index.trackCount() == paused)
     #expect(paused < library.readableCount)

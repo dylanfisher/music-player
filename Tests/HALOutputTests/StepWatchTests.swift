@@ -9,11 +9,19 @@ import Testing
 private final class Reported: @unchecked Sendable {
     private let lock = NSLock()
     private var all: [(line: String, file: URL?)] = []
+    private let arrived = DispatchSemaphore(value: 0)
 
     func diagnostics(stuckAfterSeconds: Double = 0.1) -> OutputDiagnostics {
         OutputDiagnostics(stuckAfterSeconds: stuckAfterSeconds) { line, file in
             self.lock.withLock { self.all.append((line, file)) }
+            self.arrived.signal()
         }
+    }
+
+    /// A call that runs until a line is reported, or 5 seconds, so it is still running when a
+    /// check comes late on a busy machine.
+    func runUntilReported() {
+        _ = arrived.wait(timeout: .now() + 5)
     }
 
     var lines: [(line: String, file: URL?)] { lock.withLock { all } }
@@ -23,7 +31,7 @@ private final class Reported: @unchecked Sendable {
     let reported = Reported()
     let watch = StepWatch(reported.diagnostics())
     let file = URL(fileURLWithPath: "/Volumes/music/track.flac")
-    watch.run(.reading(file)) { Thread.sleep(forTimeInterval: 0.4) }
+    watch.run(.reading(file)) { reported.runUntilReported() }
     let lines = reported.lines
     try #require(lines.count == 2, "\(lines)")
     #expect(lines[0].line.hasPrefix("playback is stuck: reading a track's file hasn't returned"))
@@ -47,7 +55,7 @@ private final class Reported: @unchecked Sendable {
 @Test func aDeviceCallNamesTheDeviceAndNoFile() async throws {
     let reported = Reported()
     let watch = StepWatch(reported.diagnostics())
-    watch.run(.configuringDevice("ADI-2 DAC")) { Thread.sleep(forTimeInterval: 0.3) }
+    watch.run(.configuringDevice("ADI-2 DAC")) { reported.runUntilReported() }
     let first = try #require(reported.lines.first)
     #expect(first.line.hasPrefix("playback is stuck: switching ADI-2 DAC to the track's format"))
     #expect(first.file == nil)

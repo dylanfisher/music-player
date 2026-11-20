@@ -1,4 +1,5 @@
 import AppKit
+import Fixtures
 import Foundation
 import Testing
 
@@ -22,9 +23,9 @@ import Testing
     #expect(!window.discogsButton.isEnabled)
     window.table.selectRowIndexes([1, 0], byExtendingSelection: false)
     #expect(window.discogsButton.isEnabled)
-    window.discogsButton.performClick(nil)
+    click(window.discogsButton)
     window.table.selectRowIndexes([1], byExtendingSelection: false)
-    window.discogsButton.performClick(nil)
+    click(window.discogsButton)
     let addresses = ["https://www.discogs.com/master/7", "https://www.discogs.com/release/8"]
     #expect(opened.map(\.absoluteString) == addresses)
 }

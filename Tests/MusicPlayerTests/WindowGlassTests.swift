@@ -165,9 +165,9 @@ func glassOnThenOffLeavesTheWindowAsAFreshOne(
 
 /// `window` as the screen shows it, its materials blended. `cacheDisplay` draws a visual effect
 /// view as a flat fill, so it can't tell a translucent material from an opaque one. Swift can't
-/// call `CGWindowListCreateImage` from the macOS 15 SDK on, but the function is still there,
-/// and for the app's own windows it needs no screen recording permission, as ScreenCaptureKit
-/// does.
+/// call `CGWindowListCreateImage` from the macOS 15 SDK on, but the function is still there.
+/// Until macOS 27.2 it read the app's own windows without the screen recording permission;
+/// from 27.2 it needs it, as ScreenCaptureKit does, and without it the image is blank.
 @MainActor
 private func onScreen(_ window: NSWindow) throws -> NSBitmapImageRep {
     typealias CreateImage =
@@ -252,6 +252,9 @@ func theGlassHeadersAreFrosted(_ appearance: NSAppearance.Name) throws {
     #expect(added.headerCell is ClearHeaderCell)
     let image = try onScreen(window)
     let under = try pixel(at: NSPoint(x: 300, y: 100), in: red, of: image)
+    try #require(
+        under.alphaComponent > 0,
+        "the window's image is blank: grant the app running the tests screen recording")
     // Over each column, away from its title.
     for x in [4, shown.headerRect(ofColumn: 1).minX + 4] {
         let color = try pixel(at: NSPoint(x: x, y: 3), in: shown, of: image)
