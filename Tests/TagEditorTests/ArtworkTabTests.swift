@@ -58,6 +58,29 @@ private func track(_ name: String, _ pictures: [ArtPicture]) -> EditableTrack {
     #expect(try model.edit().art == .pictures([only]), "the first added is the front cover")
 }
 
+/// Only the first file read keeps its pictures' bytes, the others their digests, and the tab
+/// lists the first's when they all agree.
+@Test func onlyTheFirstFileReadKeepsItsPictures() {
+    let (tracks, problems) = readEditableTracks(
+        ["bad", "A", "B", "C"],
+        read: { path in
+            guard path != "bad" else { throw MetadataError(unreadable: path, detail: "bad") }
+            return track(path, [back, front])
+        })
+    #expect(problems.count == 1)
+    #expect(tracks.map(\.pictures) == [[back, front], nil, nil])
+    #expect(TagEditorModel(tracks: tracks).shownPictures == [back, front])
+}
+
+/// Pictures compared by digest are as exact as by their bytes: one byte different in a
+/// picture of the same size and type is mixed.
+@Test func picturesOfOneSizeThatDifferAreMixed() {
+    let other = ArtPicture(image: Data([3]), mimeType: jpegMIMEType, type: .frontCover)
+    let model = TagEditorModel(tracks: [track("A", [back, front]), track("B", [back, other])])
+    #expect(model.isArtMixed)
+    #expect(model.shownPictures.isEmpty)
+}
+
 /// Replace Artwork… puts the new front cover where the shown one was, the rest kept.
 @Test func aReplacedFrontCoverKeepsTheOtherPictures() {
     var model = TagEditorModel(tracks: [track("A", [back, front])])

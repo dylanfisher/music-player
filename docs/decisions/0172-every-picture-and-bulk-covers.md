@@ -38,7 +38,10 @@ get one.
   selected. A JPEG or PNG is added as it is, any other image as PNG. The first picture added
   to a list with no front cover is the front cover, the rest Other. Tracks whose pictures
   differ show as mixed and keep theirs until the list is changed; a change then gives every
-  file the list. An edit back to what the files hold is none. The undo journal keeps the
+  file the list. An edit back to what the files hold is none. Tracks are compared by each
+  picture's type, MIME type, length and SHA-256, worked out as the files are read, and only
+  the first file keeps the bytes, which is all the tab shows or writes back, so Get Info on a
+  few hundred files on a share holds one file's pictures. The undo journal keeps the
   bytes a write replaced, so Undo Tag Edit puts the pictures back as it does the tags.
 - **The viewer.** The decoded art is drawn at most a point a pixel. The art it opens with,
   a thumbnail, fills the screen until the decode arrives, so a small cover doesn't flash

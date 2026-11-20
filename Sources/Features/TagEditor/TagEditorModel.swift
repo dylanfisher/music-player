@@ -1,3 +1,4 @@
+import CommonCrypto
 import Foundation
 import Library
 import Metadata
@@ -10,8 +11,11 @@ package struct EditableTrack: Equatable, Sendable {
     var path: String
     var tags: TrackTags
     /// Every picture it embeds, in its order. MP4's have no types, so its first reads as the
-    /// front cover and the rest as Other.
-    var pictures: [ArtPicture]
+    /// front cover and the rest as Other. Nil once `readEditableTracks` dropped their bytes,
+    /// which it keeps for one track only.
+    private(set) var pictures: [ArtPicture]?
+    /// The same pictures, as the editor compares one track's with another's.
+    let pictureDigests: [PictureDigest]
     /// Fields whose frame or item holds several values, of which the editor shows the first.
     var multiValued: Set<TagEditField>
     /// What the File tab shows; nil when not read, as in tests.
@@ -34,11 +38,36 @@ package struct EditableTrack: Equatable, Sendable {
         self.path = path
         self.tags = tags
         self.pictures = pictures
+        pictureDigests = pictures.map(PictureDigest.init)
         self.multiValued = multiValued
         self.file = file
         self.readOnly = readOnly
         self.playCount = playCount
         self.rating = rating
+    }
+
+    /// Lets go of the pictures' bytes, keeping their digests.
+    mutating func dropPictures() { pictures = nil }
+}
+
+/// A picture as the editor compares one track's with another's: its type, MIME type, and its
+/// bytes' length and SHA-256, so a few hundred tracks on a share needn't each keep their
+/// pictures' bytes in memory to be compared.
+struct PictureDigest: Equatable, Sendable {
+    var type: PictureType
+    var mimeType: String
+    var length: Int
+    var sha256: [UInt8]
+
+    init(_ picture: ArtPicture) {
+        type = picture.type
+        mimeType = picture.mimeType
+        length = picture.image.count
+        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        picture.image.withUnsafeBytes {
+            _ = CC_SHA256($0.baseAddress, CC_LONG($0.count), &digest)
+        }
+        sha256 = digest
     }
 }
 
@@ -76,10 +105,14 @@ public struct TagEditorModel: Equatable, Sendable {
     private(set) var deletedExtras: Set<String> = []
     /// What the user typed as the play count, which isn't a tag (ADR 0162).
     private(set) var typedPlayCount: String?
+    /// The pictures every track holds, or nil when they differ. Found when the tracks are set,
+    /// since showing the art asks for them several times.
+    private var sharedPictures: [ArtPicture]?
 
     init(tracks: [EditableTrack]) {
         precondition(!tracks.isEmpty, "the editor opens on at least one track")
         self.tracks = tracks
+        sharedPictures = Self.sharedPictures(of: tracks)
     }
 
     /// The same files as read again after a write: what the user typed, in Extras too, and the
@@ -88,6 +121,7 @@ public struct TagEditorModel: Equatable, Sendable {
         precondition(
             tracks.map(\.path) == self.tracks.map(\.path), "a reread holds the same files")
         self.tracks = tracks
+        sharedPictures = Self.sharedPictures(of: tracks)
     }
 
     /// The tracks Save writes: those whose tags can be written. The fields show every track's
@@ -215,10 +249,15 @@ public struct TagEditorModel: Equatable, Sendable {
             + " file\(files == 1 ? "" : "s"). Saving keeps only the value shown."
     }
 
-    /// The pictures every track holds, or nil when they differ.
-    private var sharedPictures: [ArtPicture]? {
-        let first = tracks[0].pictures
-        return tracks.dropFirst().allSatisfy { $0.pictures == first } ? first : nil
+    /// The pictures every track holds, compared by digest, or nil when they differ.
+    private static func sharedPictures(of tracks: [EditableTrack]) -> [ArtPicture]? {
+        let first = tracks[0].pictureDigests
+        guard tracks.dropFirst().allSatisfy({ $0.pictureDigests == first }) else { return nil }
+        // Any track's bytes do, as they're the same.
+        guard let pictures = tracks.lazy.compactMap(\.pictures).first else {
+            preconditionFailure("readEditableTracks keeps one track's pictures")
+        }
+        return pictures
     }
 
     /// The pictures the Artwork tab lists: the tracks' when they share them, none when mixed,
@@ -254,7 +293,7 @@ public struct TagEditorModel: Equatable, Sendable {
         case .replaced: true
         case .removed: false
         case .pictures(let pictures): !pictures.isEmpty
-        case .unchanged: writable.contains { !$0.pictures.isEmpty }
+        case .unchanged: writable.contains { !$0.pictureDigests.isEmpty }
         }
     }
 
@@ -460,7 +499,8 @@ struct ExtraRow: Equatable {
 /// since on a NAS each file waits on a few round trips. A file that can't be read is reported
 /// and left out, so the rest can still be edited. Both lists keep the order of `paths`. Once
 /// `isStopped` says so, as when the info window closes, no further file is started, and what
-/// was read comes back.
+/// was read comes back. Only the first track keeps its pictures' bytes, the rest their
+/// digests, as the editor shows and writes back only pictures every track shares.
 package func readEditableTracks(
     _ paths: [String], isStopped: @Sendable () -> Bool = { false },
     read: @Sendable (String) throws -> EditableTrack = readEditableTrack
@@ -489,6 +529,8 @@ private final class ReadResults: @unchecked Sendable {
     private let lock = NSLock()
     private var claimed = 0
     private var results: [Result<EditableTrack, any Error>?]
+    /// The first file read so far, the one whose pictures' bytes are kept.
+    private var keeper: Int?
 
     init(count: Int) { results = Array(repeating: nil, count: count) }
 
@@ -501,8 +543,25 @@ private final class ReadResults: @unchecked Sendable {
         }
     }
 
+    /// Keeps `result`, and the pictures' bytes of the first file read only, so a file read
+    /// before the one that keeps them takes them over.
     func store(_ result: Result<EditableTrack, any Error>, at index: Int) {
-        lock.withLock { results[index] = result }
+        lock.withLock {
+            guard case .success(var track) = result else {
+                results[index] = result
+                return
+            }
+            if let keeper, keeper < index {
+                track.dropPictures()
+            } else {
+                if let keeper, case .success(var kept)? = results[keeper] {
+                    kept.dropPictures()
+                    results[keeper] = .success(kept)
+                }
+                keeper = index
+            }
+            results[index] = .success(track)
+        }
     }
 
     /// Every file's result, nil for one a stop left unread.
