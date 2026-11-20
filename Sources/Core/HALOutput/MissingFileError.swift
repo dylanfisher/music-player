@@ -22,7 +22,8 @@ extension MissingFileError {
     init?(_ url: URL, volumes: String = "/Volumes") {
         guard !FileManager.default.fileExists(atPath: url.path) else { return nil }
         let components = url.standardizedFileURL.pathComponents
-        let base = URL(fileURLWithPath: volumes, isDirectory: true).standardizedFileURL.pathComponents
+        let base = URL(fileURLWithPath: volumes, isDirectory: true).standardizedFileURL
+            .pathComponents
         guard components.count > base.count + 1, Array(components.prefix(base.count)) == base
         else {
             unmountedVolume = nil
