@@ -100,14 +100,15 @@ private func state(_ path: SignalPath) -> DeviceState {
 
 @Test func aSteadyPlaybackPassBuildsNoSignalPath() async throws {
     let album = try album(44_100, 16)
-    let rig = try await Rig(speed: 1)
+    // At half speed the first track lasts two seconds, so a busy machine still waits inside it.
+    let rig = try await Rig(speed: 0.5)
     let paths = Collected(rig.output.signalPaths)
     await rig.engine.setQueue(album.tracks)
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
     try await waitForPath(paths) { signalVerdict($0) == .bitPerfect }
     let before = rig.output.signalPathBuilds
-    // About 30 control passes, well inside the first track's second.
+    // About 30 control passes, well inside the first track.
     try await Task.sleep(nanoseconds: 300_000_000)
     #expect(rig.output.signalPathBuilds == before)
 }
