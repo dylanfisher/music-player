@@ -136,6 +136,16 @@ private final class HeldReplies: @unchecked Sendable {
         #expect(fixture.requests.isEmpty)
     }
 
+    /// A socket whose peer has gone is closed, not a failed option, as the client finds when a
+    /// server turns it away between its connect and its first write.
+    @Test func preparingASocketWhosePeerHasGoneSaysItClosed() throws {
+        var pair: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &pair) == 0)
+        defer { close(pair[0]) }
+        close(pair[1])
+        #expect(throws: LocalSocketError.closed) { try prepareConnection(pair[0]) }
+    }
+
     @Test func theClientRefusesAServerOfAnotherUser() throws {
         let fixture = try Fixture()
         let server = try fixture.server()

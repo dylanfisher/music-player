@@ -72,11 +72,12 @@ enum LocalSocketFrame {
 }
 
 /// Sets the options every connected socket gets: no SIGPIPE when the peer has gone, and
-/// non-blocking, so a read or write never outlasts its deadline.
+/// non-blocking, so a read or write never outlasts its deadline. macOS refuses an option with
+/// EINVAL on a socket its peer has already shut, as a server that turns the peer away does.
 func prepareConnection(_ fd: Int32) throws(LocalSocketError) {
     var on: Int32 = 1
     guard setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size)) == 0
-    else { throw .system("setsockopt", errno: errno) }
+    else { throw errno == EINVAL ? .closed : .system("setsockopt", errno: errno) }
     let flags = fcntl(fd, F_GETFL)
     guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0 else {
         throw .system("fcntl", errno: errno)
