@@ -21,7 +21,9 @@ enum DownloadAction: CaseIterable, Sendable {
         switch self {
         case .approve: "Review where the files go, then move them into the library."
         case .reject: "Have the service delete the staged folder."
-        case .retry: "Start the job again from where it failed."
+        case .retry:
+            "Start the job again from where it failed, or, for a staged copy that isn't clean,"
+                + " download it from a user the job hasn't tried."
         case .cancel: "Stop the search or download and delete what it got."
         case .openInTagger: "Resolve the discrepancy in the Discogs Tagger."
         case .resumeHere: "Finish an import another Mac, or an earlier run, left."
@@ -32,7 +34,8 @@ enum DownloadAction: CaseIterable, Sendable {
     /// Whether the action applies to `job` on the Mac named `machine`. Nothing applies while
     /// the service doesn't answer; a job another Mac is reviewing takes only Resume Here, which
     /// takes the claim over. Approve needs the job staged and tagged clean; Open in Tagger a
-    /// discrepancy or an error, on a Mac with a catalog (`canTag`). Reveal in Finder, which only
+    /// discrepancy or an error, on a Mac with a catalog (`canTag`); Retry, besides a job that
+    /// failed or wasn't found, a staged one tagged either, which it requeues (ADR 0211). Reveal in Finder, which only
     /// looks, needs a staged folder, from `staged` until the import, and not the service.
     static func applies(
         _ action: DownloadAction, to job: DownloadJob, machine: String, answering: Bool,
@@ -51,6 +54,8 @@ enum DownloadAction: CaseIterable, Sendable {
             return !elsewhere && job.state == .staged
         case .retry:
             return job.state == .notFound || job.state == .failed
+                || (!elsewhere && job.state == .staged
+                    && [.discrepancy, .error].contains(job.tagging.status))
         case .cancel:
             switch job.state {
             case .queued, .searching, .notFound, .candidateFound, .downloading, .downloaded:

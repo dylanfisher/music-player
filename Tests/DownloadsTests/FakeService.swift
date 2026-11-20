@@ -143,6 +143,12 @@ final class FakeService: @unchecked Sendable {
             retry: { id, policy throws(RecommenderError) in try self.retry(id, policy) },
             cancel: { id throws(RecommenderError) in try self.cancel(id) },
             requeue: { id throws(RecommenderError) in try self.requeue(id) },
+            triedPeers: { id throws(RecommenderError) in
+                try self.locked { () throws(RecommenderError) in
+                    guard !self.isDown else { throw self.unreachable("/v1/downloads/peers") }
+                    return self.triedPeers[id] ?? self.store[id]?.candidate.map { [$0.peer] } ?? []
+                }
+            },
             slskdPage: { () throws(RecommenderError) in
                 try self.locked { () throws(RecommenderError) in
                     guard !self.isDown else { throw self.unreachable("/v1/downloads/config") }
@@ -205,6 +211,14 @@ final class FakeService: @unchecked Sendable {
             job.state = .cancelled
         }
     }
+
+    /// The peers each job tried, as the peers route answers; a job not here tried only its
+    /// candidate's peer.
+    var tried: [Int: [String]] {
+        get { lock.withLock { triedPeers } }
+        set { lock.withLock { triedPeers = newValue } }
+    }
+    private var triedPeers: [Int: [String]] = [:]
 
     /// Every job requeued, in order.
     var requeued: [Int] { lock.withLock { requeues } }

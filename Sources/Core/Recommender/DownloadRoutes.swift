@@ -1,3 +1,5 @@
+import StrictKeys
+
 /// The downloads routes, each answering with the whole job as it now is, and the paging
 /// through `downloads/list`.
 extension RecommenderClient {
@@ -35,6 +37,13 @@ extension RecommenderClient {
     package func requeue(_ id: Int) async throws(RecommenderError) -> DownloadJob {
         try await call("/v1/downloads/requeue", body: CancelRequest(id: id), as: JobReply.self)
             .job
+    }
+
+    /// The peers job `id`'s downloads were started from, in the order first tried, each once;
+    /// no search for the job picks one again (music-recommender's ADR 0023).
+    package func triedPeers(_ id: Int) async throws(RecommenderError) -> [String] {
+        try await call("/v1/downloads/peers", body: CancelRequest(id: id), as: PeersReply.self)
+            .triedPeers
     }
 
     /// Sends `event` for the job `id` as `machine`, the same name on every request from this
@@ -97,6 +106,20 @@ private struct RetryRequest: Encodable {
 /// The body of `cancel` and `requeue`.
 private struct CancelRequest: Encodable {
     var id: Int
+}
+
+private struct PeersReply: Decodable {
+    var triedPeers: [String]
+
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+        case ok, id
+        case triedPeers = "tried_peers"
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try strictContainer(decoder, CodingKeys.self)
+        triedPeers = try container.decode([String].self, forKey: .triedPeers)
+    }
 }
 
 private struct HandoffRequest: Encodable {

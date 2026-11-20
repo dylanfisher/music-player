@@ -893,31 +893,6 @@ package final class Downloads {
         await model.poll()
     }
 
-    private func retry(_ job: DownloadJob, _ row: DownloadRow, _ session: Session) {
-        let send = { (policy: FormatPolicy?) in
-            _ = Task {
-                if let problem = await session.model.retry(job.id, policy: policy) {
-                    self.alert("The job wasn't started again", [problem])
-                }
-            }
-        }
-        guard DownloadAction.retrySearches(job) else { return send(nil) }
-        guard let window = controller?.window else { return }
-        let policies = FormatPolicy.offered(upgrade: job.source == .upgrade)
-        let popUp = formatPopUp(policies)
-        popUp.selectItem(at: policies.firstIndex(of: job.formatPolicy) ?? 0)
-        let question = NSAlert()
-        question.messageText = "Search again for \(row.album)?"
-        question.informativeText = "Choose the format to ask for."
-        question.accessoryView = popUp
-        question.addButton(withTitle: DownloadAction.retry.title)
-        question.addButton(withTitle: "Cancel")
-        question.beginSheetModal(for: window) { response in
-            guard response == .alertFirstButtonReturn else { return }
-            send(policies[popUp.indexOfSelectedItem])
-        }
-    }
-
     // MARK: - Adding
 
     /// Queues by `addition`.
@@ -1188,7 +1163,7 @@ package final class Downloads {
         return true
     }
 
-    private func confirm(
+    func confirm(
         _ message: String, _ detail: String, _ button: String, then: @escaping () -> Void
     ) {
         guard let window = controller?.window else { return }

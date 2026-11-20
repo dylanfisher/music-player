@@ -23,6 +23,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     mapping[.album].mode = .fillEmpty
     let run = try await StagedSetup().run(exactStaging, mapping: mapping)
     #expect(run.verdict == .clean)
+    #expect(!run.anotherCopyMightFix)
     #expect(run.edits.count == 3)
     #expect(run.edits.allSatisfy { $0.edit.values[.album] == "Made-Up Album" })
     #expect(run.staged.files.map(\.id).allSatisfy { $0 < 0 })
@@ -34,6 +35,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     let run = try await StagedSetup().run(files)
     #expect(
         run.verdict == .discrepancy(["track 2 is titled Something Else Entirely, not Second Song"]))
+    #expect(run.anotherCopyMightFix)
     #expect(run.edits.isEmpty)
 }
 
@@ -41,6 +43,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     let run = try await StagedSetup().run(Array(exactStaging.prefix(2)))
     #expect(reasons(run).contains("2 files, release has 3"))
     #expect(reasons(run).contains("track 3 has no file"))
+    #expect(run.anotherCopyMightFix)
     #expect(run.edits.isEmpty)
 }
 
@@ -49,6 +52,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     release[1].duration = "0:40"
     let run = try await StagedSetup(release: release).run(exactStaging)
     #expect(run.verdict == .discrepancy(["track 2 is 40 s off"]))
+    #expect(run.anotherCopyMightFix)
 }
 
 @Test func anExtraFileIsADiscrepancy() async throws {
@@ -56,6 +60,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     let run = try await StagedSetup().run(files)
     #expect(reasons(run).contains("4 files, release has 3"))
     #expect(reasons(run).contains("04 Bonus Beat.flac fits no track"))
+    #expect(run.anotherCopyMightFix)
 }
 
 @Test func anUnreadableFileIsAnError() async throws {
@@ -83,6 +88,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     }
     let run = try await StagedSetup().run(files)
     #expect(reasons(run).contains("01 First Song.dsf: Tags in DSD files can't be written yet"))
+    #expect(!run.anotherCopyMightFix, "every peer's DSD copy would be refused the same way")
     #expect(run.edits.isEmpty)
 }
 
@@ -107,6 +113,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     }
     let run = try await StagedSetup().run(files, format: .alac)
     #expect(reasons(run).contains("01 First Song.m4a is AAC, not ALAC"))
+    #expect(run.anotherCopyMightFix)
     #expect(run.edits.isEmpty)
 }
 
@@ -121,6 +128,7 @@ private func reasons(_ run: AutoTagRun) -> [String] {
                 "01 First Song.flac is track 1, the service said 2",
                 "02 Second Song.flac is track 2, the service said 1",
             ]))
+    #expect(!run.anotherCopyMightFix, "the files match the release; the service's map doesn't")
 }
 
 @Test func aJobWhoseReleaseTheCatalogLacksIsAnErrorThoughAnotherMatches() async throws {

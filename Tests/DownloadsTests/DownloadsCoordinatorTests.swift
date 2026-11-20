@@ -80,12 +80,13 @@ private final class Calls: @unchecked Sendable {
 }
 
 /// An AutoTag run with `verdict` and no files, as AutoTag reports one.
-private func run(_ verdict: AutoTagRun.Verdict, for job: StagedJob, root: String = "/nonexistent")
-    -> AutoTagRun
-{
+private func run(
+    _ verdict: AutoTagRun.Verdict, for job: StagedJob, root: String = "/nonexistent",
+    anotherCopyMightFix: Bool = false
+) -> AutoTagRun {
     AutoTagRun(
         verdict: verdict, staged: StagedAlbum(job, stagingRoot: root), match: nil, changes: nil,
-        edits: [])
+        edits: [], anotherCopyMightFix: anotherCopyMightFix)
 }
 
 /// Appends bytes to each of `job`'s files under `root`, as a tag write does when its padding
@@ -106,6 +107,8 @@ private final class Setup {
     let calls = Calls()
     let databaseURL: URL
     var verdict = AutoTagRun.Verdict.clean
+    /// Whether the stand-in AutoTag says another peer's copy might fix a discrepancy.
+    var anotherCopyMightFix = false
     /// The staging folder the stand-ins read and write, where `stage` puts files.
     let stagingRoot: String
     /// What the staged journal's recovery reports as failed.
@@ -141,6 +144,7 @@ private final class Setup {
     ) -> DownloadsCoordinator {
         let calls = calls
         let verdict = verdict
+        let mightFix = anotherCopyMightFix
         let clock = service.clock
         let reports = importReports
         let url = databaseURL
@@ -155,7 +159,8 @@ private final class Setup {
                     ? { @Sendable job in
                         calls.tag(job)
                         await calls.waitIfHeld()
-                        return run(verdict, for: job, root: root)
+                        return run(
+                            verdict, for: job, root: root, anotherCopyMightFix: mightFix)
                     } : nil,
                 recover: {
                     calls.recover()
@@ -258,6 +263,7 @@ func aStagedJobIsTaggedWhenNoRunHoldsIt(
         setup.service.job(1)?.tagging
             == DownloadJob.Tagging(status: .discrepancy, reasons: ["track 2 is 40 s off"]))
     #expect(setup.service.eventTypes.last == "release_lease")
+    #expect(setup.service.requeued.isEmpty, "AutoTag didn't say another copy might fix it")
 }
 
 /// A staged file named outside the job's folder is never tagged, and the error says which.
@@ -711,7 +717,7 @@ private func damagedJob() -> DownloadJob {
         setup.service.eventTypes == ["lease", "tagging running", "tagging error", "release_lease"])
     #expect(setup.service.requeued == [1])
     #expect(setup.service.job(1)?.state == .queued)
-    #expect(await coordinator.damaged.isEmpty)
+    #expect(await coordinator.requeueing.isEmpty)
     #expect(try setup.index.stagedSizes(job: 1, folder: "job-1") == [:])
 }
 
@@ -731,10 +737,10 @@ private func damagedJob() -> DownloadJob {
     let coordinator = setup.coordinator(calls: calls)
     await coordinator.take([damagedJob()])
     #expect(setup.service.requeued.isEmpty)
-    #expect(await coordinator.damaged == [1])
+    #expect(await coordinator.requeueing == [1: .damaged])
     await coordinator.take([try #require(setup.service.job(1))])
     #expect(setup.service.requeued == [1])
-    #expect(await coordinator.damaged.isEmpty)
+    #expect(await coordinator.requeueing.isEmpty)
 }
 
 @Test func anErrorWithNoDamagedFileIsLeftForTheOwner() async throws {
@@ -744,6 +750,66 @@ private func damagedJob() -> DownloadJob {
     await setup.coordinator().take([job(1)])
     #expect(setup.service.requeued.isEmpty)
     #expect(setup.service.job(1)?.tagging.status == .error)
+}
+
+@Test func aCopyThatDoesntMatchIsReportedThenRequeued() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .discrepancy(["track 3 has no file"])
+    setup.anotherCopyMightFix = true
+    setup.service.tried = [1: ["first-peer", "made-up-peer"]]
+    try setup.stage(1)
+    try setup.index.recordStagedSizes(job: 1, release: 4242, folder: "job-1", sizes: firstSizes)
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1)])
+    #expect(
+        setup.service.eventTypes == [
+            "lease", "tagging running", "tagging discrepancy", "release_lease",
+        ])
+    #expect(setup.service.requeued == [1])
+    #expect(await coordinator.requeueing.isEmpty)
+    #expect(try setup.index.stagedSizes(job: 1, folder: "job-1") == [:])
+}
+
+/// The third peer's copy that doesn't match is left for the owner, so a release whose every
+/// copy differs from the catalog doesn't throw away every peer's.
+@Test func aDiscrepancyAfterThreePeersIsLeftForTheOwner() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .discrepancy(["track 3 has no file"])
+    setup.anotherCopyMightFix = true
+    setup.service.tried = [1: ["first-peer", "second-peer", "made-up-peer"]]
+    await setup.coordinator().take([job(1)])
+    #expect(setup.service.requeued.isEmpty)
+    #expect(setup.service.job(1)?.tagging.status == .discrepancy)
+}
+
+@Test func aDiscrepancyWhosePeersArentGivenIsLeftForTheOwner() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .discrepancy(["track 3 has no file"])
+    setup.anotherCopyMightFix = true
+    var calls = setup.service.service
+    calls.triedPeers = { _ throws(RecommenderError) in
+        throw RecommenderError(service: "fake", kind: .unreachable(.timedOut))
+    }
+    await setup.coordinator(calls: calls).take([job(1)])
+    #expect(setup.service.requeued.isEmpty)
+    #expect(setup.service.job(1)?.tagging.status == .discrepancy)
+}
+
+/// Retry on a staged copy gives up this Mac's review claim, which the service would refuse
+/// the requeue for, then requeues and forgets the old copy's sizes.
+@Test func retryOnAStagedCopyGivesUpItsClaimAndRequeues() async throws {
+    let reviewed = job(1) {
+        $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["track 3 has no file"])
+    }
+    let setup = try Setup([reviewed])
+    try setup.index.recordStagedSizes(job: 1, release: 4242, folder: "job-1", sizes: firstSizes)
+    let coordinator = setup.coordinator()
+    _ = try await setup.service.service.handoff(1, .claim(takeOver: false))
+    let listed = try #require(setup.service.job(1))
+    #expect(await coordinator.requeue(asked: listed) == nil)
+    #expect(setup.service.eventTypes == ["claim", "release"])
+    #expect(setup.service.requeued == [1])
+    #expect(try setup.index.stagedSizes(job: 1, folder: "job-1") == [:])
 }
 
 /// Counts calls from any thread.
