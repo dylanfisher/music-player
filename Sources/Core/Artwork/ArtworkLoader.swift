@@ -35,6 +35,13 @@ public final class ArtworkLoader: @unchecked Sendable {
         self.thumbnails = thumbnails
     }
 
+    /// A loader of thumbnails at another size that reads files as this one does, so through a
+    /// `SharedArtRead` the two read a picture they both want once.
+    public func sharingReads(maxPixelSize: Int, capacity: Int) -> ArtworkLoader {
+        ArtworkLoader(
+            maxPixelSize: maxPixelSize, capacity: capacity, read: read, thumbnails: thumbnails)
+    }
+
     /// The thumbnail if it's cached.
     public func cached(_ key: ArtworkKey) -> CGImage? {
         lock.withLock {
@@ -109,6 +116,44 @@ public typealias ArtRead = @Sendable (EmbeddedArt, String) throws -> Data
 /// The bytes of `art` in the file at `path`.
 public func readArtBytes(_ art: EmbeddedArt, path: String) throws -> Data {
     try readArt(art, at: URL(fileURLWithPath: path, isDirectory: false))
+}
+
+/// One read of a picture for loaders of different sizes that want it at the same time, as the
+/// bar's and Now Playing's do on each track change: a second caller for the picture being read
+/// waits for those bytes instead of reading the file again over the NAS. Keeps the bytes of the
+/// last picture read, and none after a failure, so the next caller tries the file again. Safe
+/// to use from any thread.
+/// `last` is guarded by `condition`.
+public final class SharedArtRead: @unchecked Sendable {
+    private let readFile: ArtRead
+    private let condition = NSCondition()
+    /// The picture read last, with its bytes, or nil for them while it's being read.
+    private var last: (key: ArtworkKey, bytes: Data?)?
+
+    public init(read: @escaping ArtRead = readArtBytes) {
+        readFile = read
+    }
+
+    /// The bytes of `art` in the file at `path`, as `ArtRead` gives them.
+    public func read(_ art: EmbeddedArt, path: String) throws -> Data {
+        let key = ArtworkKey(path: path, art: art)
+        condition.lock()
+        while let last, last.key == key, last.bytes == nil { condition.wait() }
+        if let last, last.key == key, let bytes = last.bytes {
+            condition.unlock()
+            return bytes
+        }
+        last = (key, nil)
+        condition.unlock()
+        let result = Result { try readFile(art, path) }
+        condition.withLock {
+            if last?.key == key {
+                if case .success(let bytes) = result { last = (key, bytes) } else { last = nil }
+            }
+            condition.broadcast()
+        }
+        return try result.get()
+    }
 }
 
 /// `bytes` decoded straight to an image whose longest side is at most `maxPixelSize`, or nil

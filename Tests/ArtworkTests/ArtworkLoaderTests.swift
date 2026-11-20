@@ -165,3 +165,67 @@ func aTinyImageDeclaringAHugeOneDecodesOnlyToAThumbnailOrNot(_ type: String) thr
     #expect(Date().timeIntervalSince(started) < 5, "\(type)")
     if let image { #expect(max(image.width, image.height) <= 96, "\(type)") }
 }
+
+/// Reads of a file's bytes that wait until the test lets them go, counting them, and failing
+/// while `fails` is set.
+private final class CountedReads: @unchecked Sendable {
+    private let lock = NSLock()
+    private let released = DispatchSemaphore(value: 0)
+    private var reads = 0
+    private var failing = false
+
+    var count: Int { lock.withLock { reads } }
+    var fails: Bool {
+        get { lock.withLock { failing } }
+        set { lock.withLock { failing = newValue } }
+    }
+
+    func read(_ art: EmbeddedArt, path: String) throws -> Data {
+        let fails = lock.withLock {
+            reads += 1
+            return failing
+        }
+        released.wait()
+        if fails { throw CocoaError(.fileReadUnknown) }
+        return try readArtBytes(art, path: path)
+    }
+
+    func release() { released.signal() }
+}
+
+@Test func loadersOfTwoSizesSharingAReadReadThePictureOnce() async throws {
+    let (path, art) = try fileWithArt(width: 1000, height: 1000)
+    let reads = CountedReads()
+    let small = ArtworkLoader(
+        maxPixelSize: 96, capacity: 4, read: SharedArtRead(read: reads.read).read)
+    let large = small.sharingReads(maxPixelSize: 512, capacity: 2)
+    async let smallImage = small.load(art, path: path)
+    let deadline = Date().addingTimeInterval(10)
+    while reads.count == 0, Date() < deadline { try await Task.sleep(nanoseconds: 1_000_000) }
+    // The second asks while the first's read waits on the file.
+    async let largeImage = large.load(art, path: path)
+    reads.release()
+    #expect(try await smallImage.get().width == 96)
+    #expect(try await largeImage.get().width == 512)
+    #expect(reads.count == 1)
+    // A loader that asks after the read is done gets the same bytes.
+    _ = try small.sharingReads(maxPixelSize: 32, capacity: 1).image(art, path: path)
+    #expect(reads.count == 1)
+}
+
+@Test func aSharedReadThatFailedReadsAgainAndAnotherPictureIsRead() throws {
+    let (path, art) = try fileWithArt(width: 40, height: 40)
+    let reads = CountedReads()
+    let shared = SharedArtRead(read: reads.read)
+    reads.fails = true
+    reads.release()
+    #expect(throws: CocoaError.self) { try shared.read(art, path: path) }
+    reads.fails = false
+    reads.release()
+    _ = try shared.read(art, path: path)
+    #expect(reads.count == 2)
+    let (other, otherArt) = try fileWithArt(width: 40, height: 40)
+    reads.release()
+    _ = try shared.read(otherArt, path: other)
+    #expect(reads.count == 3)
+}

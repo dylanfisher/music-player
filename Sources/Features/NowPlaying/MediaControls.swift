@@ -21,6 +21,8 @@ public final class MediaControls {
     /// The art's longest side in pixels: Control Center's largest view of it on a Retina display,
     /// with room to spare.
     public static let artPixels = 512
+    /// The art kept decoded: the current track's and the one before, for going back.
+    public static let artCacheImages = 2
     /// How far before the end a scrub may go: at the very end nothing is left to play, and the
     /// track would end before Now Playing showed the time.
     static let endMarginSeconds = 0.1

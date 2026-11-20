@@ -38,8 +38,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The now-playing bar's art: twice its point size, for Retina displays.
     static let artPixels = HeaderPart.artPoints * 2
     static let artCacheImages = 64
-    /// Now Playing's art: the current track's and the one before, for going back.
-    static let systemArtCacheImages = 2
 
     let paths: AppPaths
     private let measuring: MeasurementKind?
@@ -167,7 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var deviceListWatch: DeviceListWatch?
     var outputMenu: OutputMenu?
     var playlistMenus: [PlaylistMenu] = []
-    private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
+    private let artwork = ArtworkLoader(
+        maxPixelSize: artPixels, capacity: artCacheImages, read: SharedArtRead().read)
     private(set) lazy var recommendations = makeRecommendations()
     /// The art column's thumbnails, kept between launches (ADR 0079).
     private lazy var thumbnails = ThumbnailStore(directory: paths.thumbnailDirectory)
@@ -809,8 +808,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controls = MediaControls(
             model: NowPlayingModel(lookup: lookup), dispatcher: dispatcher,
             remote: SystemRemoteCommands(), center: SystemNowPlaying(),
-            artwork: ArtworkLoader(
-                maxPixelSize: MediaControls.artPixels, capacity: Self.systemArtCacheImages),
+            artwork: artwork.sharingReads(
+                maxPixelSize: MediaControls.artPixels, capacity: MediaControls.artCacheImages),
             seek: { [weak self] seconds in
                 guard let engine = self?.engine else { return }
                 Task { await engine.seek(toSeconds: seconds) }

@@ -47,7 +47,11 @@ MediaPlayer is a system framework, available on macOS 12 for everything used her
 - **Art comes from a second `ArtworkLoader`** at 512 px with room for two images, decoded off
   the main thread. The bar's loader holds 64 thumbnails at 96 px, which would look soft in
   Control Center, and putting large images in it would cost 64 MB. The system's request for a
-  size gets the decoded image wrapped at that size, never upscaled.
+  size gets the decoded image wrapped at that size, never upscaled. The two loaders read the
+  file through one `SharedArtRead`, so a track change reads its picture once over the NAS and
+  decodes it to each size from the same bytes; it keeps only the last picture's bytes.
+  Neither uses the thumbnail store, which is for the art column (ADR 0079). (Amended
+  2026-11-20.)
 - **The Dock menu** lists the current track's title and "artist — album" while playing or
   paused, then Play/Pause, Next Track and Previous Track with the registry's titles, each enabled
   from the dispatcher. It's built each time the Dock asks.
