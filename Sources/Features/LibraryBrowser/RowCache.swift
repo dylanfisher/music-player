@@ -11,6 +11,9 @@ final class RowCache {
     private var ids: [Int64] = []
     /// Rows by ID, per page of `ids`.
     private var pages: [Int: [Int64: TrackRow]] = [:]
+    /// Each cached page's album IDs, by position in the page, so the art column's scans of
+    /// neighboring rows don't copy whole rows.
+    private var albumIDs: [Int: [Int64?]] = [:]
     /// Page numbers, least recently used first.
     private var recency: [Int] = []
 
@@ -29,6 +32,7 @@ final class RowCache {
     func setIDs(_ ids: [Int64]) {
         self.ids = ids
         pages = [:]
+        albumIDs = [:]
         recency = []
     }
 
@@ -41,20 +45,38 @@ final class RowCache {
     /// The row at `index`, fetching its page if it isn't cached. Nil when its track has gone
     /// from the index since the IDs were loaded.
     func row(at index: Int) throws -> TrackRow? {
+        pages[try usedPage(of: index)]?[ids[index]]
+    }
+
+    /// The album ID of the row at `index`, fetching its page as `row(at:)` does. Nil when the
+    /// row has no album or its track has gone.
+    func albumID(at index: Int) throws -> Int64? {
+        let page = try usedPage(of: index)
+        return albumIDs[page]?[index - page * pageSize] ?? nil
+    }
+
+    /// The page holding `index`, fetched if it isn't cached, and counted as the latest use.
+    private func usedPage(of index: Int) throws -> Int {
         precondition(ids.indices.contains(index), "row \(index) is outside the table")
         let page = index / pageSize
-        if let rows = pages[page] {
+        if pages[page] != nil {
             if recency.last != page {
                 recency.removeAll { $0 == page }
                 recency.append(page)
             }
-            return rows[ids[index]]
+            return page
         }
         let range = (page * pageSize)..<min(ids.count, (page + 1) * pageSize)
         let rows = try signposted(.pageFetch) { try fetch(Array(ids[range])) }
-        pages[page] = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
+        let byID = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
+        pages[page] = byID
+        albumIDs[page] = ids[range].map { byID[$0]?.albumID }
         recency.append(page)
-        while recency.count > capacityPages { pages[recency.removeFirst()] = nil }
-        return pages[page]?[ids[index]]
+        while recency.count > capacityPages {
+            let evicted = recency.removeFirst()
+            pages[evicted] = nil
+            albumIDs[evicted] = nil
+        }
+        return page
     }
 }

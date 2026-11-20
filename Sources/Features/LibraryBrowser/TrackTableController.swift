@@ -527,6 +527,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         return trackRow(row)?.path == playingPath
     }
 
+    private func isPlaying(_ track: TrackRow) -> Bool { track.path == playingPath }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
         -> NSView?
     {
@@ -544,23 +546,24 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
             as? TextCell ?? TextCell(tableColumn.identifier, alignment: column.alignment)
         cell.font = font
-        cell.text = text(column, row: row)
-        cell.mark = mark(column, row: row)
+        let track = trackRow(row)
+        cell.text = text(column, track: track, row: row)
+        cell.mark = mark(column, track: track)
         rowsDrawn()
         return cell
     }
 
-    /// What `column` shows at `row`: the playing mark in Now Playing on the playing row.
-    func text(_ column: TrackColumn, row: Int) -> String {
-        guard let track = trackRow(row) else { return "" }
-        if column == .nowPlaying { return isPlaying(row) ? playingMark : "" }
+    /// What `column` shows for `track`: the playing mark in Now Playing on the playing row.
+    func text(_ column: TrackColumn, track: TrackRow?, row: Int) -> String {
+        guard let track else { return "" }
+        if column == .nowPlaying { return isPlaying(track) ? playingMark : "" }
         return column.text(track, position: row)
     }
 
-    /// The mark before `column`'s text at `row`: the playing mark before the playing track's
-    /// title while Now Playing is hidden, so the mark shows once.
-    func mark(_ column: TrackColumn, row: Int) -> String {
-        column == .title && isPlaying(row) && !isShown(.nowPlaying) ? playingMark : ""
+    /// The mark before `column`'s text for `track`: the playing mark before the playing
+    /// track's title while Now Playing is hidden, so the mark shows once.
+    func mark(_ column: TrackColumn, track: TrackRow?) -> String {
+        column == .title && track.map(isPlaying) == true && !isShown(.nowPlaying) ? playingMark : ""
     }
 
     private func isShown(_ column: TrackColumn) -> Bool {
@@ -590,7 +593,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// The row whose art `row` shows, its album's first row; nil for a row below its album's
     /// art.
     func artRow(_ row: Int) -> Int? {
-        ArtRun.start(of: row, rowsTall: artRowsTall) { trackRow($0)?.albumID }
+        ArtRun.start(of: row, rowsTall: artRowsTall) { albumID($0) }
     }
 
     /// The most rows an album's art covers: as many as a square as wide as the column.
@@ -635,7 +638,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         cell.rowsDown = row - start
         cell.runRows = ArtRun.length(
             from: start, limit: artRowsTall, rowCount: model.trackIDs.count
-        ) { trackRow($0)?.albumID }
+        ) { albumID($0) }
         cell.art = image(ofArtIn: start)
     }
 
@@ -735,7 +738,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let left = table.rect(ofColumn: column).minX
         let width = table.rect(ofColumn: column).width
         let top = table.rect(ofRow: start).minY
-        let albumID = { (row: Int) in self.trackRow(row)?.albumID }
+        let albumID = { (row: Int) in self.albumID(row) }
         let frame = ArtFrame.whole(image: image.size, width: width).offsetBy(dx: left, dy: top)
         let albumRows = ArtRun.length(
             from: start, limit: max(1, Int((frame.height / rowPitch).rounded(.up))),
@@ -816,9 +819,15 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     override func doubleClicked() { ratingClicks += 1 }
 
-    private func trackRow(_ index: Int) -> TrackRow? {
+    private func trackRow(_ index: Int) -> TrackRow? { fromCache { try cache.row(at: index) } }
+
+    /// The album ID the art column groups `index` by, read without copying its row.
+    private func albumID(_ index: Int) -> Int64? { fromCache { try cache.albumID(at: index) } }
+
+    /// What `read` gets from the row cache, or nil when the fetch fails, reported once.
+    private func fromCache<T>(_ read: () throws -> T?) -> T? {
         do {
-            return try cache.row(at: index)
+            return try read()
         } catch {
             if !reportedFetchFailure {
                 reportedFetchFailure = true

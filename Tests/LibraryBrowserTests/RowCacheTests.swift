@@ -45,3 +45,23 @@ private func row(_ id: Int64) -> TrackRow {
     #expect(try cache.row(at: 0)?.id == 3)
     #expect(fetches == 3)
 }
+
+@Test func readsAnAlbumIDFromTheRowsPage() throws {
+    var fetches = 0
+    let cache = RowCache(pageSize: 2, capacityPages: 1) { ids in
+        fetches += 1
+        return ids.filter { $0 != 2 }.map {
+            var track = row($0)
+            track.albumID = $0 == 3 ? nil : $0 * 10
+            return track
+        }
+    }
+    cache.setIDs([1, 2, 3, 4])
+    #expect(try cache.albumID(at: 0) == 10)
+    #expect(try cache.albumID(at: 1) == nil)  // gone
+    #expect(fetches == 1)
+    #expect(try cache.albumID(at: 2) == nil)  // no album
+    #expect(try cache.albumID(at: 3) == 40)
+    #expect(try cache.row(at: 0)?.albumID == 10)  // its page went with the row's
+    #expect(fetches == 3)
+}
