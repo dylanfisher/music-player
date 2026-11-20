@@ -29,6 +29,24 @@ private func wav(frames: Int, _ value: (Int, Int) -> Double) throws -> URL {
     #expect(abs(truePeak - 20 * log10(0.5)) < 0.2, "\(truePeak)")
 }
 
+@Test func hopsThatCantRaiseTheTruePeakLeaveItAsOneLongHopDoes() {
+    // A crest of 0.6 between samples, quiet hops the meter can skip, and a pair at 0.8 that
+    // ends a hop: their crest falls in the next hop's filter window, under quiet samples.
+    let hop = 1024
+    var samples = (0..<hop).map { Float(0.6 * sin(.pi / 2 * Double($0) + .pi / 4)) }
+    samples += (hop..<8 * hop).map { Float(0.2 * sin(0.3 * Double($0))) }
+    samples[7 * hop - 2] = 0.8
+    samples[7 * hop - 1] = 0.8
+    let whole = TruePeakMeter()
+    samples.withUnsafeBufferPointer { whole.add($0) }
+    let hops = TruePeakMeter()
+    for start in stride(from: 0, to: samples.count, by: hop) {
+        samples[start..<start + hop].withUnsafeBufferPointer { hops.add($0) }
+    }
+    #expect(whole.peak > 0.8)
+    #expect(hops.peak == whole.peak)
+}
+
 @Test func theDynamicRangeIsTheSecondPeakOverTheLoudestBlocks() throws {
     // A sine at half scale, whose RMS the meters take as 0.5, with a full-scale sample in two
     // of its eight 3-second blocks: 20 log10(1 / 0.5).

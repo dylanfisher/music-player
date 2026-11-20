@@ -25,6 +25,16 @@ final class TruePeakMeter {
         }
     }()
 
+    /// A bound on any phase's output as a multiple of the largest magnitude it reads: the larger
+    /// sum of a phase's tap magnitudes, 1.80, with room for float rounding.
+    private static let gainBound: Double = {
+        let sums = filters.map { $0.reduce(0) { $0 + Double(abs($1)) } }
+        // A 12-term float dot product rounds to within 12 × 2⁻²⁴ ≈ 7.2e-7 of its exact value
+        // relative to the sum of the products' magnitudes, in any order, with or without fused
+        // multiply-adds; 1e-5 covers that.
+        return sums.max()! * (1 + 1e-5)
+    }()
+
     private(set) var peak: Float = 0
     /// The last `tapsPerPhase - 1` samples, then the block being measured.
     private var buffer = [Float](repeating: 0, count: tapsPerPhase - 1)
@@ -34,6 +44,18 @@ final class TruePeakMeter {
         let history = Self.tapsPerPhase - 1
         buffer.removeSubrange(0..<buffer.count - history)
         buffer.append(contentsOf: samples)
+        // The filter reads the history as well as the new samples, so the bound covers both.
+        // A hop whose bound is no more than the peak can't raise it; skipping its filtering
+        // leaves the peak as it would be. The absolute term covers products rounded to
+        // subnormals.
+        var loudest: Float = 0
+        vDSP_maxmgv(buffer, 1, &loudest, vDSP_Length(buffer.count))
+        if loudest == 0
+            || Double(loudest) * Self.gainBound + Double(Float.leastNormalMagnitude)
+                <= Double(peak)
+        {
+            return
+        }
         if interpolated.count < samples.count {
             interpolated = [Float](repeating: 0, count: samples.count)
         }
