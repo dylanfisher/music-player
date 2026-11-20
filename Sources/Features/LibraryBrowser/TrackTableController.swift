@@ -1014,18 +1014,6 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     }
 }
 
-/// The text type-to-select matches in a row of a table sorted by `column`: the artist it sorts
-/// by, so a compilation grouped under Various Artists isn't found by a track artist's name, or
-/// the album or genre when the table sorts by one, else the title.
-func typeSelectText(_ name: TrackName, sortedBy column: TrackColumn) -> String {
-    switch column {
-    case .artist: name.sortArtist ?? ""
-    case .album: name.album ?? ""
-    case .genre: name.genre ?? ""
-    default: name.title
-    }
-}
-
 /// The playing track's mark. The variation selector asks for the text triangle, not the emoji.
 let playingMark = "\u{25B6}\u{FE0E}"
 

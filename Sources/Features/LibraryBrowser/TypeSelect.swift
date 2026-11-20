@@ -1,4 +1,6 @@
 import Foundation
+import Library
+import Settings
 
 /// Type-to-select: the text typed into a list since the last pause, and the row it picks. A key
 /// a second or more after the last one starts a new query, as does any command or a change of
@@ -56,5 +58,17 @@ package final class TypeSelect {
 
     static func fold(_ text: String) -> String {
         text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    }
+}
+
+/// The text type-to-select matches in a row of a table sorted by `column`: the artist it sorts
+/// by, so a compilation grouped under Various Artists isn't found by a track artist's name, or
+/// the album or genre when the table sorts by one, else the title.
+func typeSelectText(_ name: TrackName, sortedBy column: TrackColumn) -> String {
+    switch column {
+    case .artist: name.sortArtist ?? ""
+    case .album: name.album ?? ""
+    case .genre: name.genre ?? ""
+    default: name.title
     }
 }
