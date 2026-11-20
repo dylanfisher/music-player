@@ -106,6 +106,26 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(model.results.first?.item.title == "Zappa")
 }
 
+/// A key press cancels the ranking of the query before it, whose results would only be dropped.
+@MainActor @Test func aNewQueryCancelsTheStaleRanking() async {
+    let model = PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 })
+    _ = model.open((0..<20000).map { item("Artist \($0)") } + [item("Zappa")], byKind: false)
+    let first = Task { @MainActor in await model.setQuery("a") }
+    let deadline = Date().addingTimeInterval(waitLimit)
+    while model.ranking == nil {
+        guard Date() < deadline else {
+            Issue.record("the first query never began ranking")
+            return
+        }
+        await Task.yield()
+    }
+    let stale = model.ranking
+    await model.setQuery("zap")
+    await first.value
+    #expect(stale?.isCancelled == true)
+    #expect(model.results.first?.item.title == "Zappa")
+}
+
 @MainActor @Test func aDraggedPlaceLandsOnAnyScreen() {
     let screen = NSRect(x: 0, y: 0, width: 1440, height: 875)
     let size = NSSize(width: 640, height: 420)

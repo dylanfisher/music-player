@@ -1,4 +1,5 @@
 import Foundation
+import FuzzyMatch
 
 /// The palette's logic, apart from AppKit: the items listed, the query, and the ranked results.
 /// Ranking runs off the main actor, and only the latest query's results are kept.
@@ -7,7 +8,11 @@ public final class PaletteModel {
     /// How many rows the palette lists.
     nonisolated public static let limit = 50
 
-    public private(set) var items: [PaletteItem] = []
+    public private(set) var items: [PaletteItem] = [] {
+        didSet { candidates = items.map(\.candidate) }
+    }
+    /// The items' candidates, made when the items change rather than on each key press.
+    private var candidates: [FuzzyCandidate] = []
     public private(set) var query = ""
     /// Whether the listing ranks each kind in turn, as `rankPalette` does with `byKind`.
     public private(set) var byKind = false
@@ -21,6 +26,8 @@ public final class PaletteModel {
     /// listing as before, as when items were appended.
     var resultsChanged: (_ sameQuery: Bool) -> Void = { _ in }
     private var generation = 0
+    /// The ranking running, cancelled when the next one starts.
+    private(set) var ranking: Task<[RankedItem], Never>?
     /// The session and query `results` were ranked for.
     private var ranked: (session: Int, query: String)?
     private let now: () -> Double
@@ -68,15 +75,21 @@ public final class PaletteModel {
     func rank() async {
         generation += 1
         let mine = generation
-        let (items, query, session) = (items, query, session)
+        let (items, candidates, query, session) = (items, candidates, query, session)
         let (byKind, kinds) = (byKind, emptyQueryKinds)
         let scores = frecency.scores(now: now())
-        let results = await Task.detached(priority: .userInitiated) {
+        // A stale query's results are dropped, so its ranking stops rather than keep a core busy
+        // while the user types.
+        ranking?.cancel()
+        let task = Task.detached(priority: .userInitiated) {
             rankPalette(
                 items, query: query, frecency: scores, limit: Self.limit, byKind: byKind,
-                emptyQueryKinds: kinds)
-        }.value
+                emptyQueryKinds: kinds, candidates: candidates)
+        }
+        ranking = task
+        let results = await task.value
         guard mine == generation else { return }
+        ranking = nil
         publish(results, session: session, query: query)
     }
 
@@ -86,10 +99,12 @@ public final class PaletteModel {
     /// still running is dropped.
     func rankNow() {
         generation += 1
+        ranking?.cancel()
+        ranking = nil
         publish(
             rankPalette(
                 items, query: query, frecency: frecency.scores(now: now()), limit: Self.limit,
-                byKind: byKind, emptyQueryKinds: emptyQueryKinds),
+                byKind: byKind, emptyQueryKinds: emptyQueryKinds, candidates: candidates),
             session: session, query: query)
     }
 

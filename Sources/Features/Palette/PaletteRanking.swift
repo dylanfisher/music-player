@@ -17,18 +17,22 @@ public struct RankedItem: Sendable {
 /// `emptyQueryKinds`, when given, are the only kinds an empty query lists, so ⌘K opens on its
 /// commands and finds the rest only once the user types. A query that starts with a kind's
 /// name and a colon (`album: dream`) lists only that kind, matched on the rest.
+/// `candidates`, when given, are the items' candidates in order, kept by a caller that ranks
+/// the same items on each key press. A ranking whose task is cancelled stops early and returns
+/// what it has.
 public func rankPalette(
     _ items: [PaletteItem], query: String, frecency: [String: Double], limit: Int,
-    byKind: Bool = false, emptyQueryKinds: Set<PaletteItem.Kind>? = nil
+    byKind: Bool = false, emptyQueryKinds: Set<PaletteItem.Kind>? = nil,
+    candidates: [FuzzyCandidate]? = nil
 ) -> [RankedItem] {
     signposted(.paletteRank) {
-        rank(items, query, frecency, limit, byKind, emptyQueryKinds)
+        rank(items, query, frecency, limit, byKind, emptyQueryKinds, candidates)
     }
 }
 
 private func rank(
     _ items: [PaletteItem], _ query: String, _ frecency: [String: Double], _ limit: Int,
-    _ byKind: Bool, _ emptyQueryKinds: Set<PaletteItem.Kind>?
+    _ byKind: Bool, _ emptyQueryKinds: Set<PaletteItem.Kind>?, _ candidates: [FuzzyCandidate]?
 ) -> [RankedItem] {
     let typed = PaletteQuery(query)
     let matcher = FuzzyMatcher(typed.text)
@@ -75,8 +79,8 @@ private func rank(
             RankedItem(index: $0.index, item: items[$0.index], highlights: [])
         }
     }
-    let candidates = items.map(\.candidate)
-    matcher.scoreAll(candidates) { index, score in
+    precondition(candidates.map { $0.count == items.count } ?? true, "a candidate per item")
+    matcher.scoreAll(candidates ?? items.map(\.candidate)) { index, score in
         let item = items[index]
         if let kind = typed.kind, item.kind != kind { return }
         let bonus = frecency.isEmpty ? 0 : Frecency.bonus(frecency[item.key] ?? 0)

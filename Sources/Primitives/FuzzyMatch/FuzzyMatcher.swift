@@ -100,10 +100,13 @@ public struct FuzzyMatcher: Sendable {
     }
 
     /// Scores every candidate, reusing one scratch, and passes each one that matches to `visit`
-    /// with its index. For ranking thousands of candidates per key press.
+    /// with its index. For ranking thousands of candidates per key press: it stops early once
+    /// the task running it is cancelled, as when the next key press replaces the query.
     public func scoreAll(_ candidates: [FuzzyCandidate], _ visit: (Int, Int) -> Void) {
         var scratch = Scratch()
         for (index, candidate) in candidates.enumerated() {
+            // Checked every 1,024 candidates, so the check costs nothing next to the scoring.
+            if index & 1023 == 0, Task.isCancelled { return }
             if let score = score(candidate, &scratch) { visit(index, score) }
         }
     }

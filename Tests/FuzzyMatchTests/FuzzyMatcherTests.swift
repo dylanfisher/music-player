@@ -42,6 +42,21 @@ private func score(_ query: String, _ text: String) -> Int? {
     #expect(initials == [NSRange(location: 0, length: 1), NSRange(location: 4, length: 1)])
 }
 
+/// Scoring stops at the next check once its task is cancelled, so a replaced query's ranking
+/// doesn't score the rest of 43k tracks.
+@Test func scoringStopsOnceItsTaskIsCancelled() async {
+    let candidates = (0..<5000).map { FuzzyCandidate("Artist \($0)") }
+    let visited = await Task.detached {
+        var visited = 0
+        FuzzyMatcher("a").scoreAll(candidates) { _, _ in
+            visited += 1
+            if visited == 1 { withUnsafeCurrentTask { $0?.cancel() } }
+        }
+        return visited
+    }.value
+    #expect(visited == 1024)
+}
+
 /// The rules applied to one placement, as the doc comment states them: letters `0..<chain` use
 /// the chain's scores, the rest the normal ones.
 private func placementScore(_ positions: [Int], _ candidate: FuzzyCandidate, chain: Int) -> Int32 {
