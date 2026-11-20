@@ -53,6 +53,17 @@ private func listed(
     #expect(try listed(index).isEmpty)
 }
 
+/// A list of more albums than SQLite takes in a compound select still lists in its order.
+@Test func rediscoverListsMoreThanFiveHundredAlbums() throws {
+    let index = try craftedIndex(
+        (0..<600).map { Crafted(path: "/m/\($0)/1.flac", album: "Album \($0)").scanned })
+    let albums = try (0..<600).reversed().map { n in
+        (try album(index, "/m/\(n)/1.flac"), "Album \(n)")
+    }
+    #expect(try index.showRediscover(albums).isEmpty)
+    #expect(try listed(index) == (0..<600).reversed().map { "/m/\($0)/1.flac" })
+}
+
 @Test func theReaderListsRediscoverOnItsRefreshConnectionToo() async throws {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("rediscover-\(UUID().uuidString)", isDirectory: true)

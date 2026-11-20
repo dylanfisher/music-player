@@ -42,12 +42,13 @@ extension LibraryIndex {
     }
 
     /// Each of `albums` with its place, as `album_id` and `position`, for the track table's
-    /// Order. The ids are the index's own integers, so they go in the SQL as text.
+    /// Order. The ids are the index's own integers, so they go in the SQL as text, as one
+    /// `VALUES` list: a `UNION ALL` of more than 500 selects is more than SQLite takes.
     func albumOrderSQL(_ albums: [Int64]) -> String {
         guard !albums.isEmpty else { return "SELECT NULL AS album_id, NULL AS position" }
-        return albums.enumerated().map { place, id in
-            place == 0 ? "SELECT \(id) AS album_id, 0 AS position" : "SELECT \(id), \(place)"
-        }.joined(separator: " UNION ALL ")
+        let rows = albums.enumerated().map { place, id in "(\(id), \(place))" }
+        return "SELECT column1 AS album_id, column2 AS position FROM (VALUES "
+            + rows.joined(separator: ", ") + ")"
     }
 }
 
