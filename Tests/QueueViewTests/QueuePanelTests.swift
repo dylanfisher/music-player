@@ -3,6 +3,7 @@ import KeyChord
 import Testing
 
 @testable import Library
+@testable import Playback
 @testable import QueueView
 
 @MainActor @Test func deleteRemovesFromTheQueueBeforeAnyCommandBoundToIt() throws {
@@ -71,4 +72,55 @@ import Testing
         #expect(abs(baseline(cell.length, in: cell) - baseline(cell.title, in: cell)) < 0.5)
         #expect(cell.length.font?.pointSize == cell.detail.font?.pointSize)
     }
+}
+
+/// A hidden queue doesn't look up its rows again for each library refresh of a scan; it lists
+/// the change once it shows.
+@MainActor @Test func aHiddenQueueListsALibraryChangeOnceItShows() throws {
+    var title = "Old"
+    var lookups = 0
+    let panel = QueuePanel(
+        model: QueueModel { path in
+            lookups += 1
+            return TrackRow(
+                id: 1, path: path, title: title, artist: nil, album: nil, albumID: nil,
+                albumArtist: nil, genre: nil, date: nil, trackNumber: nil, discNumber: nil,
+                codec: "flac", sampleRateHz: 44100, bitsPerSample: 16, durationSeconds: 1,
+                addedSeconds: 0, art: nil)
+        })
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 280, height: 400), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = panel.view
+    defer { window.close() }
+    func find(_ view: NSView) -> NSTableView? {
+        view as? NSTableView ?? view.subviews.lazy.compactMap(find).first
+    }
+    let table = try #require(find(panel.view))
+    var state = PlaybackState()
+    state.queue = [URL(fileURLWithPath: "/m/1.flac", isDirectory: false)]
+    state.order = [0]
+    state.currentIndex = 0
+    panel.show(state)
+    window.displayIfNeeded()
+    #expect(lookups == 1)
+    func shownTitle() -> String? {
+        (table.view(atColumn: 0, row: 0, makeIfNecessary: false) as? NSTableCellView)?
+            .textField?.stringValue
+    }
+    panel.isShown = false
+    title = "New"
+    for _ in 0..<3 { panel.libraryChanged() }
+    window.displayIfNeeded()
+    #expect(lookups == 1)
+    panel.isShown = true
+    window.displayIfNeeded()
+    #expect(lookups == 2)
+    #expect(shownTitle() == "▶ New")
+    // Shown, a change is listed at once.
+    title = "Newer"
+    panel.libraryChanged()
+    window.displayIfNeeded()
+    #expect(shownTitle() == "▶ Newer")
 }

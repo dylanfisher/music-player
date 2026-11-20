@@ -63,6 +63,27 @@ private func split(queueVisible: Bool) -> (MainSplit, NSWindow, content: NSView)
     #expect(abs(queue.frame.width - 220) <= 1)
 }
 
+/// The queue panel hears whether it shows, so a hidden one puts off listing library changes.
+@MainActor @Test func theSplitSaysWhetherTheQueueShows() {
+    let split = MainSplit(
+        sidebar: NSViewController(nibName: nil, bundle: nil).withView(),
+        content: NSViewController(nibName: nil, bundle: nil).withView(),
+        queue: NSViewController(nibName: nil, bundle: nil).withView(), sidebarWidth: 180,
+        queueWidth: 220)
+    var shown: [Bool] = []
+    split.queueShownChanged = { shown.append($0) }
+    let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: MainWindow.defaultSize),
+        styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = split.view
+    window.layoutIfNeeded()
+    split.restore(sidebarVisible: true, queueVisible: false)
+    split.toggleQueue()
+    split.toggleQueue()
+    #expect(shown == [false, true, false])
+}
+
 /// The widths saved are the ones a launch puts back: a drag of the sidebar's and the queue's
 /// dividers saves widths that a split restored with them shows again, to the point.
 @MainActor @Test func theSidebarAndQueueWidthsSavedComeBackTheSame() {

@@ -80,6 +80,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
         split.sidebarWidthChanged = { saver.set(\.sidebarWidth, $0) }
         split.queueWidthChanged = { saver.set(\.queueWidth, $0) }
+        split.queueShownChanged = { queue.isShown = $0 }
         browser.tableLayoutChanged = { saver.set(\.trackTable, $0) }
         browser.timelineLayoutChanged = { saver.set(\.timelineTable, $0) }
         browser.browserHeightChanged = { height in

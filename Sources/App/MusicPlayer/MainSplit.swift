@@ -17,6 +17,8 @@ final class MainSplit {
     private var observer: (any NSObjectProtocol)?
     var sidebarWidthChanged: (Int) -> Void = { _ in }
     var queueWidthChanged: (Int) -> Void = { _ in }
+    /// Called with whether the queue shows, after it's restored, shown or hidden.
+    var queueShownChanged: (Bool) -> Void = { _ in }
 
     init(
         sidebar: NSViewController, content: NSViewController, queue: NSViewController,
@@ -58,6 +60,7 @@ final class MainSplit {
             split.bounds.width - CGFloat(queueWidth) - split.dividerThickness, ofDividerAt: 1)
         sidebar.isCollapsed = !sidebarVisible
         queue.isCollapsed = !queueVisible
+        queueShownChanged(queueVisible)
         split.layoutSubtreeIfNeeded()
         restoring = false
         observer = NotificationCenter.default.addObserver(
@@ -76,7 +79,10 @@ final class MainSplit {
 
     func toggleSidebar() { sidebar.isCollapsed.toggle() }
 
-    func toggleQueue() { queue.isCollapsed.toggle() }
+    func toggleQueue() {
+        queue.isCollapsed.toggle()
+        queueShownChanged(isQueueVisible)
+    }
 
     private func reportWidths() {
         guard !restoring, controller.view.window?.isVisible == true else { return }

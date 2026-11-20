@@ -63,9 +63,24 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         summary.stringValue = model.summary
     }
 
+    /// Whether the panel shows, as the window's split sets it. A hidden panel lists a library
+    /// change once it shows again, rather than looking up its rows on each refresh of a scan.
+    public var isShown = true {
+        didSet {
+            guard isShown, missedLibraryChange else { return }
+            missedLibraryChange = false
+            table.reloadData()
+        }
+    }
+    private var missedLibraryChange = false
+
     /// A rescan may have changed the queued tracks' tags.
     public func libraryChanged() {
         model.libraryChanged()
+        guard isShown else {
+            missedLibraryChange = true
+            return
+        }
         table.reloadData()
     }
 
