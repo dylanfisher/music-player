@@ -41,26 +41,26 @@ extension Downloads {
 
     private func upgradePass(_ session: Session, share: String) async {
         let database = session.setup.databaseURL
+        // Before any read: a commit after it changes the stamp a pass is kept by.
+        let stamp = await indexStamp(database)
+        if let idle = idlePass, let stamp, let epoch = session.model.jobs.epoch,
+            now() < idle.until,
+            idle.inputs == inputs(session, share: share, epoch: epoch, index: stamp)
+        {
+            return
+        }
+        idlePass = nil
         for job in unrecorded {
             let recorded = await record("job \(job.jobID) still isn't recorded as automatic") {
                 try LibraryIndex(at: database).recordAutoUpgradeJob(job)
             }
             if recorded { unrecorded.remove(job) }
         }
-        let read = await blockingFileWork {
-            Result { () throws -> ([AutoUpgradeJob], [Int: UpgradeMiss], Set<Int>) in
-                let index = try LibraryIndex(at: database)
-                return (
-                    try index.autoUpgradeJobs(), try index.upgradeMisses(),
-                    try index.neverUpgradeReleases()
-                )
-            }
-        }
         let recorded: [AutoUpgradeJob]
         let misses: [Int: UpgradeMiss]
         let never: Set<Int>
         do {
-            (recorded, misses, never) = try read.get()
+            (recorded, misses, never) = try await upgradeRecords(database)
         } catch {
             return logger.error("the automatic upgrades couldn't be read: \(error)")
         }
@@ -81,12 +81,17 @@ extension Downloads {
         let settled = AutoUpgrades.steps(
             own: own, jobs: rows, epoch: epoch, notClean: notClean,
             approvable: approvable)
+        let seen = stamp.map { inputs(session, share: share, epoch: epoch, index: $0) }
         var inFlight = settled.inFlight
         for step in settled.steps {
             guard goesOn(session, epoch) else { return }
             if await take(step, session) { inFlight += 1 }
         }
-        guard goesOn(session, epoch), inFlight < autoUpgradesInFlight else { return }
+        guard goesOn(session, epoch) else { return }
+        guard inFlight < autoUpgradesInFlight else {
+            if settled.steps.isEmpty { await keepIdle(seen, session, epoch, until: .distantFuture) }
+            return
+        }
         let candidates: [UpgradeCandidate]
         let missed: [Int: UpgradeMiss]
         do {
@@ -120,6 +125,49 @@ extension Downloads {
             guard goesOn(session, epoch) else { return }
             guard await queue(candidate, session, epoch: epoch) else { return }
         }
+        if settled.steps.isEmpty, chosen.isEmpty, let candidatesRead {
+            await keepIdle(
+                seen, session, epoch,
+                until: AutoUpgrades.IdlePass.until(candidatesRead, misses: missed, now: now()))
+        }
+    }
+
+    /// Everything a pass reads now but the clock, with `index` the index's stamp.
+    private func inputs(_ session: Session, share: String, epoch: String, index: [[Int]?])
+        -> AutoUpgrades.IdlePass.Inputs
+    {
+        let model = session.model
+        return AutoUpgrades.IdlePass.Inputs(
+            share: share, epoch: epoch,
+            jobs: model.jobs.rows.mapValues(AutoUpgrades.IdlePass.Job.init),
+            leftForReview: Set(model.leftForReview.keys), autoApprove: autoApprove,
+            room: autoUpgradesInFlight, notClean: notClean, unrecorded: unrecorded,
+            unqueueable: unqueueable, index: index)
+    }
+
+    /// The index's stamp; nil, logged, when it couldn't be read, which skips no pass.
+    private func indexStamp(_ database: URL) async -> [[Int]?]? {
+        let stamp = await blockingFileWork { Result { try libraryFileStamp(database) } }
+        do {
+            return try stamp.get()
+        } catch {
+            logger.error("the library's stamp couldn't be read: \(error)")
+            return nil
+        }
+    }
+
+    /// Keeps a pass that called nothing and wrote nothing, which read `seen`, when its inputs
+    /// are those still, so none changed while it ran. One with jobs left to record tries again
+    /// at the next.
+    private func keepIdle(
+        _ seen: AutoUpgrades.IdlePass.Inputs?, _ session: Session, _ epoch: String, until: Date
+    ) async {
+        guard let seen, seen.unrecorded.isEmpty,
+            let stamp = await indexStamp(session.setup.databaseURL),
+            goesOn(session, epoch),
+            inputs(session, share: seen.share, epoch: epoch, index: stamp) == seen
+        else { return }
+        idlePass = AutoUpgrades.IdlePass(inputs: seen, until: until)
     }
 
     /// Takes one step; true when it couldn't end a job, which still holds its slot.
@@ -250,5 +298,37 @@ extension Downloads {
         }
         if !recorded { unrecorded.insert(mine) }
         return recorded
+    }
+
+    /// What a pass reads from the index besides the candidates: its own jobs, the misses and
+    /// the releases marked Never Upgrade.
+    typealias UpgradeRecords = ([AutoUpgradeJob], [Int: UpgradeMiss], Set<Int>)
+
+    nonisolated static func readUpgradeRecords(_ database: URL) async throws -> UpgradeRecords {
+        try await blockingFileWork {
+            Result { () throws -> UpgradeRecords in
+                let index = try LibraryIndex(at: database)
+                return (
+                    try index.autoUpgradeJobs(), try index.upgradeMisses(),
+                    try index.neverUpgradeReleases()
+                )
+            }
+        }.get()
+    }
+
+    nonisolated static func readUpgradeCandidates(_ database: URL, _ share: String) async throws
+        -> [UpgradeCandidate]
+    {
+        try await blockingFileWork {
+            Result { try LibraryIndex(at: database).upgradeCandidates(onShare: share) }
+        }.get()
+    }
+
+    nonisolated static func readReleaseSnapshot(_ release: Int, _ catalog: URL) async throws
+        -> ReleaseSnapshot
+    {
+        try await blockingFileWork {
+            Result { try ReleaseSnapshot.queueable(releaseID: release, catalogAt: catalog) }
+        }.get()
     }
 }

@@ -341,6 +341,45 @@ private final class Reads: @unchecked Sendable {
 }
 
 @MainActor
+@Test func aPassWithNothingChangedOpensNoIndexUntilTheIndexChanges() async throws {
+    let fake = FakeService()
+    let (downloads, session) = try await upgrading(fake, Library([candidate(1)]), inFlight: 1)
+    let database = session.setup.databaseURL
+    let reads = Reads()
+    let records = downloads.upgradeRecords
+    downloads.upgradeRecords = {
+        reads.read()
+        return try await records($0)
+    }
+    try LibraryIndex(at: database).setNeverUpgrade(true, releases: [1])
+    downloads.autoUpgrade = true
+    await settled(downloads)
+    #expect(reads.made == 1)
+    session.model.took(listed(9, release: 9, .downloading))
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    #expect(reads.made == 2, "read again: a job came")
+
+    session.model.took(
+        listed(9, release: 9, .downloading) {
+            $0.revision = 2
+            $0.progress = DownloadJob.Progress(
+                filesDone: 1, filesTotal: 2, bytesDone: 100, bytesTotal: 200)
+        })
+    downloads.upgradeAutomatically()
+    await settled(downloads)
+    #expect(reads.made == 2, "not read: only its progress moved")
+
+    // Cleared on another connection, as Never Upgrade or the sync does.
+    try LibraryIndex(at: database).setNeverUpgrade(false, releases: [1])
+    downloads.upgradeAutomatically()
+    await eventually("queued once the mark is cleared") { fake.created.count == 1 }
+    #expect(reads.made == 3)
+    #expect(fake.created.first?.release == 1)
+    downloads.stop()
+}
+
+@MainActor
 @Test func aCopyTaggedWithADiscrepancyIsRequeuedButNotAnUpgradeQueuedByHand() async throws {
     let discrepancy = DownloadJob.Tagging(status: .discrepancy, reasons: ["a bonus track"])
     let byHand = listed(1, release: 99, .staged) { $0.tagging = discrepancy }

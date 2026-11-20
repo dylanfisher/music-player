@@ -205,25 +205,23 @@ package final class Downloads {
     var unrecorded: Set<AutoUpgradeJob> = []
     /// The candidates the last pass read, for a pass while nothing they're chosen by changed.
     var candidatesRead: AutoUpgrades.CandidatesRead?
+    /// The last pass, when it did nothing, for skipping one with the same inputs.
+    var idlePass: AutoUpgrades.IdlePass?
     /// The releases whose snapshot couldn't be built, left until the session stops.
     var unqueueable: Set<Int> = []
     /// The clock the misses are dated by; tests stand in for it.
     var now: () -> Date = Date.init
     /// The albums the upgrader may queue, read from the index off the main thread; tests
     /// stand in for it.
-    var upgradeCandidates: @Sendable (URL, String) async throws -> [UpgradeCandidate] = {
-        database, share in
-        try await blockingFileWork {
-            Result { try LibraryIndex(at: database).upgradeCandidates(onShare: share) }
-        }.get()
-    }
+    var upgradeCandidates: @Sendable (URL, String) async throws -> [UpgradeCandidate] =
+        Downloads.readUpgradeCandidates
+    /// The upgrader's own jobs, the misses and the releases marked Never Upgrade, read from the
+    /// index off the main thread; tests stand in for it.
+    var upgradeRecords: @Sendable (URL) async throws -> UpgradeRecords = Downloads
+        .readUpgradeRecords
     /// Builds a release's snapshot from the catalog off the main thread; tests stand in for it.
-    var releaseSnapshot: @Sendable (Int, URL) async throws -> ReleaseSnapshot = {
-        release, catalog in
-        try await blockingFileWork {
-            Result { try ReleaseSnapshot.queueable(releaseID: release, catalogAt: catalog) }
-        }.get()
-    }
+    var releaseSnapshot: @Sendable (Int, URL) async throws -> ReleaseSnapshot =
+        Downloads.readReleaseSnapshot
 
     package init() {
         statusItem.clicked = { [weak self] in self?.show() }
@@ -306,6 +304,7 @@ package final class Downloads {
         unrecorded = []
         unqueueable = []
         candidatesRead = nil
+        idlePass = nil
         session?.model.stop()
         session = nil
         refresh()
@@ -800,9 +799,9 @@ package final class Downloads {
         let model = session.model
         let machine = session.setup.machine
         guard
-            let job = model.jobs.rows.values.sorted(by: { $0.id < $1.id }).first(where: {
+            let job = model.jobs.rows.values.filter({
                 Self.mayApproveUnasked($0, machine: machine) && model.leftForReview[$0.id] == nil
-            })
+            }).min(by: { $0.id < $1.id })
         else { return }
         approvingCount += 1
         let number = approvingCount

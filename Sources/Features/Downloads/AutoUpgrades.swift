@@ -45,6 +45,61 @@ enum AutoUpgrades {
         }
     }
 
+    /// A pass that called nothing and wrote nothing, kept so a pass with the same inputs
+    /// before `until` is skipped, opening no index: it would do nothing too. The polls every
+    /// two seconds while a job downloads change mostly its progress, which no pass reads.
+    struct IdlePass: Equatable {
+        /// Everything a pass reads but the clock.
+        struct Inputs: Equatable {
+            var share: String
+            var epoch: String
+            var jobs: [Int: Job]
+            var leftForReview: Set<Int>
+            var autoApprove: Bool
+            var room: Int
+            var notClean: Set<AutoUpgradeJob>
+            var unrecorded: Set<AutoUpgradeJob>
+            var unqueueable: Set<Int>
+            /// `libraryFileStamp` of the index, which holds its own jobs, the misses and the
+            /// marks, written by Never Upgrade and the sync too.
+            var index: [[Int]?]
+        }
+
+        /// Of a job, the fields `steps`, `next`, `CandidatesRead.Key`, Approve Safe Matches
+        /// Automatically's look and a requeue read.
+        struct Job: Equatable {
+            var state: JobState
+            var releaseID: Int
+            var failedStage: DownloadJob.FailedStage?
+            var tagging: DownloadJob.Tagging.Status
+            var leased: Bool
+            var reviewer: String?
+
+            init(_ job: DownloadJob) {
+                state = job.state
+                releaseID = job.release.releaseID
+                failedStage = job.failedStage
+                tagging = job.tagging.status
+                leased = job.lease != nil
+                reviewer = job.review?.machine
+            }
+        }
+
+        var inputs: Inputs
+        var until: Date
+
+        /// When a pass that looked at `candidates` and `misses` at `now` may choose otherwise
+        /// with nothing else changed: the candidates are read again, or a miss's wait ends.
+        static func until(
+            _ candidates: CandidatesRead, misses: [Int: UpgradeMiss], now: Date
+        ) -> Date {
+            let seconds = now.timeIntervalSince1970
+            let waits = misses.values.compactMap(\.retryAt).filter { $0 > seconds }
+            let read = candidates.at.addingTimeInterval(CandidatesRead.kept)
+            return waits.min().map { min(read, Date(timeIntervalSince1970: $0)) } ?? read
+        }
+    }
+
     /// The jobs a state ends in; they change no more.
     static let terminal: Set<JobState> = [.imported, .rejected, .cancelled]
 
