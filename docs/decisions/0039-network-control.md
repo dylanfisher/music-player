@@ -4,7 +4,9 @@
 - **Status:** accepted
 - **Amends:** [0025](0025-threat-model.md) (rows 28 to 30)
 - **Amended by:** [0093](0093-signal-path-stages-sonos-groups-receiver-keys.md):
-  `receiver.enabled` also takes the volume keys, and the address sits under a disclosure.
+  `receiver.enabled` also takes the volume keys, and the address sits under a disclosure;
+  [0214](0214-the-web-remote-server.md): the web remote advertises and browses
+  `_music-player._tcp`, so `Info.plist` names it in `NSBonjourServices`.
 
 ## Context
 
