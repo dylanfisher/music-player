@@ -42,11 +42,11 @@ typed in, and to leave it out of the web remote.
   are chosen in a sheet. `pastedReleaseID` reads through the same parser and still takes
   releases only. There is no search by name. The command doesn't run from links or the web
   remote.
-- **Left out for now:** the queue, Now Playing, and the Downloads and Threads rows have no Show
-  Discography item. Their menus hold no track commands yet, and Downloads' jobs and Threads'
-  albums carry a release id but no artist ids, so each needs its own catalog read and menu
-  wiring. A track in them opens a discography through the track table, and any album through a
-  pasted link.
+- **The other track menus and rows.** The queue's menu (the row right-clicked, else the first
+  selected) and a menu on Now Playing's header (the track playing) get the same item, through
+  the track's `discogs_release_id`, by the same builder as the track menu, which adds the item
+  to a menu without one. A Downloads job's menu gets it through the job's release. Threads
+  lists its albums' tracks in the track table, so its rows have the track menu's item.
 - **Columns:** Format, In Library and Mark show only for a discography; Score, Why and Rank
   only for the other lists. Each column keeps the shown or hidden state last chosen while a
   list without it shows, so it comes back as it was.
@@ -71,8 +71,12 @@ typed in, and to leave it out of the web remote.
 
 ## Consequences
 
-- Opening the track menu reads one track's release id from the index and one release from the
-  catalog on the main thread, both by primary key.
+- Opening a menu with the item reads one track's release id from the index and one release
+  from the catalog on the main thread, each a point read: `SELECT discogs_release_id FROM
+  tracks WHERE file_id = ?` on `tracks`' integer primary key, and the catalog's `releases`,
+  `masters` and `artists` by `id`, which `EXPLAIN QUERY PLAN` shows as `SEARCH … USING INTEGER
+  PRIMARY KEY (rowid=?)`. That is a few pages of a B-tree however large the catalog, so the
+  reads stay synchronous rather than filling the item when an answer arrives.
 - A reply without the new fields, from a service before its phase 12, fails to decode, naming
   the field, as any reply outside the contract does.
 - Phase 91's text filter and Show in All Music, built later, cover a discography as they do
