@@ -707,6 +707,30 @@ dependency.
 page: 10.6 to 10.8, with their tests. Each part gets its own review. ADR 0214 is 10a's and ADR
 0215 is 10b's.
 
+**10a, the server side (sub-plan).**
+1. Settings: `remote.enabled` (off) and `remote.port` (47800, 1024 to 65535) in the config;
+   `remote.instanceID` and `remote.devices` (each device's name, token SHA-256, paired and last
+   seen, at most 32) in the state file, decoded strictly.
+2. `LocalNetwork`: `RemoteServer`, one `NWListener` per LAN interface on the one port, with the
+   request rules as a pure function (`RemoteRequestRules`) that the fuzz target
+   `remote-request` drives; keep-alive, caps on heads, bodies, connections and event streams;
+   the `Host` check against the bound addresses and `<name>.local`; CORS for the origins a
+   closure allows and the `OPTIONS` preflight; gzip through zlib; SSE streams. Bonjour behind
+   `BonjourAdvertising` and `BonjourBrowsing`, with dns_sd and `NWBrowser` as the real ones.
+3. Core module `Remote`: pairing (code, misses, expiry, constant-time compares, token hashes),
+   the routes (`/`, `/api/pair`, `/api/state`, `/api/events`, `/api/command`,
+   `/api/instances`), the state and its change check, the event hub (at most 4 a second), the
+   instance list from the browser, and `RemoteService`, which starts and stops it all.
+4. `ScriptRouter.Origin.remote` and `Command.runsFromRemote`; new argument commands Seek To,
+   Set Volume and Choose Output for the page's seek bar, slider and output menu.
+   `playTracks`, `queueTracks` and the queue's reorder and remove come with browsing in 10b,
+   since they take IDs only browsing gives the page, as do the artwork IDs in the state.
+5. Settings → Remote: the two settings, the code with its QR code and LAN address, paired
+   devices with Forget. App wiring starts the service, restarts it when the interfaces change
+   and feeds it the state.
+6. `NSBonjourServices`, a placeholder `Support/Remote/index.html`, ADR 0214 (amending 0039,
+   rows in 0025) and AGENTS.md's note on device tokens.
+
 ### 13. Release readiness
 
 - [ ] Developer ID signing, hardened runtime and notarization in `scripts/bundle release`.
