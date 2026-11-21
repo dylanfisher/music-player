@@ -69,7 +69,7 @@ final class RecommendationsModel {
         if query.seed.isDiscography, others == self.query, !loaded.isEmpty {
             self.query = query
             changed()
-            return nil
+            return readMoreWhileFiltered()
         }
         if !seeds.contains(query.seed) { seeds.append(query.seed) }
         self.query = query
@@ -234,9 +234,20 @@ final class RecommendationsModel {
             facts = page.list
             pending = page.pending
             finish(problem: nil)
+            readMoreWhileFiltered()
             refreshIfFetching()
             return
         }
+    }
+
+    /// Reads the next page while Missing leaves fewer rows than a page of a discography, so
+    /// a run of the library's albums can't leave the window nothing to scroll to.
+    @discardableResult
+    private func readMoreWhileFiltered() -> Task<Void, Never>? {
+        guard query.seed.isDiscography, query.filters.missing,
+            rows.count < RecommenderClient.pageLimit
+        else { return nil }
+        return readMore()
     }
 
     /// Reads the rows read so far again after a while, as the service fetches a

@@ -397,7 +397,7 @@ public final class Recommendations {
                 action = ("Try Again", { [weak self] in self?.model.readAgain(through: 0) })
             default: break
             }
-        } else if !model.isReading, model.rows.isEmpty {
+        } else if !model.isReading, !model.more, model.rows.isEmpty {
             message = "The list has no albums these filters keep."
         }
         if let notice = model.notice {

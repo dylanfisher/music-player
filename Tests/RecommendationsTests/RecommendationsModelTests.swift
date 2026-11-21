@@ -308,3 +308,54 @@ private final class Answers: @unchecked Sendable {
     owned.score = nil
     #expect(RecommendationColumn.score.text(RecommendationRow(album: owned), download: nil) == "")
 }
+
+@MainActor
+@Test func missingReadsOnWhileTheLibrarysAlbumsLeaveLessThanAPage() async {
+    let requests = Requests()
+    var service = RecommendationsService.unused
+    // 250 albums, the first 200 in the library.
+    service.page = { query, offset, limit in
+        requests.append(query, offset, limit)
+        let end = min(250, offset + limit)
+        var page = page(offset..<end, more: end < 250)
+        page.albums = page.albums?.map {
+            var album = $0
+            album.inLibrary = album.id < 200
+            return album
+        }
+        return page
+    }
+    let model = RecommendationsModel(service: { service })
+    var missing = discography
+    missing.filters.missing = true
+    await model.show(missing)?.value
+    for _ in 0..<5 {
+        guard let next = model.reading else { break }
+        await next.value
+    }
+    #expect(requests.offsets == [0, 100, 200])
+    #expect(model.rows.map(\.album.id) == Array(200..<250))
+    #expect(!model.more)
+}
+
+@MainActor
+@Test func aLateReplyForAnEarlierDiscographyDoesntReplaceTheList() async {
+    var service = RecommendationsService.unused
+    service.page = { query, offset, _ in
+        let first = query.seed == discography.seed
+        // The first artist's reply comes after the second was asked for, however it was
+        // cancelled.
+        if first { try? await Task.sleep(nanoseconds: 200_000_000) }
+        var page = page((first ? 0 : 500)..<(first ? 3 : 502), more: false)
+        page.pending = first ? 9 : 0
+        return page
+    }
+    let model = RecommendationsModel(service: { service })
+    let earlier = model.show(discography)
+    let other = RecommendationQuery(seed: .discography(artistID: 24, name: "Made-Up Other"))
+    await model.show(other)?.value
+    await earlier?.value
+    #expect(model.query.seed == other.seed)
+    #expect(model.rows.map(\.album.id) == [500, 501])
+    #expect(model.pending == 0 && model.refreshing == nil)
+}
