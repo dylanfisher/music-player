@@ -241,7 +241,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         if seeds != self.seeds {
             self.seeds = seeds
             listButton.removeAllItems()
-            listButton.addItems(withTitles: seeds.map(seedTitle))
+            listButton.addEveryItem(withTitles: seeds.map(seedTitle))
         }
         if let index = seeds.firstIndex(of: query.seed) { listButton.selectItem(at: index) }
         viewControl.selectedSegment = query.show == .albums ? 0 : 1
@@ -537,6 +537,17 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     func windowDidBecomeKey(_ notification: Notification) { visibilityChanged(true) }
 
     func windowWillClose(_ notification: Notification) { visibilityChanged(false) }
+}
+
+extension NSPopUpButton {
+    /// Adds an item for each of `titles`, in order. `addItems(withTitles:)` drops an item whose
+    /// title is in the menu already and moves the old one last, so two Discogs artists named
+    /// alike would leave fewer items than the lists they stand for, and in another order.
+    func addEveryItem(withTitles titles: [String]) {
+        for title in titles {
+            menu?.addItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""))
+        }
+    }
 }
 
 /// The window's table, which hears ⌫ for Not Interested.

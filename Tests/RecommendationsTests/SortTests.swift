@@ -59,6 +59,31 @@ import Testing
 }
 
 @MainActor
+@Test func twoDiscographiesNamedAlikeAreTwoItemsInTheListPopUp() {
+    let window = RecommendationsWindow()
+    var chosen: [RecommendationQuery] = []
+    window.queryChosen = { chosen.append($0) }
+    let first = RecommendationQuery.Seed.discography(artistID: 23, name: "Gus Other")
+    let second = RecommendationQuery.Seed.discography(artistID: 4242, name: "Gus Other")
+    window.show(
+        rows: [], query: RecommendationQuery(seed: second), seeds: [.library, first, second],
+        pending: false, message: nil, action: nil, facts: nil)
+    #expect(window.listButton.numberOfItems == 3)
+    #expect(window.listButton.indexOfSelectedItem == 2)
+    window.listButton.selectItem(at: 1)
+    window.listButton.sendAction(window.listButton.action, to: window.listButton.target)
+    #expect(chosen.map(\.seed) == [first])
+}
+
+@MainActor
+@Test func everyTitleIsAnItemOfAPopUpInOrder() {
+    let popUp = NSPopUpButton()
+    popUp.addEveryItem(withTitles: ["Gus", "Dee", "Gus"])
+    #expect(popUp.itemTitles == ["Gus", "Dee", "Gus"])
+    #expect(popUp.indexOfSelectedItem == 0)
+}
+
+@MainActor
 @Test func movingBetweenADiscographyAndAScoredListTakesEachOnesOrder() async {
     let requests = Requests()
     let model = RecommendationsModel(service: { list(10, requests) })

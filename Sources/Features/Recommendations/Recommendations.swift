@@ -254,7 +254,7 @@ public final class Recommendations {
     private func chooseDiscography(_ artists: [RecommendationPage.Named]) {
         guard let window = controller?.window, window.attachedSheet == nil else { return }
         let popUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26))
-        popUp.addItems(withTitles: artists.map(artistName))
+        popUp.addEveryItem(withTitles: artists.map(artistName))
         let question = NSAlert()
         question.messageText = "Whose discography?"
         question.accessoryView = popUp
