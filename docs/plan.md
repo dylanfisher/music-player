@@ -54,9 +54,9 @@ Set by the owner on 2026-11-19, amended on 2026-11-20. Earlier run orders are in
 2. Phase 85, what phase 84 left, waits until the owner starts it.
 3. Phase 10, drafted with the owner and started on 2026-11-20, landed on 2026-11-20.
 4. Once phase 10 is on main, the owner said (2026-11-20) to start these unasked:
-   - phase 93 (landed 2026-11-20) and music-recommender's phase 12, side by side in their own
-     worktrees;
-   - then phase 94, once the service's phase 12 has landed.
+   - phase 93 and music-recommender's phase 12 (both landed 2026-11-20), side by side in
+     their own worktrees;
+   - then phase 94, once the service's phase 12 has landed (it did, 2026-11-20).
 5. Phase 13 waits.
 
 ## Waiting on the owner
@@ -469,10 +469,14 @@ pastes. ADR 0217 records the decisions.
 
 - [ ] **94.1 The query.** `RecommendationQuery.Seed` gains `discography(artistID:)`, with its
       encoding and strict decoding of 12.2's rows: `score` null and `reasons` empty for this
-      list, `formats`, `inLibrary`, `mark` and the reply's `pending`. The sorts gain `year`
-      and `title`, offered only for a discography, where `year` is the default and `score`
-      isn't offered. The `unknown_artist` 404 says "Discogs has no artist <id> in this Mac's
-      catalog" in the status line. Tests on written replies through the stand-in transport.
+      list, `formats`, `inLibrary`, `mark`, and the reply's `list.artist` (`{id, name}`, null on
+      the other lists) and `pending` (null on the other lists), exactly as the service's
+      `docs/api.md` "A discography" section has them since its phase 12 landed (`5940f47`).
+      The sorts gain `year` and `title`, offered only for a discography, where `year` is the
+      default, `rating`, `have`, `want` and `want_have` are offered, and `score` isn't. The
+      `unknown_artist` 404 says "Discogs has no artist <id> in this Mac's catalog" in the
+      status line, and the `various_artists` 400 says "Various Artists has no discography".
+      Tests on written replies through the stand-in transport.
 - [ ] **94.2 Opening a discography.** Show Discography opens it in the Recommendations window,
       chosen in the list pop-up as "Discography: <artist>", like a seed list. The artists
       come from:
@@ -483,7 +487,8 @@ pastes. ADR 0217 records the decisions.
 
       With one main artist the command opens it. With several it's a submenu, one item for
       each. A track without a Discogs release id, or one the catalog doesn't hold, gets the
-      item disabled, with the reason as its tooltip.
+      item disabled, with the reason as its tooltip. Various Artists (Discogs artist 194) is
+      never offered: the service refuses its discography.
 
       From anywhere else, Show Discography… in the palette and the Recommendations window
       asks for a Discogs release id or a discogs.com link to a release, master or artist.
@@ -495,14 +500,16 @@ pastes. ADR 0217 records the decisions.
       - **Columns:** Format and In Library are new, and Mark shows the verdict. Score, Why and
         Rank are hidden while a discography shows, and come back as they were.
       - **Controls:** the Missing checkbox hides owned albums, as a filter of the loaded rows,
-        since the service lists everything. The Styles, Labels and year filters and phase
-        91's text filter work as they do for other lists.
+        since the service lists everything. The Styles, Labels and year filters work as they
+        do for other lists; phase 91's text filter, built later, covers this list too.
       - **Values coming in:** while `pending` is over 0, the status line says "Fetching
         ratings, <n> left", and the list is asked for again every 15 s while the window is
         open and showing it. The selection and scroll are kept as rows reorder, and asking
-        stops when `pending` is 0 or the list changes.
+        stops when `pending` is 0 or the list changes. `pending` counts only what the sync
+        fetches next, so it can reach 0 while some albums still have no values; they show
+        blank and sort last.
       - **Row actions:** Open on Discogs, Download…, Not Interested and Already Have work as
-        on other rows. In Library albums offer Show in All Music (91.2).
+        on other rows. Phase 91.2's Show in All Music, built later, covers In Library rows.
 
       Tests in `RecommendationsModelTests` for the columns, Missing, the refresh's timing with
       an injected clock, and the kept selection.
