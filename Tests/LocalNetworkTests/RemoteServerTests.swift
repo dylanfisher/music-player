@@ -254,8 +254,10 @@ private final class Fixture: @unchecked Sendable {
         _ = try await connection.receive(through: Array("data: first\n\n".utf8))
         open.append(connection)
     }
-    let refused = try await fixture.get("/events")
+    let refused = try await fixture.get("/events", "Origin: http://other.local:47800\r\n")
     #expect(refused.status == 503)
+    #expect(refused.head.contains("Access-Control-Allow-Origin: http://other.local:47800"))
+    #expect(refused.head.contains("Vary: Origin"))
     try await waitFor { fixture.stoppedStreams == 1 }
     fixture.server.stop()
     try await waitFor { fixture.stoppedStreams == RemoteServer.eventStreamCap + 1 }

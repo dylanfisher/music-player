@@ -344,7 +344,9 @@ public final class RemoteServer: @unchecked Sendable {
             guard streams < Self.eventStreamCap else {
                 stop()
                 refuse("the web remote refused an event stream: \(streams) are open")
-                return reply(client, RemoteReply(.serviceUnavailable), close: true)
+                return respond(
+                    client, .reply(RemoteReply(.serviceUnavailable)), origin: origin, gzips: false,
+                    close: true)
             }
             client.streaming = true
             client.stopEvents = stop
