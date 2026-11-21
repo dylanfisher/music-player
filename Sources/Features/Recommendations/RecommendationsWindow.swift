@@ -469,7 +469,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         menu.addItem(discogs)
         let discography = NSMenuItem(
             title: AppMenus.showDiscographyMenuTitle, action: nil, keyEquivalent: "")
-        discographyItems.fill(discography, DiscographyChoice(rows[clicked].album))
+        discographyItems.fill(discography, DiscographyChoice(rows[clicked]))
         menu.addItem(discography)
         guard query.show == .albums else { return }
         menu.addItem(.separator())

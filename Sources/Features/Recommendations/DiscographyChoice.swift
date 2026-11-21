@@ -26,8 +26,18 @@ enum DiscographyChoice: Equatable, Sendable {
             : .unavailable(various ? Self.variousArtistsText : Self.noArtistText)
     }
 
-    /// A row's artists, which the service sends with their ids.
+    /// An album's artists, which the service sends with their ids.
     init(_ album: RecommendationPage.Album) { self.init(album.artists) }
+
+    /// A row's artists: on the Artists view the row's own artist, not the artists of the best
+    /// album it shows, which may be a collaboration or Various Artists.
+    init(_ row: RecommendationRow) {
+        if let artist = row.artist {
+            self.init([RecommendationPage.Named(id: artist.id, name: artist.name)])
+        } else {
+            self.init(row.album)
+        }
+    }
 
     /// A track tagged with `release`, through its main artists in this Mac's catalog, which
     /// `artists` reads.
