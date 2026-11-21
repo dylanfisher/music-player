@@ -65,7 +65,7 @@ func problemText(_ problem: ListProblem, seed: RecommendationQuery.Seed) -> Stri
     case .unknownArtist:
         let id = if case .discography(let id, _) = seed { "\(id)" } else { "?" }
         return "Discogs has no artist \(id) in this Mac's catalog"
-    case .variousArtists: return "Various Artists has no discography"
+    case .variousArtists: return DiscographyChoice.variousArtistsText
     case .refused(let refusal):
         switch refusal.code {
         case .noProfile:

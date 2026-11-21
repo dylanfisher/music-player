@@ -50,6 +50,7 @@ final class RecommendationsModel {
         let query = asked.fitted
         if !seeds.contains(query.seed) { seeds.append(query.seed) }
         self.query = query
+        notice = nil
         rows = []
         more = false
         facts = nil
@@ -127,6 +128,12 @@ final class RecommendationsModel {
             }
             await readAgain(through: shown)?.value
         }
+    }
+
+    /// Says `text` beside the rows until the next list or mark.
+    func tell(_ text: String) {
+        notice = text
+        changed()
     }
 
     /// Stops the read out, for a closed window.

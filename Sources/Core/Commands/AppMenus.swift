@@ -52,6 +52,9 @@ public enum AppMenus {
     /// track.
     public static let addToPlaylistMenuTitle = "Add to Playlist"
     public static let showInPlaylistMenuTitle = "Show in Playlist"
+    /// The track menu's item for the first selected track's Discogs artists: one opens its
+    /// discography, several are a submenu (ADR 0217).
+    public static let showDiscographyMenuTitle = "Show Discography"
     private static let ratingMenuTitle = "Rating"
     /// The Controls menu's submenu of repeat modes, and the toolbar's repeat button.
     public static let repeatMenuTitle = "Repeat"
@@ -71,7 +74,8 @@ public enum AppMenus {
         .command(.openDiscogsRelease), .command(.getDiscogsArtwork),
         .command(.combineForTagging), .command(.toggleNeverUpgrade), .separator,
         .command(.recommendationsForAlbum), .command(.recommendationsForArtist),
-        .command(.showThreads), .command(.notNow), .separator, .command(.toggleLoved),
+        .live(showDiscographyMenuTitle), .command(.showThreads), .command(.notNow), .separator,
+        .command(.toggleLoved),
         .command(.toggleDisliked),
         .separator,
         .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
@@ -121,7 +125,8 @@ public enum AppMenus {
                     .command(.notNow),
                     .command(.showDiscogsTagger), .command(.showDownloads),
                     .command(.showRecommendations), .command(.recommendationsForAlbum),
-                    .command(.recommendationsForArtist), .command(.rescanNow),
+                    .command(.recommendationsForArtist), .command(.showDiscography),
+                    .command(.rescanNow),
                     .submenu(
                         "Moved and Removed Files",
                         [

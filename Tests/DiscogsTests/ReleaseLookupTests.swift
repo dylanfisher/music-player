@@ -27,6 +27,28 @@ func aPastedReleaseIsAnIdOrADiscogsReleaseURL(text: String, id: Int?) {
     #expect(pastedReleaseID(text) == id)
 }
 
+@Test(arguments: [
+    ("1234567", PastedDiscogsID.release(1_234_567) as PastedDiscogsID?),
+    ("r42", .release(42)),
+    ("https://www.discogs.com/release/1234567-Made-Up-Artist-Made-Up-Album", .release(1_234_567)),
+    ("https://www.discogs.com/master/99-Made-Up-Album", .master(99)),
+    ("https://www.discogs.com/fr/master/99", .master(99)),
+    ("https://www.discogs.com/artist/23-Gus-Other", .artist(23)),
+    ("https://www.discogs.com/fr/artist/23-Gus-Other", .artist(23)),
+    ("https://discogs.com/artist/23", .artist(23)),
+    (" https://www.discogs.com/artist/23?type=Releases \n", .artist(23)),
+    ("https://www.discogs.com/label/30-Seed-Records", nil),
+    ("https://www.discogs.com/artist/", nil),
+    ("https://www.discogs.com/artist/Gus-Other", nil),
+    ("https://www.discogs.com/artist/0", nil),
+    ("https://example.com/artist/23", nil),
+    ("https://notdiscogs.com/artist/23", nil),
+    ("Gus Other", nil),
+])
+func aPastedIdIsAReleaseOrAPageOfAReleaseMasterOrArtist(text: String, id: PastedDiscogsID?) {
+    #expect(pastedDiscogsID(text) == id)
+}
+
 @Test func aReleaseIDIsReadAsAPastedOneIs() {
     for typed in ["1001", " r1001 ", "https://www.discogs.com/release/1001-Persuader-Stockholm"] {
         #expect(ReleaseQuery(release: typed).releaseID == 1001, "\(typed)")

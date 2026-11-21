@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import Discogs
 import DisplayText
 import Library
@@ -21,6 +22,12 @@ public final class Recommendations {
     var readProfile: @Sendable () async throws -> LibraryProfile
     /// The albums of some tracks, for a seed, read off the main thread.
     var readSeeds: @Sendable ([Int64]) async throws -> [SeedAlbum]
+    /// What a pasted id offers, read from the catalog at a place off the main thread.
+    var readDiscographyArtists: @Sendable (PastedDiscogsID, URL?) async -> DiscographyChoice = {
+        pasted, url in
+        await Task.detached { DiscographyChoice.of(pasted, DiscographyArtists(catalogAt: url)) }
+            .value
+    }
     /// This Mac's Discogs catalog as set now, which the Marked sheet names marks from; a mark
     /// whose album it doesn't have, or every mark while there is none, goes by its id.
     package var catalog: () -> URL? = { nil }
@@ -44,6 +51,12 @@ public final class Recommendations {
         self?.service()
     })
     private(set) var controller: RecommendationsWindow?
+    /// The track menu's Show Discography items, which hold it as their target.
+    private lazy var discographyItems: DiscographyItems = {
+        let items = DiscographyItems()
+        items.open = { [weak self] in self?.showDiscography($0) }
+        return items
+    }()
 
     /// `databaseURL` is the library index the profile is read from.
     public init(databaseURL: URL) {
@@ -135,6 +148,96 @@ public final class Recommendations {
         }
     }
 
+    // MARK: - Discographies
+
+    /// Fills the track menu's Show Discography `item` for the first selected track, whose
+    /// Discogs release `release` reads, through its main artists in this Mac's catalog. It
+    /// reads the catalog as the menu opens, one release by id.
+    public func fillDiscographyItem(_ item: NSMenuItem, release: () throws -> Int?) {
+        let choice: DiscographyChoice
+        do {
+            choice = DiscographyChoice.of(
+                release: try release(), DiscographyArtists(catalogAt: catalog()).release)
+        } catch {
+            choice = .unavailable(terminalSafe("Couldn't read the track's release: \(error)"))
+        }
+        discographyItems.fill(item, choice)
+    }
+
+    /// Shows `artist`'s discography, in the order and through the filters the window has.
+    func showDiscography(_ artist: RecommendationPage.Named) {
+        let known = model.seeds.first {
+            if case .discography(artist.id, _) = $0 { true } else { false }
+        }
+        var query = model.query
+        query.seed = known ?? .discography(artistID: artist.id, name: artistName(artist))
+        (controller ?? makeWindow()).showWindow(nil)
+        model.show(query)
+    }
+
+    /// Show Discography…: asks for a Discogs artist, release or master, pasted or typed, and
+    /// shows its discography.
+    public func askForDiscography() {
+        let controller = controller ?? makeWindow()
+        controller.showWindow(nil)
+        guard let window = controller.window, window.attachedSheet == nil else { return }
+        let field = NSTextField(string: "")
+        field.placeholderString = "https://www.discogs.com/artist/1234567"
+        field.frame = NSRect(x: 0, y: 0, width: 340, height: 24)
+        let question = NSAlert()
+        question.messageText = "Paste a Discogs artist, release or master"
+        question.informativeText =
+            "Its page's address, or a release's id. A release or master shows its main"
+            + " artist's discography."
+        question.accessoryView = field
+        question.addButton(withTitle: AppMenus.showDiscographyMenuTitle)
+        question.addButton(withTitle: "Cancel")
+        question.window.initialFirstResponder = field
+        question.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.showDiscography(pasted: field.stringValue)
+        }
+    }
+
+    /// Shows the discography of what was pasted, after choosing among a release's artists
+    /// when it has several, or says why there is none.
+    @discardableResult
+    func showDiscography(pasted text: String) -> Task<Void, Never>? {
+        guard let pasted = pastedDiscogsID(text) else {
+            beep()
+            model.tell("That isn't a Discogs artist, release or master: \(terminalSafe(text))")
+            return nil
+        }
+        let artists = readDiscographyArtists
+        let catalog = catalog()
+        return Task {
+            let choice = await artists(pasted, catalog)
+            switch choice {
+            case .unavailable(let why):
+                beep()
+                model.tell(why)
+            case .artists(let artists) where artists.count == 1: showDiscography(artists[0])
+            case .artists(let artists): chooseDiscography(artists)
+            }
+        }
+    }
+
+    /// Asks which of several artists' discography to show.
+    private func chooseDiscography(_ artists: [RecommendationPage.Named]) {
+        guard let window = controller?.window, window.attachedSheet == nil else { return }
+        let popUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26))
+        popUp.addItems(withTitles: artists.map(artistName))
+        let question = NSAlert()
+        question.messageText = "Whose discography?"
+        question.accessoryView = popUp
+        question.addButton(withTitle: AppMenus.showDiscographyMenuTitle)
+        question.addButton(withTitle: "Cancel")
+        question.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.showDiscography(artists[popUp.indexOfSelectedItem])
+        }
+    }
+
     /// Shows the states of Downloads' jobs, by release id, in the Download column.
     package func show(downloads: [Int: String]) {
         self.downloads = downloads
@@ -164,6 +267,8 @@ public final class Recommendations {
         made.statusChosen = { [weak self] in self?.openStatusPage() }
         made.downloadChosen = { [weak self] in self?.download($0.map(\.album)) }
         made.discogsChosen = { [weak self] in self?.open(discogsPage(of: $0.album)) }
+        made.discographyChosen = { [weak self] in self?.showDiscography($0) }
+        made.askDiscography = { [weak self] in self?.askForDiscography() }
         made.columnsResized = { [weak self] widths in
             self?.columnWidths = widths
             self?.columnWidthsChanged(widths)

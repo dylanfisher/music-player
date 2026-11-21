@@ -1,6 +1,10 @@
 /// Which of the service's lists to read, how, and through which filters: everything a request
 /// to `/v1/recommendations` says but the page.
 package struct RecommendationQuery: Equatable, Hashable, Sendable {
+    /// Discogs's Various Artists, whose discography the service refuses: its albums would be
+    /// every compilation in the catalog.
+    package static let variousArtistsID = 194
+
     /// The list: the whole library's, one seed's, or one Discogs artist's discography.
     package enum Seed: Equatable, Hashable, Sendable {
         case library

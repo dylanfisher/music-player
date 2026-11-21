@@ -167,6 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var deviceListWatch: DeviceListWatch?
     var outputMenu: OutputMenu?
     var playlistMenus: [PlaylistMenu] = []
+    var discographyMenuItem: DiscographyMenuItem?
     private let artwork = ArtworkLoader(
         maxPixelSize: artPixels, capacity: artCacheImages, read: SharedArtRead().read)
     private(set) lazy var recommendations = makeRecommendations()
@@ -237,6 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             watchOutputs(menu)
             registerCommands(dispatcher)
             wireTrackMenu(menu)
+            wireDiscographyItem(menu)
             if let state, let saver { makePalette(dispatcher, state: state, saver: saver) }
             registerSettingCommands(dispatcher)
             settings.changed = { [weak self] keys in self?.settingsChanged(keys) }

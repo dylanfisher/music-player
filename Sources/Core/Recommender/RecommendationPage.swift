@@ -29,6 +29,11 @@ package struct RecommendationPage: Equatable, Sendable, Decodable {
         package var id: Int
         package var name: String?
 
+        package init(id: Int, name: String?) {
+            self.id = id
+            self.name = name
+        }
+
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case id, name
         }

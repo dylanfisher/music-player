@@ -166,20 +166,39 @@ private func page(_ address: String) -> URL {
     return url
 }
 
-/// The release id in what the owner pasted or typed: a number, or a Discogs release URL
-/// (`…/release/<id>`, with or without a slug after the id). Nil for anything else.
-public func pastedReleaseID(_ text: String) -> Int? {
+/// A Discogs release, master or artist the owner pasted or typed.
+public enum PastedDiscogsID: Equatable, Sendable {
+    case release(Int)
+    case master(Int)
+    case artist(Int)
+}
+
+/// What the owner pasted or typed: a number or `r` and a number, a release; or a Discogs page
+/// of a release, master or artist (`…/artist/<id>`, with or without a slug after the id or a
+/// locale before the kind, as `/fr/artist/…`). Nil for anything else.
+public func pastedDiscogsID(_ text: String) -> PastedDiscogsID? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     if let id = Int(trimmed.hasPrefix("r") ? String(trimmed.dropFirst()) : trimmed) {
-        return id > 0 ? id : nil
+        return id > 0 ? .release(id) : nil
     }
     guard let url = URL(string: trimmed), let host = url.host?.lowercased(),
         host == "discogs.com" || host.hasSuffix(".discogs.com")
     else { return nil }
     let parts = url.pathComponents
-    guard let at = parts.firstIndex(of: "release"), at + 1 < parts.count else { return nil }
-    let digits = parts[at + 1].prefix(while: \.isNumber)
-    return Int(digits).flatMap { $0 > 0 ? $0 : nil }
+    let kinds: [String: (Int) -> PastedDiscogsID] = [
+        "release": PastedDiscogsID.release, "master": PastedDiscogsID.master,
+        "artist": PastedDiscogsID.artist,
+    ]
+    guard let at = parts.firstIndex(where: { kinds[$0] != nil }), at + 1 < parts.count,
+        let kind = kinds[parts[at]], let id = Int(parts[at + 1].prefix(while: \.isNumber)), id > 0
+    else { return nil }
+    return kind(id)
+}
+
+/// The release id in what the owner pasted or typed, as `pastedDiscogsID` reads it; nil for a
+/// master, an artist or anything else.
+public func pastedReleaseID(_ text: String) -> Int? {
+    if case .release(let id) = pastedDiscogsID(text) { id } else { nil }
 }
 
 /// The title of every button that opens a release's page.

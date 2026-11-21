@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import Discogs
 import DisplayText
 import Recommender
@@ -36,6 +37,10 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     let markedButton = NSButton(title: "Marked…", target: nil, action: nil)
     let downloadButton = NSButton(title: "Download…", target: nil, action: nil)
     let discogsButton = NSButton(title: openOnDiscogsTitle, target: nil, action: nil)
+    let discographyButton = NSButton(
+        title: AppCommands.title(of: .showDiscography), target: nil, action: nil)
+    /// The rows' Show Discography items.
+    let discographyItems = DiscographyItems()
     let detailLabel = NSTextField(wrappingLabelWithString: "")
     let progress = NSProgressIndicator()
     let messageLabel = NSTextField(wrappingLabelWithString: "")
@@ -58,6 +63,10 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     var downloadChosen: ([RecommendationRow]) -> Void = { _ in }
     /// Hears Open on Discogs on a row.
     var discogsChosen: (RecommendationRow) -> Void = { _ in }
+    /// Hears an artist's discography chosen from a row.
+    var discographyChosen: (RecommendationPage.Named) -> Void = { _ in }
+    /// Hears Show Discography… clicked.
+    var askDiscography: () -> Void = {}
     /// Hears Marked… clicked.
     var showMarked: () -> Void = {}
     /// Hears Service Status clicked.
@@ -133,12 +142,17 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         downloadButton.toolTip = "Queue the selected albums in Downloads."
         discogsButton.action = #selector(discogsClicked)
         discogsButton.toolTip = "Open the first selected album's page on Discogs."
+        discographyButton.action = #selector(discographyClicked)
+        discographyButton.toolTip =
+            "Every album of a Discogs artist, from a pasted artist, release or master."
+        discographyItems.open = { [weak self] in self?.discographyChosen($0) }
         let buttons = [
-            notInterestedButton, alreadyHaveButton, downloadButton, discogsButton, markedButton,
+            notInterestedButton, alreadyHaveButton, downloadButton, discogsButton,
+            discographyButton, markedButton,
         ]
         let actions = NSStackView(views: [
             notInterestedButton, alreadyHaveButton, downloadButton, discogsButton, NSView(),
-            markedButton,
+            discographyButton, markedButton,
         ])
         actions.spacing = 8
         for button in buttons {
@@ -299,6 +313,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
 
     @objc private func markedClicked() { showMarked() }
 
+    @objc private func discographyClicked() { askDiscography() }
+
     @objc private func statusClicked() { statusChosen() }
 
     @objc private func downloadClicked() {
@@ -428,6 +444,10 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         discogs.target = self
         discogs.representedObject = clicked
         menu.addItem(discogs)
+        let discography = NSMenuItem(
+            title: AppMenus.showDiscographyMenuTitle, action: nil, keyEquivalent: "")
+        discographyItems.fill(discography, DiscographyChoice(rows[clicked].album))
+        menu.addItem(discography)
         guard query.show == .albums else { return }
         menu.addItem(.separator())
         let album = rows[clicked].album
