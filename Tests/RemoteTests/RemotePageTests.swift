@@ -82,7 +82,6 @@ private func run(_ context: JSContext, _ script: String) -> String? {
 @Test func thePagesLimitsAreTheServers() throws {
     let context = try logic()
     #expect(run(context, "return RANGE_SIZE") == "\(RemoteLibrary.rangeLimit)")
-    #expect(run(context, "return TRACKS_PER_COMMAND") == "\(CommandArgument.maximumTracks)")
 }
 
 @Test func theMacChosenIsThePickedThenThePlayingThenTheLastControlledThenOwn() throws {
@@ -90,10 +89,10 @@ private func run(_ context: JSContext, _ script: String) -> String? {
     let macs = """
         const macs = [
           {id: "a", paired: true, state: "paused"},
-          {id: "b", paired: true, state: "playing", lastPlayedAt: 10},
-          {id: "c", paired: true, state: "playing", lastPlayedAt: 20},
+          {id: "b", paired: true, state: "playing", playedAgo: 20},
+          {id: "c", paired: true, state: "playing", playedAgo: 10},
           {id: "d", paired: false, state: null},
-          {id: "e", paired: true, state: "playing"},
+          {id: "e", paired: true, state: "playing", playedAgo: null},
         ];
         """
     #expect(run(context, macs + "return chooseMac(macs, {picked: 'a'})") == #""a""#)
@@ -112,6 +111,24 @@ private func run(_ context: JSContext, _ script: String) -> String? {
         run(context, stopped + "return chooseMac(macs, {lastControlled: 'x', own: 'y'})") == #""a""#
     )
     #expect(run(context, "return chooseMac([{id: 'a', paired: false}], {own: 'a'})") == "null")
+}
+
+/// Two Macs whose clocks differ: the one whose own clock says it started more recently wins,
+/// whatever their raw times say.
+@Test func macsAreComparedByHowLongAgoEachStartedOnItsOwnClock() throws {
+    let context = try logic()
+    let script = """
+        // Fast's clock runs 100 s ahead: its later lastPlayedAt is the older start.
+        const fast = {now: 1100, lastPlayedAt: 1050};
+        const slow = {now: 1000, lastPlayedAt: 990};
+        const macs = [
+          {id: "fast", paired: true, state: "playing", playedAgo: startedAgo(fast, 0, 2000)},
+          {id: "slow", paired: true, state: "playing", playedAgo: startedAgo(slow, 1000, 2000)},
+        ];
+        return [macs[0].playedAgo, macs[1].playedAgo, chooseMac(macs, {}),
+          startedAgo({now: 5}, 0, 0), startedAgo(null, 0, 0)];
+        """
+    #expect(run(context, script) == #"[52,11,"slow",null,null]"#)
 }
 
 @Test func aTokenGoesOnlyToTheOriginItPairedAt() throws {
@@ -164,6 +181,74 @@ private func run(_ context: JSContext, _ script: String) -> String? {
     #expect(run(context, "return CACHED_RANGES") == "20")
 }
 
+@Test func aListFetchesAtMostThreeRangesAndAbortsThoseNoLongerWanted() throws {
+    let context = try logic()
+    let cached = "const cached = (start) => start === 200;"
+    #expect(
+        run(context, cached + "return planFetches([0, 200, 400, 600, 800], cached, [])")
+            == #"{"start":[0,400,600],"abort":[]}"#)
+    #expect(
+        run(context, cached + "return planFetches([400, 600], cached, [0, 400])")
+            == #"{"start":[600],"abort":[0]}"#)
+    #expect(
+        run(context, cached + "return planFetches([1000, 1200, 1400], cached, [1000, 1200, 1400])")
+            == #"{"start":[],"abort":[]}"#)
+    #expect(run(context, "return [RANGES_IN_FLIGHT, SETTLE_MS]") == "[3,100]")
+}
+
+@Test func aPageFromAnotherTagOrLengthMeansTheListChanged() throws {
+    let context = try logic()
+    let held = "const held = {stamp: 's1', total: 10};"
+    #expect(
+        run(
+            context,
+            held + """
+                return [listChanged(null, {stamp: 's2', total: 3}),
+                  listChanged(held, {stamp: 's1', total: 10}),
+                  listChanged(held, {stamp: 's2', total: 10}),
+                  listChanged(held, {stamp: 's1', total: 11})];
+                """) == "[false,false,true,true]")
+}
+
+@Test func aStreamIsDeadAfterFortySilentSecondsAndBacksOffUntilItStaysUp() throws {
+    let context = try logic()
+    #expect(run(context, "return [isSilent(0, 40000), isSilent(0, 40001)]") == "[false,true]")
+    // One that drops at once keeps counting; one up 30 s starts over.
+    #expect(
+        run(
+            context,
+            "return [failuresAfter(0, 0), failuresAfter(3, 29999), failuresAfter(3, 30000)]")
+            == "[1,4,1]")
+}
+
+@Test func playListNamesTheListAsTheTracksReadDoesAndTheTrackToPlayFrom() throws {
+    let context = try logic()
+    #expect(
+        run(context, "return playListArgument({sort: 'album', artist: 7}, 12)")
+            == #""artist=7&sort=album&playFrom=12""#)
+    #expect(
+        run(context, "return playListArgument({q: 'a&b c', sort: 'artist'}, 3)")
+            == #""q=a%26b%20c&sort=artist&playFrom=3""#)
+}
+
+@Test func browseStaysOnItsMacWhenThePageSwitchesByItself() throws {
+    let context = try logic()
+    #expect(
+        run(
+            context,
+            """
+            return [libraryMac("a", "b", "auto"), libraryMac("a", "b", "picked"),
+              libraryMac("a", "b", "top"), libraryMac(null, "b", "auto")];
+            """) == #"["a","b","b","b"]"#)
+}
+
+@Test func aRefusedQueueEditReadsTheQueueAgain() throws {
+    let context = try logic()
+    #expect(
+        run(context, "return [afterQueueEdit(true), afterQueueEdit(false)]")
+            == #"["wait","reload"]"#)
+}
+
 @Test func searchesSendOneAtATimeTheLatestWaitingAndOnlyTheLatestReplyShown() throws {
     let context = try logic()
     let script = """
@@ -189,6 +274,14 @@ private func run(_ context: JSContext, _ script: String) -> String? {
           parser.push("data: x\\r\\ndata:y\\r\\n\\r\\ndata: z\\n\\n")];
         """
     #expect(run(context, script) == #"[[],[],["{\"a\":1}"],["x\ny","z"]]"#)
+    // A `\r` ending a chunk waits to see whether `\n` follows, so `\r\n` split across
+    // chunks is one line end, not a line and then a blank one that ends the event.
+    let split = """
+        const parser = new EventParser();
+        return [parser.push("data: a\\r"), parser.push("\\ndata: b\\r"), parser.push("\\n\\r"),
+          parser.push("\\n")];
+        """
+    #expect(run(context, split) == #"[[],[],[],["a\nb"]]"#)
 }
 
 @Test func theJumpBarsLettersOnlyMoveForward() throws {
@@ -213,12 +306,4 @@ private func run(_ context: JSContext, _ script: String) -> String? {
         run(context, "return [clock(187), clock(3723), clock(null), clock(0.4)]")
             == #"["3:07","1:02:03","–:––","0:00"]"#)
     #expect(run(context, "return [backoff(0), backoff(3), backoff(10)]") == "[1000,8000,30000]")
-}
-
-@Test func aTapPlaysThatTrackAndTheLoadedOnesAfterItUpToTheLimit() throws {
-    let context = try logic()
-    let rows = "const rows = [[1], [2], [null], [4], undefined, [6]];"
-    #expect(run(context, rows + "return tracksFrom(1, 6, (i) => rows[i], 100)") == #""tracks:2,4""#)
-    #expect(run(context, rows + "return tracksFrom(0, 6, (i) => rows[i], 2)") == #""tracks:1,2""#)
-    #expect(run(context, rows + "return tracksFrom(4, 6, (i) => rows[i], 100)") == "null")
 }

@@ -5,17 +5,25 @@
 
 /// Positions in one range of a track list or the queue, as the server reads them at most.
 export const RANGE_SIZE = 200;
-/// The most track IDs one Play Tracks or Queue Tracks takes.
-export const TRACKS_PER_COMMAND = 100;
+/// Ranges a list fetches at once.
+export const RANGES_IN_FLIGHT = 3;
+/// How long a list waits after its last scroll before it fetches, in milliseconds.
+export const SETTLE_MS = 100;
+/// How long a stream may go without a byte before the page takes it for dead: the server
+/// sends a comment every 15 s.
+export const SILENT_MS = 40000;
+/// How long a stream stays up before its failures count from 0 again.
+export const STEADY_MS = 30000;
 /// Ranges a list keeps, the least recently used going first.
 export const CACHED_RANGES = 20;
 /// The longest wait before an event stream connects again, in milliseconds.
 export const BACKOFF_CAP_MS = 30000;
 
-/// The Mac to control. `macs` are `{id, paired, state, lastPlayedAt}`, `state` being the
-/// stream's "playing", "paused" or "stopped", or null before one arrived. The one the owner
-/// picked wins while it's paired; then the one playing, the newest `lastPlayedAt` among
-/// several; then the one controlled last; then the page's own Mac; then any paired one.
+/// The Mac to control. `macs` are `{id, paired, state, playedAgo}`, `state` being the
+/// stream's "playing", "paused" or "stopped", or null before one arrived, and `playedAgo` what
+/// `startedAgo` gives. The one the owner picked wins while it's paired; then the one playing,
+/// the one that started most recently among several; then the one controlled last; then the
+/// page's own Mac; then any paired one.
 export function chooseMac(macs, { picked, lastControlled, own }) {
   const paired = macs.filter((mac) => mac.paired);
   const find = (id) => paired.find((mac) => mac.id === id);
@@ -23,11 +31,20 @@ export function chooseMac(macs, { picked, lastControlled, own }) {
   const playing = paired.filter((mac) => mac.state === "playing");
   if (playing.length > 0) {
     return playing.reduce((best, mac) =>
-      (mac.lastPlayedAt ?? -Infinity) > (best.lastPlayedAt ?? -Infinity) ? mac : best
+      (mac.playedAgo ?? Infinity) < (best.playedAgo ?? Infinity) ? mac : best
     ).id;
   }
   for (const id of [lastControlled, own]) if (id && find(id)) return id;
   return paired.length > 0 ? paired[0].id : null;
+}
+
+/// Seconds since a Mac started playing, now: its `lastPlayedAt` against its own clock when the
+/// state was read, `now`, then on the phone's clock since it arrived at `arrivedAt`
+/// milliseconds; null when it hasn't played. Macs' clocks may differ by seconds, so no two
+/// Macs' times are compared directly.
+export function startedAgo(state, arrivedAt, phoneNow) {
+  if (!state || state.lastPlayedAt == null) return null;
+  return state.now - state.lastPlayedAt + (phoneNow - arrivedAt) / 1000;
 }
 
 /// Where a token is kept: the Mac's ID and the origin it paired at, so a token is never sent
@@ -112,6 +129,25 @@ export function keepsArrival(start, wanted) {
   return wanted.includes(start);
 }
 
+/// Which fetches a list starts and which it aborts, `wanted` being the ranges it wants now,
+/// `cached(start)` whether it holds one, and `inFlight` the starts being fetched: those no
+/// longer wanted are aborted, and wanted ones start, nearest the view first, while fewer than
+/// `cap` are out.
+export function planFetches(wanted, cached, inFlight, cap = RANGES_IN_FLIGHT) {
+  const abort = inFlight.filter((start) => !wanted.includes(start));
+  const kept = inFlight.length - abort.length;
+  const start = wanted
+    .filter((range) => !cached(range) && !inFlight.includes(range))
+    .slice(0, Math.max(0, cap - kept));
+  return { start, abort };
+}
+
+/// Whether a page of a list says the list changed since the ranges held were read: another
+/// library tag, or another length. `held` is `{stamp, total}`, null before any page came.
+export function listChanged(held, page) {
+  return held !== null && (held.stamp !== page.stamp || held.total !== page.total);
+}
+
 /// Search requests in order: at most one in flight, a text typed meanwhile waiting in its
 /// place and replacing any that waited before it, and a reply kept only for the text typed
 /// last.
@@ -157,6 +193,8 @@ export class EventParser {
     const events = [];
     let end;
     while ((end = this.buffer.search(/\r\n|\r|\n/)) >= 0) {
+      // A `\r` the chunk ends with may be the first half of `\r\n`: wait for the next one.
+      if (end === this.buffer.length - 1 && this.buffer[end] === "\r") break;
       const line = this.buffer.slice(0, end);
       const width = this.buffer.startsWith("\r\n", end) ? 2 : 1;
       this.buffer = this.buffer.slice(end + width);
@@ -174,6 +212,17 @@ export class EventParser {
 /// How long to wait before connecting a stream again after `failures` in a row.
 export function backoff(failures) {
   return Math.min(1000 * Math.pow(2, failures), BACKOFF_CAP_MS);
+}
+
+/// The failures in a row once a stream that was up for `upMs` ended: they count from 0 again
+/// only after it stayed up `STEADY_MS`, so a stream that drops at once keeps backing off.
+export function failuresAfter(failures, upMs) {
+  return (upMs >= STEADY_MS ? 0 : failures) + 1;
+}
+
+/// Whether a stream last heard from at `heardAt` is dead at `now`, in milliseconds.
+export function isSilent(heardAt, now) {
+  return now - heardAt > SILENT_MS;
 }
 
 /// The jump bar's letters of `names`, as listed: each letter, `#` for a name that doesn't start
@@ -219,15 +268,22 @@ export function clock(seconds) {
   return hours > 0 ? hours + ":" + String(minutes).padStart(2, "0") + ":" + rest : minutes + ":" + rest;
 }
 
-/// Play Tracks' argument for a tap on position `index` of a list of `total`, whose rows `row`
-/// gives where loaded: that track and those after it that are loaded without a gap, up to
-/// `limit` of them.
-export function tracksFrom(index, total, row, limit) {
-  const ids = [];
-  for (let position = index; position < total && ids.length < limit; position++) {
-    const found = row(position);
-    if (!found) break;
-    if (found[0] != null) ids.push(found[0]);
-  }
-  return ids.length > 0 ? "tracks:" + ids.join(",") : null;
+/// Play List's argument for a tap on track `id` of the list `filter` describes, as
+/// `/api/tracks` reads it: the list's keys, in a fixed order, and the track to play from.
+export function playListArgument(filter, id) {
+  const keys = ["genre", "artist", "album", "q", "sort", "descending"].filter((key) => filter[key] != null);
+  return keys.map((key) => key + "=" + encodeURIComponent(filter[key])).concat(["playFrom=" + id]).join("&");
+}
+
+/// The Mac Browse and Search read from: they stay on the one they were opened on when the
+/// page switches Macs by itself (`"auto"`), and follow the chosen Mac when the owner picks one
+/// (`"picked"`) or goes back to Browse's top (`"top"`), or when there was none.
+export function libraryMac(bound, chosen, event) {
+  return bound === null || event !== "auto" ? chosen : bound;
+}
+
+/// What the Queue does after an edit: a refused one, as when the queue moved since it was
+/// read, reads the queue again at once rather than waiting for the next event.
+export function afterQueueEdit(accepted) {
+  return accepted ? "wait" : "reload";
 }

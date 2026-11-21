@@ -1,8 +1,10 @@
 // The web remote's page (ADR 0215). Every name from a Mac goes on screen through
 // `textContent`, never as markup. Logic that needs no page is in logic.js.
 import {
-  RANGE_SIZE, TRACKS_PER_COMMAND, RangeCache, SearchQueue, EventParser, backoff, chooseMac,
-  clock, keepsArrival, letterOffsets, positionNow, reach, tokenKey, tracksFrom, wantedRanges,
+  RANGE_SIZE, SETTLE_MS, RangeCache, SearchQueue, EventParser, afterQueueEdit, backoff,
+  chooseMac, clock, failuresAfter, isSilent, keepsArrival, letterOffsets, libraryMac,
+  listChanged, planFetches, playListArgument, positionNow, reach, startedAgo, tokenKey,
+  wantedRanges,
 } from "./logic.js";
 
 const $ = (id) => document.getElementById(id);
@@ -138,8 +140,8 @@ class Mac {
     return response;
   }
 
-  async json(path) {
-    const response = await this.fetch(path);
+  async json(path, options = {}) {
+    const response = await this.fetch(path, options);
     if (!response.ok) throw new Error(await problem(response));
     return response.json();
   }
@@ -157,28 +159,38 @@ class Mac {
     clearTimeout(this.retry);
     const controller = new AbortController();
     this.stream = controller;
+    this.upSince = null;
+    this.heardAt = Date.now();
     this.read(controller).catch((error) => {
-      if (controller.signal.aborted) return;
-      this.stream = null;
-      this.online = false;
-      renderStrip();
-      const wait = backoff(this.failures++);
-      console.warn(this.name + "'s events stopped; again in " + wait + " ms", error);
-      this.retry = setTimeout(() => this.connect(), wait);
+      if (!controller.signal.aborted) this.failed(error);
     });
+  }
+
+  /// The stream failed, ended or went quiet: connect again after a backoff.
+  failed(error) {
+    if (this.stream) this.stream.abort();
+    this.stream = null;
+    this.online = false;
+    renderStrip();
+    this.failures = failuresAfter(this.failures, this.upSince === null ? 0 : Date.now() - this.upSince);
+    const wait = backoff(this.failures - 1);
+    console.warn(this.name + "'s events stopped; again in " + wait + " ms", error);
+    this.retry = setTimeout(() => this.connect(), wait);
   }
 
   async read(controller) {
     const response = await this.fetch("/api/events", { signal: controller.signal });
     if (!response.ok) throw new Error(await problem(response));
+    this.upSince = Date.now();
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const parser = new EventParser();
     for (;;) {
       const { value, done } = await reader.read();
       if (done) throw new Error("the stream ended");
+      // Any byte, the server's comments included, shows the stream is alive.
+      this.heardAt = Date.now();
       for (const data of parser.push(decoder.decode(value, { stream: true }))) {
-        this.failures = 0;
         this.online = true;
         this.state = JSON.parse(data);
         this.arrivedAt = Date.now();
@@ -194,6 +206,13 @@ class Mac {
     this.online = false;
   }
 }
+
+// A stream the network dropped without closing hears nothing, not even the comments.
+setInterval(() => {
+  for (const mac of macs.values()) {
+    if (mac.stream && isSilent(mac.heardAt, Date.now())) mac.failed(new Error("nothing heard"));
+  }
+}, 5000);
 
 async function problem(response) {
   try {
@@ -265,18 +284,37 @@ function ownToken() {
   return null;
 }
 
-function choose() {
+/// Chooses the Mac to control; `event` is "auto" when the page does it by itself, as when
+/// playback moves, and "picked" when the owner picks one.
+function choose(event = "auto") {
   const next = chooseMac(
     Array.from(macs.values()).map((mac) => ({
       id: mac.id, paired: mac.paired, state: mac.state ? mac.state.state : null,
-      lastPlayedAt: mac.state ? mac.state.lastPlayedAt : undefined,
+      playedAgo: startedAgo(mac.state, mac.arrivedAt, Date.now()),
     })),
     { picked, lastControlled: load(LAST, null), own: ownID }
   );
   if (next !== chosenID) {
     chosenID = next;
-    libraryChanged();
+    // The queue and Now Playing are the chosen Mac's at once.
+    queueView.stamp = null;
+    if (!$("view-queue").hidden) queueView.reload();
   }
+  bindLibrary(event);
+}
+
+/// The Mac Browse and Search read from: the chosen one unless the page switched by itself.
+let libraryID = null;
+
+function library() {
+  return libraryID ? macs.get(libraryID) ?? null : null;
+}
+
+function bindLibrary(event) {
+  const bound = libraryMac(libraryID, chosenID, event);
+  if (bound === libraryID) return;
+  libraryID = bound;
+  libraryChanged();
 }
 
 function stateChanged(mac) {
@@ -347,9 +385,10 @@ $("pair-cancel").addEventListener("click", closePairing);
 
 // MARK: Commands.
 
-async function command(name, argument) {
-  const mac = chosen();
-  if (!mac) return;
+/// Runs a command on `mac`, the chosen one unless a list from another Mac's library asks;
+/// whether the Mac took it.
+async function command(name, argument, mac = chosen()) {
+  if (!mac) return false;
   save(LAST, mac.id);
   try {
     const body = argument === undefined ? { name } : { name, argument: String(argument) };
@@ -358,10 +397,12 @@ async function command(name, argument) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!response.ok) say(await problem(response));
+    if (response.ok) return true;
+    say(await problem(response));
   } catch (error) {
     say(error.message);
   }
+  return false;
 }
 
 // MARK: Covers, fetched with the token and shown from blobs, kept by URL.
@@ -491,16 +532,20 @@ class VirtualList {
 
 /// A list read a range at a time by position: the tracks of a filter, or the queue.
 class RangedSource {
-  constructor(path, render, onPage) {
+  constructor(path, render, onPage, mac = chosen()) {
     this.path = path;
     this.renderRow = render;
     this.onPage = onPage;
     this.cache = new RangeCache();
-    this.loading = new Set();
+    /// The fetches out, by start, each with its `AbortController`.
+    this.loading = new Map();
     this.count = 0;
     this.wanted = [];
     this.list = null;
-    this.mac = chosen();
+    this.mac = mac;
+    /// The tag and length the ranges held were read under, null before the first came.
+    this.held = null;
+    this.settle = 0;
   }
 
   total() {
@@ -513,26 +558,49 @@ class RangedSource {
     return rows ? rows[index - start] : undefined;
   }
 
+  /// Rows `first` to `last` are on screen: once scrolling has settled, fetch what they want.
+  /// During a fast flick nothing is fetched, and the rows show as placeholders.
   need(first, last) {
     this.wanted = wantedRanges(first, last, this.count);
     for (const start of this.wanted) this.cache.get(start);
-    for (const start of this.wanted) this.load(start);
+    clearTimeout(this.settle);
+    this.settle = setTimeout(() => this.fetch(), SETTLE_MS);
+  }
+
+  fetch() {
+    const plan = planFetches(this.wanted, (start) => this.cache.has(start), Array.from(this.loading.keys()));
+    for (const start of plan.abort) {
+      this.loading.get(start).abort();
+      this.loading.delete(start);
+    }
+    for (const start of plan.start) this.load(start);
   }
 
   load(start) {
-    if (this.cache.has(start) || this.loading.has(start) || !this.mac) return;
-    this.loading.add(start);
+    if (!this.mac) return;
+    const controller = new AbortController();
+    this.loading.set(start, controller);
     const separator = this.path.includes("?") ? "&" : "?";
-    this.mac.json(this.path + separator + "offset=" + start + "&limit=" + RANGE_SIZE).then(
+    this.mac.json(this.path + separator + "offset=" + start + "&limit=" + RANGE_SIZE, { signal: controller.signal }).then(
       (page) => {
+        if (this.loading.get(start) !== controller) return;
         this.loading.delete(start);
         if (this.onPage && this.onPage(page) === false) return;
-        const grew = page.total !== this.count;
+        if (listChanged(this.held, page)) {
+          // The library or the list changed: what's held is of another list. The scroll
+          // position stays, and what's in view is read again.
+          for (const other of this.loading.values()) other.abort();
+          this.loading.clear();
+          this.cache = new RangeCache();
+        }
+        this.held = { stamp: page.stamp, total: page.total };
         this.count = page.total;
-        if (keepsArrival(start, this.wanted) || grew) this.cache.put(start, page.rows);
+        if (keepsArrival(start, this.wanted)) this.cache.put(start, page.rows);
         if (this.list) this.list.refresh();
+        this.fetch();
       },
       (error) => {
+        if (controller.signal.aborted) return;
         this.loading.delete(start);
         say(error.message);
       }
@@ -559,16 +627,9 @@ async function wholeList(mac, path) {
   return body;
 }
 
-function fillRow(element, { line1, line2, cover: coverID, add, placeholder }) {
+function fillRow(element, { line1, line2, add, placeholder }) {
   element.replaceChildren();
   element.classList.toggle("placeholder", !!placeholder);
-  if (coverID !== undefined) {
-    const image = document.createElement("img");
-    image.className = "thumb";
-    image.alt = "";
-    element.appendChild(image);
-    showCover(image, chosen(), coverID, "s");
-  }
   const texts = document.createElement("div");
   texts.className = "texts";
   const first = document.createElement("div");
@@ -757,7 +818,9 @@ const queueView = {
 
   edit(name, ...places) {
     if (this.selected === null || this.stamp === null) return;
-    command(name, [this.stamp, ...places].join(":"));
+    command(name, [this.stamp, ...places].join(":")).then((accepted) => {
+      if (afterQueueEdit(accepted) === "reload") this.reload();
+    });
     this.selected = null;
     $("queue-actions").hidden = true;
   },
@@ -805,7 +868,8 @@ function openLevel(next) {
 
 function showLevel() {
   const current = level();
-  const mac = chosen();
+  const mac = library();
+  renderLibraryName();
   $("back").hidden = browse.stack.length <= 1;
   $("kinds").hidden = browse.stack.length > 1;
   $("browse-title").textContent = current.title;
@@ -836,8 +900,11 @@ function showEntries(current, mac) {
   $("browse-list").replaceChildren(empty("Loading"));
   wholeList(mac, path).then(
     (list) => {
-      if (level() !== shown || chosen() !== mac) return;
-      const rows = list.rows;
+      if (level() !== shown || library() !== mac) return;
+      // An artist's albums start with all of the artist's songs.
+      const rows = current.kind === "albums" && current.filter.artist != null
+        ? [ALL_SONGS].concat(list.rows)
+        : list.rows;
       if (rows.length === 0) return $("browse-list").replaceChildren(empty("Nothing here"));
       const source = {
         total: () => rows.length,
@@ -845,7 +912,10 @@ function showEntries(current, mac) {
         need: () => {},
         render: (element, row) => {
           fillRow(element, { line1: row[1], line2: current.kind === "albums" ? row[2] ?? "" : undefined });
-          element.onclick = () => enter(current, row);
+          element.onclick = () =>
+            row === ALL_SONGS
+              ? openLevel({ kind: "tracks", title: current.title, filter: { artist: current.filter.artist, sort: "album" } })
+              : enter(current, row);
         },
       };
       browse.list = new VirtualList($("browse-list"), source, ROW, current.scroll ?? 0);
@@ -854,6 +924,8 @@ function showEntries(current, mac) {
     (error) => $("browse-list").replaceChildren(empty(error.message))
   );
 }
+
+const ALL_SONGS = [null, "All Songs", null];
 
 function enter(current, row) {
   const [id, name] = row;
@@ -872,20 +944,17 @@ function showTracks(current, mac) {
     fillRow(element, {
       line1: row[1],
       line2: current.album ? row[2] ?? "" : joined(row[2], row[3]),
-      add: row[0] != null ? () => command("playback.queueTracks", "tracks:" + row[0]) : null,
+      add: row[0] != null ? () => command("playback.queueTracks", "tracks:" + row[0], mac) : null,
     });
     element.onclick = () => {
-      if (current.album && row[0] != null) {
-        command("playback.playTracks", "album:" + current.album + ":" + row[0]);
-      } else {
-        const argument = tracksFrom(index, source.count, (position) => source.row(position), TRACKS_PER_COMMAND);
-        if (argument) command("playback.playTracks", argument);
-      }
+      if (row[0] == null) return;
+      if (current.album) command("playback.playTracks", "album:" + current.album + ":" + row[0], mac);
+      // The whole list, as the Mac reads it, from this track.
+      else command("playback.playList", playListArgument(current.filter, row[0]), mac);
     };
-  });
+  }, null, mac);
   // The length it had, so the place Back returns to is in the list before its first range.
   source.count = current.total ?? 1;
-  source.mac = mac;
   browse.list = new VirtualList($("browse-list"), source, ROW, current.scroll ?? 0);
   source.list = browse.list;
 }
@@ -897,7 +966,7 @@ function showGrid(current, mac) {
   $("browse-list").replaceChildren(empty("Loading"));
   wholeList(mac, "/api/albums").then(
     (list) => {
-      if (level() !== shown || chosen() !== mac) return;
+      if (level() !== shown || library() !== mac) return;
       const albums = list.rows;
       const across = Math.max(2, Math.floor(($("browse-list").clientWidth - 24) / 150));
       const width = ($("browse-list").clientWidth - 24 - (across - 1) * 12) / across;
@@ -983,7 +1052,11 @@ const kinds = {
   songs: { kind: "tracks", title: "Songs", filter: { sort: "artist" } },
 };
 
+/// Browse's top, where it follows the chosen Mac again.
 function chooseKind(kind) {
+  const bound = libraryMac(libraryID, chosenID, "top");
+  if (bound !== libraryID) $("results").replaceChildren();
+  libraryID = bound;
   browse.kind = kind;
   for (const button of $("kinds").children) button.classList.toggle("chosen", button.dataset.kind === kind);
   browse.stack = [Object.assign({}, kinds[kind])];
@@ -996,10 +1069,11 @@ $("kinds").addEventListener("click", (event) => {
 });
 $("back").addEventListener("click", () => {
   if (browse.stack.length > 1) browse.stack.pop();
+  if (browse.stack.length === 1) return chooseKind(browse.kind);
   showLevel();
 });
-$("browse-play").addEventListener("click", () => command("playback.playTracks", "album:" + level().album));
-$("browse-queue").addEventListener("click", () => command("playback.queueTracks", "album:" + level().album));
+$("browse-play").addEventListener("click", () => command("playback.playTracks", "album:" + level().album, library()));
+$("browse-queue").addEventListener("click", () => command("playback.queueTracks", "album:" + level().album, library()));
 
 // MARK: Search.
 
@@ -1021,25 +1095,43 @@ function searchTyped() {
 }
 
 function runSearch(text) {
-  const mac = chosen();
+  const mac = library();
   if (!mac || !mac.paired) return;
   mac.json("/api/search?q=" + encodeURIComponent(text)).then(
-    // A reply from a Mac no longer chosen is about another library.
-    (found) => searched(text, chosen() === mac ? found : null),
+    // A reply from a Mac Search no longer reads is about another library.
+    (found) => searched(text, library() === mac ? found : null, mac),
     (error) => {
-      searched(text, null);
+      searched(text, null, mac);
       say(error.message);
     }
   );
 }
 
-function searched(text, found) {
+function searched(text, found, mac) {
   const { show, next } = searches.answered(text);
-  if (show && found) showResults(found);
+  if (show && found) showResults(found, text, mac);
   if (next !== null) runSearch(next);
 }
 
-function showResults(found) {
+/// Browse at Artists on `mac`'s library, where a search result was found, whichever Mac is
+/// chosen.
+function browseFrom(mac) {
+  libraryID = mac.id;
+  browse.kind = "artists";
+  for (const button of $("kinds").children) button.classList.toggle("chosen", button.dataset.kind === "artists");
+  browse.stack = [Object.assign({}, kinds.artists)];
+  showView("browse");
+}
+
+/// Says whose library Browse and Search show when it isn't the chosen Mac's.
+function renderLibraryName() {
+  const mac = library();
+  const text = mac && mac.id !== chosenID ? "On " + mac.name : "";
+  $("library-name").textContent = text;
+  $("search-library").textContent = text;
+}
+
+function showResults(found, text, mac) {
   const results = $("results");
   results.replaceChildren();
   const section = (title, rows, fill) => {
@@ -1057,16 +1149,14 @@ function showResults(found) {
   section("Artists", found.artists, (element, row) => {
     fillRow(element, { line1: row[1] });
     element.onclick = () => {
-      showView("browse");
-      chooseKind("artists");
+      browseFrom(mac);
       enter(level(), row);
     };
   });
   section("Albums", found.albums, (element, row) => {
     fillRow(element, { line1: row[1], line2: row[2] ?? "" });
     element.onclick = () => {
-      showView("browse");
-      chooseKind("artists");
+      browseFrom(mac);
       enter({ kind: "albums" }, row);
     };
   });
@@ -1074,9 +1164,10 @@ function showResults(found) {
     fillRow(element, {
       line1: row[1],
       line2: joined(row[2], row[3]),
-      add: () => command("playback.queueTracks", "tracks:" + row[0]),
+      add: () => command("playback.queueTracks", "tracks:" + row[0], mac),
     });
-    element.onclick = () => command("playback.playTracks", "tracks:" + row[0]);
+    // The search's whole list of songs, in the order it lists them, from this one.
+    element.onclick = () => command("playback.playList", playListArgument({ q: text, sort: "artist" }, row[0]), mac);
   });
   if (results.children.length === 0) results.appendChild(empty("Nothing found"));
 }
@@ -1104,12 +1195,11 @@ function libraryChanged() {
   browse.stack = [];
   browse.list = null;
   $("results").replaceChildren();
-  queueView.stamp = null;
   if (!$("view-browse").hidden) chooseKind(browse.kind);
-  if (!$("view-queue").hidden) queueView.reload();
 }
 
 function renderStrip() {
+  renderLibraryName();
   const strip = $("macs");
   const auto = $("auto");
   auto.hidden = picked === null;
@@ -1130,7 +1220,7 @@ function renderStrip() {
     button.onclick = () => {
       if (!mac.paired) return askToPair(mac);
       picked = mac.id;
-      choose();
+      choose("picked");
       render();
     };
     buttons.push(button);
@@ -1140,7 +1230,7 @@ function renderStrip() {
 
 $("auto").addEventListener("click", () => {
   picked = null;
-  choose();
+  choose("picked");
   render();
 });
 
