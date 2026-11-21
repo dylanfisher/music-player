@@ -187,7 +187,10 @@ public final class RemoteServer: @unchecked Sendable {
             if error != nil { return end(client) }
             // A stream's client has nothing more to send; whatever it sends is dropped.
             if client.streaming { client.received = [] }
+            // Past a whole request's most, the client is sending ahead of its replies; while a
+            // reply is pending, a second one can't go before it, so it just closes.
             if client.received.count > RemoteRules.headBytes + RemoteRules.bodyBytes {
+                guard !client.busy else { return end(client) }
                 return reply(client, RemoteReply(.payloadTooLarge), close: true)
             }
             if isComplete { client.peerClosed = true }
