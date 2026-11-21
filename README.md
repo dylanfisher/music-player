@@ -56,6 +56,13 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   shows a tile per check with its count over the track table, in the browser columns' place;
   a tile lists its tracks below. It runs after a scan and on Show Library Health. ⌘R reveals the selected tracks
   in Searcher, or in Finder when Searcher isn't installed or the File Viewer setting says so.
+- **Recommendations…** (File menu) shows music-recommender's lists of albums the library
+  doesn't have: the library's, or one album's or artist's from the selection, with their
+  filters and orders. **Show Discography** lists every album a Discogs artist is a main artist
+  on, owned and marked ones included, sorted by year, title or a community value: from the
+  track menu for the selected track's release, from a recommendation's menu, or with **Show
+  Discography…**, which takes a pasted Discogs release, master or artist link
+  ([ADR 0217](docs/decisions/0217-an-artists-discography.md)).
 - **Sync Folder** (Settings): Macs that play the same library on a share share their plays,
   ratings, loved tracks, playlists, Date Added and where downloads came from through a folder outside the music, where
   each writes only its own log. They sync at launch, after each rescan and on wake; a Mac
