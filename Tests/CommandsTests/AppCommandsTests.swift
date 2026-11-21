@@ -57,6 +57,7 @@ import Testing
         .playPause, .play, .pause, .nextTrack, .previousTrack, .seekForward, .seekBack,
         .seekForwardPercent, .seekBackPercent, .seekTo, .volumeUp, .volumeDown,
         .setAppVolume, .chooseOutput, .stop, .shuffle, .repeatOff, .repeatAll, .repeatOne,
+        .playTracks, .queueTracks, .moveInQueue, .removeFromQueueAt,
     ]
     #expect(
         remote
@@ -76,6 +77,25 @@ import Testing
     #expect(CommandArgument.decibels("-61", in: -60...0) == nil)
 }
 
+@Test func playTracksTakesIDsOrAnAlbumAndTheQueueEditsAStampAndPositions() {
+    #expect(CommandArgument.tracks("tracks:3,1,2", startAllowed: false) == .tracks([3, 1, 2]))
+    #expect(CommandArgument.tracks("album:7", startAllowed: false) == .album(7, start: nil))
+    #expect(CommandArgument.tracks("album:7:9", startAllowed: true) == .album(7, start: 9))
+    let tooMany = (1...(CommandArgument.maximumTracks + 1)).map(String.init).joined(separator: ",")
+    for text in [
+        "album:7:9", "tracks:", "tracks:1,", "tracks:0", "tracks:-1", "tracks: 1", "album:",
+        "album:7:", "album:7:9:1", "albums:7", "7", "tracks:" + tooMany,
+        "tracks:1234567890123456789",
+    ] {
+        #expect(CommandArgument.tracks(text, startAllowed: false) == nil, "\(text)")
+    }
+    #expect(CommandArgument.queuePlaces("4:0:2", count: 2)?.places == [0, 2])
+    #expect(CommandArgument.queuePlaces("4:0", count: 1)?.stamp == 4)
+    for text in ["4:0", "4:0:1:2", "4::1", ":0:1", "4:+1:2", "4:a:1"] {
+        #expect(CommandArgument.queuePlaces(text, count: 2) == nil, "\(text)")
+    }
+}
+
 /// Any web page can open a link, so this list is the whole of what one can do (ADR 0036).
 @Test func onlyPlaybackAndNavigationRunFromLinks() {
     let linked = Set(AppCommands.all().filter(\.runsFromLinks).map(\.id))
@@ -88,7 +108,10 @@ import Testing
         ])
     #expect(
         AppCommands.all().filter { $0.argument != nil }.map(\.id)
-            == [.showStats, .play, .seekTo, .setAppVolume, .chooseOutput, .receiverSetVolume])
+            == [
+                .showStats, .play, .seekTo, .setAppVolume, .chooseOutput, .playTracks,
+                .queueTracks, .moveInQueue, .removeFromQueueAt, .receiverSetVolume,
+            ])
     #expect(AppCommands.all().filter(\.replies).map(\.id) == [.showStats, .showSpectrum])
     #expect(AppCommands.all().filter(\.takesPaths).map(\.id) == [.showSpectrum])
 }

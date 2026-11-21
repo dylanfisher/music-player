@@ -213,3 +213,37 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     try library.index().recordPlay(path, at: 3000)
     #expect(try index.trackTotals(ids: [ids[0]]).sizeBytes > 0)
 }
+
+@Test func aWindowOfTrackNamesIsThatSliceOfTheWholeListAndTheCountItsLength() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let genre = try #require(try index.genres().first)
+    for filter in [TrackFilter(), TrackFilter(genre: genre.id), TrackFilter(search: "zzzz")] {
+        for column in [TrackColumn.artist, .title, .album] {
+            let whole = try index.trackNames(filter, sortedBy: column, ascending: false)
+            #expect(try index.trackCount(filter) == whole.count)
+            for window in [0..<5, 3..<9, whole.count..<(whole.count + 5)] {
+                let part = try index.trackNames(
+                    filter, sortedBy: column, ascending: false, window: window)
+                #expect(part == Array(whole[window.clamped(to: 0..<whole.count)]))
+            }
+        }
+    }
+}
+
+@Test func eachAlbumWithArtGivesItsFirstTrackWithArt() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/m/a/2.flac", album: "A", disc: 1, number: 2).scanned,
+        Crafted(path: "/m/a/1.flac", album: "A", disc: 1, number: 1, art: false).scanned,
+        Crafted(path: "/m/a/3.flac", album: "A", disc: 2, number: 1).scanned,
+        Crafted(path: "/m/b/1.flac", album: "B", number: 1, art: false).scanned,
+        Crafted(path: "/m/c/9.flac", album: "C", number: 9).scanned,
+    ])
+    let albums = Dictionary(uniqueKeysWithValues: try index.albums().map { ($0.name, $0.id) })
+    let found = try index.artTracks(albumIDs: Array(albums.values))
+    let paths = try index.paths(ids: Array(found.values))
+    #expect(found.count == 2)
+    #expect(albums["A"].flatMap { found[$0] }.flatMap { paths[$0] } == "/m/a/2.flac")
+    #expect(albums["C"].flatMap { found[$0] }.flatMap { paths[$0] } == "/m/c/9.flac")
+}

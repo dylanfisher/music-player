@@ -86,14 +86,15 @@ extension LibraryIndex {
 
     /// The names of the tracks `trackIDs` gives, in the same order, for Go to Item and
     /// type-to-select.
+    /// `window` reads only those positions, as the web remote reads a list a range at a time.
     public func trackNames(
         _ filter: TrackFilter = TrackFilter(), sortedBy column: TrackColumn,
-        ascending: Bool = true
+        ascending: Bool = true, window: Range<Int>? = nil
     ) throws -> [TrackName] {
         let sortArtist = filter.groupByAlbumArtist ? "ga" : "ar"
         return try orderedTracks(
             "t.file_id, f.path, t.title, ar.name, al.title, g.name, \(sortArtist).name", filter,
-            column, ascending
+            column, ascending, window: window
         ) { row in
             let path = try row.text(1)
             return TrackName(
@@ -103,14 +104,28 @@ extension LibraryIndex {
         }
     }
 
-    private func orderedTracks<T>(
-        _ columns: String, _ filter: TrackFilter, _ column: TrackColumn, _ ascending: Bool,
-        _ read: (Row) throws -> T
-    ) throws -> [T] {
+    /// How many tracks `filter` lets through, as `trackIDs` would list them.
+    public func trackCount(_ filter: TrackFilter) throws -> Int {
+        let (conditions, values) = try orderedConditions(filter)
+        return try statement(
+            "SELECT count(*) FROM tracks t \(trackJoins) \(whereClause(conditions))"
+        ).map(binding: values) { try $0.int(0) }[0]
+    }
+
+    private func orderedConditions(_ filter: TrackFilter) throws -> (
+        [String], [(any SQLiteValue)?]
+    ) {
         let selected = BrowserGrouping.allCases.filter { filter.selections[$0] != nil }
-        let (conditions, values) = try trackConditions(
+        return try trackConditions(
             filter, panes: [.source] + selected.map(FilterPart.selection) + [.search],
             playsJoined: true)
+    }
+
+    private func orderedTracks<T>(
+        _ columns: String, _ filter: TrackFilter, _ column: TrackColumn, _ ascending: Bool,
+        window: Range<Int>? = nil, _ read: (Row) throws -> T
+    ) throws -> [T] {
+        let (conditions, values) = try orderedConditions(filter)
         // Playlist order is the shown playlist's; anywhere else it's null, which leaves the
         // album order below.
         var entries = ""
@@ -164,8 +179,10 @@ extension LibraryIndex {
             \(releaseJoin)
             \(whereClause(conditions))
             ORDER BY \(order), \(tieBreak)
+            \(window == nil ? "" : "LIMIT ? OFFSET ?")
             """
-        return try statement(sql).map(binding: entryValues + values, row: read)
+        let windowValues: [(any SQLiteValue)?] = window.map { [$0.count, $0.lowerBound] } ?? []
+        return try statement(sql).map(binding: entryValues + values + windowValues, row: read)
     }
 
     /// The genres of the tracks in `filter`'s source.
@@ -324,6 +341,24 @@ extension LibraryIndex {
             ids, { "SELECT id, path FROM files WHERE id IN (\($0))" },
             { (Int64(try $0.int(0)), try $0.text(1)) })
         // An ID asked for in two chunks comes back from both.
+        return Dictionary(found, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// For each of `albumIDs` with art, one of its tracks that has some, the first by disc and
+    /// track number, for the web remote's album grid.
+    public func artTracks(albumIDs: [Int64]) throws -> [Int64: Int64] {
+        let found = try inChunks(
+            albumIDs,
+            {
+                // SQLite takes the bare `file_id` from the row `min` picks.
+                """
+                SELECT album_id, file_id,
+                    min(ifnull(disc_number, 0) * 100000 + ifnull(track_number, 0))
+                FROM tracks WHERE art_offset IS NOT NULL AND album_id IN (\($0))
+                GROUP BY album_id
+                """
+            },
+            { (Int64(try $0.int(0)), Int64(try $0.int(1))) })
         return Dictionary(found, uniquingKeysWith: { first, _ in first })
     }
 

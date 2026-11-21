@@ -171,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         maxPixelSize: artPixels, capacity: artCacheImages, read: SharedArtRead().read)
     private(set) lazy var recommendations = makeRecommendations()
     /// The art column's thumbnails, kept between launches (ADR 0079).
-    private lazy var thumbnails = ThumbnailStore(directory: paths.thumbnailDirectory)
+    private(set) lazy var thumbnails = ThumbnailStore(directory: paths.thumbnailDirectory)
     /// The Spectrum window's spectrograms, kept beside the thumbnails (ADR 0115).
     lazy var spectrograms = SpectrogramStore(directory: paths.spectrogramDirectory)
     /// Made on first use by `measuresCache()`, `fileAnalyzer()` and `libraryPass()`.
@@ -830,17 +830,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func play(_ request: PlayRequest) {
+    private func play(_ request: PlayRequest) { play(request.urls, first: request.first) }
+    /// Plays `urls` from `first` as a new queue.
+    func play(_ urls: [URL], first: Int) {
         guard let engine else { return }
-        guard request.urls.indices.contains(request.first) else {
-            fail("Couldn't play", PlayRequestError.noStart(request.first, of: request.urls.count))
+        guard urls.indices.contains(first) else {
+            fail("Couldn't play", PlayRequestError.noStart(first, of: urls.count))
             return
         }
         // Through `play(starting:)`, so the output keeps the device open (ADR 0078).
         Task {
-            let filling = await engine.play(starting: request.urls[request.first]) {
-                (request.urls, request.first)
-            }
+            let filling = await engine.play(starting: urls[first]) { (urls, first) }
             do {
                 try await filling.value
             } catch {

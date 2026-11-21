@@ -124,11 +124,15 @@ public final class CacheFolder: @unchecked Sendable {
 
     /// The file for `key`, named by a 128-bit hash of its parts.
     public func fileURL(_ key: [String]) -> URL {
+        directory.appendingPathComponent(Self.name(key), isDirectory: false)
+    }
+
+    /// A 128-bit hash of `key`'s parts, as 32 hex digits: the name of its file.
+    public static func name(_ key: [String]) -> String {
         let bytes = Array(key.joined(separator: "\u{0}").utf8)
         let hash = fnv1a(bytes, basis: 0xcbf2_9ce4_8422_2325)
         let second = fnv1a(bytes, basis: 0x8422_2325_cbf2_9ce4)
-        return directory.appendingPathComponent(
-            String(format: "%016llx%016llx", hash, second), isDirectory: false)
+        return String(format: "%016llx%016llx", hash, second)
     }
 
     /// Reports `message`, unless the session has reported `reportedFailures` already.

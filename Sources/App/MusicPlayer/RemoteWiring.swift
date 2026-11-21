@@ -1,5 +1,6 @@
 import Commands
 import Foundation
+import Library
 import LocalNetwork
 import Log
 import Network
@@ -46,28 +47,29 @@ extension AppDelegate {
             browser?.report("The web remote can't start: the Mac has no computer name")
             return nil
         }
-        guard
-            let url = Bundle.main.url(
-                forResource: "index.html", withExtension: nil, subdirectory: "Remote")
-        else {
+        guard let folder = Bundle.main.url(forResource: "Remote", withExtension: nil) else {
             browser?.report("The web remote can't start: its page isn't in the app")
             return nil
         }
-        let page: Data
+        let page: RemotePage
         do {
-            page = try Data(contentsOf: url)
+            page = try RemotePage(folder: folder)
         } catch {
-            browser?.report("The web remote can't read its page: \(error)")
+            browser?.report("The web remote can't start: \(error)")
             return nil
         }
+        guard let library = remoteLibrary() else { return nil }
         return RemoteService(
-            identity: identity, devices: devices, page: Array(page),
+            identity: identity, devices: devices, page: page, library: library,
             state: { [weak self] in
                 await self?.remoteState(identity)
                     ?? RemoteState(
                         identity: identity, playback: PlaybackState(), position: nil,
                         readAt: Date().timeIntervalSince1970, track: nil, queue: RemoteQueueStamp(),
                         volumeDecibels: nil, output: nil, receiver: nil)
+            },
+            queue: { [weak self] in
+                await self?.remoteQueue() ?? RemoteQueue(stamp: 0, paths: [], position: nil)
             },
             run: { [weak self] id, argument in
                 await self?.runFromRemote(id, argument) ?? .failed("the app is quitting")
@@ -85,6 +87,44 @@ extension AppDelegate {
             state[\.remoteDevices], save: { try state.set(\.remoteDevices, to: $0) })
         remote.devices = made
         return made
+    }
+
+    /// The remote's library reads, made on first use and kept for the launch, which Play
+    /// Tracks and Queue Tracks resolve through whether the remote is on or not.
+    private func remoteLibrary() -> RemoteLibrary? {
+        if let library = remote.library { return library }
+        guard let settings else { return nil }
+        let made = RemoteLibrary(
+            databaseURL: libraryFileURL(in: paths.dataDirectory), thumbnails: thumbnails,
+            groupByAlbumArtist: settings[\.groupByAlbumArtist])
+        remote.library = made
+        return made
+    }
+
+    /// Play Tracks' or, `queueing`, Queue Tracks' argument, from the remote or the command line.
+    func playTracks(_ text: String, queueing: Bool) async throws -> String? {
+        guard let library = remoteLibrary() else { throw RemoteNotReady() }
+        let files = try await library.files(argument: text, queueing: queueing)
+        if queueing { addToQueue(files.urls) } else { play(files.urls, first: files.first) }
+        return nil
+    }
+
+    /// Move in Queue's (`moving`) or Remove from Queue at's argument.
+    func editQueue(_ text: String, moving: Bool) async throws -> String? {
+        guard let engine else { throw RemoteNotReady() }
+        switch try remote.queue.edit(text, moving: moving, count: playback.order.count) {
+        case .move(let from, let before): await engine.moveQueueItems([from], to: before)
+        case .remove(let at): await engine.removeQueueItems([at])
+        }
+        return nil
+    }
+
+    /// The queue in play order, as `/api/queue` reads it.
+    private func remoteQueue() -> RemoteQueue {
+        let state = playback
+        return RemoteQueue(
+            stamp: remote.queue.stamp, paths: state.order.map { state.queue[$0].path },
+            position: state.currentIndex.flatMap { state.order.firstIndex(of: $0) })
     }
 
     /// Starts the service on the interfaces the Mac has now and `remote.port`, unless it runs
@@ -143,7 +183,8 @@ extension AppDelegate {
                 try trackLookup?(path).map { row in
                     RemoteState.Track(
                         id: row.id, albumID: row.albumID, title: row.title, artist: row.artist,
-                        album: row.album, durationSeconds: row.durationSeconds)
+                        album: row.album, durationSeconds: row.durationSeconds,
+                        art: RemoteLibrary.artID(row))
                 }
             }
         } catch {
@@ -153,6 +194,7 @@ extension AppDelegate {
             identity: identity, playback: state, position: position,
             readAt: Date().timeIntervalSince1970, track: track, queue: remote.queue,
             volumeDecibels: canSetVolume ? volumeDecibels : nil,
+            volumeFloorDecibels: MainToolbar.volumeRangeDecibels.lowerBound,
             output: RemoteState.Output(current: currentOutput, among: outputOptionsNow()),
             receiver: receiver.map { RemoteState.Receiver($0.state) })
     }
@@ -173,4 +215,11 @@ final class RemoteParts {
     var devices: RemoteDeviceRegistry?
     /// The current track as the state names it.
     var track = RemoteTrackCache()
+    /// The library's reads for the remote and its track commands, made on first use.
+    var library: RemoteLibrary?
+}
+
+/// A track or queue command came before the app had its library or engine.
+private struct RemoteNotReady: Error, CustomStringConvertible {
+    var description: String { "the app's library and playback aren't ready yet" }
 }

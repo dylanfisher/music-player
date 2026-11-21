@@ -33,10 +33,10 @@ private final class Fixture: @unchecked Sendable {
                 let text =
                     "\(request.method) \(request.path) \(request.query ?? "-") "
                     + String(decoding: request.body, as: UTF8.self)
-                let size = request.path == "/big" ? 4000 : 0
+                let size = request.path == "/big" || request.path == "/picture" ? 4000 : 0
                 return .reply(
                     RemoteReply(
-                        .ok, contentType: "text/plain",
+                        .ok, contentType: request.path == "/picture" ? "image/jpeg" : "text/plain",
                         body: Array((text + String(repeating: "x", count: size)).utf8)))
             },
             problem: { [self] message in lock.withLock { heard.append(message) } },
@@ -241,6 +241,8 @@ private final class Fixture: @unchecked Sendable {
     #expect(!refused.head.contains("Content-Encoding"))
     let small = try await fixture.get("/small", "Accept-Encoding: gzip\r\n")
     #expect(!small.head.contains("Content-Encoding"))
+    let picture = try await fixture.get("/picture", "Accept-Encoding: gzip\r\n")
+    #expect(!picture.head.contains("Content-Encoding"))
 }
 
 @Test func anEventStreamSendsEachEventAndIsStoppedWhenItsConnectionCloses() async throws {

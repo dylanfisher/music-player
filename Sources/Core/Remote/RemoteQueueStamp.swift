@@ -1,3 +1,4 @@
+import Commands
 import Foundation
 import Playback
 import Receiver
@@ -7,7 +8,7 @@ import Settings
 /// update, for the remote's state (ADR 0214): the page fetches the queue again only when the
 /// stamp moves, and chooses among Macs playing by the newest start.
 public struct RemoteQueueStamp: Sendable {
-    private(set) var stamp = 0
+    public private(set) var stamp = 0
     private(set) var lastPlayedAt: Double?
     private var queue: [URL] = []
     private var order: [Int] = []
@@ -26,6 +27,31 @@ public struct RemoteQueueStamp: Sendable {
         if now && !playing { lastPlayedAt = time }
         playing = now
     }
+
+    /// An edit Move in Queue (`moving`) or Remove from Queue at asks for, by positions in play
+    /// order of a queue `count` long. Throws when the stamp isn't the current one, since the
+    /// positions then name other tracks, or a position is past the queue.
+    public func edit(_ text: String, moving: Bool, count: Int) throws(RemoteRefusal) -> QueueEdit {
+        guard let asked = CommandArgument.queuePlaces(text, count: moving ? 2 : 1) else {
+            throw RemoteRefusal("\(text) isn't the queue's stamp and positions between colons")
+        }
+        guard asked.stamp == stamp else {
+            throw RemoteRefusal("the queue changed since it was read; read it again")
+        }
+        let from = asked.places[0]
+        guard from < count else { throw RemoteRefusal("the queue has no position \(from)") }
+        guard moving else { return .remove(from) }
+        let to = asked.places[1]
+        guard to <= count else { throw RemoteRefusal("the queue has no position \(to)") }
+        return .move(from, before: to)
+    }
+}
+
+/// An edit to the queue by positions in play order, as the engine takes them.
+public enum QueueEdit: Equatable, Sendable {
+    /// The track at the first position to just before the second, counted before the move.
+    case move(Int, before: Int)
+    case remove(Int)
 }
 
 extension RemoteState {
@@ -34,7 +60,7 @@ extension RemoteState {
     public init(
         identity: RemoteService.Identity, playback: PlaybackState, position: Double?,
         readAt: Double, track: Track?, queue: RemoteQueueStamp, volumeDecibels: Double?,
-        output: Output?, receiver: Receiver?
+        volumeFloorDecibels: Double? = nil, output: Output?, receiver: Receiver?
     ) {
         let state: Playing =
             switch playback.status {
@@ -52,8 +78,9 @@ extension RemoteState {
             queuePosition: playback.currentIndex.flatMap { index in
                 playback.order.firstIndex(of: index).map { $0 + 1 }
             }, shuffle: playback.shuffle, repeatMode: playback.repeatMode.rawValue,
-            volumeDecibels: volumeDecibels.flatMap { $0.isFinite ? $0 : nil }, output: output,
-            receiver: receiver, lastPlayedAt: queue.lastPlayedAt)
+            volumeDecibels: volumeDecibels.flatMap { $0.isFinite ? $0 : nil },
+            volumeFloorDecibels: volumeFloorDecibels, output: output, receiver: receiver,
+            lastPlayedAt: queue.lastPlayedAt)
     }
 }
 
@@ -71,7 +98,12 @@ extension RemoteState.Receiver {
     public init(_ said: ReceiverState) {
         self.init(
             isOn: said.isOn, volumeDecibels: said.volume?.decibels, isMuted: said.isMuted,
-            input: said.input?.rawValue)
+            input: said.input?.rawValue,
+            inputs: ReceiverInput.allCases.map {
+                Input(
+                    value: $0.rawValue, title: $0.title,
+                    command: CommandID.receiverInput($0).rawValue)
+            })
     }
 }
 

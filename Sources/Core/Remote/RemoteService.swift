@@ -84,11 +84,12 @@ public final class RemoteService: @unchecked Sendable {
     /// How long a listener stays ready before a loss counts as a first one again.
     static let steadySeconds = 60.0
 
-    /// `state` says what's playing now, `run` runs a command as `Origin.remote`, and `page`
-    /// is the web page's HTML.
+    /// `state` says what's playing now and `queue` what's queued, `run` runs a command as
+    /// `Origin.remote`, `page` is the web page's files and `library` reads the index.
     public init(
-        identity: Identity, devices: RemoteDeviceRegistry, page: [UInt8],
-        state: @escaping @Sendable () async -> RemoteState,
+        identity: Identity, devices: RemoteDeviceRegistry, page: RemotePage,
+        library: RemoteLibrary, state: @escaping @Sendable () async -> RemoteState,
+        queue: @escaping @Sendable () async -> RemoteQueue,
         run: @escaping @Sendable (CommandID, String?) async -> ScriptReply,
         advertiser: any BonjourAdvertising, browser: any BonjourBrowsing,
         problem: @escaping @Sendable (String) -> Void,
@@ -114,7 +115,8 @@ public final class RemoteService: @unchecked Sendable {
         devices.forgotten = { [weak hub] in hub?.drop(tokenHash: $0) }
         devices.reportSaveFailure = { problem("couldn't save when a device was last seen: \($0)") }
         api = RemoteAPI(
-            instanceID: identity.id, name: identity.name, page: page, pairing: pairing,
+            instanceID: identity.id, name: identity.name, page: page, library: library,
+            queue: queue, pairing: pairing,
             devices: devices, hub: hub, state: state, run: run,
             instances: { [weak self] in self?.instances ?? [] })
     }

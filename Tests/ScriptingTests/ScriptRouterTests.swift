@@ -39,6 +39,22 @@ private final class Recorder {
                 arguments.append(text)
                 return nil
             },
+            .playTracks: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
+            .queueTracks: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
+            .moveInQueue: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
+            .removeFromQueueAt: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
         ],
         reports: [
             .showStats: { [unowned self] text, _, json in

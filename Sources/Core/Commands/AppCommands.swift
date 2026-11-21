@@ -169,6 +169,14 @@ extension CommandID {
     public static let setAppVolume = CommandID("playback.setAppVolume")
     /// The output to play through, by `OutputChoice.text`, for the web remote.
     public static let chooseOutput = CommandID("output.chooseOutput")
+    /// Tracks by ID, or an album from a track, for the web remote's lists.
+    public static let playTracks = CommandID("playback.playTracks")
+    /// Tracks by ID, or an album, after those already queued, for the web remote's lists.
+    public static let queueTracks = CommandID("playback.queueTracks")
+    /// A track in the queue to another place, by position, for the web remote's Queue.
+    public static let moveInQueue = CommandID("queue.moveItem")
+    /// A track out of the queue by position, for the web remote's Queue.
+    public static let removeFromQueueAt = CommandID("queue.removeItem")
     public static let stop = CommandID("playback.stop")
     public static let shuffle = CommandID("playback.shuffle")
     public static let repeatOff = CommandID("playback.repeatOff")
@@ -220,6 +228,12 @@ public enum AppCommands {
     private static let seekToArgument = "a position in seconds"
     /// Set Volume's argument, as `CommandArgument.decibels` reads it.
     private static let appVolumeArgument = "a level in dB, 0 or under"
+    /// Move in Queue's argument, as `CommandArgument.queuePlaces` reads it.
+    private static let queueMoveArgument =
+        "the queue's stamp, the position from 0 and the position to move before, between colons"
+    /// Remove from Queue at's argument.
+    private static let queueRemoveArgument =
+        "the queue's stamp and a position from 0, between colons"
     /// How far Seek Forward and Back 5% or 30 s move: this percentage of the track's duration,
     /// or `seekStepMinimumSeconds` when that's longer or the duration is unknown.
     public static let seekStepPercent = 5
@@ -398,6 +412,18 @@ public enum AppCommands {
             Command(
                 .chooseOutput, "Choose Output", remote: true, argument: OutputChoice.textHelp,
                 menus: false),
+            Command(
+                .playTracks, "Play Tracks", remote: true,
+                argument: CommandArgument.playTracksHelp, menus: false),
+            Command(
+                .queueTracks, "Queue Tracks", remote: true,
+                argument: CommandArgument.queueTracksHelp, menus: false),
+            Command(
+                .moveInQueue, "Move in Queue", remote: true, argument: queueMoveArgument,
+                menus: false),
+            Command(
+                .removeFromQueueAt, "Remove from Queue at", remote: true,
+                argument: queueRemoveArgument, menus: false),
             Command(.shuffle, "Shuffle", links: true, remote: true),
             Command(.repeatOff, "Repeat Off", links: true, remote: true),
             Command(.repeatAll, "Repeat All", links: true, remote: true),

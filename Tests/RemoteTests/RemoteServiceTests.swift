@@ -1,3 +1,4 @@
+import Artwork
 import Commands
 import Foundation
 import Playback
@@ -51,9 +52,13 @@ private final class Fixture: @unchecked Sendable {
     let saves = Saves()
     var service: RemoteService!
 
+    var queued = RemoteQueue(stamp: 1, paths: [], position: nil)
+
     init(
         restartSleep: @escaping @Sendable (Double) async throws -> Void = { _ in },
-        now: @escaping @Sendable () -> Double = { 0 }
+        now: @escaping @Sendable () -> Double = { 0 },
+        databaseURL: URL = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "remote-\(UUID().uuidString).sqlite", isDirectory: false)
     ) {
         current = RemoteState(
             instance: ownID, name: "Studio", state: .paused, track: nil, positionSeconds: 10,
@@ -66,8 +71,16 @@ private final class Fixture: @unchecked Sendable {
                 save: { [saves] in
                     saves.save($0)
                 }),
-            page: Array("<html>remote</html>".utf8),
+            page: RemotePage(contents: [
+                "index.html": Array("<html>remote</html>".utf8), "app.js": Array("go()".utf8),
+            ]),
+            library: RemoteLibrary(
+                databaseURL: databaseURL,
+                thumbnails: ThumbnailStore(
+                    directory: databaseURL.deletingPathExtension().appendingPathExtension("art")),
+                groupByAlbumArtist: false),
             state: { [self] in lock.withLock { current } },
+            queue: { [self] in lock.withLock { queued } },
             run: { [self] id, argument in
                 lock.withLock { ran.append((id, argument)) }
                 return id == .removeTracks
@@ -84,6 +97,7 @@ private final class Fixture: @unchecked Sendable {
     var commands: [String] { lock.withLock { ran.map { "\($0.0) \($0.1 ?? "-")" } } }
     var problems: [String] { lock.withLock { heard } }
     func set(_ change: (inout RemoteState) -> Void) { lock.withLock { change(&current) } }
+    func queue(_ queue: RemoteQueue) { lock.withLock { queued = queue } }
 
     var port: UInt16 { service.listeningPort ?? 0 }
     var host: String { "127.0.0.1:\(port)" }
@@ -138,7 +152,11 @@ private final class Fixture: @unchecked Sendable {
     let routes = [
         ("GET", "/api/state"), ("GET", "/api/events"), ("GET", "/api/instances"),
         ("POST", "/api/command"), ("GET", "/api/nothing"), ("GET", "/secret"),
-        ("POST", "/api/state"),
+        ("POST", "/api/state"), ("GET", "/api/genres"), ("GET", "/api/artists"),
+        ("GET", "/api/albums"), ("GET", "/api/tracks?offset=0&limit=1"),
+        ("GET", "/api/search?q=a"), ("GET", "/api/covers?albums=1"),
+        ("GET", "/api/queue?offset=0&limit=1"), ("GET", "/api/art/s/1-00"),
+        ("GET", "/style.css/../index.html"),
     ]
     for (method, path) in routes {
         for sent in [nil, wrong, token.uppercased()] {
@@ -150,6 +168,9 @@ private final class Fixture: @unchecked Sendable {
         }
     }
     #expect(try await fixture.send("GET", "/").body == "<html>remote</html>")
+    #expect(try await fixture.send("GET", "/app.js").body == "go()")
+    // Only the files the page is made of: one that isn't in the bundle isn't served.
+    #expect(try await fixture.send("GET", "/style.css").status == 401)
     #expect(try await fixture.send("GET", "/api/nothing", token: token).status == 404)
     #expect(try await fixture.send("POST", "/api/state", token: token, body: "{}").status == 405)
 }
@@ -576,9 +597,13 @@ private final class Waits: @unchecked Sendable {
     var said = ReceiverState()
     said.isOn = true
     said.input = .cd
+    let receiver = RemoteState.Receiver(said)
+    #expect(receiver.isOn == true && receiver.input == "CD" && receiver.volumeDecibels == nil)
+    #expect(receiver.inputs.count == ReceiverInput.allCases.count)
     #expect(
-        RemoteState.Receiver(said)
-            == RemoteState.Receiver(isOn: true, volumeDecibels: nil, isMuted: nil, input: "CD"))
+        receiver.inputs.first { $0.value == "BD" }
+            == RemoteState.Receiver.Input(
+                value: "BD", title: ReceiverInput.bluRay.title, command: "receiver.inputBluRay"))
     var cache = RemoteTrackCache()
     var lookups = 0
     let track = RemoteState.Track(
@@ -603,4 +628,59 @@ private final class Waits: @unchecked Sendable {
             Issue.record("asked again")
             return nil
         } == nil)
+}
+
+@Test func thePagesFilesAndTheLibrarysListsAnswerTheirTagWithA304() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    let token = try await fixture.pair()
+    let page = try await fixture.send("GET", "/")
+    #expect(page.head.contains("Content-Security-Policy: default-src 'none'"))
+    let pageTag = try #require(page.head.split(separator: "\r\n").first { $0.hasPrefix("ETag: ") })
+    let cachedPage = try await fixture.send(
+        "GET", "/", fields: "If-None-Match: \(pageTag.dropFirst(6))\r\n")
+    #expect(cachedPage.status == 304)
+    let genres = try await fixture.send("GET", "/api/genres", token: token)
+    #expect(genres.status == 200)
+    #expect(genres.body == #"{"rows":[]}"#)
+    let tag = try #require(genres.head.split(separator: "\r\n").first { $0.hasPrefix("ETag: ") })
+    let cached = try await fixture.send(
+        "GET", "/api/genres", token: token, fields: "If-None-Match: \(tag.dropFirst(6))\r\n")
+    #expect(cached.status == 304)
+    #expect(cached.body.isEmpty)
+}
+
+@Test func theQueueComesARangeAtATimeInPlayOrderWithItsStamp() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    let token = try await fixture.pair()
+    fixture.queue(RemoteQueue(stamp: 7, paths: ["/m/One.flac", "/m/Two.flac"], position: 0))
+    let reply = try await fixture.send("GET", "/api/queue?offset=1&limit=5", token: token)
+    #expect(reply.status == 200)
+    #expect(
+        reply.body
+            == #"{"offset":1,"position":0,"rows":[[null,"Two",null,null]],"stamp":7,"total":2}"#)
+    #expect(reply.head.contains("Cache-Control: no-store"))
+    #expect(try await fixture.send("GET", "/api/queue?offset=0", token: token).status == 400)
+    #expect(try await fixture.send("POST", "/api/queue", token: token, body: "{}").status == 405)
+}
+
+@Test func aQueueEditNamesPositionsOfTheQueueAsItsStampSaysItWas() throws {
+    var stamp = RemoteQueueStamp()
+    var state = PlaybackState()
+    state.queue = [URL(fileURLWithPath: "/a.flac", isDirectory: false)]
+    state.order = [0]
+    stamp.note(state, at: 0)
+    let now = "\(stamp.stamp)"
+    #expect(try stamp.edit("\(now):0:1", moving: true, count: 3) == .move(0, before: 1))
+    #expect(try stamp.edit("\(now):2", moving: false, count: 3) == .remove(2))
+    #expect(try stamp.edit("\(now):1:3", moving: true, count: 3) == .move(1, before: 3))
+    for (text, moving) in [
+        ("\(stamp.stamp + 1):0", false), ("\(now):3", false), ("\(now):0:4", true),
+        ("\(now):0", true), ("\(now):0:1", false), ("\(now):-1", false), ("x:0", false),
+    ] {
+        #expect(throws: RemoteRefusal.self, "\(text)") {
+            try stamp.edit(text, moving: moving, count: 3)
+        }
+    }
 }

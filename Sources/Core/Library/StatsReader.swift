@@ -10,8 +10,7 @@ public actor StatsReader {
     private var firstPlays: (version: [Int], groupByAlbumArtist: Bool, plays: FirstPlays)?
 
     public init(databaseURL: URL) throws {
-        index = try LibraryIndex(at: databaseURL)
-        try index.database.execute(queryOnlySQL)
+        index = try LibraryIndex.queryOnly(at: databaseURL)
     }
 
     /// The report of `period` at `now` in `calendar`, its artists grouped as the Artists

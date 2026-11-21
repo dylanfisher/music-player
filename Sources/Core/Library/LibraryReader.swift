@@ -19,8 +19,7 @@ public actor LibraryReader {
 
     /// Read-only, so nothing written on it can race the edits on the first connection.
     private init(refreshing databaseURL: URL) throws {
-        index = try LibraryIndex(at: databaseURL)
-        try index.database.execute(queryOnlySQL)
+        index = try LibraryIndex.queryOnly(at: databaseURL)
         self.databaseURL = databaseURL
         refreshConnection = nil
     }
@@ -333,3 +332,12 @@ public actor LibraryReader {
 
 /// Makes a connection read-only, so nothing written on it can race another's edits.
 let queryOnlySQL = "PRAGMA query_only = ON"
+
+extension LibraryIndex {
+    /// A connection of its own that can't write, for a reader that only queries.
+    public static func queryOnly(at databaseURL: URL) throws -> LibraryIndex {
+        let index = try LibraryIndex(at: databaseURL)
+        try index.database.execute(queryOnlySQL)
+        return index
+    }
+}

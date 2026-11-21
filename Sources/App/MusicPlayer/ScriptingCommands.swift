@@ -33,6 +33,16 @@ extension AppDelegate {
                 .seekTo: { [weak self] text in try await self?.seek(to: text) },
                 .setAppVolume: { [weak self] text in try self?.setAppVolume(text) },
                 .chooseOutput: { [weak self] text in try self?.chooseOutput(text: text) },
+                .playTracks: { [weak self] text in
+                    try await self?.playTracks(text, queueing: false)
+                },
+                .queueTracks: { [weak self] text in
+                    try await self?.playTracks(text, queueing: true)
+                },
+                .moveInQueue: { [weak self] text in try await self?.editQueue(text, moving: true) },
+                .removeFromQueueAt: { [weak self] text in
+                    try await self?.editQueue(text, moving: false)
+                },
             ],
             reports: [
                 .showStats: { [weak self] text, _, json in

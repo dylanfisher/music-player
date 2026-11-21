@@ -343,7 +343,10 @@ extension AppDelegate {
             self?.changeVolume(by: -volumeStepDecibels)
         }
         // Each needs its argument, which only the command line and the remote pass.
-        for id in [CommandID.seekTo, .setAppVolume, .chooseOutput] {
+        for id in [
+            CommandID.seekTo, .setAppVolume, .chooseOutput, .playTracks, .queueTracks,
+            .moveInQueue, .removeFromQueueAt,
+        ] {
             dispatcher.handle(id, enabled: { false }, run: {})
         }
     }

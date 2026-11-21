@@ -162,6 +162,7 @@ extension AppDelegate {
         if keys.contains(schema.groupByAlbumArtist.key), let browser {
             let on = settings[\.groupByAlbumArtist]
             Task { await browser.setGroupByAlbumArtist(on) }
+            if let library = remote.library { Task { await library.group(byAlbumArtist: on) } }
         }
         if keys.contains(schema.showRediscover.key) {
             browser?.showsRediscoverInSidebar = settings[\.showRediscover]

@@ -116,6 +116,45 @@ private let stamp = FileStamp(sizeBytes: 9000, modifiedSeconds: 1_700_000_000.5)
     #expect(reads.count == 2)
 }
 
+@Test func anEncodedThumbnailIsMadeOnceAtEachSizeAndSentAsItsBytes() throws {
+    let store = scratchStore()
+    let reads = CountedReads()
+    let bytes = try #require(pngData(try square(200)))
+    let read: ArtRead = { _, _ in
+        reads.count += 1
+        return bytes
+    }
+    let small = try store.encodedThumbnail(
+        art, path: key.path, stamp: stamp, pixels: 64, read: read)
+    #expect(Array(small.prefix(2)) == [0xFF, 0xD8])
+    #expect(
+        try store.encodedThumbnail(art, path: key.path, stamp: stamp, pixels: 64, read: read)
+            == small)
+    #expect(reads.count == 1)
+    let large = try store.encodedThumbnail(
+        art, path: key.path, stamp: stamp, pixels: 150, read: read)
+    #expect(reads.count == 2)
+    let decoded = try #require(
+        CGImageSourceCreateWithData(large as CFData, nil).flatMap {
+            CGImageSourceCreateImageAtIndex($0, 0, nil)
+        })
+    #expect(decoded.width == 150)
+    #expect(throws: ArtworkError.self) {
+        try store.encodedThumbnail(
+            art, path: key.path, stamp: FileStamp(sizeBytes: 1, modifiedSeconds: 1), pixels: 64,
+            read: { _, _ in Data([1, 2, 3]) })
+    }
+}
+
+@Test func aPicturesNameChangesWithItsFileAndPlaceButNotItsSize() {
+    let name = ThumbnailStore.pictureName(art, path: key.path, stamp: stamp)
+    #expect(name.count == 32 && name.allSatisfy(\.isHexDigit))
+    #expect(ThumbnailStore.pictureName(art, path: key.path, stamp: stamp) == name)
+    let edited = FileStamp(sizeBytes: 9001, modifiedSeconds: stamp.modifiedSeconds)
+    #expect(ThumbnailStore.pictureName(art, path: key.path, stamp: edited) != name)
+    #expect(ThumbnailStore.pictureName(art, path: "/Volumes/music/b.flac", stamp: stamp) != name)
+}
+
 private final class CountedReads: @unchecked Sendable {
     var count = 0
 }

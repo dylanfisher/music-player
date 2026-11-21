@@ -14,10 +14,12 @@ public struct RemoteState: Encodable, Equatable, Sendable {
         public var artist: String?
         public var album: String?
         public var durationSeconds: Double?
+        /// The cover's ID in `/api/art`, as `RemoteLibrary.artID` names it; nil for none.
+        public var art: String?
 
         public init(
             id: Int64, albumID: Int64?, title: String, artist: String?, album: String?,
-            durationSeconds: Double?
+            durationSeconds: Double?, art: String? = nil
         ) {
             self.id = id
             self.albumID = albumID
@@ -25,6 +27,7 @@ public struct RemoteState: Encodable, Equatable, Sendable {
             self.artist = artist
             self.album = album
             self.durationSeconds = durationSeconds
+            self.art = art
         }
     }
 
@@ -43,14 +46,26 @@ public struct RemoteState: Encodable, Equatable, Sendable {
         public var isOn: Bool?
         public var volumeDecibels: Double?
         public var isMuted: Bool?
-        /// The input's raw value, as Switch Receiver to's commands name it.
+        /// The input's raw value, as `inputs` names it.
         public var input: String?
+        /// Every input the page's menu offers, with the command that switches to it.
+        public var inputs: [Input]
 
-        public init(isOn: Bool?, volumeDecibels: Double?, isMuted: Bool?, input: String?) {
+        public struct Input: Encodable, Equatable, Sendable {
+            public var value: String
+            public var title: String
+            public var command: String
+        }
+
+        public init(
+            isOn: Bool?, volumeDecibels: Double?, isMuted: Bool?, input: String?,
+            inputs: [Input] = []
+        ) {
             self.isOn = isOn
             self.volumeDecibels = volumeDecibels
             self.isMuted = isMuted
             self.input = input
+            self.inputs = inputs
         }
     }
 
@@ -72,6 +87,8 @@ public struct RemoteState: Encodable, Equatable, Sendable {
     public var repeatMode: String
     /// Nil while the app's volume is fixed: Digital Volume off, or a renderer playing.
     public var volumeDecibels: Double?
+    /// The lowest the app's volume goes, for the page's slider; nil with `volumeDecibels`.
+    public var volumeFloorDecibels: Double?
     public var output: Output?
     public var receiver: Receiver?
     /// Seconds since 1970 when this Mac last started playing, for the page to choose among
@@ -81,8 +98,9 @@ public struct RemoteState: Encodable, Equatable, Sendable {
     public init(
         instance: String, name: String, state: Playing, track: Track?, positionSeconds: Double?,
         positionReadAt: Double, queueStamp: Int, queueLength: Int, queuePosition: Int?,
-        shuffle: Bool, repeatMode: String, volumeDecibels: Double?, output: Output?,
-        receiver: Receiver?, lastPlayedAt: Double?
+        shuffle: Bool, repeatMode: String, volumeDecibels: Double?,
+        volumeFloorDecibels: Double? = nil, output: Output?, receiver: Receiver?,
+        lastPlayedAt: Double?
     ) {
         self.instance = instance
         self.name = name
@@ -96,6 +114,7 @@ public struct RemoteState: Encodable, Equatable, Sendable {
         self.shuffle = shuffle
         self.repeatMode = repeatMode
         self.volumeDecibels = volumeDecibels
+        self.volumeFloorDecibels = volumeDecibels == nil ? nil : volumeFloorDecibels
         self.output = output
         self.receiver = receiver
         self.lastPlayedAt = lastPlayedAt
@@ -120,5 +139,19 @@ public struct RemoteState: Encodable, Equatable, Sendable {
             return abs(now - expected) > Self.driftSeconds
         default: return true
         }
+    }
+}
+
+/// The queue as `/api/queue` reads it: the change stamp the state carries, each file's path in
+/// the order it plays, and the current track's place in that order.
+public struct RemoteQueue: Sendable {
+    public var stamp: Int
+    public var paths: [String]
+    public var position: Int?
+
+    public init(stamp: Int, paths: [String], position: Int?) {
+        self.stamp = stamp
+        self.paths = paths
+        self.position = position
     }
 }

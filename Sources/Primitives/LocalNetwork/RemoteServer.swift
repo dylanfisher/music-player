@@ -313,7 +313,10 @@ public final class RemoteServer: @unchecked Sendable {
     private func cors(_ origin: String?) -> [(String, String)] {
         guard let origin else { return [] }
         // The other Macs' pages read a list's tag to ask for it again with `If-None-Match`.
-        return [("Access-Control-Allow-Origin", origin), ("Access-Control-Expose-Headers", "ETag")]
+        return [
+            ("Access-Control-Allow-Origin", origin),
+            ("Access-Control-Expose-Headers", HTTPWord.etag),
+        ]
     }
 
     /// HTTP/1.0, or `Connection: close`, ends the connection after its reply.
@@ -335,7 +338,10 @@ public final class RemoteServer: @unchecked Sendable {
         case .reply(var reply):
             // Always, so a reply without the CORS field isn't cached for a page that needs it.
             reply.fields += cors(origin) + [("Vary", "Origin")]
-            if gzips, reply.contentType != nil, reply.body.count >= Self.gzipMinimumBytes {
+            // A picture is compressed already.
+            if gzips, let type = reply.contentType, !type.hasPrefix("image/"),
+                reply.body.count >= Self.gzipMinimumBytes
+            {
                 reply.body = gzip(reply.body)
                 reply.fields += [("Content-Encoding", gzipCoding), ("Vary", "Accept-Encoding")]
             }

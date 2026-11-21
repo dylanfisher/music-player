@@ -10,18 +10,28 @@ import StrictKeys
 /// 401 with nothing in it, whatever the path, so a stranger learns no route.
 struct RemoteAPI: Sendable {
     enum Route {
-        static let page = "/"
-        static let pageFile = "/index.html"
         static let pair = "/api/pair"
         static let state = "/api/state"
         static let events = "/api/events"
         static let command = "/api/command"
         static let instances = "/api/instances"
+        static let genres = "/api/genres"
+        static let artists = "/api/artists"
+        static let albums = "/api/albums"
+        static let tracks = "/api/tracks"
+        static let search = "/api/search"
+        static let covers = "/api/covers"
+        static let queue = "/api/queue"
+        /// Followed by a size, `/` and a cover's ID.
+        static let art = "/api/art/"
     }
 
     let instanceID: String
     let name: String
-    let page: [UInt8]
+    let page: RemotePage
+    let library: RemoteLibrary
+    /// The queue as it plays now.
+    let queue: @Sendable () async -> RemoteQueue
     let pairing: RemotePairing
     let devices: RemoteDeviceRegistry
     let hub: RemoteEventHub
@@ -32,16 +42,13 @@ struct RemoteAPI: Sendable {
     let instances: @Sendable () -> [RemoteInstance]
 
     func handle(_ request: RemoteRequest) async -> RemoteResponse {
-        switch (request.method, request.path) {
-        case ("GET", Route.page), ("GET", Route.pageFile):
-            return .reply(
-                RemoteReply(
-                    .ok, contentType: "text/html; charset=utf-8", body: page,
-                    fields: [(HTTPWord.cacheControl, "no-cache")]))
-        case (HTTPWord.post, Route.pair):
+        if request.method == "GET",
+            let file = page.reply(request.path, ifNoneMatch: request.field("if-none-match"))
+        {
+            return .reply(file)
+        }
+        if request.method == HTTPWord.post, request.path == Route.pair {
             return .reply(pair(request))
-        default:
-            break
         }
         guard let device = devices.device(authorization: request.field("authorization")) else {
             return .reply(RemoteReply(.unauthorized))
@@ -55,10 +62,68 @@ struct RemoteAPI: Sendable {
             return .reply(await command(request))
         case ("GET", Route.instances):
             return .reply(Self.reply(instances()))
-        case (_, Route.state), (_, Route.events), (_, Route.command), (_, Route.instances):
+        case ("GET", Route.queue):
+            return .reply(await queueReply(RemoteQuery(request.query)))
+        case ("GET", let path) where path.hasPrefix(Route.art):
+            return .reply(await art(String(path.dropFirst(Route.art.count)), request.query))
+        case ("GET", let path):
+            return .reply(
+                await library.reply(
+                    path, query: RemoteQuery(request.query),
+                    ifNoneMatch: request.field("if-none-match"))
+                    ?? RemoteReply(.notFound))
+        case (_, Route.state), (_, Route.events), (_, Route.command), (_, Route.instances),
+            (_, Route.genres), (_, Route.artists), (_, Route.albums), (_, Route.tracks),
+            (_, Route.search), (_, Route.covers), (_, Route.queue):
             return .reply(RemoteReply(.methodNotAllowed))
         default:
             return .reply(RemoteReply(.notFound))
+        }
+    }
+
+    private struct QueueRange: Encodable {
+        var stamp: Int
+        var total: Int
+        var offset: Int
+        /// The current track's place in play order, from 0.
+        var position: Int?
+        var rows: [TrackLine]
+    }
+
+    private func queueReply(_ query: RemoteQuery) async -> RemoteReply {
+        let window: Range<Int>
+        do throws(RemoteRefusal) {
+            try query.only([RemoteQuery.offset, RemoteQuery.limit])
+            window = try query.window(limit: RemoteLibrary.rangeLimit)
+        } catch {
+            return Self.error(.badRequest, "\(error)")
+        }
+        let now = await queue()
+        let shown = window.clamped(to: 0..<now.paths.count)
+        do {
+            return Self.reply(
+                QueueRange(
+                    stamp: now.stamp, total: now.paths.count, offset: window.lowerBound,
+                    position: now.position,
+                    rows: try await library.queueRows(Array(now.paths[shown]))))
+        } catch {
+            return Self.error(.serviceUnavailable, "the queue's tracks couldn't be read: \(error)")
+        }
+    }
+
+    /// A cover, `<size>/<id>`, kept by the phone for good: its ID changes when the picture
+    /// does.
+    private func art(_ rest: String, _ query: String?) async -> RemoteReply {
+        let parts = rest.split(separator: "/", omittingEmptySubsequences: false)
+        guard query == nil, parts.count == 2 else { return RemoteReply(.notFound) }
+        do {
+            guard let found = try await library.art(String(parts[1]), size: String(parts[0]))
+            else { return RemoteReply(.notFound) }
+            return RemoteReply(
+                .ok, contentType: found.type, body: Array(found.bytes),
+                fields: [(HTTPWord.cacheControl, "private, max-age=31536000, immutable")])
+        } catch {
+            return Self.error(.serviceUnavailable, "the cover couldn't be read: \(error)")
         }
     }
 
