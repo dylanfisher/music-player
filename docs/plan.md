@@ -494,6 +494,24 @@ Pane, Focus Next Area), which move keyboard focus.
         Result line notes that the feature was removed.
 - Version: a minor bump, since removing a feature is a breaking change, pre-1.0.
 
+Plan (ADR 0216):
+
+- 93a The command and the window: `.focusMode` out of `AppCommands`, `AppMenus` and
+  `CommandHandlers` (the View toggles go back to `hasWindow`), and `MainWindow`'s section, its
+  injected full-screen toggle, the separator it kept to hide and `SilentEscapeWindow.escaped`,
+  which only it set. `MainWindowTests`' three Focus Mode tests go. A test in
+  `AppCommandsTests` checks ⌥⌘F is unbound and no command or setting is named for it.
+- 93b The browser and the track table: `LibraryBrowser`'s section and the timeline's hook,
+  `TrackTableController`'s focus columns, saved layout and branches, and `FocusRows`.
+  `reloadKeepingSelection` stays; a new test checks a row height change keeps the selection,
+  which the deleted Focus Mode test covered. `TimelineModelTests`' and
+  `TrackTableControllerTests`' Focus Mode tests go.
+- 93c The setting: `appearance.focusFontSize` out of `AppSettings`, `TableAppearance`,
+  `WindowSettings` and the Settings window. A config that still names it gets the existing
+  "unknown setting" problem and Remove Obsolete Setting (ADR 0082); a test checks that.
+- 93d Docs: ADR 0216, 0204 superseded, the README, map and other ADRs, and Waiting on the
+  owner.
+
 ### 94. An artist's discography in Recommendations
 
 The owner (2026-11-20) asked to "view all albums by an artist (according to our local discogs
