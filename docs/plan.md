@@ -55,7 +55,9 @@ Set by the owner on 2026-11-19. Earlier run orders are in the archive.
 3. Phase 10, drafted with the owner and started on 2026-11-20, runs now on its own branch. Its
    pairing-token storage is decided (see the phase).
 4. Phase 93, asked for on 2026-11-20, waits until the owner starts it.
-5. Phase 13 waits.
+5. Phase 94 and music-recommender's phase 12, asked for on 2026-11-20, wait until the owner
+   starts them. The service's phase lands first.
+6. Phase 13 waits.
 
 ## Waiting on the owner
 
@@ -487,6 +489,68 @@ Pane, Focus Next Area), which move keyboard focus.
       - Delete phase 82's pending owner checkpoint from Waiting on the owner. The archived
         Result line notes that the feature was removed.
 - Version: a minor bump, since removing a feature is a breaking change, pre-1.0.
+
+### 94. An artist's discography in Recommendations
+
+The owner (2026-11-20) asked to "view all albums by an artist (according to our local discogs
+database), sort by community user rating, etc.", in the Recommendations window, with "a way
+to filter/sort to a mode that finds just that artist's albums". The service builds the list
+in its phase 12 (`list: "discography"`), which lands first. Its answers apply here too:
+
+- the artist's albums are those it's a main artist on;
+- every format is listed;
+- everything shows, owned and marked albums included;
+- the values are the master's main release's;
+- a discography's values are fetched first.
+
+Opening one needs a Discogs artist the player already knows, never a name typed in. That
+means a track in the player, a row with an artist id, or a Discogs id or link the owner
+pastes. ADR 0217 records the decisions.
+
+- [ ] **94.1 The query.** `RecommendationQuery.Seed` gains `discography(artistID:)`, with its
+      encoding and strict decoding of 12.2's rows: `score` null and `reasons` empty for this
+      list, `formats`, `inLibrary`, `mark` and the reply's `pending`. The sorts gain `year`
+      and `title`, offered only for a discography, where `year` is the default and `score`
+      isn't offered. The `unknown_artist` 404 says "Discogs has no artist <id> in this Mac's
+      catalog" in the status line. Tests on written replies through the stand-in transport.
+- [ ] **94.2 Opening a discography.** Show Discography opens it in the Recommendations window,
+      chosen in the list pop-up as "Discography: <artist>", like a seed list. The artists
+      come from:
+      - a track anywhere in the player (the track table, the queue, Now Playing, and other
+        windows' track rows), through its `discogs_release_id`'s main artists in this Mac's
+        catalog;
+      - a Recommendations, Downloads or Threads row, through the artist ids it carries.
+
+      With one main artist the command opens it. With several it's a submenu, one item for
+      each. A track without a Discogs release id, or one the catalog doesn't hold, gets the
+      item disabled, with the reason as its tooltip.
+
+      From anywhere else, Show Discography… in the palette and the Recommendations window
+      asks for a Discogs release id or a discogs.com link to a release, master or artist.
+      `pastedReleaseID` grows into one parser for the three kinds. A release or master opens
+      its main artists, chosen as above when there are several. There's no search by name.
+      Tests for each source, for several artists, for a track without an id, and for the
+      parser's kinds, slugs, locale prefixes (`/fr/artist/…`) and refusals.
+- [ ] **94.3 The window in discography mode.**
+      - **Columns:** Format and In Library are new, and Mark shows the verdict. Score, Why and
+        Rank are hidden while a discography shows, and come back as they were.
+      - **Controls:** the Missing checkbox hides owned albums, as a filter of the loaded rows,
+        since the service lists everything. The Styles, Labels and year filters and phase
+        91's text filter work as they do for other lists.
+      - **Values coming in:** while `pending` is over 0, the status line says "Fetching
+        ratings, <n> left", and the list is asked for again every 15 s while the window is
+        open and showing it. The selection and scroll are kept as rows reorder, and asking
+        stops when `pending` is 0 or the list changes.
+      - **Row actions:** Open on Discogs, Download…, Not Interested and Already Have work as
+        on other rows. In Library albums offer Show in All Music (91.2).
+
+      Tests in `RecommendationsModelTests` for the columns, Missing, the refresh's timing with
+      an injected clock, and the kept selection.
+- [ ] **94.4 Docs.** ADR 0217, the README's Recommendations section, and a palette and menu
+      entry in the command docs.
+- [ ] **Hardware checkpoint (owner):** open the discography of an artist from the library,
+      one from a recommendation, and one from a pasted link. Sort by rating while the values
+      come in, and download a missing album.
 
 ### 85. The file splits and the performance rerun
 
