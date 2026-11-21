@@ -4,6 +4,7 @@
 - **Status:** accepted
 - **Amends:** [0122](0122-incremental-test-step.md) (how `scripts/test` runs what it picks),
   [0127](0127-tests-click-without-the-event-loop.md) (where the summary check runs)
+- **Amended by:** [0213](0213-a-time-limit-for-each-test-target.md) (a time limit per target)
 
 ## Context
 
