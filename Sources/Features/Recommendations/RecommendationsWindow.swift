@@ -26,6 +26,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     static let missingHelp =
         "Only albums by an artist of the list's albums: the library's artists for Library, the"
         + " seed albums' for a seed."
+    static let missingDiscographyHelp = "Only the albums the library doesn't have."
     let stylesField = NSTokenField()
     let yearFromField = NSTextField()
     let yearToField = NSTextField()
@@ -53,6 +54,10 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     /// The state of each release's newest download job, by release id.
     private(set) var downloads: [Int: String] = [:]
     private var seeds: [RecommendationQuery.Seed] = []
+    /// Whether each column is hidden as last chosen, kept while a list without it shows, so it
+    /// comes back as it was.
+    private var chosenHidden = Dictionary(
+        uniqueKeysWithValues: RecommendationColumn.allCases.map { ($0, $0.hiddenByDefault) })
     private var action: (() -> Void)?
 
     /// Hears a change of list, view, order or filter.
@@ -165,8 +170,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             table.addColumn(
                 NSUserInterfaceItemIdentifier(column.rawValue), title: column.title,
                 width: CGFloat(column.width), stretches: column == .why)
-            table.tableColumns.last?.isHidden = column.hiddenByDefault
         }
+        showColumns()
         table.rowHeight = 20
         table.allowsMultipleSelection = true
         let menu = NSMenu()
@@ -240,6 +245,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         }
         if let index = seeds.firstIndex(of: query.seed) { listButton.selectItem(at: index) }
         viewControl.selectedSegment = query.show == .albums ? 0 : 1
+        viewControl.isEnabled = !query.seed.isDiscography
         let albums = query.show == .albums
         for control in [
             sortButton, missingBox, stylesField, yearFromField, yearToField, labelsField,
@@ -259,16 +265,21 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             yearFromField.stringValue = query.filters.yearFrom.map(String.init) ?? ""
             yearToField.stringValue = query.filters.yearTo.map(String.init) ?? ""
             labelsField.objectValue = query.filters.labels.map { $0.name ?? "\($0.id)" }
-            for column in table.tableColumns
-            where column.identifier.rawValue == RecommendationColumn.albums.rawValue {
-                column.isHidden = albums
-            }
+            missingBox.toolTip =
+                query.seed.isDiscography ? Self.missingDiscographyHelp : Self.missingHelp
+            showColumns()
         }
         if rows != self.rows {
+            // A discography read again as its values come in reorders; the selection follows
+            // its albums, and the scroll stays where it is.
+            let selected = Set(
+                selectedRows.map { MarkedAlbum(kind: $0.album.kind, id: $0.album.id) })
             self.rows = rows
             table.reloadData()
             if let place, !rows.isEmpty {
                 table.selectRowIndexes([min(place, rows.count - 1)], byExtendingSelection: false)
+            } else {
+                table.selectRowIndexes(rowsOf(selected, in: rows), byExtendingSelection: false)
             }
         }
         if !pending { place = nil }
@@ -402,9 +413,21 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     }
 
     @objc private func columnToggled(_ sender: NSMenuItem) {
-        guard let column = table.tableColumns.first(where: { $0.title == sender.title })
+        guard let column = table.tableColumns.first(where: { $0.title == sender.title }),
+            let shown = RecommendationColumn(rawValue: column.identifier.rawValue)
         else { return }
         column.isHidden.toggle()
+        chosenHidden[shown] = column.isHidden
+    }
+
+    /// Hides each column the list shown has nothing for, and shows the rest as last chosen.
+    private func showColumns() {
+        for column in table.tableColumns {
+            guard let shown = RecommendationColumn(rawValue: column.identifier.rawValue) else {
+                continue
+            }
+            column.isHidden = !shown.applies(to: query) || chosenHidden[shown] == true
+        }
     }
 
     // MARK: - The menus
@@ -413,8 +436,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         menu.removeAllItems()
         if menu === table.headerView?.menu {
             for column in table.tableColumns
-            where column.identifier.rawValue != RecommendationColumn.albums.rawValue
-                || query.show == .artists
+            where RecommendationColumn(rawValue: column.identifier.rawValue)?.applies(to: query)
+                == true
             {
                 let item = NSMenuItem(
                     title: column.title, action: #selector(columnToggled), keyEquivalent: "")

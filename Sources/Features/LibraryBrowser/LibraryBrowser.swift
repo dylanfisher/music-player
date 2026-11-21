@@ -1530,14 +1530,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         open(release)
     }
 
-    /// The Discogs release the first selected track is tagged with; nil for none, or when
-    /// nothing is selected.
-    public func firstSelectedRelease() throws -> Int? {
-        try firstSelectedTrackID().flatMap { try index.discogsReleaseID(ofTrack: $0) }
-    }
-
     /// The track of the first selected row, reading only that row.
-    private func firstSelectedTrackID() throws -> Int64? {
+    func firstSelectedTrackID() throws -> Int64? {
         let list = showsTimeline ? timeline.table : table.table
         guard let first = list.selectedRowIndexes.first else { return nil }
         let row = IndexSet(integer: first)

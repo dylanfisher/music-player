@@ -1,4 +1,5 @@
 import DisplayText
+import Foundation
 import Recommender
 
 /// The Recommendations window's list without the window: the query, the rows read so far and
@@ -12,11 +13,24 @@ final class RecommendationsModel {
     /// An `out_of_date` list being scored again is asked for again this often while the window
     /// is open.
     static let rebuildingRetrySeconds = 30.0
+    /// A discography whose values the service still fetches is asked for again this often
+    /// while the window is open and shows it.
+    static let fetchingRetrySeconds = 15.0
 
     /// The lists the pop-up offers: the library's, then each seed asked for since launch.
     private(set) var seeds: [RecommendationQuery.Seed] = [.library]
     private(set) var query = RecommendationQuery()
-    private(set) var rows: [RecommendationRow] = []
+    /// The rows read, in the list's order.
+    private var loaded: [RecommendationRow] = []
+    /// The rows shown: those read, without the library's albums when Missing is on for a
+    /// discography, which the service lists whole (ADR 0217).
+    var rows: [RecommendationRow] {
+        query.seed.isDiscography && query.filters.missing
+            ? loaded.filter { !$0.album.inLibrary } : loaded
+    }
+    /// How many of a discography's releases the service will still fetch values for, as the
+    /// last page said; nil for the scored lists.
+    private(set) var pending: Int?
     /// Whether the list goes on past the rows read.
     private(set) var more = false
     private(set) var facts: RecommendationPage.Facts?
@@ -30,7 +44,9 @@ final class RecommendationsModel {
 
     private let service: () -> RecommendationsService?
     private let sleep: @Sendable (Double) async throws -> Void
-    private var reading: Task<Void, Never>?
+    private(set) var reading: Task<Void, Never>?
+    /// The wait before a discography whose values are coming in is read again, and that read.
+    private(set) var refreshing: Task<Void, Never>?
 
     /// `sleep` waits between retries; tests pass one that doesn't.
     init(
@@ -48,12 +64,20 @@ final class RecommendationsModel {
     @discardableResult
     func show(_ asked: RecommendationQuery) -> Task<Void, Never>? {
         let query = asked.fitted
+        var others = query
+        others.filters.missing = self.query.filters.missing
+        if query.seed.isDiscography, others == self.query, !loaded.isEmpty {
+            self.query = query
+            changed()
+            return nil
+        }
         if !seeds.contains(query.seed) { seeds.append(query.seed) }
         self.query = query
         notice = nil
-        rows = []
+        loaded = []
         more = false
         facts = nil
+        pending = nil
         return read(from: 0, through: 0)
     }
 
@@ -61,7 +85,7 @@ final class RecommendationsModel {
     @discardableResult
     func readMore() -> Task<Void, Never>? {
         guard more, reading == nil, problem == nil else { return nil }
-        return read(from: rows.count, through: 0)
+        return read(from: loaded.count, through: 0)
     }
 
     /// Reads the list again from its first row through at least `count` rows, a page at a
@@ -86,10 +110,10 @@ final class RecommendationsModel {
             return nil
         }
         let albums = distinct(marked.map { MarkedAlbum(kind: $0.album.kind, id: $0.album.id) })
-        let before = rows
-        let shown = rows.count
+        let before = loaded
+        let shown = loaded.count
         stop()
-        rows.removeAll { albums.contains(MarkedAlbum(kind: $0.album.kind, id: $0.album.id)) }
+        loaded.removeAll { albums.contains(MarkedAlbum(kind: $0.album.kind, id: $0.album.id)) }
         notice = nil
         changed()
         return Task {
@@ -103,7 +127,7 @@ final class RecommendationsModel {
                 }
             }
             if set.count < albums.count {
-                rows = before.filter {
+                loaded = before.filter {
                     !set.contains(MarkedAlbum(kind: $0.album.kind, id: $0.album.id))
                 }
             }
@@ -116,7 +140,7 @@ final class RecommendationsModel {
     @discardableResult
     func unmark(_ albums: [MarkedAlbum]) -> Task<Void, Never>? {
         guard let service = service() else { return nil }
-        let shown = rows.count + albums.count
+        let shown = loaded.count + albums.count
         stop()
         return Task {
             for album in albums {
@@ -136,15 +160,26 @@ final class RecommendationsModel {
         changed()
     }
 
-    /// Stops the read out, for a closed window.
+    /// Stops the read out, and the wait to read a discography again, for a closed window.
     func stop() {
         reading?.cancel()
         reading = nil
+        refreshing?.cancel()
+        refreshing = nil
+    }
+
+    /// Waits to read a discography again, for a window opened again, while its values are
+    /// still coming in and nothing else is out.
+    func resume() {
+        guard reading == nil, refreshing == nil, problem == nil else { return }
+        refreshIfFetching()
     }
 
     private func read(from offset: Int, through count: Int) -> Task<Void, Never>? {
         reading?.cancel()
         reading = nil
+        refreshing?.cancel()
+        refreshing = nil
         problem = nil
         guard let service = service() else {
             problem = .notSet
@@ -194,11 +229,24 @@ final class RecommendationsModel {
             let rows = RecommendationRow.rows(of: page)
             read += rows
             if page.more, !rows.isEmpty, read.count < count { continue }
-            self.rows = start == 0 ? read : self.rows + read
+            loaded = start == 0 ? read : loaded + read
             more = page.more
             facts = page.list
+            pending = page.pending
             finish(problem: nil)
+            refreshIfFetching()
             return
+        }
+    }
+
+    /// Reads the rows read so far again after a while, as the service fetches a
+    /// discography's values and its order changes with them.
+    private func refreshIfFetching() {
+        guard let pending, pending > 0 else { return }
+        refreshing = Task {
+            guard await waited(Self.fetchingRetrySeconds) else { return }
+            refreshing = nil
+            await readAgain(through: loaded.count)?.value
         }
     }
 
@@ -233,6 +281,15 @@ final class RecommendationsModel {
 struct MarkedAlbum: Equatable, Hashable, Sendable {
     var kind: AlbumKind
     var id: Int
+}
+
+/// The rows of `rows` whose albums are `albums`, for a selection kept as a list read again
+/// reorders.
+func rowsOf(_ albums: Set<MarkedAlbum>, in rows: [RecommendationRow]) -> IndexSet {
+    IndexSet(
+        rows.indices.filter {
+            albums.contains(MarkedAlbum(kind: rows[$0].album.kind, id: rows[$0].album.id))
+        })
 }
 
 /// `values` without repeats, in their first order.

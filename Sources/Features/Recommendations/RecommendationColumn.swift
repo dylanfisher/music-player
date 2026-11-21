@@ -6,10 +6,11 @@ import Settings
 
 /// A column of the Recommendations window's table, and its text for a row. On the Artists
 /// view, Artist, Albums and Score are the artist's and the rest its best album's. Download is
-/// the state of the newest download job of the album's release, from Downloads.
+/// the state of the newest download job of the album's release, from Downloads. Format, In
+/// Library and Mark are a discography's, which lists the library's and the marked albums too.
 enum RecommendationColumn: String, CaseIterable {
-    case rank, artist, albums, title, year, label, styles, rating, have, want, download, why
-    case score
+    case rank, artist, albums, title, year, label, styles, format, inLibrary, mark, rating, have
+    case want, download, why, score
     case forSale, lowestPrice
 
     var title: String {
@@ -21,6 +22,9 @@ enum RecommendationColumn: String, CaseIterable {
         case .year: TrackColumn.year.title
         case .label: "Label"
         case .styles: "Styles"
+        case .format: "Format"
+        case .inLibrary: "In Library"
+        case .mark: markColumnTitle
         case .rating: "Rating"
         case .have: "Have"
         case .want: "Want"
@@ -35,7 +39,9 @@ enum RecommendationColumn: String, CaseIterable {
     var width: Double {
         switch self {
         case .artist, .title: 180
-        case .label, .styles, .download: 140
+        case .label, .styles, .download, .format: 140
+        case .mark: 100
+        case .inLibrary: 70
         case .why: 320
         case .rating: 80
         case .rank, .albums, .year, .have, .want, .score, .forSale, .lowestPrice: 60
@@ -45,8 +51,16 @@ enum RecommendationColumn: String, CaseIterable {
     /// Hidden until shown from the header's menu.
     var hiddenByDefault: Bool { [.rank, .score, .forSale, .lowestPrice].contains(self) }
 
-    /// Whether the column has anything to show on `show`'s view.
-    func applies(to show: RecommendationQuery.Show) -> Bool { self != .albums || show == .artists }
+    /// Whether the column has anything to show for `query`: Albums on the Artists view, and
+    /// Score, Why and Rank for a scored list, Format, In Library and Mark for a discography.
+    func applies(to query: RecommendationQuery) -> Bool {
+        switch self {
+        case .albums: query.show == .artists
+        case .score, .why, .rank: !query.seed.isDiscography
+        case .format, .inLibrary, .mark: query.seed.isDiscography
+        default: true
+        }
+    }
 
     /// `download` is the state of the newest job of the row's album's release, nil for none.
     func text(_ row: RecommendationRow, download: String?) -> String {
@@ -63,6 +77,9 @@ enum RecommendationColumn: String, CaseIterable {
         case .year: return album.year.map(String.init) ?? ""
         case .label: return album.label.map { name($0.name) } ?? ""
         case .styles: return album.styles.map { name($0.name) }.joined(separator: ", ")
+        case .format: return album.formats.map(terminalSafe).joined(separator: "; ")
+        case .inLibrary: return album.inLibrary ? "Yes" : ""
+        case .mark: return album.mark.map(verdictTitle) ?? ""
         case .rating: return ratingText(album.community)
         case .have: return values.map { number($0.have) } ?? ""
         case .want: return values.map { number($0.want) } ?? ""

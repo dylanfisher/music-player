@@ -51,6 +51,7 @@ public final class Recommendations {
         self?.service()
     })
     private(set) var controller: RecommendationsWindow?
+    private var trackMenuDiscography: TrackMenuDiscography?
     /// The track menu's Show Discography items, which hold it as their target.
     private lazy var discographyItems: DiscographyItems = {
         let items = DiscographyItems()
@@ -150,10 +151,17 @@ public final class Recommendations {
 
     // MARK: - Discographies
 
-    /// Fills the track menu's Show Discography `item` for the first selected track, whose
-    /// Discogs release `release` reads, through its main artists in this Mac's catalog. It
-    /// reads the catalog as the menu opens, one release by id.
-    public func fillDiscographyItem(_ item: NSMenuItem, release: () throws -> Int?) {
+    /// Fills `trackMenu`'s Show Discography item each time it opens, for the first selected
+    /// track, whose Discogs release `release` reads, through its main artists in this Mac's
+    /// catalog, read by id as the menu opens. The menu holds its delegate weakly, so this does.
+    public func fillDiscographyItem(of trackMenu: NSMenu, release: @escaping () throws -> Int?) {
+        let delegate = TrackMenuDiscography()
+        delegate.fill = { [weak self] in self?.fillDiscographyItem($0, release: release) }
+        trackMenu.delegate = delegate
+        trackMenuDiscography = delegate
+    }
+
+    private func fillDiscographyItem(_ item: NSMenuItem, release: () throws -> Int?) {
         let choice: DiscographyChoice
         do {
             choice = DiscographyChoice.of(
@@ -274,7 +282,7 @@ public final class Recommendations {
             self?.columnWidthsChanged(widths)
         }
         made.visibilityChanged = { [weak self] open in
-            if !open { self?.model.stop() }
+            if open { self?.model.resume() } else { self?.model.stop() }
         }
         model.changed = { [weak self] in self?.redraw() }
         return made
@@ -358,6 +366,7 @@ public final class Recommendations {
         let model = model
         let seed = model.query.seed
         var message = model.isReading ? pendingText(seed) : nil
+        if let pending = model.pending, pending > 0 { message = fetchingText(pending) }
         var action: (title: String, run: () -> Void)?
         if let problem = model.problem {
             message = problemText(problem, seed: seed)

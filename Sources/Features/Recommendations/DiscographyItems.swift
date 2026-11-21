@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import DisplayText
 import Recommender
 
@@ -51,4 +52,18 @@ final class DiscographyItems: NSObject {
 /// An artist's name for a menu or the pop-up, or its id when the catalog has no name.
 func artistName(_ artist: RecommendationPage.Named) -> String {
     artist.name.map(terminalSafe) ?? "Discogs artist \(artist.id)"
+}
+
+/// The track menu's delegate, which fills its Show Discography item each time the menu opens,
+/// since that item is a plain item for one artist and a submenu for several (ADR 0217).
+@MainActor
+final class TrackMenuDiscography: NSObject, NSMenuDelegate {
+    var fill: (NSMenuItem) -> Void = { _ in }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard let item = menu.item(withTitle: AppMenus.showDiscographyMenuTitle) else {
+            preconditionFailure("the track menu has no \(AppMenus.showDiscographyMenuTitle)")
+        }
+        fill(item)
+    }
 }

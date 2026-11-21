@@ -16,7 +16,7 @@ package struct RecommendationQuery: Equatable, Hashable, Sendable {
         /// is for the pop-up only; the service is asked by id.
         case discography(artistID: Int, name: String)
 
-        var isDiscography: Bool {
+        package var isDiscography: Bool {
             if case .discography = self { true } else { false }
         }
 

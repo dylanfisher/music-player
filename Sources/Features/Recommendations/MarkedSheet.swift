@@ -39,7 +39,7 @@ final class MarkedSheet: NSWindowController, NSTableViewDataSource, NSTableViewD
         let title = NSTextField(labelWithString: "Marked")
         title.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         for (column, heading, width) in [
-            (Column.name, TrackColumn.album.title, 300.0), (.verdict, "Mark", 110.0),
+            (Column.name, TrackColumn.album.title, 300.0), (.verdict, markColumnTitle, 110.0),
             (.set, "Set", 120.0),
         ] {
             table.addColumn(
@@ -101,6 +101,9 @@ final class MarkedSheet: NSWindowController, NSTableViewDataSource, NSTableViewD
         removeButton.isEnabled = !table.selectedRowIndexes.isEmpty
     }
 }
+
+/// The title of a column of verdicts, here and in a discography.
+let markColumnTitle = "Mark"
 
 /// The button and menu item that set `verdict`, and the Marked sheet's name for it.
 func verdictTitle(_ verdict: FeedbackMark.Verdict) -> String {

@@ -100,17 +100,6 @@ extension AppDelegate {
         }
     }
 
-    /// The track menu's Show Discography, for the first selected track's Discogs release.
-    func wireDiscographyItem(_ menu: MainMenu) {
-        let item = DiscographyMenuItem()
-        item.fill = { [weak self] in
-            guard let self, let browser else { return }
-            recommendations.fillDiscographyItem($0) { try browser.firstSelectedRelease() }
-        }
-        menu.trackMenu.delegate = item
-        discographyMenuItem = item
-    }
-
     private func showRecommendations(_ kind: SeedKind) {
         guard let browser else { return }
         do {
