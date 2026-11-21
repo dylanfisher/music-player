@@ -30,6 +30,9 @@ extension AppDelegate {
             arguments: [
                 .play: { [weak self] text in try await self?.playQuery(text) },
                 .receiverSetVolume: { [weak self] text in try self?.setReceiverVolume(text) },
+                .seekTo: { [weak self] text in try await self?.seek(to: text) },
+                .setAppVolume: { [weak self] text in try self?.setAppVolume(text) },
+                .chooseOutput: { [weak self] text in try self?.chooseOutput(text: text) },
             ],
             reports: [
                 .showStats: { [weak self] text, _, json in
@@ -93,6 +96,41 @@ extension AppDelegate {
         return try await browser.play(PlayQuery(text))
     }
 
+    /// Seek To's argument: a position in the playing track.
+    private func seek(to text: String) async throws -> String? {
+        guard let seconds = CommandArgument.seconds(text) else {
+            throw Refused(description: "\(text) isn't a position in seconds")
+        }
+        guard let engine, await engine.state.status != .stopped else {
+            throw Refused(description: "nothing is playing")
+        }
+        await engine.seek(toSeconds: seconds)
+        return nil
+    }
+
+    /// Set Volume's argument: the digital volume, saved as the slider saves it.
+    private func setAppVolume(_ text: String) throws -> String? {
+        let range = MainToolbar.volumeRangeDecibels
+        guard let decibels = CommandArgument.decibels(text, in: range) else {
+            throw Refused(
+                description: "\(text) isn't a level from \(Int(range.lowerBound)) to 0 dB")
+        }
+        guard canSetVolume else {
+            throw Refused(description: "the volume is fixed: Digital Volume is off")
+        }
+        setVolume(decibels, saving: true)
+        return nil
+    }
+
+    /// Choose Output's argument, as the output menu chooses one.
+    private func chooseOutput(text: String) throws -> String? {
+        guard let choice = OutputChoice(text: text) else {
+            throw Refused(description: "\(text) isn't an output: \(OutputChoice.textHelp)")
+        }
+        chooseOutput(choice)
+        return nil
+    }
+
     /// Shows Listening Stats for the period `text` names, or the one shown last, and says what
     /// they hold, as `music-player stats` prints it.
     private func statsReply(_ text: String?, json: Bool) async throws -> String {
@@ -132,6 +170,11 @@ extension AppDelegate {
 /// Play has nothing to play through.
 private struct NoOutput: Error, CustomStringConvertible {
     var description: String { "the app has no output device" }
+}
+
+/// A command line or remote argument the app can't act on.
+private struct Refused: Error, CustomStringConvertible {
+    var description: String
 }
 
 /// Stats has no window to read the library through.

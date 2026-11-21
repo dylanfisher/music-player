@@ -145,6 +145,12 @@ public struct AppSettings: SettingsSchema {
     public let receiverAddress = Setting<IPAddressSetting?>(
         "receiver.address", title: "Receiver Address", default: nil,
         "Its IP address: for a Marantz, or a Denon the search misses.")
+    public let remoteEnabled = Setting(
+        "remote.enabled", title: "Web Remote", default: false,
+        "Let paired phones control playback from a web page on this network.")
+    public let remotePort = Setting(
+        "remote.port", title: "Web Remote Port", default: 47800, range: 1024...65535,
+        "The port it listens on, which a saved home-screen link names.")
     public let appearance = Setting(
         "appearance", title: "Appearance", default: Appearance.auto,
         "Light or dark windows; Auto follows the system.")

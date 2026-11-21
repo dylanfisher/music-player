@@ -85,6 +85,8 @@ public final class GeneralModel {
         /// The Playback pane's.
         case output, playCounts
         case sync, receiver, downloads
+        /// The Remote pane's, above its pairing.
+        case remote
         /// The Watched Folders pane's, under its list, as Swinsian has them.
         case folderChanges, networkFolders
         /// The Library pane's.
@@ -104,6 +106,7 @@ public final class GeneralModel {
             case .database: "Database"
             case .sync: "Sync"
             case .receiver: "Receiver"
+            case .remote: schema.remoteEnabled.title
             case .downloads: "Downloads"
             case .folderChanges: "Folder Changes"
             case .libraryFolder: schema.libraryFolder.title
@@ -128,6 +131,7 @@ public final class GeneralModel {
             case .database: [schema.snapshotFolder.key]
             case .sync: ["sync."]
             case .receiver: ["receiver."]
+            case .remote: ["remote."]
             case .downloads: ["recommender.", "import.", "downloads."]
             case .folderChanges: [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key]
             case .libraryFolder:
@@ -166,6 +170,7 @@ public final class GeneralModel {
         var switchKeys: [String] {
             return switch self {
             case .receiver: [schema.receiverEnabled.key]
+            case .remote: [schema.remoteEnabled.key]
             case .libraryFolder: [schema.copyAddedFiles.key, schema.keepFilesOrganized.key]
             default: []
             }

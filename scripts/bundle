@@ -66,6 +66,9 @@ done
 iconutil -c icns -o "$app/Contents/Resources/AppIcon.icns" "$iconset"
 rm -rf "$work"
 
+# The web remote's page, served as it is (ADR 0214).
+cp -R Support/Remote "$app/Contents/Resources/Remote"
+
 # The tool's name and the link scheme are one word, declared once in Swift (ADR 0036).
 tool=$(sed -n 's/^public let toolName = "\(.*\)"$/\1/p' Sources/Core/Scripting/Scripting.swift)
 if [ -z "$tool" ]; then

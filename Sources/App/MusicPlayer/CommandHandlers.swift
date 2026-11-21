@@ -342,6 +342,10 @@ extension AppDelegate {
         dispatcher.handle(.volumeDown, enabled: hasVolume) { [weak self] in
             self?.changeVolume(by: -volumeStepDecibels)
         }
+        // Each needs its argument, which only the command line and the remote pass.
+        for id in [CommandID.seekTo, .setAppVolume, .chooseOutput] {
+            dispatcher.handle(id, enabled: { false }, run: {})
+        }
     }
 
     // MARK: Helpers

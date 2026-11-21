@@ -220,6 +220,41 @@ let httpRequest = FuzzTarget(
         }
     })
 
+/// A request to the web remote's server: its head, its `Host` and `Origin` checks and the body
+/// its length names (ADR 0214).
+let remoteRequest = FuzzTarget(
+    name: "remote-request",
+    summary: "a request to the web remote and the body it reads",
+    seedFormats: [],
+    tokens: [
+        "\r\n", "Host: 10.0.0.2:47800", "Origin: http://10.0.0.3:47800", "Content-Length: ",
+        "Transfer-Encoding: chunked", "GET /", "POST /api/command", "OPTIONS /",
+    ],
+    madeSeeds: { _, _ in
+        [
+            "GET /api/state HTTP/1.1\r\nHost: 10.0.0.2:47800\r\n\r\n",
+            "POST /api/pair HTTP/1.1\r\nHost: 10.0.0.2:47800\r\nContent-Length: 2\r\n\r\n{}",
+            "OPTIONS /api/command HTTP/1.1\r\nHost: 10.0.0.2:47800\r\n"
+                + "Origin: http://10.0.0.3:47800\r\n\r\n",
+        ].map { Array($0.utf8) }
+    },
+    prepare: { _ in
+        { input in
+            guard
+                let (status, bodyLength) = answer(
+                    toRemoteRequest: input, authority: "10.0.0.2:47800",
+                    allowedOrigin: "http://10.0.0.3:47800")
+            else { return false }
+            precondition(bodyLength <= 16 * 1024, "a body of \(bodyLength) bytes was read")
+            precondition(status == 200 || bodyLength == 0, "status \(status) read a body")
+            if status == 200 {
+                let text = String(decoding: input, as: UTF8.self)
+                precondition(text.contains("10.0.0.2:47800"), "a request without the Host")
+            }
+            return status == 200 || status == 204
+        }
+    })
+
 /// A track's tags as the UPnP output sends them: DIDL-Lite inside a SetAVTransportURI request.
 /// Both must read back as the text they were given, so no tag can change the XML.
 let didlLite = FuzzTarget(

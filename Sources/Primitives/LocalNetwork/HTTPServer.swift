@@ -234,7 +234,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
         }
         client.file = opened
         var fields = [
-            ("Content-Type", file.contentType), ("Accept-Ranges", "bytes"),
+            (HTTPWord.contentType, file.contentType), ("Accept-Ranges", "bytes"),
         ]
         let bytes: ClosedRange<UInt64>?
         let status: HTTPStatus
@@ -329,7 +329,9 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     {
         let lines =
             ["\(HTTPHead.version) \(status.rawValue) \(status.reason)"]
-            + (fields + [("Content-Length", "\(length)"), ("Connection", "close")]).map {
+            + (fields + [
+                (HTTPWord.contentLength, "\(length)"), (HTTPWord.connection, HTTPWord.close),
+            ]).map {
                 "\($0): \($1)"
             }
         return Array((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8)

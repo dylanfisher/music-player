@@ -61,7 +61,7 @@ public enum IPAddress: Hashable, Sendable, CustomStringConvertible {
     }
 
     /// `fe80::/10`, which means something only on one interface.
-    var isLinkLocal: Bool {
+    public var isLinkLocal: Bool {
         guard case .v6(let bytes, _) = self else { return false }
         return bytes[0] == 0xFE && bytes[1] & 0xC0 == 0x80
     }

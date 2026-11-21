@@ -9,6 +9,21 @@ import Snapshot
 /// The library's daily snapshots, Back Up Now and Restore… (ADR 0142): each runs between the
 /// watcher's scans, so never during a scan or sync. Restore… stops a running scan first.
 extension AppDelegate {
+    /// Says the library file couldn't be read and where it went, with a way to find it.
+    func showMovedAside(_ aside: URL, in window: NSWindow) {
+        let alert = NSAlert()
+        alert.messageText = "The library file couldn't be read"
+        alert.informativeText =
+            "It was moved to \(aside.path), and a new library was started. The next scan fills"
+            + " it. The plays, ratings and playlists stay in the old file."
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Show in Finder")
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertSecondButtonReturn else { return }
+            NSWorkspace.shared.activateFileViewerSelecting([aside])
+        }
+    }
+
     /// How often the app asks for the day's snapshot after the launch's: once the day changes,
     /// the next ask writes it.
     static let snapshotCheckSeconds = 3600.0

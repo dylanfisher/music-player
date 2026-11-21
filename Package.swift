@@ -145,6 +145,14 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Remote",
+            dependencies: [
+                "Commands", "LocalNetwork", "Playback", "Scripting", "Settings", "StrictKeys",
+            ],
+            path: "Sources/Core/Remote",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Recommender",
             dependencies: ["DisplayText", "LocalNetwork", "Settings", "StrictKeys"],
             path: "Sources/Core/Recommender",
@@ -277,8 +285,8 @@ let package = Package(
         .target(
             name: "SettingsWindow",
             dependencies: [
-                "Commands", "Discogs", "DisplayText", "KeyChord", "Log", "Metadata", "Settings",
-                "WindowPlacement",
+                "Commands", "Discogs", "DisplayText", "KeyChord", "Log", "Metadata", "Remote",
+                "Settings", "WindowPlacement",
             ],
             path: "Sources/Features/SettingsWindow",
             swiftSettings: strictSwift
@@ -306,7 +314,7 @@ let package = Package(
                 "Downloads", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Recommendations",
-                "Recommender",
+                "Recommender", "Remote",
                 "Scripting", "SQLite", "Settings", "SettingsWindow", "Snapshot", "Spectrum",
                 "TagEditor", "TagWriter", "UPnP", "UPnPOutput", "WindowPlacement",
             ],
@@ -598,8 +606,8 @@ let package = Package(
         .testTarget(
             name: "SettingsWindowTests",
             dependencies: [
-                "Commands", "Discogs", "Fixtures", "KeyChord", "Settings", "SettingsWindow",
-                "WindowPlacement",
+                "Commands", "Discogs", "Fixtures", "KeyChord", "Remote", "Settings",
+                "SettingsWindow", "WindowPlacement",
             ],
             swiftSettings: strictSwift
         ),
@@ -634,6 +642,14 @@ let package = Package(
         .testTarget(
             name: "SQLiteTests",
             dependencies: ["SQLite"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "RemoteTests",
+            dependencies: [
+                "Commands", "Fixtures", "LocalNetwork", "Playback", "Remote", "Scripting",
+                "Settings",
+            ],
             swiftSettings: strictSwift
         ),
         .testTarget(

@@ -39,7 +39,8 @@ struct FuzzTarget: Sendable {
         dsdParser(.dff, "DSDIFF chunks, PROP properties and ID3 chunks"),
         vorbis, config, state, journal, rules, playlistFile, syncLog, swinsian, swinsianPredicate,
         swinsianColumns, iTunesXML, tagWriter, receiverLine, deviceDescription, soapReply,
-        avTransportReply, serviceDescription, httpRequest, didlLite, chunkedBody, discogsDump,
+        avTransportReply, serviceDescription, httpRequest, remoteRequest, didlLite, chunkedBody,
+        discogsDump,
         recommenderReply, rediscoverReply, threadsReply,
     ]
 

@@ -34,7 +34,7 @@ public enum LocalHTTPClient {
         timeoutSeconds: Double = timeoutSeconds, keepingRefusals: Bool = false
     ) async throws(LocalNetworkError) -> [UInt8] {
         try await exchange(
-            url, request: request("POST", url, fields: fields, body: body), cap: cap,
+            url, request: request(HTTPWord.post, url, fields: fields, body: body), cap: cap,
             timeoutSeconds: timeoutSeconds, keepingRefusals: keepingRefusals)
     }
 
@@ -52,7 +52,7 @@ public enum LocalHTTPClient {
                 (name + value).utf8.allSatisfy { $0 >= 0x20 && $0 < 0x7F }, "\(name) can't be sent")
             lines.append("\(name): \(value)")
         }
-        if method == "POST" { lines.append("Content-Length: \(body.count)") }
+        if method == HTTPWord.post { lines.append("\(HTTPWord.contentLength): \(body.count)") }
         return Array((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8) + body
     }
 

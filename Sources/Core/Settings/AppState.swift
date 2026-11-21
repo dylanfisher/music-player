@@ -119,6 +119,14 @@ public struct AppState: SettingsSchema {
         "output.profiles", title: "Device Profiles", default: DeviceProfiles(profiles: []),
         "Each output device's hog mode, digital volume and volume, and the rates and formats it"
             + " reported, most recently used first.")
+    public let remoteInstanceID = Setting<String?>(
+        "remote.instanceID", title: "Remote Instance ID", default: nil,
+        "The random ID this Mac's web remote advertises, so a page tells the Macs apart. Null"
+            + " makes a new one.")
+    public let remoteDevices = Setting(
+        "remote.devices", title: "Paired Devices", default: RemoteDevices(devices: []),
+        "The devices paired with the web remote: each one's name, its token's SHA-256, and when"
+            + " it paired and was last seen.")
     public let paletteVisits = Setting(
         "palette.visits", title: "Palette Visits", default: VisitLog(visits: []),
         "How often and how recently each palette item was chosen or played.")

@@ -12,6 +12,11 @@ public struct Command: Sendable, Equatable {
     /// A `music-player://` link may run it. Any web page can open one, so only playback and
     /// moving around the window do (ADR 0036).
     public let runsFromLinks: Bool
+    /// A paired web remote may run it: playback, seeking, the queue, the app's volume, the
+    /// output and the receiver, and nothing that writes tags, moves or deletes files, changes
+    /// another setting or approves a download, since those wait for a confirmation in the Mac's
+    /// own UI (ADR 0214).
+    public let runsFromRemote: Bool
     /// What the command line and a link may pass it, as help shows it; nil when it takes
     /// nothing.
     public let argument: String?
@@ -29,7 +34,8 @@ public struct Command: Sendable, Equatable {
 
     init(
         _ id: CommandID, _ title: String, _ chords: [KeyChord] = [], links: Bool = false,
-        argument: String? = nil, menus: Bool = true, palette: Bool = false, replies: Bool = false,
+        remote: Bool = false, argument: String? = nil, menus: Bool = true, palette: Bool = false,
+        replies: Bool = false,
         paths: Bool = false
     ) {
         precondition(!paths || replies, "\(id) takes paths but doesn't say what it found")
@@ -39,6 +45,7 @@ public struct Command: Sendable, Equatable {
         self.title = title
         self.chords = chords
         runsFromLinks = links
+        runsFromRemote = remote
         self.argument = argument
         runsFromMenus = menus && !palette
         inPalette = palette

@@ -4,11 +4,11 @@ import Settings
 import WindowPlacement
 
 /// The Settings window: one window with a toolbar of panes, General, Playback, Appearance,
-/// Toolbar, Library, Watched Folders, Tagging and Shortcuts. Made on first use and kept.
+/// Toolbar, Library, Watched Folders, Tagging, Remote and Shortcuts. Made on first use and kept.
 @MainActor
 public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     public enum Pane: String, CaseIterable {
-        case general, playback, appearance, toolbar, library, folders, tagging, shortcuts
+        case general, playback, appearance, toolbar, library, folders, tagging, remote, shortcuts
 
         var title: String {
             switch self {
@@ -19,6 +19,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .library: "Library"
             case .folders: AppSettings().watchedFolders.title
             case .tagging: "Tagging"
+            case .remote: "Remote"
             case .shortcuts: "Shortcuts"
             }
         }
@@ -32,6 +33,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .toolbar: [.titles, .toolbarStatus, .statusBar]
             case .library: [.libraryFolder, .browsing, .database]
             case .folders: [.folderChanges, .networkFolders]
+            case .remote: [.remote]
             }
         }
 
@@ -44,6 +46,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .library: "books.vertical"
             case .folders: "folder"
             case .tagging: "tag"
+            case .remote: "iphone"
             case .shortcuts: "keyboard"
             }
         }
@@ -61,6 +64,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private let toolbarPane: GeneralPane
     private let library: GeneralPane
     private let folders: FoldersPane
+    private let remote: RemotePane
     /// Made as it's first shown, since its model reads the mapping then.
     private(set) var tagging: TaggingPane?
     private let shortcuts: ShortcutsPane
@@ -76,7 +80,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     /// `value` reads a setting as JSON holds it and `set` writes one, as `general`'s do.
     public init(
         general: GeneralModel, shortcuts: ShortcutsModel, configPath: String,
-        actions: SettingsActions, value: @escaping (String) -> Any?,
+        actions: SettingsActions, remote: RemoteControls, value: @escaping (String) -> Any?,
         set: @escaping (String, Any) throws -> Void
     ) {
         model = general
@@ -96,6 +100,10 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         library = GeneralPane(
             model: general, configPath: nil, actions: actions, sections: Pane.library.sections)
         folders = FoldersPane(model: general, actions: actions)
+        self.remote = RemotePane(
+            model: RemoteModel(remote),
+            settings: GeneralPane(
+                model: general, configPath: nil, actions: actions, sections: Pane.remote.sections))
         self.shortcuts = ShortcutsPane(model: shortcuts)
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: GeneralPane.width, height: 400),
@@ -133,6 +141,8 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         show(pane)
         if pane == .folders {
             folders.focus(key)
+        } else if pane == .remote {
+            remote.focus(key)
         } else {
             (controller(pane) as? GeneralPane)?.focus(key)
         }
@@ -176,6 +186,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         toolbarPane.reload()
         library.reload()
         if folders.isViewLoaded { folders.reload() }
+        if remote.isViewLoaded { remote.reload() }
         if let tagging, tagging.isViewLoaded { tagging.reload() }
         if shortcuts.isViewLoaded { shortcuts.reload() }
     }
@@ -189,6 +200,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         case .library: library
         case .folders: folders
         case .tagging: taggingPane()
+        case .remote: remote
         case .shortcuts: shortcuts
         }
     }

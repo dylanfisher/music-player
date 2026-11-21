@@ -44,6 +44,38 @@ import Testing
         ])
 }
 
+/// A paired remote runs playback, the queue, the volumes, the output and the receiver, and
+/// nothing that writes tags, moves files, changes another setting or approves a download
+/// (ADR 0214).
+@Test func onlyPlaybackVolumeOutputAndTheReceiverRunFromTheRemote() {
+    let remote = Set(AppCommands.all().filter(\.runsFromRemote).map(\.id))
+    let receiver: Set<CommandID> = [
+        .receiverVolumeUp, .receiverVolumeDown, .receiverSetVolume, .receiverMute,
+        .receiverPowerOn, .receiverStandby,
+    ]
+    let playback: Set<CommandID> = [
+        .playPause, .play, .pause, .nextTrack, .previousTrack, .seekForward, .seekBack,
+        .seekForwardPercent, .seekBackPercent, .seekTo, .volumeUp, .volumeDown,
+        .setAppVolume, .chooseOutput, .stop, .shuffle, .repeatOff, .repeatAll, .repeatOne,
+    ]
+    #expect(
+        remote
+            == playback.union(receiver).union(ReceiverInput.allCases.map(CommandID.receiverInput)))
+    #expect(!remote.contains { $0.rawValue.hasPrefix("setting.") })
+}
+
+@Test func seekToAndSetVolumeTakeAPlainNumberInRange() {
+    #expect(CommandArgument.seconds("12.5") == 12.5)
+    #expect(CommandArgument.seconds("0") == 0)
+    for text in ["-1", "1e3", "", ".5", "5.", "1.2.3", "nan", "inf", "86401", "0x10", " 1"] {
+        #expect(CommandArgument.seconds(text) == nil, "\(text)")
+    }
+    #expect(CommandArgument.decibels("-12", in: -60...0) == -12)
+    #expect(CommandArgument.decibels("+1", in: -60...0) == nil)
+    #expect(CommandArgument.decibels("--1", in: -60...0) == nil)
+    #expect(CommandArgument.decibels("-61", in: -60...0) == nil)
+}
+
 /// Any web page can open a link, so this list is the whole of what one can do (ADR 0036).
 @Test func onlyPlaybackAndNavigationRunFromLinks() {
     let linked = Set(AppCommands.all().filter(\.runsFromLinks).map(\.id))
@@ -56,7 +88,7 @@ import Testing
         ])
     #expect(
         AppCommands.all().filter { $0.argument != nil }.map(\.id)
-            == [.showStats, .play, .receiverSetVolume])
+            == [.showStats, .play, .seekTo, .setAppVolume, .chooseOutput, .receiverSetVolume])
     #expect(AppCommands.all().filter(\.replies).map(\.id) == [.showStats, .showSpectrum])
     #expect(AppCommands.all().filter(\.takesPaths).map(\.id) == [.showSpectrum])
 }

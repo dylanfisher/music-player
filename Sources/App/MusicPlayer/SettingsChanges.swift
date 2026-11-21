@@ -3,6 +3,7 @@ import Commands
 import Library
 import LibraryBrowser
 import Recommender
+import Remote
 import Settings
 import SettingsWindow
 import UniformTypeIdentifiers
@@ -109,7 +110,7 @@ extension AppDelegate {
 
     /// What follows each changed key: the shortcuts, the appearance,
     /// the watched folders and how they're scanned, the Artist pane's grouping, the track table's
-    /// look, receiver control, the output, and when a track counts as played.
+    /// look, receiver control, the web remote, the output, and when a track counts as played.
     func settingsChanged(_ keys: Set<String>) {
         guard let settings else { return }
         let schema = settings.schema
@@ -213,6 +214,9 @@ extension AppDelegate {
         }
         if !keys.isDisjoint(with: [schema.receiverEnabled.key, schema.receiverAddress.key]) {
             applyReceiverSetting()
+        }
+        if !keys.isDisjoint(with: [schema.remoteEnabled.key, schema.remotePort.key]) {
+            applyRemoteSetting()
         }
         let output = [schema.outputDeviceUID.key, schema.hogMode.key, schema.digitalVolume.key]
         if !keys.isDisjoint(with: output) {
@@ -330,7 +334,11 @@ extension AppDelegate {
                 restoreSnapshot: { [weak self] snapshot in
                     guard let window = self?.settingsWindow?.window else { return }
                     self?.confirmRestoring(snapshot, over: window)
-                }), value: value, set: set)
+                }),
+            remote: RemoteControls(
+                pairing: remote.pairing, devices: { [weak self] in self?.remoteDeviceRegistry() },
+                links: { [weak self] in self?.remote.service?.links }),
+            value: value, set: set)
         settingsWindow = controller
         return controller
     }

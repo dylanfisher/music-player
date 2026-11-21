@@ -13,7 +13,11 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>With Receiver Control on, the app finds your receiver on the local network and controls its volume, sound mode, input and power.</string>
+	<string>With Receiver Control on, the app finds your receiver on the local network and controls its volume, sound mode, input and power. With the Web Remote on, it answers paired phones and finds the other Macs running it.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_music-player._tcp</string>
+	</array>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>

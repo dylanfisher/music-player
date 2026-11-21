@@ -16,9 +16,12 @@ struct HTTPHead: Equatable {
     static let fieldCap = 100
 
     static let version = "HTTP/1.1"
+    /// The older version, whose requests both servers take.
+    static let version10 = "HTTP/1.0"
     /// Field names, lowercased as `fields` holds them.
     static let contentLength = "content-length"
     static let transferEncoding = "transfer-encoding"
+    static let host = "host"
 
     enum Parse: Equatable {
         /// The head goes on past the bytes so far, which are under the cap.

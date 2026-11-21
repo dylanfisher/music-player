@@ -62,7 +62,7 @@ package struct RecommenderClient: Sendable {
             reply = try await LocalHTTPClient.post(
                 url,
                 fields: [
-                    ("Content-Type", "application/json"),
+                    (HTTPWord.contentType, HTTPWord.json),
                     ("Authorization", "Bearer \(token.secret)"),
                 ], body: bytes, timeoutSeconds: timeoutSeconds, keepingRefusals: true)
         } catch {

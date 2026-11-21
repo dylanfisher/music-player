@@ -18,7 +18,7 @@ package struct SOAPAction: Sendable {
     /// The fields besides the body that the request needs.
     var fields: [(String, String)] {
         [
-            ("Content-Type", "text/xml; charset=\"utf-8\""),
+            (HTTPWord.contentType, "text/xml; charset=\"utf-8\""),
             ("SOAPACTION", "\"\(serviceType)#\(name)\""),
         ]
     }

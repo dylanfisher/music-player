@@ -154,6 +154,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var scriptRouter: ScriptRouter?
     /// Receiver control, while `receiver.enabled` is on.
     var receiver: ReceiverControl?
+    /// The web remote's service and what it keeps between reads (ADR 0214).
+    let remote = RemoteParts()
     var scriptServer: LocalSocketServer?
     /// Links that came before the router, run once it's there.
     var waitingLinks: [String] = []
@@ -451,21 +453,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let aside = index.movedAside { showMovedAside(aside, in: window.window) }
     }
 
-    /// Says the library file couldn't be read and where it went, with a way to find it.
-    private func showMovedAside(_ aside: URL, in window: NSWindow) {
-        let alert = NSAlert()
-        alert.messageText = "The library file couldn't be read"
-        alert.informativeText =
-            "It was moved to \(aside.path), and a new library was started. The next scan fills"
-            + " it. The plays, ratings and playlists stay in the old file."
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Show in Finder")
-        alert.beginSheetModal(for: window) { response in
-            guard response == .alertSecondButtonReturn else { return }
-            NSWorkspace.shared.activateFileViewerSelecting([aside])
-        }
-    }
-
     /// The first rows are on screen. Everything that can wait for that starts now.
     private func interactive() {
         guard let settings else { return }
@@ -480,6 +467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         spectrograms.trimInBackground()
         startScripting()
         applyReceiverSetting()
+        applyRemoteSetting()
         startWatching(settings)
         applyDownloadsSettings()
         showLibraryAnalysisStanding()
@@ -626,6 +614,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         volumeKeyTap?.stop()
         scriptServer?.stop()
         receiver?.stop()
+        remote.service?.stop()
         downloadsStarting?.cancel()
         downloads.stop()
         window?.saveToolbarVisibility()
@@ -727,6 +716,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for await update in await engine.updates() {
                     self?.playback = update.state
                     self?.playbackChanged(update.state)
+                    self?.remote.queue.note(update.state, at: Date().timeIntervalSince1970)
                     self?.browser?.showPlaying(path: self?.currentTrackPath)
                     self?.playTracker?.handle(update)
                     if case .trackStarted(let index) = update.event {

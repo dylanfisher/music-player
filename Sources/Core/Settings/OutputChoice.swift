@@ -38,6 +38,9 @@ public enum OutputChoice: Hashable, Sendable {
         }
     }
 
+    /// What `init(text:)` reads, as help shows it.
+    public static let textHelp = "\(prefix), \(prefix)\(device)<uid> or \(prefix)\(renderer)<udn>"
+
     public init?(text: String) {
         guard text.hasPrefix(Self.prefix) else { return nil }
         let rest = text.dropFirst(Self.prefix.count)

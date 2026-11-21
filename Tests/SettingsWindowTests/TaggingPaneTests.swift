@@ -180,7 +180,7 @@ private func select(_ field: DiscogsField, in pane: TaggingPane) {
                     lastProblem: nil)
             },
             revealIndex: {}, backUpNow: {}, restoreSnapshot: { _ in }),
-        value: value, set: { _, _ in })
+        remote: remoteControls(), value: value, set: { _, _ in })
     defer { controller.window.close() }
     #expect(controller.tagging == nil, "made as it's first shown")
     controller.show(setting: TaggingModel.setting.key)

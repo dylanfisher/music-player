@@ -6,24 +6,37 @@ enum HTTPRoute: Equatable {
     case serve(token: String, range: ByteRangeRequest?, sendsBody: Bool)
 }
 
-enum HTTPStatus: Int, Equatable {
+/// The statuses the two servers answer with.
+public enum HTTPStatus: Int, Equatable, Sendable {
     case ok = 200
+    case noContent = 204
     case partialContent = 206
     case badRequest = 400
+    case unauthorized = 401
+    case forbidden = 403
     case notFound = 404
     case methodNotAllowed = 405
+    case payloadTooLarge = 413
+    case unsupportedMediaType = 415
     case rangeNotSatisfiable = 416
     case headersTooLarge = 431
+    case serviceUnavailable = 503
 
     var reason: String {
         switch self {
         case .ok: "OK"
+        case .noContent: "No Content"
         case .partialContent: "Partial Content"
         case .badRequest: "Bad Request"
+        case .unauthorized: "Unauthorized"
+        case .forbidden: "Forbidden"
         case .notFound: "Not Found"
         case .methodNotAllowed: "Method Not Allowed"
+        case .payloadTooLarge: "Content Too Large"
+        case .unsupportedMediaType: "Unsupported Media Type"
         case .rangeNotSatisfiable: "Range Not Satisfiable"
         case .headersTooLarge: "Request Header Fields Too Large"
+        case .serviceUnavailable: "Service Unavailable"
         }
     }
 }
@@ -55,11 +68,11 @@ let tokenLength = 32
 func route(_ head: HTTPHead, extra: Int, authority: String) -> HTTPRoute {
     let method = head.start[0]
     guard method == "GET" || method == "HEAD" else { return .refuse(.methodNotAllowed) }
-    guard head.start[2] == HTTPHead.version || head.start[2] == "HTTP/1.0" else {
+    guard head.start[2] == HTTPHead.version || head.start[2] == HTTPHead.version10 else {
         return .refuse(.badRequest)
     }
     // DNS rebinding: a page that resolved its own name to this address still sends its name.
-    guard let host = head.value("host"), host.lowercased() == authority.lowercased() else {
+    guard let host = head.value(HTTPHead.host), host.lowercased() == authority.lowercased() else {
         return .refuse(.badRequest)
     }
     let lengths = head.values(HTTPHead.contentLength)

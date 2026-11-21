@@ -301,7 +301,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let sections = model.sections
     #expect(
         sections.map(\.section) == [
-            .output, .playCounts, .sync, .receiver, .downloads, .folderChanges, .networkFolders,
+            .output, .playCounts, .sync, .receiver, .downloads, .remote, .folderChanges,
+            .networkFolders,
             .libraryFolder, .browsing, .database, .theme, .trackTable, .titles, .toolbarStatus,
             .statusBar,
         ])
@@ -733,7 +734,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        configPath: "/tmp/config.json", actions: actions(), remote: remoteControls(),
+        value: { _ in nil },
         set: { _, _ in })
     func keys(_ view: NSView) -> Set<String> {
         view.subviews.reduce(into: Set(view.identifier.map { [$0.rawValue] } ?? [])) {
@@ -792,7 +794,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        configPath: "/tmp/config.json", actions: actions(), remote: remoteControls(),
+        value: { _ in nil },
         set: { _, _ in })
     controller.show(.general)
     defer { controller.window.close() }
@@ -829,7 +832,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        configPath: "/tmp/config.json", actions: actions(), remote: remoteControls(),
+        value: { _ in nil },
         set: { _, _ in })
     controller.show(.shortcuts)
     defer { controller.window.close() }
@@ -856,7 +860,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        configPath: "/tmp/config.json", actions: actions(), remote: remoteControls(),
+        value: { _ in nil },
         set: { _, _ in })
     controller.show(.general)
     defer { controller.window.close() }
@@ -887,7 +892,7 @@ private func waitFor(_ condition: () -> Bool) async throws {
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
         configPath: "/tmp/config.json", actions: actions(openConfigFile: { opened += 1 }),
-        value: { _ in nil }, set: { _, _ in })
+        remote: remoteControls(), value: { _ in nil }, set: { _, _ in })
     controller.show(setting: schema.rescanNetworkFoldersAtLaunch.key)
     #expect(controller.window.title == schema.watchedFolders.title)
     let folders = try #require(controller.window.contentViewController?.view)
@@ -924,7 +929,8 @@ private func waitFor(_ condition: () -> Bool) async throws {
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
         general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
-        configPath: "/tmp/config.json", actions: actions(), value: { _ in nil },
+        configPath: "/tmp/config.json", actions: actions(), remote: remoteControls(),
+        value: { _ in nil },
         set: { _, _ in })
     defer { controller.window.close() }
     let folderKeys = [

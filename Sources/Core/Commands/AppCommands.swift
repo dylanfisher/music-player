@@ -160,8 +160,15 @@ extension CommandID {
     /// `AppCommands.seekStepMinimumSeconds`, whichever is longer.
     public static let seekForwardPercent = CommandID("playback.seekForwardPercent")
     public static let seekBackPercent = CommandID("playback.seekBackPercent")
+    /// To a position in seconds, for the web remote's seek bar.
+    public static let seekTo = CommandID("playback.seekTo")
     public static let volumeUp = CommandID("playback.volumeUp")
     public static let volumeDown = CommandID("playback.volumeDown")
+    /// The app's digital volume to a level, for the web remote's slider; its last part isn't
+    /// the receiver's Set Volume, as the command line names commands by it.
+    public static let setAppVolume = CommandID("playback.setAppVolume")
+    /// The output to play through, by `OutputChoice.text`, for the web remote.
+    public static let chooseOutput = CommandID("output.chooseOutput")
     public static let stop = CommandID("playback.stop")
     public static let shuffle = CommandID("playback.shuffle")
     public static let repeatOff = CommandID("playback.repeatOff")
@@ -209,6 +216,10 @@ public enum AppCommands {
     private static let playArgument = "a search, or album:, artist: or genre: and a name"
     /// Set Receiver Volume's argument, as `ReceiverVolume(decibels:)` reads it.
     private static let receiverVolumeArgument = "a level in dB from -80 to +18, in half steps"
+    /// Seek To's argument, as `CommandArgument.seconds` reads it.
+    private static let seekToArgument = "a position in seconds"
+    /// Set Volume's argument, as `CommandArgument.decibels` reads it.
+    private static let appVolumeArgument = "a level in dB, 0 or under"
     /// How far Seek Forward and Back 5% or 30 s move: this percentage of the track's duration,
     /// or `seekStepMinimumSeconds` when that's longer or the duration is unknown.
     public static let seekStepPercent = 5
@@ -345,50 +356,62 @@ public enum AppCommands {
             Command(.exportLibraryProfile, "Export Library Profile…"),
             Command(.sendLibraryProfile, "Send Library Profile to Service"),
 
-            Command(.playPause, "Play/Pause", [.init(.space)], links: true),
-            Command(.play, "Play", links: true, argument: playArgument),
-            Command(.pause, "Pause", links: true),
+            Command(.playPause, "Play/Pause", [.init(.space)], links: true, remote: true),
+            Command(.play, "Play", links: true, remote: true, argument: playArgument),
+            Command(.pause, "Pause", links: true, remote: true),
             Command(
                 .playSelection, "Play Now", [.init(.return), .init(.down, cmd)],
                 links: true),
             Command(.playNext, "Play Next", [.init(.return, opt)], links: true),
             Command(.addToQueue, "Add to Playback Queue"),
-            Command(.nextTrack, "Next Track", [.init(.right, cmd), .init(.right)], links: true),
             Command(
-                .previousTrack, "Previous Track", [.init(.left, cmd), .init(.left)], links: true),
+                .nextTrack, "Next Track", [.init(.right, cmd), .init(.right)], links: true,
+                remote: true),
+            Command(
+                .previousTrack, "Previous Track", [.init(.left, cmd), .init(.left)], links: true,
+                remote: true),
             // ⌥→ and ⌥← (with or without ⇧) move by word in a field being edited, which takes
             // them first (`KeyChord.isTextEditing`).
             Command(
                 .seekForward, "Seek Forward", [.init(.right, [opt, cmd]), .init(.right, opt)],
-                links: true),
+                links: true, remote: true),
             Command(
                 .seekBack, "Seek Back", [.init(.left, [opt, cmd]), .init(.left, opt)],
-                links: true),
+                links: true, remote: true),
             Command(
                 .seekForwardPercent,
                 "Seek Forward \(seekStepPercent)% or \(seekStepMinimumSeconds) s",
-                [.init(.right, [opt, shift])], links: true),
+                [.init(.right, [opt, shift])], links: true, remote: true),
             Command(
                 .seekBackPercent, "Seek Back \(seekStepPercent)% or \(seekStepMinimumSeconds) s",
-                [.init(.left, [opt, shift])], links: true),
+                [.init(.left, [opt, shift])], links: true, remote: true),
             // Not from links: a page could raise it to full in a loop (ADR 0036).
-            Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])]),
-            Command(.volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])], links: true),
-            Command(.stop, "Stop", links: true),
-            Command(.shuffle, "Shuffle", links: true),
-            Command(.repeatOff, "Repeat Off", links: true),
-            Command(.repeatAll, "Repeat All", links: true),
-            Command(.repeatOne, "Repeat One", links: true),
+            Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])], remote: true),
+            Command(
+                .volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])], links: true, remote: true),
+            Command(.stop, "Stop", links: true, remote: true),
+            // Only from the command line and the remote, since each needs its argument.
+            Command(.seekTo, "Seek To", remote: true, argument: seekToArgument, menus: false),
+            Command(
+                .setAppVolume, "Set Volume", remote: true, argument: appVolumeArgument,
+                menus: false),
+            Command(
+                .chooseOutput, "Choose Output", remote: true, argument: OutputChoice.textHelp,
+                menus: false),
+            Command(.shuffle, "Shuffle", links: true, remote: true),
+            Command(.repeatOff, "Repeat Off", links: true, remote: true),
+            Command(.repeatAll, "Repeat All", links: true, remote: true),
+            Command(.repeatOne, "Repeat One", links: true, remote: true),
 
             // Only Volume Down from links, as for the app's own volume (ADR 0039).
-            Command(.receiverVolumeUp, "Receiver Volume Up"),
-            Command(.receiverVolumeDown, "Receiver Volume Down", links: true),
+            Command(.receiverVolumeUp, "Receiver Volume Up", remote: true),
+            Command(.receiverVolumeDown, "Receiver Volume Down", links: true, remote: true),
             Command(
-                .receiverSetVolume, "Set Receiver Volume", argument: receiverVolumeArgument,
-                menus: false),
-            Command(.receiverMute, "Mute Receiver"),
-            Command(.receiverPowerOn, "Turn Receiver On"),
-            Command(.receiverStandby, "Put Receiver in Standby"),
+                .receiverSetVolume, "Set Receiver Volume", remote: true,
+                argument: receiverVolumeArgument, menus: false),
+            Command(.receiverMute, "Mute Receiver", remote: true),
+            Command(.receiverPowerOn, "Turn Receiver On", remote: true),
+            Command(.receiverStandby, "Put Receiver in Standby", remote: true),
 
             Command(.showSettings, "Settings…", [.init(",", cmd)]),
             Command(.openConfigFile, "Open Config File"),
@@ -404,7 +427,7 @@ public enum AppCommands {
             Command(.receiverSoundMode($0), "Receiver \($0.title)")
         }
         + ReceiverInput.allCases.map {
-            Command(.receiverInput($0), "Switch Receiver to \($0.title)")
+            Command(.receiverInput($0), "Switch Receiver to \($0.title)", remote: true)
         }
 
     /// Every command: those above, then those generated from `settings`.

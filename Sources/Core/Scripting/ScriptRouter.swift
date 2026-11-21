@@ -10,6 +10,8 @@ public final class ScriptRouter {
         case commandLine
         /// A `music-player://` link: only commands marked `runsFromLinks`.
         case link
+        /// A paired web remote: only commands marked `runsFromRemote`, by their whole ID.
+        case remote
     }
 
     /// Runs a command's argument; each command declaring one has one.
@@ -64,7 +66,9 @@ public final class ScriptRouter {
     public func handle(_ request: ScriptRequest, from origin: Origin) async -> ScriptReply {
         switch request {
         case .status:
-            guard origin == .commandLine else { return .failed("a link can't ask for the status") }
+            guard origin == .commandLine else {
+                return .failed("only the command line can ask for the status")
+            }
             return .status(await status())
         case .run(let id, let argument):
             guard let command = dispatcher.bindings.defaults.command(id) else {
@@ -72,6 +76,9 @@ public final class ScriptRouter {
             }
             if origin == .link, !command.runsFromLinks {
                 return .failed("\(id) doesn't run from links")
+            }
+            if origin == .remote, !command.runsFromRemote {
+                return .failed("\(id) doesn't run from the web remote")
             }
             guard let argument else {
                 return dispatcher.run(id) ? .done(nil) : .failed("\(command.title) can't run now")
@@ -86,7 +93,9 @@ public final class ScriptRouter {
                 return .failed("\(error)")
             }
         case .report(let id, let argument, let json, let paths):
-            guard origin == .commandLine else { return .failed("a link can't ask for \(id)") }
+            guard origin == .commandLine else {
+                return .failed("only the command line can ask for \(id)")
+            }
             guard let report = reports[id] else {
                 return .failed("\(id) doesn't reply; run it without \(ScriptFlag.json.rawValue)")
             }

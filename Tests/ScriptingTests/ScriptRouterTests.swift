@@ -27,6 +27,18 @@ private final class Recorder {
                 arguments.append(text)
                 return nil
             },
+            .seekTo: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
+            .setAppVolume: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
+            .chooseOutput: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
         ],
         reports: [
             .showStats: { [unowned self] text, _, json in
@@ -66,6 +78,31 @@ private final class Recorder {
     #expect(recorder.ran == AppCommands.all().map(\.id))
 }
 
+@MainActor @Test func aRemoteRunsOnlyTheCommandsMarkedForTheRemote() async throws {
+    let recorder = try Recorder()
+    for command in AppCommands.all() {
+        let reply = await recorder.router.handle(.run(command.id, argument: nil), from: .remote)
+        #expect(
+            reply
+                == (command.runsFromRemote
+                    ? .done(nil) : .failed("\(command.id) doesn't run from the web remote")))
+    }
+    #expect(recorder.ran == AppCommands.all().filter(\.runsFromRemote).map(\.id))
+    #expect(
+        await recorder.router.handle(.run(.removeTracks, argument: nil), from: .remote)
+            == .failed("track.remove doesn't run from the web remote"))
+    #expect(
+        await recorder.router.handle(.run(.seekTo, argument: "30"), from: .remote) == .done(nil))
+    #expect(recorder.arguments == ["30"])
+    #expect(
+        await recorder.router.handle(.status, from: .remote)
+            == .failed("only the command line can ask for the status"))
+    #expect(
+        await recorder.router.handle(
+            .report(.showStats, argument: nil, json: true), from: .remote)
+            == .failed("only the command line can ask for library.stats"))
+}
+
 @MainActor @Test func aLinkRunsOnlyTheCommandsMarkedForLinks() async throws {
     let recorder = try Recorder()
     for command in AppCommands.all() {
@@ -78,7 +115,7 @@ private final class Recorder {
     #expect(recorder.ran == AppCommands.all().filter(\.runsFromLinks).map(\.id))
     #expect(
         await recorder.router.handle(.status, from: .link)
-            == .failed("a link can't ask for the status"))
+            == .failed("only the command line can ask for the status"))
 }
 
 @MainActor @Test func argumentsGoToTheirHandlerAndFailuresAreSaid() async throws {
@@ -167,7 +204,7 @@ private final class Recorder {
             == .failed("nothing matches"))
     #expect(
         await router.handle(.report(.showStats, argument: nil, json: false), from: .link)
-            == .failed("a link can't ask for library.stats"))
+            == .failed("only the command line can ask for library.stats"))
     #expect(
         await router.handle(.report(.nextTrack, argument: nil, json: true), from: .commandLine)
             == .failed("playback.next doesn't reply; run it without --json"))
