@@ -743,11 +743,13 @@ page: 10.6 to 10.8, with their tests. Each part gets its own review. ADR 0214 is
 2. `LocalNetwork`: 304 Not Modified, `If-None-Match` in the preflight's allowed headers, and
    `ETag` exposed to the other Macs' pages.
 3. `Library`: `trackNames` takes a window (`LIMIT`/`OFFSET` on the same statement) and a
-   filtered count gives the total; one new read, an art track for each of a set of albums, for
-   the album grid. `ThumbnailStore` hands back a thumbnail's encoded bytes, made and kept on a
+   filtered count gives the total; `searchEntries` reads the Artist and Album panes with the
+   search applied, which the panes ignore; one new read, an art track for each of a set of
+   albums, for the album grid. `ThumbnailStore` hands back a thumbnail's encoded bytes, made and kept on a
    miss, and names a picture by the hash its files are named by.
 4. `Remote`: `RemoteLibrary` on a query-only connection of its own: `/api/genres`,
-   `/api/artists`, `/api/albums` (compact arrays, whole, with first-letter offsets),
+   `/api/artists`, `/api/albums` (compact arrays, whole; the phone works out the jump bar's
+   letters from the names),
    `/api/tracks` (a total and a range by `offset` and `limit`, sorted by a `TrackColumn`),
    `/api/search` (artists, albums and tracks, 20 each), `/api/queue` (a range of the queue in
    play order, with its stamp), `/api/covers` (art IDs for albums) and `/api/art/<size>/<id>`

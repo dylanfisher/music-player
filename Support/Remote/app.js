@@ -383,7 +383,12 @@ async function cover(mac, id, size) {
   }
   const made = mac.fetch("/api/art/" + size + "/" + encodeURIComponent(id), { cache: "default" })
     .then((response) => (response.ok ? response.blob() : null))
-    .then((blob) => (blob ? URL.createObjectURL(blob) : null));
+    .then((blob) => (blob ? URL.createObjectURL(blob) : null))
+    .catch((error) => {
+      // Not kept, so the next showing asks again.
+      covers.delete(url);
+      throw error;
+    });
   covers.set(url, made);
   while (covers.size > COVERS_KEPT) {
     const [oldest, kept] = covers.entries().next().value;
@@ -415,8 +420,8 @@ function showCover(image, mac, id, size) {
 
 class VirtualList {
   /// `source` gives `total`, `row(index)` (undefined until loaded), `need(first, last)`, and
-  /// `render(element, row, index)`; `rowHeight` is in pixels, `perRow` items to a row.
-  constructor(container, source, rowHeight = ROW) {
+  /// `render(element, row, index)`; `rowHeight` is in pixels, and `scroll` where it starts.
+  constructor(container, source, rowHeight = ROW, scroll = 0) {
     this.container = container;
     this.source = source;
     this.rowHeight = rowHeight;
@@ -424,6 +429,8 @@ class VirtualList {
     this.spacer.className = "spacer";
     this.rows = [];
     container.replaceChildren(this.spacer);
+    this.spacer.style.height = source.total() * rowHeight + "px";
+    container.scrollTop = scroll;
     for (let i = 0; i < POOL; i++) {
       const element = document.createElement("div");
       element.className = "row";
@@ -787,6 +794,11 @@ function query(filter) {
 }
 
 function openLevel(next) {
+  // Kept, so Back comes back to the same place in the list.
+  if (level()) {
+    level().scroll = $("browse-list").scrollTop;
+    if (browse.list) level().total = browse.list.source.total();
+  }
   browse.stack.push(next);
   showLevel();
 }
@@ -836,7 +848,7 @@ function showEntries(current, mac) {
           element.onclick = () => enter(current, row);
         },
       };
-      browse.list = new VirtualList($("browse-list"), source);
+      browse.list = new VirtualList($("browse-list"), source, ROW, current.scroll ?? 0);
       jumpBar(rows.map((row) => row[1]), browse.list);
     },
     (error) => $("browse-list").replaceChildren(empty(error.message))
@@ -871,9 +883,10 @@ function showTracks(current, mac) {
       }
     };
   });
-  source.count = 1;
+  // The length it had, so the place Back returns to is in the list before its first range.
+  source.count = current.total ?? 1;
   source.mac = mac;
-  browse.list = new VirtualList($("browse-list"), source);
+  browse.list = new VirtualList($("browse-list"), source, ROW, current.scroll ?? 0);
   source.list = browse.list;
 }
 
@@ -933,7 +946,7 @@ function showGrid(current, mac) {
           element.appendChild(tiles);
         },
       };
-      const grid = new VirtualList($("browse-list"), source, Math.ceil(width + 52));
+      const grid = new VirtualList($("browse-list"), source, Math.ceil(width + 52), current.scroll ?? 0);
       browse.list = grid;
     },
     (error) => $("browse-list").replaceChildren(empty(error.message))
@@ -1011,7 +1024,8 @@ function runSearch(text) {
   const mac = chosen();
   if (!mac || !mac.paired) return;
   mac.json("/api/search?q=" + encodeURIComponent(text)).then(
-    (found) => searched(text, found),
+    // A reply from a Mac no longer chosen is about another library.
+    (found) => searched(text, chosen() === mac ? found : null),
     (error) => {
       searched(text, null);
       say(error.message);
