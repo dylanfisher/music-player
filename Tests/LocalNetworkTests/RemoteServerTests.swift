@@ -27,6 +27,9 @@ private final class Fixture: @unchecked Sendable {
                     continuation.yield(Array("data: first\n\n".utf8))
                     return .events(stream, stop: { [self] in lock.withLock { stopped += 1 } })
                 }
+                if request.path == "/unchanged" {
+                    return .reply(RemoteReply(.notModified, fields: [("ETag", "\"1\"")]))
+                }
                 let text =
                     "\(request.method) \(request.path) \(request.query ?? "-") "
                     + String(decoding: request.body, as: UTF8.self)
@@ -180,6 +183,7 @@ private final class Fixture: @unchecked Sendable {
     let allowed = try await fixture.get("/api/state", "Origin: \(other)\r\n")
     #expect(allowed.status == 200)
     #expect(allowed.head.contains("Access-Control-Allow-Origin: \(other)"))
+    #expect(allowed.head.contains("Access-Control-Expose-Headers: ETag"))
     let own = try await fixture.get("/api/state", "Origin: http://\(fixture.host)\r\n")
     #expect(own.status == 200)
     for origin in ["http://evil.example", "null", "http://other.local:47801"] {
@@ -192,7 +196,9 @@ private final class Fixture: @unchecked Sendable {
             + "Access-Control-Request-Headers: authorization\r\n\r\n")
     #expect(preflight.status == 204)
     #expect(preflight.head.contains("Access-Control-Allow-Origin: \(other)"))
-    #expect(preflight.head.contains("Access-Control-Allow-Headers: Authorization, Content-Type"))
+    #expect(
+        preflight.head.contains(
+            "Access-Control-Allow-Headers: Authorization, Content-Type, If-None-Match"))
     #expect(!preflight.head.contains("Content-Length"))
     let foreign = try await fixture.exchange(
         "OPTIONS /api/command HTTP/1.1\r\nHost: \(fixture.host)\r\nOrigin: http://evil.example"
@@ -201,6 +207,21 @@ private final class Fixture: @unchecked Sendable {
     let bare = try await fixture.exchange(
         "OPTIONS /api/command HTTP/1.1\r\nHost: \(fixture.host)\r\n\r\n")
     #expect(bare.status == 403)
+}
+
+@Test func aNotModifiedReplyHasNoBodyAndKeepsTheConnection() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    let connection = try await fixture.connect()
+    defer { connection.close() }
+    let unchanged = try await fixture.exchange(
+        "GET /unchanged HTTP/1.1\r\nHost: \(fixture.host)\r\n\r\n", on: connection)
+    #expect(unchanged.status == 304)
+    #expect(unchanged.head.contains("HTTP/1.1 304 Not Modified"))
+    #expect(!unchanged.head.contains("Content-Length"))
+    let next = try await fixture.exchange(
+        "GET /small HTTP/1.1\r\nHost: \(fixture.host)\r\n\r\n", on: connection)
+    #expect(next.status == 200)
 }
 
 @Test func aLargeReplyIsGzippedWhenTheClientTakesGzip() async throws {

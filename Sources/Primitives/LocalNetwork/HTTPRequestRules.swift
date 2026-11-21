@@ -11,6 +11,7 @@ public enum HTTPStatus: Int, Equatable, Sendable {
     case ok = 200
     case noContent = 204
     case partialContent = 206
+    case notModified = 304
     case badRequest = 400
     case unauthorized = 401
     case forbidden = 403
@@ -27,6 +28,7 @@ public enum HTTPStatus: Int, Equatable, Sendable {
         case .ok: "OK"
         case .noContent: "No Content"
         case .partialContent: "Partial Content"
+        case .notModified: "Not Modified"
         case .badRequest: "Bad Request"
         case .unauthorized: "Unauthorized"
         case .forbidden: "Forbidden"

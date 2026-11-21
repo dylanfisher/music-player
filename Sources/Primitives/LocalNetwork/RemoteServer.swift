@@ -306,13 +306,14 @@ public final class RemoteServer: @unchecked Sendable {
 
     private static let preflightFields = [
         ("Access-Control-Allow-Methods", "GET, POST"),
-        ("Access-Control-Allow-Headers", "Authorization, Content-Type"),
+        ("Access-Control-Allow-Headers", "Authorization, Content-Type, If-None-Match"),
         ("Access-Control-Max-Age", "600"),
     ]
 
     private func cors(_ origin: String?) -> [(String, String)] {
         guard let origin else { return [] }
-        return [("Access-Control-Allow-Origin", origin)]
+        // The other Macs' pages read a list's tag to ask for it again with `If-None-Match`.
+        return [("Access-Control-Allow-Origin", origin), ("Access-Control-Expose-Headers", "ETag")]
     }
 
     /// HTTP/1.0, or `Connection: close`, ends the connection after its reply.
@@ -388,8 +389,8 @@ public final class RemoteServer: @unchecked Sendable {
     private func reply(_ client: RemoteClient, _ reply: RemoteReply, close: Bool) {
         var fields = reply.fields
         if let type = reply.contentType { fields.insert((HTTPWord.contentType, type), at: 0) }
-        // A 204 has no body, so no length either.
-        if reply.status != .noContent {
+        // A 204 or a 304 has no body, so no length either.
+        if reply.status != .noContent && reply.status != .notModified {
             fields.append((HTTPWord.contentLength, "\(reply.body.count)"))
         }
         fields.append((HTTPWord.connection, close ? HTTPWord.close : "keep-alive"))
