@@ -36,6 +36,9 @@ func aPastedReleaseIsAnIdOrADiscogsReleaseURL(text: String, id: Int?) {
     ("https://www.discogs.com/master/99-Made-Up-Album", .master(99)),
     ("https://www.discogs.com/fr/master/99", .master(99)),
     ("https://www.discogs.com/artist/23-Gus-Other", .artist(23)),
+    // As `pastedReleaseID` reads it, the first component with an id after it.
+    ("https://www.discogs.com/artist/1/release/2", .artist(1)),
+    ("https://www.discogs.com/artist/Gus-Other/release/2", .release(2)),
     ("https://www.discogs.com/fr/artist/23-Gus-Other", .artist(23)),
     ("https://discogs.com/artist/23", .artist(23)),
     (" https://www.discogs.com/artist/23?type=Releases \n", .artist(23)),
