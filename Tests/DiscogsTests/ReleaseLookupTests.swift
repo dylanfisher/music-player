@@ -19,6 +19,8 @@ private let stockholm = DiscogsAlbum(
     ("https://discogs.com/release/99", 99),
     ("https://www.discogs.com/fr/release/99-Album", 99),
     ("https://www.discogs.com/master/99-Album", nil),
+    ("https://www.discogs.com/artist/1/release/2", 2),
+    ("https://www.discogs.com/sell/release/77", 77),
     ("https://example.com/release/99", nil),
     ("0", nil),
     ("Made-Up Album", nil),
