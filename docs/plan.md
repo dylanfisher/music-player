@@ -48,16 +48,16 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 ### Current run order
 
-Set by the owner on 2026-11-19. Earlier run orders are in the archive.
+Set by the owner on 2026-11-19, amended on 2026-11-20. Earlier run orders are in the archive.
 
 1. Phases 91 and 92, asked for on 2026-11-19, built side by side on their own branches.
 2. Phase 85, what phase 84 left, waits until the owner starts it.
 3. Phase 10, drafted with the owner and started on 2026-11-20, runs now on its own branch. Its
    pairing-token storage is decided (see the phase).
-4. Phase 93, asked for on 2026-11-20, waits until the owner starts it.
-5. Phase 94 and music-recommender's phase 12, asked for on 2026-11-20, wait until the owner
-   starts them. The service's phase lands first.
-6. Phase 13 waits.
+4. Once phase 10 is on main, the owner said (2026-11-20) to start these unasked:
+   - phase 93 and music-recommender's phase 12, side by side in their own worktrees;
+   - then phase 94, once the service's phase 12 has landed.
+5. Phase 13 waits.
 
 ## Waiting on the owner
 
