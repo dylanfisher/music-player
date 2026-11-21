@@ -731,6 +731,39 @@ page: 10.6 to 10.8, with their tests. Each part gets its own review. ADR 0214 is
 6. `NSBonjourServices`, a placeholder `Support/Remote/index.html`, ADR 0214 (amending 0039,
    rows in 0025) and AGENTS.md's note on device tokens.
 
+**10b, browsing and the page (sub-plan).**
+1. Static files: a fixed list (`index.html`, `style.css`, `app.js`, `logic.js`, `icon.png`)
+   read from `Remote/` in the bundle once at start into a map keyed by exact path, each with
+   its type and an `ETag` of its bytes; nothing from the request path touches the file system.
+   `scripts/bundle` makes `icon.png` from `AppIcon.svg`. The page gets a
+   `Content-Security-Policy`.
+2. `LocalNetwork`: 304 Not Modified, `If-None-Match` in the preflight's allowed headers, and
+   `ETag` exposed to the other Macs' pages.
+3. `Library`: `trackNames` takes a window (`LIMIT`/`OFFSET` on the same statement) and a
+   filtered count gives the total; one new read, an art track for each of a set of albums, for
+   the album grid. `ThumbnailStore` hands back a thumbnail's encoded bytes, made and kept on a
+   miss, and names a picture by the hash its files are named by.
+4. `Remote`: `RemoteLibrary` on a query-only connection of its own: `/api/genres`,
+   `/api/artists`, `/api/albums` (compact arrays, whole, with first-letter offsets),
+   `/api/tracks` (a total and a range by `offset` and `limit`, sorted by a `TrackColumn`),
+   `/api/search` (artists, albums and tracks, 20 each), `/api/queue` (a range of the queue in
+   play order, with its stamp), `/api/covers` (art IDs for albums) and `/api/art/<size>/<id>`
+   (two sizes, `immutable`). Every library read carries `ETag` from `changeStamp`, a launch
+   nonce and the grouping, and answers `If-None-Match` with a 304. The state gains the track's
+   art ID, the app volume's floor and the receiver's inputs.
+5. Commands, through `ScriptRouter` as `Origin.remote`: Play Tracks and Queue Tracks
+   (`tracks:<ids>` or `album:<id>[:<track>]`), Move in Queue and Remove from Queue Item
+   (`<stamp>:<position>[:<to>]`, refused when the queue changed). Arguments parse in Core.
+6. The page: `logic.js`, a pure ES module (choosing a Mac, range planning with its 20-range
+   cache, search request ordering, the SSE parser, letter offsets), and `app.js`, the DOM:
+   the Mac strip, pairing, an event stream per Mac read with `fetch` and reconnected on
+   `visibilitychange` and on error with backoff, tokens keyed by instance ID and origin, Now
+   Playing, Queue, Browse (Genres, Artists, Albums, Songs, an album grid), Search, IndexedDB
+   list cache, `textContent` only.
+7. Tests: the routes, ranges, ETags and 304s against a fixture index, the art URLs, the static
+   map, the new commands and their arguments, and `logic.js` in `JavaScriptCore`. `Bench`
+   gets the three 10.7 budgets. ADR 0215.
+
 ### 13. Release readiness
 
 - [ ] Developer ID signing, hardened runtime and notarization in `scripts/bundle release`.
