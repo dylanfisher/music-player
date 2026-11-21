@@ -9,6 +9,7 @@ import Testing
 private final class Fixture: @unchecked Sendable {
     private let lock = NSLock()
     private var stopped = 0
+    private var losses = 0
     private var heard: [String] = []
     private var continuations: [AsyncStream<[UInt8]>.Continuation] = []
     var server: RemoteServer!
@@ -36,10 +37,13 @@ private final class Fixture: @unchecked Sendable {
                         body: Array((text + String(repeating: "x", count: size)).utf8)))
             },
             problem: { [self] message in lock.withLock { heard.append(message) } },
-            headSeconds: headSeconds, idleSeconds: idleSeconds)
+            lost: { [self] in lock.withLock { losses += 1 } }, headSeconds: headSeconds,
+            idleSeconds: idleSeconds)
     }
 
     var stoppedStreams: Int { lock.withLock { stopped } }
+    var problems: [String] { lock.withLock { heard } }
+    var lostListeners: Int { lock.withLock { losses } }
     var streams: [AsyncStream<[UInt8]>.Continuation] { lock.withLock { continuations } }
     var host: String { "127.0.0.1:\(server.port)" }
 
@@ -288,4 +292,39 @@ private final class Fixture: @unchecked Sendable {
             == 403)
     #expect(status("OPTIONS / HTTP/1.1\r\n\(host)Origin: http://10.0.0.3:47800\r\n\r\n") == 204)
     #expect(status("GET / HTTP/1.1\r\nHost: 10.0.0.2\r\n\r\n") == 400)
+}
+
+@Test func everyReplySaysItVariesByOriginWithOrWithoutOne() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    #expect(try await fixture.get("/api/state").head.contains("Vary: Origin"))
+    let other = try await fixture.get("/api/state", "Origin: http://other.local:47800\r\n")
+    #expect(other.head.contains("Vary: Origin"))
+}
+
+@Test func refusedConnectionsPastTheLogCapAreCountedInOneLineAtTheStop() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    var open: [LoopbackConnection] = []
+    defer { for connection in open { connection.close() } }
+    for _ in 0..<RemoteServer.connectionCap { open.append(try await fixture.connect()) }
+    try await waitFor { fixture.server.openConnections.all == RemoteServer.connectionCap }
+    let extra = RemoteServer.refusalLogCap + 5
+    for _ in 0..<extra {
+        let refused = try await fixture.connect()
+        #expect(await refused.closes(within: 3))
+        refused.close()
+    }
+    let logged = fixture.problems.filter { $0.contains("connections are open") }
+    #expect(logged.count == RemoteServer.refusalLogCap)
+    fixture.server.stop()
+    #expect(fixture.problems.last == "the web remote refused 5 more connections")
+}
+
+@Test func aListenerThatFailsAfterItWasReadyIsDroppedSaidAndReported() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    fixture.server.loseFirstListener()
+    #expect(fixture.lostListeners == 1)
+    #expect(fixture.problems.contains { $0.hasPrefix("the web remote stopped listening on lo0") })
 }

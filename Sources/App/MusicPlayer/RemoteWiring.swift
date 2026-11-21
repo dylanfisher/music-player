@@ -15,36 +15,53 @@ private let logger = moduleLogger()
 /// reads, its commands through the router, and the interfaces it follows.
 extension AppDelegate {
     /// Starts the remote when `remote.enabled` is on, on `remote.port`, and stops it otherwise.
-    /// Off, nothing listens or advertises, and every connection is closed.
+    /// Off, nothing listens or advertises, and every connection is closed. One service is made
+    /// for the launch, so its starts and stops run in order (ADR 0214).
     func applyRemoteSetting() {
-        remote.service?.stop()
-        remote.service = nil
-        remote.paths?.cancel()
-        remote.paths = nil
-        guard let settings, settings[\.remoteEnabled], let devices = remoteDeviceRegistry() else {
+        guard let settings, settings[\.remoteEnabled] else {
+            remote.service?.stop()
+            remote.paths?.cancel()
+            remote.paths = nil
             return
         }
+        guard let service = remote.service ?? makeRemoteService() else { return }
+        remote.service = service
+        if remote.paths == nil {
+            let paths = NWPathMonitor()
+            paths.pathUpdateHandler = { [weak self] _ in
+                Task { @MainActor in
+                    guard self?.settings?[\.remoteEnabled] == true else { return }
+                    self?.followInterfaces()
+                }
+            }
+            paths.start(queue: .main)
+            remote.paths = paths
+        }
+        followInterfaces()
+    }
+
+    private func makeRemoteService() -> RemoteService? {
+        guard let devices = remoteDeviceRegistry() else { return nil }
         guard let identity = remoteIdentity() else {
             browser?.report("The web remote can't start: the Mac has no computer name")
-            return
+            return nil
         }
         guard
             let url = Bundle.main.url(
                 forResource: "index.html", withExtension: nil, subdirectory: "Remote")
         else {
             browser?.report("The web remote can't start: its page isn't in the app")
-            return
+            return nil
         }
         let page: Data
         do {
             page = try Data(contentsOf: url)
         } catch {
             browser?.report("The web remote can't read its page: \(error)")
-            return
+            return nil
         }
-        let service = RemoteService(
-            identity: identity, port: UInt16(settings[\.remotePort]), devices: devices,
-            page: Array(page),
+        return RemoteService(
+            identity: identity, devices: devices, page: Array(page),
             state: { [weak self] in
                 await self?.remoteState(identity)
                     ?? RemoteState(
@@ -57,17 +74,6 @@ extension AppDelegate {
             },
             advertiser: DNSServiceAdvertiser(), browser: NetworkBrowser(),
             problem: { logger.notice("\($0)") }, pairing: remote.pairing)
-        remote.service = service
-        let paths = NWPathMonitor()
-        paths.pathUpdateHandler = { [weak self, weak service] _ in
-            Task { @MainActor in
-                guard let service, self?.remote.service === service else { return }
-                self?.followInterfaces(service)
-            }
-        }
-        paths.start(queue: .main)
-        remote.paths = paths
-        followInterfaces(service)
     }
 
     /// The paired devices, read from the state file once and kept for the launch, so the
@@ -81,8 +87,11 @@ extension AppDelegate {
         return made
     }
 
-    /// Starts the service again on the interfaces the Mac has now, when they changed.
-    private func followInterfaces(_ service: RemoteService) {
+    /// Starts the service on the interfaces the Mac has now and `remote.port`, unless it runs
+    /// on just those.
+    private func followInterfaces() {
+        guard let service = remote.service, let settings else { return }
+        let port = UInt16(settings[\.remotePort])
         let interfaces: [NetworkInterface]
         do {
             interfaces = try currentInterfaces()
@@ -92,7 +101,7 @@ extension AppDelegate {
         }
         Task { [weak self] in
             do {
-                try await service.follow(interfaces)
+                try await service.follow(interfaces, port: port)
             } catch {
                 self?.browser?.report("The web remote can't listen: \(error)")
             }
@@ -127,38 +136,25 @@ extension AppDelegate {
     private func remoteState(_ identity: RemoteService.Identity) async -> RemoteState {
         let position = await engine?.position()
         let state = playback
-        let receiverState = receiver.map(\.state).map { said in
-            RemoteState.Receiver(
-                isOn: said.isOn, volumeDecibels: said.volume?.decibels, isMuted: said.isMuted,
-                input: said.input?.rawValue)
-        }
-        let output = outputOptionsNow().first { $0.choice == currentOutput }.map {
-            RemoteState.Output(choice: $0.choice.text, name: $0.title)
+        var track: RemoteState.Track?
+        do {
+            track = try remote.track.track(at: state.currentIndex.map { state.queue[$0].path }) {
+                [trackLookup] path in
+                try trackLookup?(path).map { row in
+                    RemoteState.Track(
+                        id: row.id, albumID: row.albumID, title: row.title, artist: row.artist,
+                        album: row.album, durationSeconds: row.durationSeconds)
+                }
+            }
+        } catch {
+            logger.error("couldn't look up the playing track for the remote: \(error)")
         }
         return RemoteState(
             identity: identity, playback: state, position: position,
-            readAt: Date().timeIntervalSince1970, track: remoteTrack(state),
-            queue: remote.queue, volumeDecibels: canSetVolume ? volumeDecibels : nil,
-            output: output, receiver: receiverState)
-    }
-
-    /// The current track's IDs and tags from the index, looked up once per track rather than
-    /// at every read of the state.
-    private func remoteTrack(_ state: PlaybackState) -> RemoteState.Track? {
-        guard let path = state.currentIndex.map({ state.queue[$0].path }) else { return nil }
-        if let cached = remote.track, cached.path == path { return cached.track }
-        var track: RemoteState.Track?
-        do {
-            track = try trackLookup?(path).map { row in
-                RemoteState.Track(
-                    id: row.id, albumID: row.albumID, title: row.title, artist: row.artist,
-                    album: row.album, durationSeconds: state.durationSeconds ?? row.durationSeconds)
-            }
-        } catch {
-            logger.error("couldn't look up \(path) for the remote: \(error)")
-        }
-        remote.track = (path, track)
-        return track
+            readAt: Date().timeIntervalSince1970, track: track, queue: remote.queue,
+            volumeDecibels: canSetVolume ? volumeDecibels : nil,
+            output: RemoteState.Output(current: currentOutput, among: outputOptionsNow()),
+            receiver: receiver.map { RemoteState.Receiver($0.state) })
     }
 }
 
@@ -175,6 +171,6 @@ final class RemoteParts {
     let pairing = RemotePairing()
     /// The paired devices, made from the state file on first use.
     var devices: RemoteDeviceRegistry?
-    /// The current track as the state names it, by its path.
-    var track: (path: String, track: RemoteState.Track?)?
+    /// The current track as the state names it.
+    var track = RemoteTrackCache()
 }

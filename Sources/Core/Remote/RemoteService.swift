@@ -1,4 +1,5 @@
 import Commands
+import DisplayText
 import Foundation
 import LocalNetwork
 import Scripting
@@ -35,27 +36,40 @@ public final class RemoteService: @unchecked Sendable {
     public let pairing: RemotePairing
     public let devices: RemoteDeviceRegistry
     private let identity: Identity
-    private let port: UInt16
     private let hub: RemoteEventHub
     private let advertiser: any BonjourAdvertising
     private let browser: any BonjourBrowsing
     private let problem: @Sendable (String) -> Void
     private let lock = NSLock()
     private var server: RemoteServer?
+    /// Servers stopped whose listeners may not have closed yet, which a start waits for.
+    private var closing: [RemoteServer] = []
+    /// Moves on at each `stop`, so a start asked for before it does nothing.
     private var generation = 0
+    /// The last of the starts and restarts, each of which waits for the one before.
+    private var tail: Task<Void, Never>?
     private var own: RemoteInstance?
     private var found: [RemoteInstance] = []
     private var subnets = LocalSubnets([])
-    /// The interfaces the server listens on.
-    private var running: [NetworkInterface] = []
+    /// The interfaces and port the server listens on; empty interfaces while it's stopped, or
+    /// once a listener was lost, so the next `follow` starts it again.
+    private var running: (interfaces: [NetworkInterface], port: UInt16) = ([], 0)
+    /// The interfaces and port asked for last, which a lost listener starts again on.
+    private var wanted: (interfaces: [NetworkInterface], port: UInt16)?
+    /// What was reported of adverts this session, so each is said once.
     private var refused: Set<String> = []
     /// Set once, at the end of `init`, since its instance list reads this service.
     private var api: RemoteAPI?
 
+    /// Adverts reported in a session, past which the rest go unsaid.
+    static let refusedCap = 64
+    /// Characters of an advert's name kept: the name a Mac gives itself is far shorter.
+    static let nameCharacters = 256
+
     /// `state` says what's playing now, `run` runs a command as `Origin.remote`, and `page`
     /// is the web page's HTML.
     public init(
-        identity: Identity, port: UInt16, devices: RemoteDeviceRegistry, page: [UInt8],
+        identity: Identity, devices: RemoteDeviceRegistry, page: [UInt8],
         state: @escaping @Sendable () async -> RemoteState,
         run: @escaping @Sendable (CommandID, String?) async -> ScriptReply,
         advertiser: any BonjourAdvertising, browser: any BonjourBrowsing,
@@ -66,7 +80,6 @@ public final class RemoteService: @unchecked Sendable {
         }
     ) {
         self.identity = identity
-        self.port = port
         self.devices = devices
         self.pairing = pairing
         self.advertiser = advertiser
@@ -82,22 +95,73 @@ public final class RemoteService: @unchecked Sendable {
             instances: { [weak self] in self?.instances ?? [] })
     }
 
-    /// Starts on `interfaces`, or starts again on them, as when the Mac joins another network,
-    /// keeping the code shown. Throws when no interface can listen on the port.
-    public func start(on interfaces: [NetworkInterface]) async throws(LocalNetworkError) {
-        let started = lock.withLock { () -> Int in
-            generation += 1
+    /// Starts on `interfaces` at `port`, or again when either changed or a listener was lost,
+    /// keeping the code shown. Calls run one at a time, in the order made, and one made before
+    /// a `stop` does nothing, so two at once or a quick off and on never leave two servers or
+    /// none. Throws when no interface can listen on the port.
+    public func follow(_ interfaces: [NetworkInterface], port: UInt16)
+        async throws(LocalNetworkError)
+    {
+        try await followTask(interfaces, port: port).value.get()
+    }
+
+    /// `follow`'s work, queued now: its call is ordered before any `stop` made after it.
+    func followTask(_ interfaces: [NetworkInterface], port: UInt16)
+        -> Task<Result<Void, LocalNetworkError>, Never>
+    {
+        let asked = lock.withLock { () -> Int in
+            wanted = (interfaces, port)
             return generation
         }
+        return serially { [self] in
+            let due = lock.withLock {
+                generation == asked
+                    && (server == nil || running.interfaces != interfaces || running.port != port)
+            }
+            guard due else { return .success(()) }
+            do throws(LocalNetworkError) {
+                try await start(on: interfaces, port: port, generation: asked)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }
+    }
+
+    /// Queues `work` after every start before it.
+    private func serially(
+        _ work: @escaping @Sendable () async -> Result<Void, LocalNetworkError>
+    ) -> Task<Result<Void, LocalNetworkError>, Never> {
+        let task = lock.withLock { () -> Task<Result<Void, LocalNetworkError>, Never> in
+            let previous = tail
+            let made = Task {
+                await previous?.value
+                return await work()
+            }
+            tail = Task { _ = await made.value }
+            return made
+        }
+        return task
+    }
+
+    private func start(on interfaces: [NetworkInterface], port: UInt16, generation asked: Int)
+        async throws(LocalNetworkError)
+    {
         stopServing()
+        for stopped in lock.withLock({ () -> [RemoteServer] in
+            defer { closing = [] }
+            return closing
+        }) {
+            await stopped.closed()
+        }
         guard let api = lock.withLock({ self.api }) else {
             preconditionFailure("the service's API is set in init")
         }
         let made = try await RemoteServer.start(
-            on: interfaces, port: port,
-            hostNames: [dotLocal(identity.host)],
+            on: interfaces, port: port, hostNames: [dotLocal(identity.host)],
             allowsOrigin: { [weak self] in self?.allows(origin: $0) ?? false },
-            handler: { await api.handle($0) }, problem: problem)
+            handler: { await api.handle($0) }, problem: problem,
+            lost: { [weak self] in self?.listenerLost() })
         let addresses = interfaces.map(\.address).filter { !$0.isLinkLocal }
             .sorted { if case .v4 = $0, case .v6 = $1 { true } else { false } }
             .map(\.description)
@@ -105,45 +169,66 @@ public final class RemoteService: @unchecked Sendable {
             id: identity.id, name: identity.name, host: identity.host, addresses: addresses,
             port: made.port)
         let current = lock.withLock { () -> Bool in
-            guard generation == started else { return false }
+            // A stop while it bound: this server was never wanted.
+            guard generation == asked else { return false }
             server = made
             own = instance
             subnets = LocalSubnets(interfaces)
-            running = interfaces
+            running = (interfaces, port)
             return true
         }
-        guard current else { return made.stop() }
+        guard current else {
+            made.stop()
+            lock.withLock { closing.append(made) }
+            return
+        }
         advertiser.start(instance.advert, problem: problem)
         browser.start(
             type: RemoteInstance.serviceType, found: { [weak self] in self?.update($0) },
             problem: problem)
     }
 
-    /// Starts on `interfaces` unless it's running on just those already, as when the Mac's
-    /// network changes in a way that leaves its addresses as they were.
-    public func follow(_ interfaces: [NetworkInterface]) async throws(LocalNetworkError) {
-        guard lock.withLock({ server == nil || running != interfaces }) else { return }
-        try await start(on: interfaces)
+    /// A listener failed after it was ready: starts again on what was asked for last.
+    private func listenerLost() {
+        guard
+            let again = lock.withLock({ () -> (interfaces: [NetworkInterface], port: UInt16)? in
+                running.interfaces = []
+                return wanted
+            })
+        else { return }
+        Task { [weak self] in
+            do throws(LocalNetworkError) {
+                try await self?.follow(again.interfaces, port: again.port)
+            } catch {
+                self?.problem("the web remote can't listen again: \(error)")
+            }
+        }
     }
 
-    /// Stops listening, advertising and browsing, closes every connection and ends the code.
+    /// Stops listening, advertising and browsing, closes every connection, a server still
+    /// binding included, and ends the code.
     public func stop() {
-        lock.withLock { generation += 1 }
+        lock.withLock {
+            generation += 1
+            wanted = nil
+        }
         stopServing()
         pairing.clear()
     }
 
     private func stopServing() {
-        let running = lock.withLock { () -> RemoteServer? in
+        let current = lock.withLock { () -> RemoteServer? in
             defer {
                 server = nil
                 own = nil
                 found = []
-                running = []
+                running = ([], 0)
+                refused = []
+                if let server { closing.append(server) }
             }
             return server
         }
-        running?.stop()
+        current?.stop()
         hub.stopAll()
         advertiser.stop()
         browser.stop()
@@ -156,6 +241,9 @@ public final class RemoteService: @unchecked Sendable {
 
     /// The port the server listens on, nil while it's stopped.
     var listeningPort: UInt16? { lock.withLock { own?.port } }
+
+    /// The server, for tests that fail its listeners.
+    var currentServer: RemoteServer? { lock.withLock { server } }
 
     /// Where a phone opens the page, nil while it's stopped.
     public var links: RemoteLinks? {
@@ -175,25 +263,45 @@ public final class RemoteService: @unchecked Sendable {
         lock.withLock { found.contains { $0.origins.contains(origin) } }
     }
 
+    /// Takes the adverts the browser sees now. One whose TXT record isn't an instance's is
+    /// left out, as are all of those that claim one ID with different addresses, since a page
+    /// keys its tokens by ID; each is reported once a session, up to `refusedCap`.
     private func update(_ adverts: [BonjourFound]) {
         let problems = lock.withLock { () -> [String] in
-            var seen: Set<String> = []
-            var next: [RemoteInstance] = []
+            var byID: [String: [RemoteInstance]] = [:]
             var bad: [String] = []
-            for advert in adverts {
-                switch RemoteInstance.parse(advert, subnets: subnets) {
-                case .success(let instance):
-                    guard instance.id != identity.id, seen.insert(instance.id).inserted else {
-                        continue
-                    }
-                    next.append(instance)
-                case .failure(let refusal):
-                    // Once per name, so a stray advert isn't reported each time the set changes.
-                    if refused.insert(advert.name).inserted {
-                        bad.append(
-                            "ignored the Bonjour advert \"\(advert.name)\": no \(refusal.missing)")
-                    }
+            func report(_ key: String, _ line: String) {
+                guard refused.count < Self.refusedCap else { return }
+                guard refused.insert(key).inserted else { return }
+                bad.append(line)
+                if refused.count == Self.refusedCap {
+                    bad.append("the web remote logs no more Bonjour adverts until it stops")
                 }
+            }
+            for advert in adverts {
+                let name = String(terminalSafe(advert.name).prefix(Self.nameCharacters))
+                switch RemoteInstance.parse(advert, subnets: subnets) {
+                case .success(var instance):
+                    guard instance.id != identity.id else { continue }
+                    instance.name = name
+                    byID[instance.id, default: []].append(instance)
+                case .failure(let refusal):
+                    report(
+                        "name:" + name,
+                        "ignored the Bonjour advert \"\(name)\": no \(refusal.missing)")
+                }
+            }
+            var next: [RemoteInstance] = []
+            for (id, claims) in byID {
+                guard Set(claims.map { Set($0.addresses) }).count == 1 else {
+                    report(
+                        "id:" + id,
+                        "ignored \(claims.count) Bonjour adverts that claim one ID with different"
+                            + " addresses: "
+                            + claims.map { "\"\($0.name)\"" }.joined(separator: ", "))
+                    continue
+                }
+                next.append(claims[0])
             }
             found = next.sorted { $0.name < $1.name }
             return bad

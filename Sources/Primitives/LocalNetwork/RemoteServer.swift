@@ -23,6 +23,9 @@ public final class RemoteServer: @unchecked Sendable {
     static var unsentEventCap: Int { 16 }
     /// A smaller body goes as it is: gzip's header and trailer cost more than they save.
     static var gzipMinimumBytes: Int { 512 }
+    /// Refused connections logged in a server's session, so a LAN scanner can't flood the log;
+    /// the rest are counted, and said as one line when it stops.
+    static var refusalLogCap: Int { 10 }
 
     private let queue = DispatchQueue(label: "RemoteServer")
     private var listeners: [(listener: NWListener, interface: NetworkInterface)] = []
@@ -33,29 +36,35 @@ public final class RemoteServer: @unchecked Sendable {
     private let idleSeconds: Double
     private var clients: [ObjectIdentifier: RemoteClient] = [:]
     private var boundPort: UInt16 = 0
+    private let lost: @Sendable () -> Void
+    private var refusals = 0
+    /// Listeners made and not yet cancelled, so a new server on the port waits for them.
+    private var unclosed = 0
 
     /// Starts listening on every one of `interfaces` at `port`, reachable by their addresses
     /// and by each of `hostNames` ("studio.local"). `allowsOrigin` says whether a page from
     /// another origin, lowercased, may call it. Throws when no interface could listen; one that
-    /// can't while others can is told to `problem`, which hears each connection refused too.
+    /// can't while others can is told to `problem`, which hears the first refused connections
+    /// too. `lost` is called when a listener that was ready fails, as when its address goes.
     public static func start(
         on interfaces: [NetworkInterface], port: UInt16, hostNames: [String],
         allowsOrigin: @escaping @Sendable (String) -> Bool, handler: @escaping Handler,
-        problem: @escaping @Sendable (String) -> Void
+        problem: @escaping @Sendable (String) -> Void, lost: @escaping @Sendable () -> Void
     ) async throws(LocalNetworkError) -> RemoteServer {
         try await start(
             on: interfaces, port: port, hostNames: hostNames, allowsOrigin: allowsOrigin,
-            handler: handler, problem: problem, headSeconds: headSeconds,
+            handler: handler, problem: problem, lost: lost, headSeconds: headSeconds,
             idleSeconds: idleSeconds)
     }
 
     static func start(
         on interfaces: [NetworkInterface], port: UInt16, hostNames: [String],
         allowsOrigin: @escaping @Sendable (String) -> Bool, handler: @escaping Handler,
-        problem: @escaping @Sendable (String) -> Void, headSeconds: Double, idleSeconds: Double
+        problem: @escaping @Sendable (String) -> Void, lost: @escaping @Sendable () -> Void,
+        headSeconds: Double, idleSeconds: Double
     ) async throws(LocalNetworkError) -> RemoteServer {
         let server = RemoteServer(
-            handler: handler, problem: problem, headSeconds: headSeconds,
+            handler: handler, problem: problem, lost: lost, headSeconds: headSeconds,
             idleSeconds: idleSeconds)
         var failures: [String] = []
         var authorities: [String] = []
@@ -83,10 +92,11 @@ public final class RemoteServer: @unchecked Sendable {
 
     private init(
         handler: @escaping Handler, problem: @escaping @Sendable (String) -> Void,
-        headSeconds: Double, idleSeconds: Double
+        lost: @escaping @Sendable () -> Void, headSeconds: Double, idleSeconds: Double
     ) {
         self.handler = handler
         self.problem = problem
+        self.lost = lost
         self.headSeconds = headSeconds
         self.idleSeconds = idleSeconds
     }
@@ -105,6 +115,7 @@ public final class RemoteServer: @unchecked Sendable {
         } catch {
             throw .failed("\(error)")
         }
+        queue.sync { unclosed += 1 }
         let waiting = ListenWait()
         let outcome = await withCheckedContinuation { continuation in
             queue.sync { waiting.continuation = continuation }
@@ -120,8 +131,12 @@ public final class RemoteServer: @unchecked Sendable {
                     waiting.end(.success(bound))
                 case .failed(let error), .waiting(let error):
                     listener.cancel()
+                    guard waiting.continuation != nil else {
+                        return loseListener(listener, reason: "\(error)")
+                    }
                     waiting.end(.failure(.failed("\(error)")))
                 case .cancelled:
+                    unclosed -= 1
                     waiting.end(.failure(.cancelled))
                 default:
                     break
@@ -139,6 +154,44 @@ public final class RemoteServer: @unchecked Sendable {
         return try outcome.get()
     }
 
+    /// Drops a listener that failed after it was ready, says so, and tells `lost`, which
+    /// starts the server again.
+    private func loseListener(_ listener: NWListener, reason: String) {
+        guard let index = listeners.firstIndex(where: { $0.listener === listener }) else { return }
+        let interface = listeners.remove(at: index).interface
+        listener.newConnectionHandler = nil
+        problem("the web remote stopped listening on \(interface): \(reason)")
+        lost()
+    }
+
+    /// Fails the first listener as the system would, for tests.
+    func loseFirstListener() {
+        queue.sync {
+            guard let first = listeners.first?.listener else { return }
+            first.cancel()
+            loseListener(first, reason: "a test failed it")
+        }
+    }
+
+    /// Logs a refused connection while under `refusalLogCap` this session, and counts the rest.
+    private func refuse(_ message: String) {
+        refusals += 1
+        if refusals <= Self.refusalLogCap { problem(message) }
+        if refusals == Self.refusalLogCap {
+            problem("the web remote logs no more refused connections until it stops")
+        }
+    }
+
+    /// Waits, up to `listenSeconds`, until every listener has closed after `stop`, so a server
+    /// started next on the same port can bind it.
+    public func closed() async {
+        for _ in 0..<Int(Self.listenSeconds * 100) {
+            if queue.sync(execute: { unclosed }) <= 0 { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)  // A cancelled wait just ends it.
+        }
+        problem("the web remote's listeners hadn't closed within \(Self.listenSeconds) s")
+    }
+
     /// The port the first listener has: `port` as asked, or the one the system picked for 0.
     public var port: UInt16 { queue.sync { boundPort } }
 
@@ -151,17 +204,21 @@ public final class RemoteServer: @unchecked Sendable {
             }
             listeners = []
             for client in clients.values { end(client) }
+            if refusals > Self.refusalLogCap {
+                problem("the web remote refused \(refusals - Self.refusalLogCap) more connections")
+            }
+            refusals = 0
         }
     }
 
     private func accept(_ connection: NWConnection, _ interface: NetworkInterface) {
         guard let peer = IPAddress(peerOf: connection), interface.holds(peer) else {
-            problem("the web remote refused \(connection.endpoint), off \(interface)")
+            refuse("the web remote refused \(connection.endpoint), off \(interface)")
             connection.cancel()
             return
         }
         guard clients.count < Self.connectionCap else {
-            problem("the web remote refused \(peer): \(Self.connectionCap) connections are open")
+            refuse("the web remote refused \(peer): \(Self.connectionCap) connections are open")
             connection.cancel()
             return
         }
@@ -224,7 +281,9 @@ public final class RemoteServer: @unchecked Sendable {
                 client.received.removeFirst(length)
                 reply(
                     client,
-                    RemoteReply(.noContent, fields: Self.preflightFields + cors(origin)),
+                    RemoteReply(
+                        .noContent,
+                        fields: Self.preflightFields + cors(origin) + [("Vary", "Origin")]),
                     close: close)
             case .request(let bodyLength, let origin):
                 guard client.received.count >= length + bodyLength else { return }
@@ -253,7 +312,7 @@ public final class RemoteServer: @unchecked Sendable {
 
     private func cors(_ origin: String?) -> [(String, String)] {
         guard let origin else { return [] }
-        return [("Access-Control-Allow-Origin", origin), ("Vary", "Origin")]
+        return [("Access-Control-Allow-Origin", origin)]
     }
 
     /// HTTP/1.0, or `Connection: close`, ends the connection after its reply.
@@ -273,7 +332,8 @@ public final class RemoteServer: @unchecked Sendable {
         }
         switch response {
         case .reply(var reply):
-            reply.fields += cors(origin)
+            // Always, so a reply without the CORS field isn't cached for a page that needs it.
+            reply.fields += cors(origin) + [("Vary", "Origin")]
             if gzips, reply.contentType != nil, reply.body.count >= Self.gzipMinimumBytes {
                 reply.body = gzip(reply.body)
                 reply.fields += [("Content-Encoding", gzipCoding), ("Vary", "Accept-Encoding")]
@@ -283,7 +343,7 @@ public final class RemoteServer: @unchecked Sendable {
             let streams = clients.values.filter(\.streaming).count
             guard streams < Self.eventStreamCap else {
                 stop()
-                problem("the web remote refused an event stream: \(streams) are open")
+                refuse("the web remote refused an event stream: \(streams) are open")
                 return reply(client, RemoteReply(.serviceUnavailable), close: true)
             }
             client.streaming = true
@@ -293,7 +353,7 @@ public final class RemoteServer: @unchecked Sendable {
                     (HTTPWord.contentType, "text/event-stream"),
                     (HTTPWord.cacheControl, HTTPWord.noStore),
                     (HTTPWord.connection, HTTPWord.close),
-                ] + cors(origin)
+                ] + cors(origin) + [("Vary", "Origin")]
             client.connection.send(
                 content: Data(head(.ok, fields)),
                 completion: .contentProcessed { [self] error in

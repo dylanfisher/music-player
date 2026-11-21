@@ -1,6 +1,7 @@
 import Commands
 import Foundation
 import Playback
+import Receiver
 import Scripting
 import Settings
 import Testing
@@ -56,7 +57,7 @@ private final class Fixture: @unchecked Sendable {
             positionReadAt: 0, queueStamp: 1, queueLength: 0, queuePosition: nil, shuffle: false,
             repeatMode: "off", volumeDecibels: nil, output: nil, receiver: nil, lastPlayedAt: nil)
         service = RemoteService(
-            identity: .init(id: ownID, name: "Studio", host: "Studio"), port: 0,
+            identity: .init(id: ownID, name: "Studio", host: "Studio"),
             devices: RemoteDeviceRegistry(
                 RemoteDevices(devices: []),
                 save: { [saves] in
@@ -83,7 +84,7 @@ private final class Fixture: @unchecked Sendable {
     var port: UInt16 { service.listeningPort ?? 0 }
     var host: String { "127.0.0.1:\(port)" }
 
-    func start() async throws { try await service.start(on: [loopback]) }
+    func start(port: UInt16 = 0) async throws { try await service.follow([loopback], port: port) }
 
     /// Sends one request on a new connection and reads its reply.
     func send(
@@ -372,4 +373,155 @@ private final class Fixture: @unchecked Sendable {
     #expect(links.local == "http://studio.local:\(fixture.port)")
     #expect(links.lan == "http://127.0.0.1:\(fixture.port)")
     #expect(links.pairing("123456") == "http://studio.local:\(fixture.port)/#pair=123456")
+}
+
+/// A loopback port nothing listens on now, found by listening on one the system picks.
+private func freePort() async throws -> UInt16 {
+    let probe = Fixture()
+    try await probe.start()
+    let port = probe.port
+    let server = probe.service.currentServer
+    probe.service.stop()
+    await server?.closed()
+    return port
+}
+
+@Test func twoFollowsAtOnceLeaveOneServerListening() async throws {
+    let fixture = Fixture()
+    async let first: Void = fixture.service.follow([loopback], port: 0)
+    async let second: Void = fixture.service.follow([loopback], port: 0)
+    _ = try await (first, second)
+    #expect(fixture.service.listeningPort != nil)
+    #expect(try await fixture.send("GET", "/").status == 200)
+}
+
+@Test func aStopWhileAStartBindsLeavesNothingListeningAndALaterStartListens() async throws {
+    let fixture = Fixture()
+    let port = try await freePort()
+    let starting = fixture.service.followTask([loopback], port: port)
+    fixture.service.stop()
+    try await starting.value.get()
+    #expect(fixture.service.listeningPort == nil)
+    await #expect(throws: (any Error).self) { try await LoopbackConnection.connect(port: port) }
+    let again = fixture.service.followTask([loopback], port: port)
+    fixture.service.stop()
+    try await fixture.service.follow([loopback], port: port)
+    try await again.value.get()
+    #expect(fixture.service.listeningPort == port)
+    #expect(try await fixture.send("GET", "/").status == 200)
+}
+
+@Test func aPortChangeDuringAStartLeavesOnlyTheNewPortBound() async throws {
+    let fixture = Fixture()
+    let old = try await freePort()
+    let new = try await freePort()
+    async let first: Void = fixture.service.follow([loopback], port: old)
+    async let second: Void = fixture.service.follow([loopback], port: new)
+    _ = try await (first, second)
+    #expect(fixture.service.listeningPort == new)
+    await #expect(throws: (any Error).self) { try await LoopbackConnection.connect(port: old) }
+}
+
+@Test func aLostListenerStartsTheServerAgain() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    let before = try #require(fixture.service.currentServer)
+    before.loseFirstListener()
+    try await waitFor {
+        fixture.service.currentServer.map { $0 !== before } == true
+            && fixture.service.listeningPort != nil
+    }
+    #expect(try await fixture.send("GET", "/").status == 200)
+    #expect(fixture.problems.contains { $0.hasPrefix("the web remote stopped listening") })
+}
+
+@Test func aDeviceHoldsAtMostFourEventStreams() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    let token = try await fixture.pair()
+    var open: [LoopbackConnection] = []
+    defer { for connection in open { connection.close() } }
+    for _ in 0..<RemoteEventHub.streamsPerDevice {
+        let connection = try await LoopbackConnection.connect(port: fixture.port)
+        try await connection.send(
+            "GET /api/events HTTP/1.1\r\nHost: \(fixture.host)\r\nAuthorization: Bearer \(token)"
+                + "\r\n\r\n")
+        _ = try await connection.receive(through: Array("data: ".utf8))
+        open.append(connection)
+    }
+    #expect(try await fixture.send("GET", "/api/events", token: token).status == 503)
+    let other = try await fixture.pair()
+    let connection = try await LoopbackConnection.connect(port: fixture.port)
+    defer { connection.close() }
+    try await connection.send(
+        "GET /api/events HTTP/1.1\r\nHost: \(fixture.host)\r\nAuthorization: Bearer \(other)"
+            + "\r\n\r\n")
+    _ = try await connection.receive(through: Array("data: ".utf8))
+}
+
+@Test func advertsClaimingOneIDWithDifferentAddressesAreAllLeftOutAndNamesAreMadeSafe()
+    async throws
+{
+    let fixture = Fixture()
+    try await fixture.start()
+    let token = try await fixture.pair()
+    func advert(_ name: String, _ id: String, _ address: String) -> BonjourFound {
+        BonjourFound(name: name, txt: ["id": id, "host": "mbp", "port": "47800", "addr": address])
+    }
+    let third = String(repeating: "c", count: 32)
+    fixture.bonjour.find([
+        advert("Real", otherID, "127.0.0.9"), advert("Impostor", otherID, "127.0.0.10"),
+        advert("Same\u{1B}[31m" + String(repeating: "x", count: 300), third, "127.0.0.11"),
+        advert("Twice", third, "127.0.0.11"),
+    ])
+    let listed = try await fixture.send("GET", "/api/instances", token: token)
+    let instances = try #require(
+        try JSONSerialization.jsonObject(with: Data(listed.body.utf8)) as? [[String: Any]])
+    #expect(instances.map { $0["id"] as? String } == [ownID, third])
+    let name = try #require(instances.last?["name"] as? String)
+    #expect(!name.unicodeScalars.contains { $0.value < 0x20 } && name.count <= 256)
+    #expect(fixture.problems.filter { $0.contains("claim one ID") }.count == 1)
+    fixture.bonjour.find([
+        advert("Real", otherID, "127.0.0.9"), advert("Impostor", otherID, "127.0.0.10"),
+    ])
+    #expect(fixture.problems.filter { $0.contains("claim one ID") }.count == 1)
+}
+
+@Test func theOutputReceiverAndTrackAreReadFromPlainInputs() throws {
+    let options = outputOptions(
+        devices: [FoundOutput(id: "dac", name: "DAC")], renderers: [], current: .device(uid: "dac"))
+    #expect(
+        RemoteState.Output(current: .device(uid: "dac"), among: options)
+            == RemoteState.Output(choice: "output:device:dac", name: "DAC"))
+    #expect(RemoteState.Output(current: .renderer(udn: "x"), among: options) == nil)
+    var said = ReceiverState()
+    said.isOn = true
+    said.input = .cd
+    #expect(
+        RemoteState.Receiver(said)
+            == RemoteState.Receiver(isOn: true, volumeDecibels: nil, isMuted: nil, input: "CD"))
+    var cache = RemoteTrackCache()
+    var lookups = 0
+    let track = RemoteState.Track(
+        id: 1, albumID: 2, title: "A", artist: nil, album: nil, durationSeconds: 3)
+    for _ in 0..<3 {
+        #expect(
+            try cache.track(at: "/a.flac") { _ in
+                lookups += 1
+                return track
+            } == track)
+    }
+    #expect(lookups == 1)
+    #expect(
+        try cache.track(at: nil) { _ in
+            Issue.record("looked up")
+            return nil
+        } == nil)
+    struct Broken: Error {}
+    #expect(throws: Broken.self) { try cache.track(at: "/b.flac") { _ in throw Broken() } }
+    #expect(
+        try cache.track(at: "/b.flac") { _ in
+            Issue.record("asked again")
+            return nil
+        } == nil)
 }

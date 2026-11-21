@@ -147,7 +147,8 @@ let package = Package(
         .target(
             name: "Remote",
             dependencies: [
-                "Commands", "LocalNetwork", "Playback", "Scripting", "Settings", "StrictKeys",
+                "Commands", "DisplayText", "LocalNetwork", "Playback", "Receiver", "Scripting",
+                "Settings", "StrictKeys",
             ],
             path: "Sources/Core/Remote",
             swiftSettings: strictSwift
@@ -647,8 +648,8 @@ let package = Package(
         .testTarget(
             name: "RemoteTests",
             dependencies: [
-                "Commands", "Fixtures", "LocalNetwork", "Playback", "Remote", "Scripting",
-                "Settings",
+                "Commands", "Fixtures", "LocalNetwork", "Playback", "Receiver", "Remote",
+                "Scripting", "Settings",
             ],
             swiftSettings: strictSwift
         ),

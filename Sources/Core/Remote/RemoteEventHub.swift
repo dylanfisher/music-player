@@ -12,6 +12,8 @@ final class RemoteEventHub: @unchecked Sendable {
     /// Events a stream holds for a reader that's behind; older ones are dropped, since each
     /// event is the whole state.
     static let bufferedEvents = 4
+    /// Streams one device may hold: one per Mac's page it has open, with room for a reload.
+    static let streamsPerDevice = 4
 
     private struct Subscriber {
         let tokenHash: String
@@ -40,14 +42,23 @@ final class RemoteEventHub: @unchecked Sendable {
         self.problem = problem
     }
 
-    /// A new stream for the device with `tokenHash`, as the server sends it.
+    /// A new stream for the device with `tokenHash`, as the server sends it; a 503 for a
+    /// device holding `streamsPerDevice` already, so one device can't take every stream.
     func subscribe(tokenHash: String) -> RemoteResponse {
         let (stream, continuation) = AsyncStream.makeStream(
             of: [UInt8].self, bufferingPolicy: .bufferingNewest(Self.bufferedEvents))
         let id = UUID()
-        lock.withLock {
+        let taken = lock.withLock { () -> Bool in
+            let held = subscribers.values.filter { $0.tokenHash == tokenHash }.count
+            guard held < Self.streamsPerDevice else { return false }
             subscribers[id] = Subscriber(tokenHash: tokenHash, continuation: continuation)
             if loop == nil { loop = Task { [weak self] in await self?.run() } }
+            return true
+        }
+        guard taken else {
+            continuation.finish()
+            problem("the web remote refused a device's stream: it has \(Self.streamsPerDevice)")
+            return .reply(RemoteReply(.serviceUnavailable))
         }
         continuation.onTermination = { [weak self] _ in self?.remove([id]) }
         return .events(stream, stop: { [weak self] in self?.remove([id]) })
