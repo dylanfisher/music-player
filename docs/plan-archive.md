@@ -13247,3 +13247,78 @@ carries `Resources/Remote` and `NSBonjourServices`. `/simplify` not run: the rev
 duplication, and `dupes` flags only an advisory 20-line block shared by `RemoteDevices` and
 `DeviceProfiles`. Untested in JS: `RangedSource`'s retry and dispose, which live in `app.js`.
 Pending: the owner check.
+
+### 93. Removing Focus Mode
+
+The owner (2026-11-20): "remove focus mode and all related code". Phase 82 added it
+([ADR 0204](decisions/0204-focus-mode.md)). Distraction-Free Mode
+([ADR 0072](decisions/0072-window-chrome-and-status-bar.md)) is a different feature and stays. So do the `focus.*` commands (Focus Sidebar, Focus Next
+Pane, Focus Next Area), which move keyboard focus.
+
+- [x] **93.1 The code.**
+      - **Command:** `AppCommands.focusMode` (`view.focusMode`, ⌥⌘F), its View menu item in
+        `AppMenus`, and its title switch and enabling in `CommandHandlers`.
+      - **Main window:** the Focus Mode section in `MainWindow` (what it saves and puts back,
+        leaving it when full screen ends, the frame it won't save) and the toolbar check that
+        mentions it.
+      - **Library browser:** its section in `LibraryBrowser`, including the timeline's leaving
+        hook.
+      - **Track table:** in `TrackTableController`, the focus columns, the saved columns, the
+        text and rows, and the branches in column reporting.
+      - **Rows:** `TableAppearance`'s focus font size and row type.
+      - **Setting:** `appearance.focusFontSize`, from `AppSettings`, the Settings window and
+        `config.json`'s schema. A config that still holds the key is handled the way the
+        Pre-release rule says: data that doesn't match is discarded, with no shim. If the
+        config check refuses unknown keys, the stale key gets a message saying it's gone.
+      - **Search afterwards:** `rg -i 'focus ?mode|focusFontSize|focusColumns'` over
+        `Sources`, `Tests`, `Support` and `scripts` comes back empty, apart from the `focus.*`
+        keyboard commands. `./scripts/dupes`, `surface` and `size` allowlist entries that
+        only Focus Mode needed are removed.
+- [x] **93.2 What stays.** A reload of every row keeps the selection. ADR 0204 made that fix
+      for every reload, not only Focus Mode's, so it stays with its test, renamed if the name
+      mentions Focus Mode. Any other shared change from phase 82 is kept in the same way.
+      Check each before deleting it.
+- [x] **93.3 Tests.** Delete the tests that exercise only Focus Mode (`MainWindowTests`,
+      `TrackTableControllerTests`, `TimelineModelTests`) and keep the rest. One test checks
+      that ⌥⌘F is unbound and that no command or setting named for Focus Mode is left, so it
+      can't come back by halves.
+- [x] **93.4 Docs.**
+      - ADR 0204's status becomes "superseded by" a short new ADR, 0216, that records the
+        removal and what stayed.
+      - Remove mentions of Focus Mode from `README.md`, `docs/map.md` and the other ADRs,
+        except history in the archive and the retrospectives.
+      - Delete phase 82's pending owner checkpoint from Waiting on the owner. The archived
+        Result line notes that the feature was removed.
+- Version: a minor bump, since removing a feature is a breaking change, pre-1.0.
+
+Plan (ADR 0216):
+
+- 93a The command and the window: `.focusMode` out of `AppCommands`, `AppMenus` and
+  `CommandHandlers` (the View toggles go back to `hasWindow`), and `MainWindow`'s section, its
+  injected full-screen toggle, the separator it kept to hide and `SilentEscapeWindow.escaped`,
+  which only it set. `MainWindowTests`' three Focus Mode tests go. A test in
+  `AppCommandsTests` checks ⌥⌘F is unbound and no command or setting is named for it.
+- 93b The browser and the track table: `LibraryBrowser`'s section and the timeline's hook,
+  `TrackTableController`'s focus columns, saved layout and branches, and `FocusRows`.
+  `reloadKeepingSelection` stays; a new test checks a row height change keeps the selection,
+  which the deleted Focus Mode test covered. `TimelineModelTests`' and
+  `TrackTableControllerTests`' Focus Mode tests go.
+- 93c The setting: `appearance.focusFontSize` out of `AppSettings`, `TableAppearance`,
+  `WindowSettings` and the Settings window. A config that still names it gets the existing
+  "unknown setting" problem and Remove Obsolete Setting (ADR 0082); a test checks that.
+- 93d Docs: ADR 0216, 0204 superseded, the README, map and other ADRs, and Waiting on the
+  owner.
+
+Result (2026-11-20): `7683bd8b..a0fefa2c`, 4 commits. Removed `view.focusMode` and ⌥⌘F, its
+View menu item and enabling, `MainWindow`'s section with `toggleFullScreen`, `topLine` and
+`SilentEscapeWindow.escaped`, `LibraryBrowser`'s section, `TrackTableController`'s focus
+columns, `fitRows`, `resizingMask` and `FocusRows`, and `appearance.focusFontSize`; 5 tests went
+with them. `reloadKeepingSelection` stays, now covered by `aRowHeightChangeKeepsTheSelection`.
+`TrackTableController` drops under 1,000 lines and leaves the size allowlist. ADR 0216 supersedes
+0204. A config that still overrides `view.focusMode`'s shortcut gets the existing unknown-command
+problem, which keeps that file's settings from applying until the line goes, as for any command
+ID that no longer exists (ADR 0216); neither build Mac's settings name it. Cost: one Opus builder,
+139k tokens (55 tool calls, 17 minutes), and one Sonnet correctness reviewer, 63k, which found
+nothing. The full gate passes every step but `test`: `theGlassHeadersAreFrosted` and one
+HALOutputTests timing test, which passes run alone. Bench and release bundle skipped: no budgeted
+path, C target or Package.swift changed. No owner check.

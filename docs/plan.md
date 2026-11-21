@@ -54,7 +54,8 @@ Set by the owner on 2026-11-19, amended on 2026-11-20. Earlier run orders are in
 2. Phase 85, what phase 84 left, waits until the owner starts it.
 3. Phase 10, drafted with the owner and started on 2026-11-20, landed on 2026-11-20.
 4. Once phase 10 is on main, the owner said (2026-11-20) to start these unasked:
-   - phase 93 and music-recommender's phase 12, side by side in their own worktrees;
+   - phase 93 (landed 2026-11-20) and music-recommender's phase 12, side by side in their own
+     worktrees;
    - then phase 94, once the service's phase 12 has landed.
 5. Phase 13 waits.
 
@@ -448,67 +449,6 @@ to fall back to System Default and stay paused, and to keep searching only when 
 - [ ] **Hardware checkpoint (owner):** unplug the DAC while playing, then press Play on the
       speakers and plug it back in. Turn the Denon off while playing to it. On a fresh launch,
       open Controls ▸ Output and watch the Searching row give way to the Denon.
-
-### 93. Removing Focus Mode
-
-The owner (2026-11-20): "remove focus mode and all related code". Phase 82 added it
-([ADR 0204](decisions/0204-focus-mode.md)). Distraction-Free Mode
-([ADR 0072](decisions/0072-window-chrome-and-status-bar.md)) is a different feature and stays. So do the `focus.*` commands (Focus Sidebar, Focus Next
-Pane, Focus Next Area), which move keyboard focus.
-
-- [ ] **93.1 The code.**
-      - **Command:** `AppCommands.focusMode` (`view.focusMode`, ⌥⌘F), its View menu item in
-        `AppMenus`, and its title switch and enabling in `CommandHandlers`.
-      - **Main window:** the Focus Mode section in `MainWindow` (what it saves and puts back,
-        leaving it when full screen ends, the frame it won't save) and the toolbar check that
-        mentions it.
-      - **Library browser:** its section in `LibraryBrowser`, including the timeline's leaving
-        hook.
-      - **Track table:** in `TrackTableController`, the focus columns, the saved columns, the
-        text and rows, and the branches in column reporting.
-      - **Rows:** `TableAppearance`'s focus font size and row type.
-      - **Setting:** `appearance.focusFontSize`, from `AppSettings`, the Settings window and
-        `config.json`'s schema. A config that still holds the key is handled the way the
-        Pre-release rule says: data that doesn't match is discarded, with no shim. If the
-        config check refuses unknown keys, the stale key gets a message saying it's gone.
-      - **Search afterwards:** `rg -i 'focus ?mode|focusFontSize|focusColumns'` over
-        `Sources`, `Tests`, `Support` and `scripts` comes back empty, apart from the `focus.*`
-        keyboard commands. `./scripts/dupes`, `surface` and `size` allowlist entries that
-        only Focus Mode needed are removed.
-- [ ] **93.2 What stays.** A reload of every row keeps the selection. ADR 0204 made that fix
-      for every reload, not only Focus Mode's, so it stays with its test, renamed if the name
-      mentions Focus Mode. Any other shared change from phase 82 is kept in the same way.
-      Check each before deleting it.
-- [ ] **93.3 Tests.** Delete the tests that exercise only Focus Mode (`MainWindowTests`,
-      `TrackTableControllerTests`, `TimelineModelTests`) and keep the rest. One test checks
-      that ⌥⌘F is unbound and that no command or setting named for Focus Mode is left, so it
-      can't come back by halves.
-- [ ] **93.4 Docs.**
-      - ADR 0204's status becomes "superseded by" a short new ADR, 0216, that records the
-        removal and what stayed.
-      - Remove mentions of Focus Mode from `README.md`, `docs/map.md` and the other ADRs,
-        except history in the archive and the retrospectives.
-      - Delete phase 82's pending owner checkpoint from Waiting on the owner. The archived
-        Result line notes that the feature was removed.
-- Version: a minor bump, since removing a feature is a breaking change, pre-1.0.
-
-Plan (ADR 0216):
-
-- 93a The command and the window: `.focusMode` out of `AppCommands`, `AppMenus` and
-  `CommandHandlers` (the View toggles go back to `hasWindow`), and `MainWindow`'s section, its
-  injected full-screen toggle, the separator it kept to hide and `SilentEscapeWindow.escaped`,
-  which only it set. `MainWindowTests`' three Focus Mode tests go. A test in
-  `AppCommandsTests` checks ⌥⌘F is unbound and no command or setting is named for it.
-- 93b The browser and the track table: `LibraryBrowser`'s section and the timeline's hook,
-  `TrackTableController`'s focus columns, saved layout and branches, and `FocusRows`.
-  `reloadKeepingSelection` stays; a new test checks a row height change keeps the selection,
-  which the deleted Focus Mode test covered. `TimelineModelTests`' and
-  `TrackTableControllerTests`' Focus Mode tests go.
-- 93c The setting: `appearance.focusFontSize` out of `AppSettings`, `TableAppearance`,
-  `WindowSettings` and the Settings window. A config that still names it gets the existing
-  "unknown setting" problem and Remove Obsolete Setting (ADR 0082); a test checks that.
-- 93d Docs: ADR 0216, 0204 superseded, the README, map and other ADRs, and Waiting on the
-  owner.
 
 ### 94. An artist's discography in Recommendations
 
