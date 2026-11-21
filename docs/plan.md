@@ -56,7 +56,8 @@ Set by the owner on 2026-11-19, amended on 2026-11-20. Earlier run orders are in
 4. Once phase 10 is on main, the owner said (2026-11-20) to start these unasked:
    - phase 93 and music-recommender's phase 12 (both landed 2026-11-20), side by side in
      their own worktrees;
-   - then phase 94, once the service's phase 12 has landed (it did, 2026-11-20).
+   - then phase 94, once the service's phase 12 has landed (it did, and phase 94 landed
+     2026-11-20).
 5. Phase 13 waits.
 
 ## Waiting on the owner
@@ -113,6 +114,9 @@ that phase's Result line, and delete its line here.
   immediate, bit-perfect in the signal path panel.
 - **10 Web remote** ([steps](plan-archive.md#10-web-remote)): pair a phone with the 2015
   MacBook Pro, control the Denon from the home-screen page, switch Macs, browse the full library.
+- **94 An artist's discography** ([steps](plan-archive.md#94-an-artists-discography-in-recommendations)):
+  open discographies from the library, a recommendation and a pasted link, sort by rating while
+  values come in, download a missing album; with the service's phase 12 checkpoint.
 
 ### Owner checks in the running app
 
@@ -449,91 +453,6 @@ to fall back to System Default and stay paused, and to keep searching only when 
 - [ ] **Hardware checkpoint (owner):** unplug the DAC while playing, then press Play on the
       speakers and plug it back in. Turn the Denon off while playing to it. On a fresh launch,
       open Controls ▸ Output and watch the Searching row give way to the Denon.
-
-### 94. An artist's discography in Recommendations
-
-The owner (2026-11-20) asked to "view all albums by an artist (according to our local discogs
-database), sort by community user rating, etc.", in the Recommendations window, with "a way
-to filter/sort to a mode that finds just that artist's albums". The service builds the list
-in its phase 12 (`list: "discography"`), which lands first. Its answers apply here too:
-
-- the artist's albums are those it's a main artist on;
-- every format is listed;
-- everything shows, owned and marked albums included;
-- the values are the master's main release's;
-- a discography's values are fetched first.
-
-Opening one needs a Discogs artist the player already knows, never a name typed in. That
-means a track in the player, a row with an artist id, or a Discogs id or link the owner
-pastes. ADR 0217 records the decisions.
-
-- [ ] **94.1 The query.** `RecommendationQuery.Seed` gains `discography(artistID:)`, with its
-      encoding and strict decoding of 12.2's rows: `score` null and `reasons` empty for this
-      list, `formats`, `inLibrary`, `mark`, and the reply's `list.artist` (`{id, name}`, null on
-      the other lists) and `pending` (null on the other lists), exactly as the service's
-      `docs/api.md` "A discography" section has them since its phase 12 landed (`5940f47`).
-      The sorts gain `year` and `title`, offered only for a discography, where `year` is the
-      default, `rating`, `have`, `want` and `want_have` are offered, and `score` isn't. The
-      `unknown_artist` 404 says "Discogs has no artist <id> in this Mac's catalog" in the
-      status line, and the `various_artists` 400 says "Various Artists has no discography".
-      Tests on written replies through the stand-in transport.
-- [ ] **94.2 Opening a discography.** Show Discography opens it in the Recommendations window,
-      chosen in the list pop-up as "Discography: <artist>", like a seed list. The artists
-      come from:
-      - a track anywhere in the player (the track table, the queue, Now Playing, and other
-        windows' track rows), through its `discogs_release_id`'s main artists in this Mac's
-        catalog;
-      - a Recommendations, Downloads or Threads row, through the artist ids it carries.
-
-      With one main artist the command opens it. With several it's a submenu, one item for
-      each. A track without a Discogs release id, or one the catalog doesn't hold, gets the
-      item disabled, with the reason as its tooltip. Various Artists (Discogs artist 194) is
-      never offered: the service refuses its discography.
-
-      From anywhere else, Show Discography… in the palette and the Recommendations window
-      asks for a Discogs release id or a discogs.com link to a release, master or artist.
-      `pastedReleaseID` grows into one parser for the three kinds. A release or master opens
-      its main artists, chosen as above when there are several. There's no search by name.
-      Tests for each source, for several artists, for a track without an id, and for the
-      parser's kinds, slugs, locale prefixes (`/fr/artist/…`) and refusals.
-- [ ] **94.3 The window in discography mode.**
-      - **Columns:** Format and In Library are new, and Mark shows the verdict. Score, Why and
-        Rank are hidden while a discography shows, and come back as they were.
-      - **Controls:** the Missing checkbox hides owned albums, as a filter of the loaded rows,
-        since the service lists everything. The Styles, Labels and year filters work as they
-        do for other lists; phase 91's text filter, built later, covers this list too.
-      - **Values coming in:** while `pending` is over 0, the status line says "Fetching
-        ratings, <n> left", and the list is asked for again every 15 s while the window is
-        open and showing it. The selection and scroll are kept as rows reorder, and asking
-        stops when `pending` is 0 or the list changes. `pending` counts only what the sync
-        fetches next, so it can reach 0 while some albums still have no values; they show
-        blank and sort last.
-      - **Row actions:** Open on Discogs, Download…, Not Interested and Already Have work as
-        on other rows. Phase 91.2's Show in All Music, built later, covers In Library rows.
-
-      Tests in `RecommendationsModelTests` for the columns, Missing, the refresh's timing with
-      an injected clock, and the kept selection.
-- [ ] **94.4 Docs.** ADR 0217, the README's Recommendations section, and a palette and menu
-      entry in the command docs.
-- **Implementation plan:**
-  1. `Recommender`: `Seed.discography(artistID:name:)`, the sorts `year` and `title` with
-     `Sort.offered(for:)`, the request's `artist_id` (never `missing`), and the page's
-     `list.artist`, `pending`, an optional `score`, `formats`, `in_library` and `mark` on
-     every album, decoded strictly. A discography fixture beside `recommendations.json`.
-  2. `Discogs`: `pastedDiscogsID` (release, master or artist, slugs and locale prefixes),
-     which `pastedReleaseID` reads, and `Catalog.discographyArtists(release:)`,
-     `(master:)` and `artistName(_:)`, the main artists with ids, without Various Artists.
-  3. `Recommendations`: `showDiscography(_:)`, `discographyChoice(release:)`, the menu item
-     for one artist, several or a reason, the rows' Show Discography, and Show
-     Discography… asking for a pasted id or link. The App wires `recommendations.discography`
-     to the palette and File menu, and the track menu's Show Discography item.
-  4. `RecommendationsModel`: Missing as a filter of the loaded rows, the 15 s refresh while
-     `pending` is over 0, and the kept selection; the window's Format, In Library and Mark
-     columns, Score, Why and Rank hidden for a discography, and its sorts.
-  5. ADR 0217, the README.
-- [ ] **Hardware checkpoint (owner):** open the discography of an artist from the library,
-      one from a recommendation, and one from a pasted link. Sort by rating while the values
-      come in, and download a missing album.
 
 ### 85. The file splits and the performance rerun
 
