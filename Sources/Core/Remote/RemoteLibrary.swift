@@ -62,16 +62,18 @@ public actor RemoteLibrary {
         return made
     }
 
-    /// A library read's reply, by path; nil for a path that isn't one.
-    func reply(_ path: String, query: RemoteQuery, ifNoneMatch: String?) -> RemoteReply? {
+    /// A library read's reply, by path and the query string after its `?`; nil for a path
+    /// that isn't one.
+    public func reply(_ path: String, query text: String?, ifNoneMatch: String?) -> RemoteReply? {
+        let query = RemoteQuery(text)
         let read: (LibraryIndex, RemoteQuery, Bool) throws -> RemoteReply
         switch path {
-        case RemoteAPI.Route.genres: read = Self.genres
-        case RemoteAPI.Route.artists: read = Self.artists
-        case RemoteAPI.Route.albums: read = Self.albums
-        case RemoteAPI.Route.tracks: read = Self.tracks
-        case RemoteAPI.Route.search: read = Self.search
-        case RemoteAPI.Route.covers: read = Self.covers
+        case RemoteRoute.genres: read = Self.genres
+        case RemoteRoute.artists: read = Self.artists
+        case RemoteRoute.albums: read = Self.albums
+        case RemoteRoute.tracks: read = Self.tracks
+        case RemoteRoute.search: read = Self.search
+        case RemoteRoute.covers: read = Self.covers
         default: return nil
         }
         do {
@@ -168,10 +170,11 @@ public actor RemoteLibrary {
         return RemoteAPI.reply(
             Found(
                 artists: EntryList(
-                    Array(try index.artists(filter).prefix(searchLimit)), albums: false
+                    try index.searchEntries(.artists, filter, limit: searchLimit), albums: false
                 ).rows,
-                albums: EntryList(Array(try index.albums(filter).prefix(searchLimit)), albums: true)
-                    .rows,
+                albums: EntryList(
+                    try index.searchEntries(.albums, filter, limit: searchLimit), albums: true
+                ).rows,
                 tracks: try index.trackNames(filter, sortedBy: .artist, window: 0..<searchLimit)
                     .map(TrackLine.init)))
     }

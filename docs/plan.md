@@ -378,6 +378,9 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | The same over about 200 fixture files, the library folder's listings on the slow simulated NAS: 45 ms a listing, 10 ms any other question (73.1); the old Mac figure is an estimate until its checkpoint | < 15 s | < 30 s |
 | Type-to-select a key over every fixture title, sorted by title (p95; 73.1); the old Mac figure is an estimate until its checkpoint | < 20 ms | < 80 ms |
 | A 3 MB body read through `HTTPSClient` from a stand-in server, asked from the main actor (73.1); the old Mac figure is an estimate until its checkpoint | < 50 ms | < 200 ms |
+| The web remote's whole Artists list, read and encoded on the server, over every fixture track (p95; 10b); the old Mac figure is the plan's, to be measured at its checkpoint | < 30 ms | < 150 ms |
+| A web remote search, its artists, albums and tracks, per keystroke (p95; 10b); the old Mac figure is the plan's | < 25 ms | < 100 ms |
+| An album's tracks, the web remote's first range of them (p95; 10b); the old Mac figure is the plan's | < 10 ms | < 50 ms |
 | The real catalog of that dump (51.13: 35.89 GB) | < 40 GB | none |
 | Analyze on the real catalog, per album and for the owner's 1,741 albums with a release id, ids hidden (51.13: 4.1 ms, 7.2 s) | < 10 ms, < 15 s | none |
 | One album's candidates on the real catalog, matched and listed, warm (51.13: 15.7 ms for the median of five albums; 167 ms, 437 ms cold, for The Dark Side of the Moon's 1,555 releases) | < 50 ms; < 1 s for the most releases | none |

@@ -12,4 +12,4 @@ let benchmarks =
     + playbackBenchmarks + playLatencyBenchmarks + timeToSoundBenchmarks + scrubBenchmarks
     + tagWriterBenchmarks + tagEditorBenchmarks + tagBatchBenchmarks
     + analysisBenchmarks
-    + discogsBenchmarks + downloadsBenchmarks + httpsBenchmarks
+    + discogsBenchmarks + downloadsBenchmarks + httpsBenchmarks + remoteBenchmarks

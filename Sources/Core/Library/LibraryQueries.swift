@@ -179,7 +179,7 @@ extension LibraryIndex {
             \(releaseJoin)
             \(whereClause(conditions))
             ORDER BY \(order), \(tieBreak)
-            \(window == nil ? "" : "LIMIT ? OFFSET ?")
+            \(window == nil ? "" : windowSQL)
             """
         let windowValues: [(any SQLiteValue)?] = window.map { [$0.count, $0.lowerBound] } ?? []
         return try statement(sql).map(binding: entryValues + values + windowValues, row: read)
@@ -199,6 +199,15 @@ extension LibraryIndex {
     /// The albums of the tracks in `filter`'s source, genre and artist.
     public func albums(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
         try entries(.albums, filter, [.source, .selection(.genres), .selection(.artists)])
+    }
+
+    /// The first `limit` entries of the Artist or Album pane, `grouping`, of the tracks
+    /// `filter`'s search finds in its source, for the web remote's search. The panes themselves
+    /// ignore the search.
+    public func searchEntries(_ grouping: BrowserGrouping, _ filter: TrackFilter, limit: Int)
+        throws -> [BrowserEntry]
+    {
+        try entries(grouping, filter, [.source, .search], limit: limit)
     }
 
     /// The entries of a browser column grouping by `grouping`, from the tracks in `filter`'s
@@ -239,11 +248,13 @@ extension LibraryIndex {
 
     /// The rows of a grouping read from a table, as `pane` lists them.
     private func entries(
-        _ grouping: BrowserGrouping, _ filter: TrackFilter, _ panes: [FilterPart]
+        _ grouping: BrowserGrouping, _ filter: TrackFilter, _ panes: [FilterPart],
+        limit: Int? = nil
     ) throws -> [BrowserEntry] {
         guard case .table(let rows, let column, let order, let albums) = grouping.sql(filter)
         else { preconditionFailure("\(grouping) isn't read from a table") }
-        return try pane(rows, column, order, filter, panes, row: albums ? albumEntry : entry)
+        return try pane(
+            rows, column, order, filter, panes, limit: limit, row: albums ? albumEntry : entry)
     }
 
     /// The Artist and Album pane entries that list track `id`, by `filter`'s grouping; nil for
@@ -391,15 +402,15 @@ extension LibraryIndex {
     /// `panes` let through.
     private func pane(
         _ rowSQL: String, _ column: String, _ order: String, _ filter: TrackFilter,
-        _ panes: [FilterPart], row read: (Row) throws -> BrowserEntry = entry
+        _ panes: [FilterPart], limit: Int? = nil, row read: (Row) throws -> BrowserEntry = entry
     ) throws -> [BrowserEntry] {
         let (conditions, values) = try trackConditions(filter, panes: panes)
         // SQLite leaves out the joins no condition uses.
         let sql =
             "\(rowSQL) WHERE id IN (SELECT t.\(column) FROM tracks t \(trackJoins)"
             + "\(whereClause(conditions).isEmpty ? "" : " " + whereClause(conditions)))"
-            + " ORDER BY \(order), id"
-        return try statement(sql).map(binding: values, row: read)
+            + " ORDER BY \(order), id " + (limit == nil ? "" : windowSQL)
+        return try statement(sql).map(binding: values + (limit.map { [$0, 0] } ?? []), row: read)
     }
 }
 
@@ -528,6 +539,9 @@ extension LibraryIndex {
 private func whereClause(_ conditions: [String]) -> String {
     conditions.isEmpty ? "" : "WHERE " + conditions.joined(separator: " AND ")
 }
+
+/// Reads a window of a query's rows, binding how many and from where.
+private let windowSQL = "LIMIT ? OFFSET ?"
 
 /// The most IDs one `IN` list binds: well under SQLite's limit, and few statement shapes.
 let inListSize = 500

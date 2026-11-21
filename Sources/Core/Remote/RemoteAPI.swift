@@ -9,22 +9,6 @@ import StrictKeys
 /// lets through; every other path needs a paired device's bearer token, and without one gets a
 /// 401 with nothing in it, whatever the path, so a stranger learns no route.
 struct RemoteAPI: Sendable {
-    enum Route {
-        static let pair = "/api/pair"
-        static let state = "/api/state"
-        static let events = "/api/events"
-        static let command = "/api/command"
-        static let instances = "/api/instances"
-        static let genres = "/api/genres"
-        static let artists = "/api/artists"
-        static let albums = "/api/albums"
-        static let tracks = "/api/tracks"
-        static let search = "/api/search"
-        static let covers = "/api/covers"
-        static let queue = "/api/queue"
-        /// Followed by a size, `/` and a cover's ID.
-        static let art = "/api/art/"
-    }
 
     let instanceID: String
     let name: String
@@ -47,34 +31,35 @@ struct RemoteAPI: Sendable {
         {
             return .reply(file)
         }
-        if request.method == HTTPWord.post, request.path == Route.pair {
+        if request.method == HTTPWord.post, request.path == RemoteRoute.pair {
             return .reply(pair(request))
         }
         guard let device = devices.device(authorization: request.field("authorization")) else {
             return .reply(RemoteReply(.unauthorized))
         }
         switch (request.method, request.path) {
-        case ("GET", Route.state):
+        case ("GET", RemoteRoute.state):
             return .reply(Self.reply(await state()))
-        case ("GET", Route.events):
+        case ("GET", RemoteRoute.events):
             return hub.subscribe(tokenHash: device.tokenHash)
-        case (HTTPWord.post, Route.command):
+        case (HTTPWord.post, RemoteRoute.command):
             return .reply(await command(request))
-        case ("GET", Route.instances):
+        case ("GET", RemoteRoute.instances):
             return .reply(Self.reply(instances()))
-        case ("GET", Route.queue):
+        case ("GET", RemoteRoute.queue):
             return .reply(await queueReply(RemoteQuery(request.query)))
-        case ("GET", let path) where path.hasPrefix(Route.art):
-            return .reply(await art(String(path.dropFirst(Route.art.count)), request.query))
+        case ("GET", let path) where path.hasPrefix(RemoteRoute.art):
+            return .reply(await art(String(path.dropFirst(RemoteRoute.art.count)), request.query))
         case ("GET", let path):
             return .reply(
                 await library.reply(
-                    path, query: RemoteQuery(request.query),
-                    ifNoneMatch: request.field("if-none-match"))
+                    path, query: request.query, ifNoneMatch: request.field("if-none-match"))
                     ?? RemoteReply(.notFound))
-        case (_, Route.state), (_, Route.events), (_, Route.command), (_, Route.instances),
-            (_, Route.genres), (_, Route.artists), (_, Route.albums), (_, Route.tracks),
-            (_, Route.search), (_, Route.covers), (_, Route.queue):
+        case (_, RemoteRoute.state), (_, RemoteRoute.events), (_, RemoteRoute.command),
+            (_, RemoteRoute.instances),
+            (_, RemoteRoute.genres), (_, RemoteRoute.artists), (_, RemoteRoute.albums),
+            (_, RemoteRoute.tracks),
+            (_, RemoteRoute.search), (_, RemoteRoute.covers), (_, RemoteRoute.queue):
             return .reply(RemoteReply(.methodNotAllowed))
         default:
             return .reply(RemoteReply(.notFound))
@@ -246,4 +231,22 @@ struct RemoteAPI: Sendable {
 /// A request refused before it's acted on, with the reply that says why.
 private struct Refused: Error {
     var reply: RemoteReply
+}
+
+/// The web remote's paths.
+public enum RemoteRoute {
+    static let pair = "/api/pair"
+    static let state = "/api/state"
+    static let events = "/api/events"
+    static let command = "/api/command"
+    static let instances = "/api/instances"
+    public static let genres = "/api/genres"
+    public static let artists = "/api/artists"
+    static let albums = "/api/albums"
+    public static let tracks = "/api/tracks"
+    public static let search = "/api/search"
+    static let covers = "/api/covers"
+    static let queue = "/api/queue"
+    /// Followed by a size, `/` and a cover's ID.
+    static let art = "/api/art/"
 }

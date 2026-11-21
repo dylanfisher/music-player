@@ -47,21 +47,21 @@ private func read(
 )
     async throws -> RemoteReply
 {
-    try #require(await library.reply(path, query: RemoteQuery(query), ifNoneMatch: tag))
+    try #require(await library.reply(path, query: query, ifNoneMatch: tag))
 }
 
 @Test func listsComeWholeAsCompactArraysOfWhatTheBrowserQueriesGive() async throws {
     let (remote, index) = try library()
-    let genres = try json(try await read(remote, RemoteAPI.Route.genres)) as? [String: Any]
+    let genres = try json(try await read(remote, RemoteRoute.genres)) as? [String: Any]
     #expect(
         (genres?["rows"] as? [[Any]])?.map { "\($0[0]) \($0[1])" }
             == (try index.genres().map { "\($0.id) \($0.name)" }))
     let genre = try #require(try index.genres().first)
-    let artists = try json(try await read(remote, RemoteAPI.Route.artists, "genre=\(genre.id)"))
+    let artists = try json(try await read(remote, RemoteRoute.artists, "genre=\(genre.id)"))
     #expect(
         ((artists as? [String: Any])?["rows"] as? [[Any]])?.map { "\($0[0]) \($0[1])" }
             == (try index.artists(TrackFilter(genre: genre.id)).map { "\($0.id) \($0.name)" }))
-    let albums = try json(try await read(remote, RemoteAPI.Route.albums))
+    let albums = try json(try await read(remote, RemoteRoute.albums))
     let rows = try #require((albums as? [String: Any])?["rows"] as? [[Any]])
     #expect(rows.count == (try index.albums().count))
     #expect(rows.allSatisfy { $0.count == 3 })
@@ -74,7 +74,7 @@ private func read(
     for offset in [0, 50, whole.count - 3, whole.count + 10] {
         let reply = try json(
             try await read(
-                remote, RemoteAPI.Route.tracks, "sort=title&descending=1&offset=\(offset)&limit=40")
+                remote, RemoteRoute.tracks, "sort=title&descending=1&offset=\(offset)&limit=40")
         )
         let range = try #require(reply as? [String: Any])
         #expect(range["total"] as? Int == whole.count)
@@ -89,7 +89,7 @@ private func read(
         })
     let listed = try json(
         try await read(
-            remote, RemoteAPI.Route.tracks, "album=\(album.id)&sort=album&offset=0&limit=200"))
+            remote, RemoteRoute.tracks, "album=\(album.id)&sort=album&offset=0&limit=200"))
     let ids = ((listed as? [String: Any])?["rows"] as? [[Any]])?.compactMap { $0[0] as? Int64 }
     let files = try await remote.files(argument: "album:\(album.id)", queueing: true)
     let paths = try index.paths(ids: try #require(ids))
@@ -99,60 +99,66 @@ private func read(
 
 @Test func aReadOfAnUnchangedLibraryIsA304UntilAnotherConnectionChangesIt() async throws {
     let (remote, index) = try library()
-    let first = try await read(remote, RemoteAPI.Route.artists)
+    let first = try await read(remote, RemoteRoute.artists)
     let tag = try #require(first.fields.first { $0.0 == "ETag" }?.1)
-    let again = try await read(remote, RemoteAPI.Route.artists, tag: tag)
+    let again = try await read(remote, RemoteRoute.artists, tag: tag)
     #expect(again.status == .notModified)
     #expect(again.body.isEmpty)
     let track = try #require(try index.trackIDs(sortedBy: .path).first)
     try index.setRating(3, trackIDs: [track])
-    let changed = try await read(remote, RemoteAPI.Route.artists, tag: tag)
+    let changed = try await read(remote, RemoteRoute.artists, tag: tag)
     #expect(changed.status == .ok)
     #expect(changed.fields.first { $0.0 == "ETag" }?.1 != tag)
     // The grouping changes what the Artists list holds, so it's in the tag too.
     let (grouped, _) = try library(grouped: true)
-    let other = try await read(grouped, RemoteAPI.Route.artists, tag: tag)
+    let other = try await read(grouped, RemoteRoute.artists, tag: tag)
     #expect(other.status == .ok)
 }
 
 @Test func aQueryStringOutsideWhatTheReadTakesIsRefused() async throws {
     let (remote, _) = try library()
     let refused: [(String, String)] = [
-        (RemoteAPI.Route.genres, "genre=1"), (RemoteAPI.Route.artists, "genre=x"),
-        (RemoteAPI.Route.artists, "genre=1&genre=2"), (RemoteAPI.Route.artists, "genre=0"),
-        (RemoteAPI.Route.tracks, "offset=0"), (RemoteAPI.Route.tracks, "offset=0&limit=201"),
-        (RemoteAPI.Route.tracks, "offset=0&limit=0"), (RemoteAPI.Route.tracks, "offset=-1&limit=5"),
-        (RemoteAPI.Route.tracks, "offset=0&limit=5&sort=rowNumber"),
-        (RemoteAPI.Route.tracks, "offset=0&limit=5&descending=yes"),
-        (RemoteAPI.Route.search, ""),
-        (RemoteAPI.Route.search, "q=" + String(repeating: "a", count: 257)),
-        (RemoteAPI.Route.covers, "albums=1,,2"), (RemoteAPI.Route.albums, "nope"),
+        (RemoteRoute.genres, "genre=1"), (RemoteRoute.artists, "genre=x"),
+        (RemoteRoute.artists, "genre=1&genre=2"), (RemoteRoute.artists, "genre=0"),
+        (RemoteRoute.tracks, "offset=0"), (RemoteRoute.tracks, "offset=0&limit=201"),
+        (RemoteRoute.tracks, "offset=0&limit=0"), (RemoteRoute.tracks, "offset=-1&limit=5"),
+        (RemoteRoute.tracks, "offset=0&limit=5&sort=rowNumber"),
+        (RemoteRoute.tracks, "offset=0&limit=5&descending=yes"),
+        (RemoteRoute.search, ""),
+        (RemoteRoute.search, "q=" + String(repeating: "a", count: 257)),
+        (RemoteRoute.covers, "albums=1,,2"), (RemoteRoute.albums, "nope"),
     ]
     for (path, query) in refused {
         #expect(try await read(remote, path, query).status == .badRequest, "\(path)?\(query)")
     }
-    #expect(await remote.reply("/api/nothing", query: RemoteQuery(nil), ifNoneMatch: nil) == nil)
+    #expect(await remote.reply("/api/nothing", query: nil, ifNoneMatch: nil) == nil)
 }
 
 @Test func aSearchFindsArtistsAlbumsAndTracksTwentyOfEach() async throws {
     let (remote, index) = try library()
-    let artist = try #require(try index.artists().first)
+    // Past the first 20, so a search that listed every artist wouldn't find it.
+    let artist = try #require(try index.artists().last)
     let word = try #require(artist.name.split(separator: " ").first)
     let found = try #require(
-        try json(try await read(remote, RemoteAPI.Route.search, "q=\(word)")) as? [String: Any])
+        try json(try await read(remote, RemoteRoute.search, "q=\(word)")) as? [String: Any])
     let artists = try #require(found["artists"] as? [[Any]])
     #expect(artists.contains { $0[0] as? Int64 == artist.id })
     for kind in ["artists", "albums", "tracks"] {
         #expect(((found[kind] as? [[Any]])?.count ?? 99) <= RemoteLibrary.searchLimit)
     }
     #expect(!(found["tracks"] as? [[Any]] ?? []).isEmpty)
+    let none = try #require(
+        try json(try await read(remote, RemoteRoute.search, "q=qqqzzzxxx")) as? [String: Any])
+    for kind in ["artists", "albums", "tracks"] {
+        #expect((none[kind] as? [[Any]])?.isEmpty == true, "\(kind)")
+    }
 }
 
 @Test func coversNameEachAlbumsArtWhichComesAtTwoSizesForGood() async throws {
     let (remote, index) = try library()
     let albums = try index.albums().map(\.id)
     let reply = try await read(
-        remote, RemoteAPI.Route.covers,
+        remote, RemoteRoute.covers,
         "albums=" + albums.prefix(200).map(String.init).joined(separator: ","))
     let covers = try #require(try json(reply) as? [String: String])
     #expect(!covers.isEmpty && covers.count < albums.count)
