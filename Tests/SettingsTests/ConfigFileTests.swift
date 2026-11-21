@@ -332,6 +332,19 @@ func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
     #expect(problems(#"{"a.old": 1, "a.count": 11}"#).count == 2)
 }
 
+/// Focus Mode is gone (ADR 0216): no setting is named for it, and a file that still sets its
+/// text size has the key skipped as unknown, for Remove Obsolete Setting to take out.
+@Test func focusModesTextSizeIsAnUnknownSetting() throws {
+    let app = AppSettings().settings
+    let named = app.filter { ($0.key + $0.title).lowercased().contains("focus") }
+    #expect(named.isEmpty, "\(named.map(\.key))")
+    let key = "appearance.focusFontSize"
+    let contents = try ConfigFile.parse(
+        ConfigText(#"{"\#(key)": 30}"#), settings: app, check: check)
+    #expect(contents.values.isEmpty)
+    #expect(contents.skipped.map(\.obsoleteKey) == [[key]])
+}
+
 /// Remove Obsolete Setting's edit of `text`, which must still parse.
 private func removing(_ path: [String], _ text: String) throws -> String {
     let removed = try ConfigFile.removing(path, from: ConfigText(text)).string

@@ -251,7 +251,6 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(settings[\.alternatingRows] == true)
     #expect(settings[\.rowHeight] == .regular)
     #expect(settings[\.artSize] == .fit)
-    #expect(settings[\.focusFontSize] == 30)
     #expect(settings[\.statusBarLayout] == .defaultStatusBar)
     #expect(settings[\.statusBarStyle] == .minimal)
     let keys = AppSettings().settings.map(\.key).filter { $0.hasPrefix("appearance.") }
@@ -260,7 +259,7 @@ private func problems(_ json: String) -> [SettingProblem] {
             "appearance.columnLines", "appearance.rowLines", "appearance.albumLines",
             "appearance.rowLineColor", "appearance.albumLineColor", "appearance.playingRowColor",
             "appearance.alternatingRows",
-            "appearance.rowHeight", "appearance.artSize", "appearance.focusFontSize",
+            "appearance.rowHeight", "appearance.artSize",
             "appearance.glass",
             "appearance.windowTitle",
             "appearance.headerStatusLayout", "appearance.customStatus1Layout",

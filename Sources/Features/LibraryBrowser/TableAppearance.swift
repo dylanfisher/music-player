@@ -1,9 +1,8 @@
 import AppKit
 import Settings
 
-/// How the track table draws: the `appearance.` settings for its lines, rows and art, its text
-/// in Focus Mode, and whether the window's glass is on, which draws the alternating rows
-/// translucent.
+/// How the track table draws: the `appearance.` settings for its lines, rows and art, and
+/// whether the window's glass is on, which draws the alternating rows translucent.
 public struct TableAppearance: Equatable, Sendable {
     public var columnLines: Bool
     public var rowLines: Bool
@@ -17,14 +16,11 @@ public struct TableAppearance: Equatable, Sendable {
     public var rowHeight: RowHeight
     public var artSize: ArtSize
     public var glass: Bool
-    /// The text's size in Focus Mode, in points, which its rows' height follows.
-    public var focusFontSize: Int
 
     public init(
         columnLines: Bool, rowLines: Bool, albumLines: Bool, rowLineColor: HexColor?,
         albumLineColor: HexColor?, playingRowColor: HexColor?, alternatingRows: Bool,
-        rowHeight: RowHeight, artSize: ArtSize, glass: Bool,
-        focusFontSize: Int = AppSettings().focusFontSize.defaultValue
+        rowHeight: RowHeight, artSize: ArtSize, glass: Bool
     ) {
         self.columnLines = columnLines
         self.rowLines = rowLines
@@ -36,7 +32,6 @@ public struct TableAppearance: Equatable, Sendable {
         self.rowHeight = rowHeight
         self.artSize = artSize
         self.glass = glass
-        self.focusFontSize = focusFontSize
     }
 
     var rowLine: NSColor { rowLineColor.map(NSColor.init) ?? .gridColor }
