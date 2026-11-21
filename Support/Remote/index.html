@@ -2,10 +2,120 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Music">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
 <title>Music Player Remote</title>
 </head>
 <body>
-<p>The web remote's page comes in phase 10b. This one shows that the server answers.</p>
+<header id="macs" class="macs" aria-label="Macs">
+  <button id="auto" class="mac auto" type="button" hidden>Auto</button>
+</header>
+
+<main>
+  <section id="view-now" class="view now">
+    <div class="cover-frame"><img id="now-cover" class="cover" alt=""></div>
+    <div class="titles">
+      <h1 id="now-title" class="title">Nothing playing</h1>
+      <p id="now-subtitle" class="subtitle"></p>
+    </div>
+    <div class="seek">
+      <input id="seek" type="range" min="0" max="1" step="1" value="0" aria-label="Position">
+      <div class="times"><span id="elapsed">–:––</span><span id="remaining">–:––</span></div>
+    </div>
+    <div class="transport">
+      <button id="shuffle" class="small" type="button" aria-label="Shuffle">⤮</button>
+      <button id="previous" type="button" aria-label="Previous">⏮</button>
+      <button id="play" class="big" type="button" aria-label="Play or pause">▶</button>
+      <button id="next" type="button" aria-label="Next">⏭</button>
+      <button id="repeat" class="small" type="button" aria-label="Repeat">↻</button>
+    </div>
+    <div id="volume-row" class="volume" hidden>
+      <span class="label">Volume</span>
+      <input id="volume" type="range" min="-60" max="0" step="1" value="0" aria-label="Volume">
+      <span id="volume-text" class="value"></span>
+    </div>
+    <p id="output" class="output"></p>
+    <div id="receiver" class="receiver" hidden>
+      <div class="receiver-row">
+        <span class="label">Receiver</span>
+        <button id="receiver-power" class="pill" type="button"></button>
+        <button id="receiver-mute" class="pill" type="button">Mute</button>
+      </div>
+      <div class="receiver-row">
+        <button id="receiver-down" class="round" type="button" aria-label="Receiver volume down">−</button>
+        <span id="receiver-volume" class="value"></span>
+        <button id="receiver-up" class="round" type="button" aria-label="Receiver volume up">+</button>
+        <select id="receiver-input" aria-label="Receiver input"></select>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-queue" class="view list-view" hidden>
+    <div class="bar"><h2>Queue</h2><span id="queue-count" class="count"></span></div>
+    <div id="queue-list" class="vlist"></div>
+    <div id="queue-actions" class="actions" hidden>
+      <button id="queue-up" type="button">Up</button>
+      <button id="queue-down" type="button">Down</button>
+      <button id="queue-next" type="button">Play Next</button>
+      <button id="queue-remove" class="danger" type="button">Remove</button>
+    </div>
+  </section>
+
+  <section id="view-browse" class="view list-view" hidden>
+    <div class="bar">
+      <button id="back" class="back" type="button" hidden>‹</button>
+      <h2 id="browse-title">Library</h2>
+      <button id="browse-play" class="pill" type="button" hidden>Play</button>
+      <button id="browse-queue" class="pill" type="button" hidden>Queue</button>
+    </div>
+    <div id="kinds" class="kinds">
+      <button type="button" data-kind="artists" class="chosen">Artists</button>
+      <button type="button" data-kind="albums">Albums</button>
+      <button type="button" data-kind="genres">Genres</button>
+      <button type="button" data-kind="songs">Songs</button>
+    </div>
+    <div class="list-frame">
+      <div id="browse-list" class="vlist"></div>
+      <div id="jump" class="jump" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <section id="view-search" class="view list-view" hidden>
+    <div class="bar">
+      <input id="search" type="search" placeholder="Artists, albums and songs" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+    </div>
+    <div id="results" class="results"></div>
+  </section>
+</main>
+
+<nav id="tabs" class="tabs">
+  <button type="button" data-view="now" class="chosen">Now Playing</button>
+  <button type="button" data-view="queue">Queue</button>
+  <button type="button" data-view="browse">Browse</button>
+  <button type="button" data-view="search">Search</button>
+</nav>
+
+<div id="pairing" class="sheet" hidden>
+  <form id="pair-form" class="card">
+    <h2 id="pair-title">Pair with this Mac</h2>
+    <p class="hint">Enter the code Settings → Remote shows on <span id="pair-name">the Mac</span>.</p>
+    <input id="pair-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" aria-label="Code">
+    <p id="pair-problem" class="problem"></p>
+    <div class="buttons">
+      <button id="pair-cancel" type="button">Cancel</button>
+      <button type="submit" class="primary">Pair</button>
+    </div>
+  </form>
+</div>
+
+<p id="message" class="message" role="status" hidden></p>
+<script type="module" src="app.js"></script>
 </body>
 </html>

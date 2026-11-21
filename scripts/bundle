@@ -53,6 +53,10 @@ master="$work/AppIcon.svg.png"
 if [ ! -s "$master" ]; then
   echo "Quick Look wrote no PNG from Support/AppIcon.svg." >&2; exit 1
 fi
+# The web remote's home-screen icon, from the master before its corners are cut: iOS rounds
+# the corners itself and shows transparent ones as black (ADR 0215).
+touch_icon="$work/icon.png"
+sips -z 180 180 "$master" --out "$touch_icon" >/dev/null
 # Quick Look draws on white; the icon's corners must be transparent.
 swift scripts/icon-mask.swift Support/AppIcon.svg "$master"
 for size in 16 32 128 256 512; do
@@ -64,10 +68,12 @@ for size in 16 32 128 256 512; do
   done
 done
 iconutil -c icns -o "$app/Contents/Resources/AppIcon.icns" "$iconset"
-rm -rf "$work"
 
-# The web remote's page, served as it is (ADR 0214).
+# The web remote's page, served as it is (ADR 0214), with its icon.
+rm -rf "$app/Contents/Resources/Remote"
 cp -R Support/Remote "$app/Contents/Resources/Remote"
+cp "$touch_icon" "$app/Contents/Resources/Remote/icon.png"
+rm -rf "$work"
 
 # The tool's name and the link scheme are one word, declared once in Swift (ADR 0036).
 tool=$(sed -n 's/^public let toolName = "\(.*\)"$/\1/p' Sources/Core/Scripting/Scripting.swift)
