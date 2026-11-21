@@ -6,7 +6,7 @@ plan.md lists as pending. Nothing here is open work: what's still to do is in pl
 checkpoint ticked here only after it's cleared there.
 
 Phase numbers are kept, so "phase 23" in an ADR, a commit or a comment means the phase of that
-number here. Phases 10 and 13 aren't built and are still in plan.md, with phases 77 onward.
+number here. Phase 13 isn't built and is still in plan.md, with phases 77 onward.
 
 ## Run orders
 
@@ -13019,3 +13019,228 @@ this Mac: HALOutputTests' StepWatch, MusicPlayerTests' frosted glass headers and
 quarantine flag; DeviceOutput's seeks and BrowserModelTests' search during a refresh failed
 under another session's test load and passed run alone. Bench and release bundle skipped: no
 budgeted path, Package.swift or `#available` changed. Pending: the owner check.
+
+### 10. Web remote
+
+The owner (2026-11-20): control "the macbook that is connected to the denon receiver from my
+phone", with "full efficient browsing of the library", and no iOS app and no Shortcuts. The
+2015 MacBook Pro is usually the Mac on the Denon, but any of the three Macs may be playing, so
+the remote "determine[s] if multiple music players are launched, which one is currently
+playing, and control[s] that one", and shows every one of them.
+
+A web page can't discover anything on the LAN by itself, so each running app does that for the
+page. Every app advertises itself over Bonjour and lists the others it finds. The page, served
+by whichever app the phone opened, asks that app for the list, then talks to each app on it
+directly.
+
+- [x] **10.1 The remote server.** A second listener in `LocalNetwork`. The phase 9
+      `HTTPServer` serves files to one renderer by token, and this one answers any paired
+      device on a local subnet, so it's a type of its own, sharing the head parser and the
+      subnet check. `remote.enabled` is off by default; nothing listens or advertises until the
+      owner turns it on, and turning it off closes every connection. `remote.port` defaults to
+      a fixed port (47800) rather than one the system picks, so a saved home-screen link keeps
+      working. It listens on each LAN interface (not loopback, not point-to-point) and accepts
+      connections only from that interface's subnet. `Host` must be one of the Mac's own
+      addresses or its `<name>.local` with the port, which stops DNS rebinding. `GET` for the
+      page and reads, `POST` for commands and pairing, JSON bodies of 16 KiB at most, 8 KiB
+      heads within 10 s, and keep-alive allowed. At most 32 connections, since each phone holds
+      one event stream per Mac (10.4). Responses are gzip-compressed with `Compression`
+      (system zlib, no dependency) when the client asks. Threat model rows in ADR 0025, and a
+      fuzz target, `scripts/fuzz remote-request`.
+- [x] **10.2 Pairing.** Settings → Remote shows a 6-digit code, live for 2 minutes, and a QR
+      code holding `http://<name>.local:<port>/#pair=<code>`, with the LAN IP beside it as
+      plain text for when `.local` doesn't resolve. The page trades the code and a device name
+      it makes up ("iPhone, Safari") for a 128-bit token. Five wrong codes kill the code, and
+      a new one has to be shown. Every request except the static page and the trade carries the
+      token in `Authorization: Bearer`; anything else gets 401 and nothing more. The Mac keeps
+      only the token's SHA-256, with the device name, when it paired and when it was last seen,
+      so the Mac holds no secret, just a way to check one (owner question below). Settings
+      lists paired devices with Forget for each.
+- [x] **10.3 Finding the other Macs.** Each app keeps a random instance ID in its state file and
+      advertises `_music-player._tcp` with its port, its computer name and that ID in the TXT
+      record. It doesn't advertise whether it's playing: anyone on the LAN can read a TXT
+      record. An `NWBrowser` collects the other instances, and `GET /api/instances` returns
+      them (ID, name, addresses, port) to a paired device. A Mac that sleeps or quits drops off
+      the list. `NSBonjourServices` in `Info.plist` names the one service, amending ADR 0039.
+      The page talks to the other Macs directly, so each one sends CORS headers, echoing
+      `Origin` only when it's another instance's origin from its own Bonjour list, and answers
+      the `OPTIONS` preflight that the `Authorization` header triggers.
+- [x] **10.4 State and push.** `GET /api/state` returns now playing (track, album and
+      artwork IDs), whether it's playing, position with the time it was read so the page can
+      advance the bar itself without an update every second, the queue's change stamp, volume,
+      the output, and the receiver's power, volume and input when receiver control is on.
+      `GET /api/events` is a Server-Sent Events stream of the same state, sent whenever any of
+      it changes, at most 4 times a second. SSE rather than WebSocket: it's plain HTTP on the
+      same hand-written server, Safari reconnects it on its own, and commands go up as `POST`
+      anyway. The stream also carries a `lastPlayedAt` time, which the page uses to choose a
+      Mac (10.6).
+- [x] **10.5 Commands.** `POST /api/command {name, argument}` goes through `ScriptRouter`
+      with a new `Origin.remote`. It runs only commands marked `runsFromRemote`: playback,
+      seek, queue edits, the app's volume, the output, and the receiver (volume, mute, input,
+      power). It runs nothing that writes tags, moves or deletes files, changes a setting, or
+      approves a download, since AGENTS.md lets those happen only after a confirmation in the
+      Mac's own UI. `playTracks` and `queueTracks` take track IDs, or an album ID with a track
+      to start from, for browsing (10.7).
+- [x] **10.6 Which Mac.** The page keeps one token per instance ID, all in the storage of the
+      origin it was saved from. A header strip lists every Mac it can see, with a dot for
+      playing, paused or unpaired. Tapping an unpaired Mac asks for the code that Mac's
+      Settings shows. Unless the owner picks one, the page controls the Mac that is playing. If
+      more than one is playing, it picks the one with the newest `lastPlayedAt`. If none is, it
+      picks the one controlled last, and failing that, the Mac whose page was opened. Each Mac
+      sends its own event stream, so the strip and the choice stay current as playback moves.
+      Browsing (10.7) uses the chosen Mac's library.
+- [x] **10.7 Browsing the library, quickly.** Reads come from the index through the
+      `LibraryQueries` the browser already uses (`artists`, `albums`, `genres`,
+      `columnEntries`, `trackNames`, `TrackFilter.search`), never a second set of queries.
+      - Lists come as compact arrays (`[id, name, artist]`), not objects. Genres, artists and
+        albums load whole, since even 10k artists is about 60 KB gzipped, with first-letter
+        offsets for a jump bar.
+      - Tracks load by position: the total, then any range of 200 (`offset`, `limit`), sorted
+        on the server by the browser's `TrackColumnSort`. Ranges are fetched by position rather
+        than by keyset cursor, because a full-height list has to jump straight to any point
+        when its scrollbar is dragged. SQLite's `OFFSET` on 100k rows takes milliseconds.
+      - The page's list is a hand-written virtual list, not TanStack or another dependency:
+        fixed-height rows, a spacer as tall as all of them, and about 40 reused row elements
+        for what's on screen. It fetches the range in view and one either side, drops ranges it
+        no longer needs once they arrive, keeps the 20 used last, and shows placeholder rows
+        until a range arrives.
+      - Every read carries the index's `changeStamp` as its `ETag`. The page caches lists in
+        IndexedDB under that stamp and asks again with `If-None-Match`, so a library that
+        hasn't changed costs a 304.
+      - Search runs `TrackFilter.search` over artists, albums and tracks at once, 20 of each,
+        at most one request in flight per keystroke, and the stale one is dropped.
+      - Artwork comes from `ThumbnailStore` at two sizes (list and now playing), at URLs keyed
+        by the artwork's hash with `Cache-Control: immutable`, so each cover crosses the
+        network once.
+      - Budgets, measured on the 2015 MacBook Pro over the owner's library: the first page of
+        artists in under 150 ms on the server, a search in under 100 ms, and an album's tracks
+        in under 50 ms. `Bench` gets a remote case for each.
+- [x] **10.8 The web app.** Static HTML, CSS and JS in `Support/Remote/`, which `scripts/bundle`
+      copies into the app; no framework, no build step. It's sized for phones and has
+      `apple-mobile-web-app-capable`, so Add to Home Screen opens it full screen. Four views:
+      - **Now Playing:** artwork, transport, a seek bar, and the app's and the receiver's volume.
+      - **Queue:** reorder and remove.
+      - **Browse:** Artists → Albums → Tracks, and an album grid, as virtualized lists.
+      - **Search.**
+
+      It reconnects its event streams on `visibilitychange`, since iOS suspends the page while
+      the phone is locked. Light and dark follow the phone. It needs nothing newer than iOS 15
+      Safari.
+- [x] **10.9 Tests.** Swift Testing tests for the server's caps, the Host and CORS checks,
+      pairing (expiry, five misses, Forget), a 401 for every route without a token, an
+      unremotable command refused, ranges by position and ETags against a fixture index, and
+      discovery with an injected browser. JS stays thin enough that its logic, such as picking a
+      Mac and which ranges the virtual list fetches, is a pure module that a Swift test runs in
+      `JavaScriptCore` (a system framework). No test opens a port past loopback or advertises
+      on the LAN: Bonjour's advertiser and browser are injected.
+- [ ] **Hardware checkpoint (owner):**
+      - Pair a phone with the 2015 MacBook Pro, from the QR code and by its LAN IP.
+      - Add it to the home screen, open it full screen and control playback through the Denon.
+      - Start playing on a second Mac and watch the remote switch to it, with Browse kept.
+      - Pair a second Mac from the strip, opened from the `.local` link and from the IP link.
+      - Lock the phone for a minute, unlock it, and see the event streams come back.
+      - Browse and search the full library: the jump bar and scrolling at 10k artists, an
+        album grid's covers, All Songs for an artist.
+      - Control one Mac from a phone and a computer at once.
+      - The page in the phone's dark theme.
+      - Forget a device, and see its next request refused.
+
+**What a web page can't do here.** It's plain `http`, so there's no service worker or offline
+page, and the token travels unencrypted on the LAN, as the recommender's does (ADR 0025 row
+65). There are no lock-screen controls: Safari offers them only for audio the page itself
+plays. The phone's home-screen link points at one Mac, the 2015 MacBook Pro, and works only
+while that Mac is awake. The others show up on its strip.
+
+**Decided by the owner (2026-11-20).** The Mac stores only a SHA-256 of each device token, in
+the state file, so no Mac holds the secret, and AGENTS.md's secrets line gets a note saying so
+rather than a third secret. The virtual list is written by hand, with no TanStack or any other
+dependency.
+
+**Built in two parts on one branch, `phase/10-web-remote`.** 10a is the server side: 10.1 to
+10.5, 10.3's discovery and the Settings → Remote pane, with their tests. 10b is browsing and the
+page: 10.6 to 10.8, with their tests. Each part gets its own review. ADR 0214 is 10a's and ADR
+0215 is 10b's.
+
+**10a, the server side (sub-plan).**
+1. Settings: `remote.enabled` (off) and `remote.port` (47800, 1024 to 65535) in the config;
+   `remote.instanceID` and `remote.devices` (each device's name, token SHA-256, paired and last
+   seen, at most 32) in the state file, decoded strictly.
+2. `LocalNetwork`: `RemoteServer`, one `NWListener` per LAN interface on the one port, with the
+   request rules as a pure function (`RemoteRequestRules`) that the fuzz target
+   `remote-request` drives; keep-alive, caps on heads, bodies, connections and event streams;
+   the `Host` check against the bound addresses and `<name>.local`; CORS for the origins a
+   closure allows and the `OPTIONS` preflight; gzip through zlib; SSE streams. Bonjour behind
+   `BonjourAdvertising` and `BonjourBrowsing`, with dns_sd and `NWBrowser` as the real ones.
+3. Core module `Remote`: pairing (code, misses, expiry, constant-time compares, token hashes),
+   the routes (`/`, `/api/pair`, `/api/state`, `/api/events`, `/api/command`,
+   `/api/instances`), the state and its change check, the event hub (at most 4 a second), the
+   instance list from the browser, and `RemoteService`, which starts and stops it all.
+4. `ScriptRouter.Origin.remote` and `Command.runsFromRemote`; new argument commands Seek To,
+   Set Volume and Choose Output for the page's seek bar, slider and output menu.
+   `playTracks`, `queueTracks` and the queue's reorder and remove come with browsing in 10b,
+   since they take IDs only browsing gives the page, as do the artwork IDs in the state.
+5. Settings → Remote: the two settings, the code with its QR code and LAN address, paired
+   devices with Forget. App wiring starts the service, restarts it when the interfaces change
+   and feeds it the state.
+6. `NSBonjourServices`, a placeholder `Support/Remote/index.html`, ADR 0214 (amending 0039,
+   rows in 0025) and AGENTS.md's note on device tokens.
+
+**10b, browsing and the page (sub-plan).**
+1. Static files: a fixed list (`index.html`, `style.css`, `app.js`, `logic.js`, `icon.png`)
+   read from `Remote/` in the bundle once at start into a map keyed by exact path, each with
+   its type and an `ETag` of its bytes; nothing from the request path touches the file system.
+   `scripts/bundle` makes `icon.png` from `AppIcon.svg`. The page gets a
+   `Content-Security-Policy`.
+2. `LocalNetwork`: 304 Not Modified, `If-None-Match` in the preflight's allowed headers, and
+   `ETag` exposed to the other Macs' pages.
+3. `Library`: `trackNames` takes a window (`LIMIT`/`OFFSET` on the same statement) and a
+   filtered count gives the total; `searchEntries` reads the Artist and Album panes with the
+   search applied, which the panes ignore; one new read, an art track for each of a set of
+   albums, for the album grid. `ThumbnailStore` hands back a thumbnail's encoded bytes, made and kept on a
+   miss, and names a picture by the hash its files are named by.
+4. `Remote`: `RemoteLibrary` on a query-only connection of its own: `/api/genres`,
+   `/api/artists`, `/api/albums` (compact arrays, whole; the phone works out the jump bar's
+   letters from the names),
+   `/api/tracks` (a total and a range by `offset` and `limit`, sorted by a `TrackColumn`),
+   `/api/search` (artists, albums and tracks, 20 each), `/api/queue` (a range of the queue in
+   play order, with its stamp), `/api/covers` (art IDs for albums) and `/api/art/<size>/<id>`
+   (two sizes, `immutable`). Every library read carries `ETag` from `changeStamp`, a launch
+   nonce and the grouping, and answers `If-None-Match` with a 304. The state gains the track's
+   art ID, the app volume's floor and the receiver's inputs.
+5. Commands, through `ScriptRouter` as `Origin.remote`: Play List (a track list by
+   `/api/tracks`' keys and a start track, played whole), Play Tracks and Queue Tracks
+   (`tracks:<ids>` or `album:<id>[:<track>]`), Move in Queue and Remove from Queue Item
+   (`<stamp>:<position>[:<to>]`, refused when the queue changed). Arguments parse in Core.
+6. The page: `logic.js`, a pure ES module (choosing a Mac, range planning with its 20-range
+   cache, search request ordering, the SSE parser, letter offsets), and `app.js`, the DOM:
+   the Mac strip, pairing, an event stream per Mac read with `fetch` and reconnected on
+   `visibilitychange` and on error with backoff, tokens keyed by instance ID and origin, Now
+   Playing, Queue, Browse (Genres, Artists, Albums, Songs, an album grid), Search, IndexedDB
+   list cache, `textContent` only.
+7. Tests: the routes, ranges, ETags and 304s against a fixture index, the art URLs, the static
+   map, the new commands and their arguments, and `logic.js` in `JavaScriptCore`. `Bench`
+   gets the three 10.7 budgets. ADR 0215.
+
+Result (2026-11-20): `caebc81b..eabe29d5`, 23 commits. 10a: `RemoteServer` (Network.framework,
+the phase 9 head parser and subnet check, gzip through system zlib), pairing to a token whose
+SHA-256 is all the state file keeps, Bonjour discovery with `/api/instances`, SSE state at most
+4 a second with a 15 s comment, `Origin.remote` commands, and Settings → Remote; ADR 0214, with
+ADR 0039 and 0025 amended. 10b: `RemoteLibrary` reads through `LibraryQueries` and `TrackFilter`
+by position with the `changeStamp` ETag, `playback.playList` playing a whole described list from
+a track, covers through `ThumbnailStore`, and the page in `Support/Remote/` with its hand-written
+virtual list; ADR 0215. Cost: two Opus builders, 10a about 450k tokens (221 tool calls, about 88
+minutes over the build and two fix rounds) and 10b about 450k (249 calls, about 89 minutes over
+the build and one fix round); Sonnet reviewers about 490k in all (correctness and security for
+each part, and a re-review of each fix round); two Sonnet fixers, 67k and 49k. The reviews found,
+among others, a start race that left nothing listening, a listener lost after ready with no
+restart, eviction not closing streams, a stop that closed nothing, a play from a track capped at
+100, unbounded range fetches, a queue edit racing its stamp, a chunk-split CRLF, Browse wiped on
+an auto switch, and Browse stuck on a Mac gone offline; all are fixed with tests. Bench on the
+build Mac (p95): the whole Artists list 3.86 ms (budget 30), a search 19.33 ms (25), an album's
+tracks 0.18 ms (10); the 2015 MacBook Pro numbers come with the owner check. The full gate passes
+every step but `test`, whose failures also fail on main on this Mac: `theGlassHeadersAreFrosted`
+and HALOutputTests' timing tests, which pass run alone. The release bundle builds universal and
+carries `Resources/Remote` and `NSBonjourServices`. `/simplify` not run: the reviews covered
+duplication, and `dupes` flags only an advisory 20-line block shared by `RemoteDevices` and
+`DeviceProfiles`. Untested in JS: `RangedSource`'s retry and dispose, which live in `app.js`.
+Pending: the owner check.
