@@ -54,7 +54,8 @@ Set by the owner on 2026-11-19. Earlier run orders are in the archive.
 2. Phase 85, what phase 84 left, waits until the owner starts it.
 3. Phase 10, drafted with the owner and started on 2026-11-20, runs now on its own branch. Its
    pairing-token storage is decided (see the phase).
-4. Phase 13 waits.
+4. Phase 93, asked for on 2026-11-20, waits until the owner starts it.
+5. Phase 13 waits.
 
 ## Waiting on the owner
 
@@ -443,6 +444,49 @@ to fall back to System Default and stay paused, and to keep searching only when 
 - [ ] **Hardware checkpoint (owner):** unplug the DAC while playing, then press Play on the
       speakers and plug it back in. Turn the Denon off while playing to it. On a fresh launch,
       open Controls ▸ Output and watch the Searching row give way to the Denon.
+
+### 93. Removing Focus Mode
+
+The owner (2026-11-20): "remove focus mode and all related code". Phase 82 added it
+([ADR 0204](decisions/0204-focus-mode.md)). Distraction-Free Mode
+([ADR 0072](decisions/0072-window-chrome-and-status-bar.md)) is a different feature and stays. So do the `focus.*` commands (Focus Sidebar, Focus Next
+Pane, Focus Next Area), which move keyboard focus.
+
+- [ ] **93.1 The code.**
+      - **Command:** `AppCommands.focusMode` (`view.focusMode`, ⌥⌘F), its View menu item in
+        `AppMenus`, and its title switch and enabling in `CommandHandlers`.
+      - **Main window:** the Focus Mode section in `MainWindow` (what it saves and puts back,
+        leaving it when full screen ends, the frame it won't save) and the toolbar check that
+        mentions it.
+      - **Library browser:** its section in `LibraryBrowser`, including the timeline's leaving
+        hook.
+      - **Track table:** in `TrackTableController`, the focus columns, the saved columns, the
+        text and rows, and the branches in column reporting.
+      - **Rows:** `TableAppearance`'s focus font size and row type.
+      - **Setting:** `appearance.focusFontSize`, from `AppSettings`, the Settings window and
+        `config.json`'s schema. A config that still holds the key is handled the way the
+        Pre-release rule says: data that doesn't match is discarded, with no shim. If the
+        config check refuses unknown keys, the stale key gets a message saying it's gone.
+      - **Search afterwards:** `rg -i 'focus ?mode|focusFontSize|focusColumns'` over
+        `Sources`, `Tests`, `Support` and `scripts` comes back empty, apart from the `focus.*`
+        keyboard commands. `./scripts/dupes`, `surface` and `size` allowlist entries that
+        only Focus Mode needed are removed.
+- [ ] **93.2 What stays.** A reload of every row keeps the selection. ADR 0204 made that fix
+      for every reload, not only Focus Mode's, so it stays with its test, renamed if the name
+      mentions Focus Mode. Any other shared change from phase 82 is kept in the same way.
+      Check each before deleting it.
+- [ ] **93.3 Tests.** Delete the tests that exercise only Focus Mode (`MainWindowTests`,
+      `TrackTableControllerTests`, `TimelineModelTests`) and keep the rest. One test checks
+      that ⌥⌘F is unbound and that no command or setting named for Focus Mode is left, so it
+      can't come back by halves.
+- [ ] **93.4 Docs.**
+      - ADR 0204's status becomes "superseded by" a short new ADR, 0216, that records the
+        removal and what stayed.
+      - Remove mentions of Focus Mode from `README.md`, `docs/map.md` and the other ADRs,
+        except history in the archive and the retrospectives.
+      - Delete phase 82's pending owner checkpoint from Waiting on the owner. The archived
+        Result line notes that the feature was removed.
+- Version: a minor bump, since removing a feature is a breaking change, pre-1.0.
 
 ### 85. The file splits and the performance rerun
 
