@@ -45,6 +45,10 @@ private struct Unreadable: Error, CustomStringConvertible {
     var row = album(7)
     row.artists = [various, dee]
     #expect(DiscographyChoice(row) == .artists([dee]))
+    row.artists = [various]
+    #expect(DiscographyChoice(row) == .unavailable(DiscographyChoice.variousArtistsText))
+    row.artists = []
+    #expect(DiscographyChoice(row) == .unavailable("No main artist is linked to a Discogs artist"))
 }
 
 @Test func aPastedIdOffersItsArtistOrItsMainArtists() {

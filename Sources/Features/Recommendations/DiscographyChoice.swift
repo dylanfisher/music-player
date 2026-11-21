@@ -10,6 +10,7 @@ enum DiscographyChoice: Equatable, Sendable {
     case unavailable(String)
 
     static let variousArtistsText = "Various Artists has no discography"
+    static let noArtistText = "No main artist is linked to a Discogs artist"
     static let noReleaseText = "No Discogs release to find the artists from"
 
     /// `artists` each once, without Various Artists, whose discography the service refuses.
@@ -18,7 +19,11 @@ enum DiscographyChoice: Equatable, Sendable {
         let offered = artists.filter {
             $0.id != RecommendationQuery.variousArtistsID && seen.insert($0.id).inserted
         }
-        self = offered.isEmpty ? .unavailable(Self.variousArtistsText) : .artists(offered)
+        let various = artists.contains { $0.id == RecommendationQuery.variousArtistsID }
+        self =
+            !offered.isEmpty
+            ? .artists(offered)
+            : .unavailable(various ? Self.variousArtistsText : Self.noArtistText)
     }
 
     /// A row's artists, which the service sends with their ids.
