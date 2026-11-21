@@ -114,7 +114,7 @@ final class Saves: @unchecked Sendable {
     #expect(gone.last?.devices.first?.tokenHash == tokenHash(token))
 }
 
-@Test func aFullListMakesRoomByTheDeviceSeenLeastRecently() throws {
+@Test func aFullListMakesRoomByTheDeviceSeenLeastRecentlyAndClosesItsStreams() throws {
     let clock = Clock()
     let registry = RemoteDeviceRegistry(
         RemoteDevices(devices: []), save: { _ in }, now: { clock.now })
@@ -123,8 +123,28 @@ final class Saves: @unchecked Sendable {
         tokens.append(try registry.pair(name: "Device \(index)"))
         clock.advance(1)
     }
+    let gone = Saves()
+    registry.forgotten = { hash in
+        gone.save(
+            RemoteDevices(devices: [
+                .init(name: "x", tokenHash: hash, pairedSeconds: 0, lastSeenSeconds: 0)
+            ]))
+    }
     _ = try registry.pair(name: "New")
+    #expect(gone.last?.devices.first?.tokenHash == tokenHash(tokens[0]))
     #expect(registry.devices.count == RemoteDevices.capacity)
     #expect(registry.device(authorization: "Bearer \(tokens[0])") == nil)
     #expect(registry.devices.last?.name == "New")
+}
+
+/// Waits up to five seconds for `condition`, recording an issue when it never holds.
+func waitFor(_ condition: @escaping () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(5)
+    while !condition() {
+        guard Date() < deadline else {
+            Issue.record("the condition never held")
+            return
+        }
+        try await Task.sleep(nanoseconds: 5_000_000)
+    }
 }

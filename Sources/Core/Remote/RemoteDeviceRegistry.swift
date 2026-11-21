@@ -30,21 +30,22 @@ public final class RemoteDeviceRegistry: @unchecked Sendable {
     public var devices: [RemoteDevices.Device] { lock.withLock { list.devices } }
 
     /// Pairs a device named `name`, returning its token. The oldest-seen device makes room
-    /// when the list is full.
+    /// when the list is full, and its streams close once the list is saved.
     func pair(name: String) throws -> String {
         var generator = SystemRandomNumberGenerator()
         let token = (0..<2).map { _ in generator.next() as UInt64 }
             .map { String(repeating: "0", count: 16) + String($0, radix: 16) }
             .map { String($0.suffix(16)) }.joined()
         let time = now()
-        try lock.withLock {
+        let evicted = try lock.withLock { () -> String? in
             var next = list
+            var evicted: String?
             if next.devices.count >= RemoteDevices.capacity,
                 let oldest = next.devices.indices.min(by: {
                     next.devices[$0].lastSeenSeconds < next.devices[$1].lastSeenSeconds
                 })
             {
-                next.devices.remove(at: oldest)
+                evicted = next.devices.remove(at: oldest).tokenHash
             }
             next.devices.append(
                 RemoteDevices.Device(
@@ -52,7 +53,9 @@ public final class RemoteDeviceRegistry: @unchecked Sendable {
                     lastSeenSeconds: time))
             try save(next)
             list = next
+            return evicted
         }
+        if let evicted { forgotten(evicted) }
         return token
     }
 
