@@ -195,6 +195,19 @@ import Testing
     #expect(registry.command(.focusPreviousPane)?.chords == [])
 }
 
+/// Focus Mode is gone (ADR 0216): its ⌥⌘F is unbound and no command is named for it. The
+/// `focus.*` commands, which move the keys, stay.
+@Test func noCommandIsLeftOfFocusMode() throws {
+    let registry = try CommandRegistry(AppCommands.all())
+    #expect(registry.command(for: KeyChord("f", [.option, .command])) == nil)
+    let named = AppCommands.all().filter {
+        $0.id.rawValue.lowercased().contains("focusmode")
+            || $0.title.lowercased().contains("focus mode")
+    }
+    #expect(named.isEmpty, "\(named.map(\.id))")
+    #expect(registry.command(.focusSidebar) != nil)
+}
+
 /// ⌘⌥⇧0 clears the rating and ⌘⌥⇧1 to ⌘⌥⇧5 rate, taking no other command's chord.
 @Test func theRatingCommandsHaveTheDigitsWithCommandOptionAndShift() throws {
     let bindings = try KeyBindings(

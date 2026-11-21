@@ -92,11 +92,6 @@ extension AppDelegate {
 
     /// Whether the main window is open, for the commands that need it.
     var hasWindow: () -> Bool { { [weak self] in self?.window != nil } }
-    /// Whether the window is open and out of Focus Mode, which hides what the View menu's
-    /// toggles would show.
-    var hasUnfocusedWindow: () -> Bool {
-        { [weak self] in self?.window.map { !$0.isFocused } == true }
-    }
 
     /// Whether the track table has a selection, for the commands that act on it.
     var hasSelectedTracks: () -> Bool {
@@ -170,40 +165,29 @@ extension AppDelegate {
             self?.browser?.reverseSort()
         }
         dispatcher.handle(
-            .toggleSidebar, enabled: hasUnfocusedWindow,
+            .toggleSidebar, enabled: hasWindow,
             isOn: { [weak self] in self?.window?.isSidebarVisible == true },
             run: { [weak self] in self?.window?.toggleSidebar() })
         dispatcher.handle(
-            .toggleToolbar, enabled: hasUnfocusedWindow,
+            .toggleToolbar, enabled: hasWindow,
             isOn: { [weak self] in self?.window?.isToolbarVisible == true },
             run: { [weak self] in self?.window?.toggleToolbar() })
         dispatcher.handle(
-            .distractionFree, enabled: hasUnfocusedWindow,
+            .distractionFree, enabled: hasWindow,
             isOn: { [weak self] in self?.window?.isDistractionFree == true },
             run: { [weak self] in self?.window?.toggleDistractionFree() })
-        dispatcher.handle(
-            .focusMode,
-            enabled: { [weak self] in
-                guard let window = self?.window else { return false }
-                return window.isFocused || self?.browser?.canFocus == true
-            },
-            title: { [weak self] in
-                self?.window?.isFocused == true
-                    ? "Leave Focus Mode" : AppCommands.title(of: .focusMode)
-            },
-            run: { [weak self] in self?.window?.toggleFocus() })
-        dispatcher.handle(.focusSidebar, enabled: hasUnfocusedWindow) { [weak self] in
+        dispatcher.handle(.focusSidebar, enabled: hasWindow) { [weak self] in
             self?.window?.showSidebar()
             self?.browser?.focusSidebar()
         }
         dispatcher.handle(
-            .toggleStatusBar, enabled: hasUnfocusedWindow,
+            .toggleStatusBar, enabled: hasWindow,
             isOn: { [weak self] in self?.browser?.isStatusBarVisible == true },
             run: { [weak self] in
                 self?.window?.toggleStatusBar()
             })
         dispatcher.handle(
-            .toggleBrowser, enabled: hasUnfocusedWindow,
+            .toggleBrowser, enabled: hasWindow,
             isOn: { [weak self] in self?.browser?.isBrowserVisible == true },
             run: { [weak self] in
                 guard let browser = self?.browser else { return }
@@ -211,11 +195,11 @@ extension AppDelegate {
                 self?.saver?.set(\.browserVisible, browser.isBrowserVisible)
             })
         dispatcher.handle(
-            .toggleQueue, enabled: hasUnfocusedWindow,
+            .toggleQueue, enabled: hasWindow,
             isOn: { [weak self] in self?.window?.isQueueVisible == true },
             run: { [weak self] in self?.window?.toggleQueue() })
         dispatcher.handle(
-            .toggleSignalPath, enabled: hasUnfocusedWindow,
+            .toggleSignalPath, enabled: hasWindow,
             isOn: { [weak self] in self?.window?.isSignalPathVisible == true },
             run: { [weak self] in self?.window?.toggleSignalPath() })
         dispatcher.handle(

@@ -55,18 +55,6 @@ extension NSColor {
     }
 }
 
-/// The track table's rows in Focus Mode: text of `fontSize` points, in rows as much taller than
-/// it as Regular's are than its text.
-struct FocusRows {
-    let fontSize: Int
-
-    var points: CGFloat {
-        let regular = RowHeight.regular
-        return (CGFloat(fontSize) * regular.points / regular.font.pointSize).rounded()
-    }
-    var font: NSFont { .systemFont(ofSize: CGFloat(fontSize)) }
-}
-
 extension RowHeight {
     /// Compact is Swinsian's row height.
     var points: CGFloat {

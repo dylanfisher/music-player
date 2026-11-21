@@ -1425,19 +1425,18 @@ private func launchedTable(
     }
 }
 
-/// Focus Mode shows Title, Artist and Album in rows sized by its setting, reports no layout of
-/// its own, and leaving puts the columns, rows and selection back.
-@MainActor @Test func focusModeShowsThreeColumnsInItsTextAndLeavesTheLayoutAsItWas() async throws {
+/// A row height change reads every row again and keeps the selection, which
+/// `NSTableView.reloadData` drops.
+@MainActor @Test func aRowHeightChangeKeepsTheSelection() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
         groupByAlbumArtist: false)
     let index = try LibraryIndex(at: databaseURL)
-    var reported: [TrackTableLayout] = []
     let actions = BrowserActions(
         play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
         sort: { _, _ in },
-        layoutChanged: { reported.append($0) },
+        layoutChanged: { _ in },
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
@@ -1445,51 +1444,15 @@ private func launchedTable(
     controller.view.frame = NSRect(x: 0, y: 0, width: 900, height: 300)
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
-    func appearance(focusFontSize: Int) -> TableAppearance {
-        TableAppearance(
-            columnLines: false, rowLines: false, albumLines: false, rowLineColor: nil,
-            albumLineColor: nil, playingRowColor: nil, alternatingRows: true,
-            rowHeight: .regular, artSize: .fit, glass: false, focusFontSize: focusFontSize)
-    }
-    controller.apply(appearance(focusFontSize: 40))
     let table = controller.table
     table.selectRowIndexes([3, 5], byExtendingSelection: false)
-    let selected = Set([3, 5].map { model.trackIDs[$0] })
-    let before = controller.layout
-    func shown() -> [String] {
-        table.tableColumns.filter { !$0.isHidden }.map(\.identifier.rawValue)
+    for rowHeight in [RowHeight.large, .compact, .regular] {
+        controller.apply(
+            TableAppearance(
+                columnLines: false, rowLines: false, albumLines: false, rowLineColor: nil,
+                albumLineColor: nil, playingRowColor: nil, alternatingRows: true,
+                rowHeight: rowHeight, artSize: .fit, glass: false))
+        #expect(table.rowHeight == rowHeight.points)
+        #expect(table.selectedRowIndexes == [3, 5], "\(rowHeight)")
     }
-    let shownBefore = shown()
-    #expect(shownBefore != ["title", "artist", "album"])
-    reported = []
-
-    controller.enterFocus()
-    #expect(shown() == ["title", "artist", "album"])
-    #expect(Set(table.selectedRowIndexes.map { model.trackIDs[$0] }) == selected)
-    #expect(table.rowHeight == 60)
-    #expect(controller.layout == before)
-    // A size changed while it's on applies at once.
-    controller.apply(appearance(focusFontSize: 20))
-    #expect(table.rowHeight == 30)
-    #expect(Set(table.selectedRowIndexes.map { model.trackIDs[$0] }) == selected)
-    let header = try #require(table.headerView?.menu)
-    controller.menuNeedsUpdate(header)
-    #expect(header.items.isEmpty)
-    #expect(reported.isEmpty)
-
-    controller.leaveFocus()
-    #expect(shown() == shownBefore)
-    #expect(controller.layout == before)
-    #expect(table.rowHeight == RowHeight.regular.points)
-    #expect(Set(table.selectedRowIndexes.map { model.trackIDs[$0] }) == selected)
-
-    // Columns shown while it's on, as an import's, are the ones leaving puts back.
-    var imported = before
-    imported.columns.removeLast()
-    controller.enterFocus()
-    controller.showColumns(imported)
-    #expect(shown() == ["title", "artist", "album"])
-    #expect(controller.layout == imported)
-    controller.leaveFocus()
-    #expect(shown() == imported.columns.map(\.column.rawValue))
 }
