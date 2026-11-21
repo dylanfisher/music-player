@@ -135,6 +135,8 @@ package final class Downloads {
     /// and none once polling stops: the Recommendations window's Download column.
     package var releaseStatesChanged: ([Int: String]) -> Void = { _ in }
 
+    /// A row's Show Discography item for its release, from Recommendations (ADR 0217).
+    package var discographyItem: (Int) -> NSMenuItem? = { _ in nil }
     /// Shows files in the Finder, and opens a web page; tests stand in for both.
     var showInFinder: ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
     var openPage: (URL) -> Void = { url in
@@ -421,6 +423,7 @@ package final class Downloads {
         made.applies = { [weak self] action, row in self?.applies(action, row) ?? false }
         made.act = { [weak self] action, row in self?.act(action, row) }
         made.add = { [weak self] addition in self?.add(addition) }
+        made.discographyItem = { [weak self] in self?.discographyItem($0) }
         made.openSlskd = { [weak self] in self?.openSlskd() }
         made.autoApproveChanged = { [weak self] on in
             self?.autoApproveChosen(on)

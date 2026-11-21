@@ -64,9 +64,12 @@ public final class QueueModel {
         IndexSet(rows.map(position(ofRow:)))
     }
 
+    /// The file at `row`.
+    public func url(ofRow row: Int) -> URL { state.queue[state.order[position(ofRow: row)]] }
+
     /// The track at `row`.
     public func item(at row: Int) -> QueueItem {
-        let url = state.queue[state.order[position(ofRow: row)]]
+        let url = url(ofRow: row)
         if let item = described[url.path] { return item }
         if described.count >= Self.lookupCapacity { described = [:] }
         let item: QueueItem
@@ -83,7 +86,7 @@ public final class QueueModel {
     /// The track at `row` for Edit ▸ Copy: a file the library doesn't know is copied by its
     /// name, with no artist.
     public func copy(ofRow row: Int) -> CopiedTrack {
-        let url = state.queue[state.order[position(ofRow: row)]]
+        let url = url(ofRow: row)
         let item = item(at: row)
         return CopiedTrack(path: url.path, artist: item.artist, title: item.title)
     }

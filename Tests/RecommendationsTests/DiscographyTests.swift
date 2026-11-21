@@ -29,7 +29,7 @@ private struct Unreadable: Error, CustomStringConvertible {
     #expect(DiscographyChoice.of(release: 10, catalogReads().release) == .artists([gus, dee]))
     #expect(
         DiscographyChoice.of(release: nil, catalogReads().release)
-            == .unavailable("The track isn't tagged with a Discogs release"))
+            == .unavailable(DiscographyChoice.noReleaseText))
     #expect(
         DiscographyChoice.of(release: 11, catalogReads().release)
             == .unavailable("This Mac's Discogs catalog doesn't have release 11"))
@@ -94,9 +94,9 @@ private struct Unreadable: Error, CustomStringConvertible {
     NSApplication.shared.sendAction(try #require(item.action), to: item.target, from: item)
     #expect(opened.map(\.id) == [21, 99])
 
-    items.fill(item, .unavailable("The track isn't tagged with a Discogs release"))
+    items.fill(item, .unavailable(DiscographyChoice.noReleaseText))
     #expect(item.submenu == nil && item.action == nil && !item.isEnabled)
-    #expect(item.toolTip == "The track isn't tagged with a Discogs release")
+    #expect(item.toolTip == DiscographyChoice.noReleaseText)
 }
 
 @MainActor
@@ -128,4 +128,42 @@ private struct Unreadable: Error, CustomStringConvertible {
     #expect(recommendations.model.notice == "This Mac's Discogs catalog doesn't have master 101")
     #expect(beeps == 2)
     recommendations.controller?.close()
+}
+
+@MainActor
+@Test func aTrackMenuGetsTheItemOnceAndFillsItForTheTrackAsItOpens() throws {
+    let recommendations = Recommendations(
+        databaseURL: URL(fileURLWithPath: "/dev/null", isDirectory: false))
+    recommendations.discographyArtists = { catalogReads() }
+    var release: Int? = 10
+    let menu = NSMenu()
+    menu.addItem(withTitle: "Play", action: nil, keyEquivalent: "")
+    recommendations.showDiscography(in: menu) { release }
+    #expect(menu.items.map(\.title) == ["Play", "", "Show Discography"])
+    let delegate = try #require(menu.delegate)
+    delegate.menuNeedsUpdate?(menu)
+    let item = try #require(menu.item(withTitle: "Show Discography"))
+    #expect(item.submenu?.items.map(\.title) == ["Gus Other", "Dee Producer"])
+    release = nil
+    delegate.menuNeedsUpdate?(menu)
+    #expect(item.submenu == nil && !item.isEnabled)
+    #expect(item.toolTip == DiscographyChoice.noReleaseText)
+
+    let trackMenu = NSMenu()
+    trackMenu.addItem(withTitle: "Show Discography", action: nil, keyEquivalent: "")
+    recommendations.showDiscography(in: trackMenu) { 11 }
+    trackMenu.delegate?.menuNeedsUpdate?(trackMenu)
+    #expect(trackMenu.items.count == 1)
+    #expect(trackMenu.items[0].toolTip == "This Mac's Discogs catalog doesn't have release 11")
+    #expect(menu.delegate === delegate, "each menu keeps its own")
+}
+
+@MainActor
+@Test func anotherWindowsRowGetsAnItemForItsRelease() {
+    let recommendations = Recommendations(
+        databaseURL: URL(fileURLWithPath: "/dev/null", isDirectory: false))
+    recommendations.discographyArtists = { catalogReads() }
+    let item = recommendations.discographyItem(release: 10)
+    #expect(item.title == "Show Discography" && item.submenu?.items.count == 2)
+    #expect(!recommendations.discographyItem(release: nil).isEnabled)
 }

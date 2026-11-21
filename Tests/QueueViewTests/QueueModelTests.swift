@@ -179,3 +179,15 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     // A file the library doesn't know, by its name.
     #expect(model.copy(ofRow: 1) == CopiedTrack(path: urls[0].path, artist: nil, title: "0"))
 }
+
+@MainActor @Test func showDiscographyFindsTheRowRightClickedElseTheFirstSelected() {
+    let model = QueueModel { _ in nil }
+    let panel = QueuePanel(model: model)
+    _ = panel.view
+    panel.show(state(order: [2, 1, 0], current: nil))
+    #expect(model.url(ofRow: 1) == urls[1])
+    #expect(panel.clickedURL == nil, "nothing clicked or selected")
+    (panel.list as? NSTableView)?.selectRowIndexes([2], byExtendingSelection: false)
+    #expect(panel.clickedURL == urls[0])
+    #expect(panel.listMenu?.items.map(\.title) == ["Play", "Remove from Queue"])
+}

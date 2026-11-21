@@ -392,3 +392,18 @@ private func rows() -> [DownloadRow] {
     let off = Downloads.notFoundNote(autoUpgrade: false)
     #expect(off.contains("with \(box) off, nothing is queued until it's turned on"))
 }
+
+@MainActor
+@Test func aJobsShowDiscographyItemComesFromItsRelease() {
+    let downloads = Downloads()
+    var asked: [Int] = []
+    downloads.discographyItem = {
+        asked.append($0)
+        return NSMenuItem(title: "Show Discography", action: nil, keyEquivalent: "")
+    }
+    let window = downloads.makeWindow()
+    #expect(window.discographyItem(4242)?.title == "Show Discography")
+    #expect(asked == [4242])
+    #expect(DownloadsWindow().discographyItem(1) == nil, "left out unless set")
+    window.window?.close()
+}

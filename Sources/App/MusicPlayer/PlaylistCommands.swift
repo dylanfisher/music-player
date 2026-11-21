@@ -133,8 +133,8 @@ extension AppDelegate {
         }
     }
 
-    /// The track menu's playlist submenus, which the menu holds only weakly, and its Show
-    /// Discography.
+    /// The track menu's playlist submenus, which the menu holds only weakly, and Show
+    /// Discography in it and the other track menus.
     func wireTrackMenu(_ menu: MainMenu) {
         let add = PlaylistMenu()
         add.playlists = { [weak self] in self?.browser?.playlists.filter(\.isManual) ?? [] }
@@ -146,9 +146,7 @@ extension AppDelegate {
         menu.liveMenus[AppMenus.showInPlaylistMenuTitle]?.delegate = show
         playlistMenus = [add, show]
         browser?.trackMenu = menu.trackMenu
-        recommendations.fillDiscographyItem(of: menu.trackMenu) { [weak self] in
-            try self?.browser?.firstSelectedRelease()
-        }
+        wireDiscographyItems(menu.trackMenu)
     }
 
     /// The manual playlists that list the first selected track; nil after reporting why they

@@ -51,7 +51,12 @@ public final class Recommendations {
         self?.service()
     })
     private(set) var controller: RecommendationsWindow?
-    private var trackMenuDiscography: TrackMenuDiscography?
+    /// The track menus whose Show Discography item is filled as they open.
+    private var discographyMenus: [TrackMenuDiscography] = []
+    /// This Mac's catalog's reads for Show Discography, as set now; tests stand in for it.
+    lazy var discographyArtists: () -> DiscographyArtists = { [unowned self] in
+        DiscographyArtists(catalogAt: catalog())
+    }
     /// The track menu's Show Discography items, which hold it as their target.
     private lazy var discographyItems: DiscographyItems = {
         let items = DiscographyItems()
@@ -151,21 +156,36 @@ public final class Recommendations {
 
     // MARK: - Discographies
 
-    /// Fills `trackMenu`'s Show Discography item each time it opens, for the first selected
-    /// track, whose Discogs release `release` reads, through its main artists in this Mac's
-    /// catalog, read by id as the menu opens. The menu holds its delegate weakly, so this does.
-    public func fillDiscographyItem(of trackMenu: NSMenu, release: @escaping () throws -> Int?) {
+    /// Gives `menu` a Show Discography item, after a separator unless it has one already,
+    /// filled each time the menu opens for the track whose Discogs release `release` reads,
+    /// through its main artists in this Mac's catalog. Both are point reads by primary key, so
+    /// they run as the menu opens (ADR 0217). The menu holds its delegate weakly, so this
+    /// does; the menu needs no other delegate.
+    public func showDiscography(in menu: NSMenu, release: @escaping () throws -> Int?) {
+        if menu.item(withTitle: AppMenus.showDiscographyMenuTitle) == nil {
+            if !menu.items.isEmpty { menu.addItem(.separator()) }
+            menu.addItem(
+                withTitle: AppMenus.showDiscographyMenuTitle, action: nil, keyEquivalent: "")
+        }
         let delegate = TrackMenuDiscography()
         delegate.fill = { [weak self] in self?.fillDiscographyItem($0, release: release) }
-        trackMenu.delegate = delegate
-        trackMenuDiscography = delegate
+        menu.delegate = delegate
+        discographyMenus.append(delegate)
+    }
+
+    /// A Show Discography item for a row of another window, such as a Downloads job, through
+    /// `release`'s main artists in this Mac's catalog.
+    package func discographyItem(release: Int?) -> NSMenuItem {
+        let item = NSMenuItem(
+            title: AppMenus.showDiscographyMenuTitle, action: nil, keyEquivalent: "")
+        fillDiscographyItem(item) { release }
+        return item
     }
 
     private func fillDiscographyItem(_ item: NSMenuItem, release: () throws -> Int?) {
         let choice: DiscographyChoice
         do {
-            choice = DiscographyChoice.of(
-                release: try release(), DiscographyArtists(catalogAt: catalog()).release)
+            choice = DiscographyChoice.of(release: try release(), discographyArtists().release)
         } catch {
             choice = .unavailable(terminalSafe("Couldn't read the track's release: \(error)"))
         }

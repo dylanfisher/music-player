@@ -81,6 +81,8 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     var applies: (DownloadAction, DownloadRow) -> Bool = { _, _ in false }
     var act: (DownloadAction, DownloadRow) -> Void = { _, _ in }
     var add: (DownloadAddition) -> Void = { _ in }
+    /// A row's Show Discography item, through its release; nil leaves it out.
+    var discographyItem: (Int) -> NSMenuItem? = { _ in nil }
     var openSlskd: () -> Void = {}
     /// Hears Approve Safe Matches Automatically turned on or off.
     var autoApproveChanged: (Bool) -> Void = { _ in }
@@ -264,6 +266,10 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
             item.representedObject = clicked
             item.isEnabled = applies(action, rows[clicked])
             menu.addItem(item)
+        }
+        if let discography = discographyItem(rows[clicked].releaseID) {
+            menu.addItem(.separator())
+            menu.addItem(discography)
         }
     }
 

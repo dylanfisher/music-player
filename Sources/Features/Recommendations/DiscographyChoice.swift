@@ -10,7 +10,7 @@ enum DiscographyChoice: Equatable, Sendable {
     case unavailable(String)
 
     static let variousArtistsText = "Various Artists has no discography"
-    static let noReleaseText = "The track isn't tagged with a Discogs release"
+    static let noReleaseText = "No Discogs release to find the artists from"
 
     /// `artists` each once, without Various Artists, whose discography the service refuses.
     init(_ artists: [RecommendationPage.Named]) {

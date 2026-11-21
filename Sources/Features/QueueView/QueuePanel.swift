@@ -214,6 +214,15 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     /// The queue's list, for moving the keys to it.
     public var list: NSView { table }
 
+    /// The list's context menu, which Show Discography joins.
+    public var listMenu: NSMenu? { table.menu }
+
+    /// The file of the row a right-click is on, else of the first selected row.
+    public var clickedURL: URL? {
+        let row = table.clickedRow >= 0 ? table.clickedRow : table.selectedRow
+        return row >= 0 && row < model.count ? model.url(ofRow: row) : nil
+    }
+
     public var hasSelection: Bool { !table.selectedRowIndexes.isEmpty }
 
     public func removeSelection() { remove(table.selectedRowIndexes) }

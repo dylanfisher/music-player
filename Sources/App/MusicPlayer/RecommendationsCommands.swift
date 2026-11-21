@@ -1,3 +1,4 @@
+import AppKit
 import Commands
 import Foundation
 import Library
@@ -98,6 +99,36 @@ extension AppDelegate {
                 MainActor.assumeIsolated { _ = self?.recommendations.sendProfileIfChanged() }
             }
         }
+    }
+
+    /// Show Discography for a track anywhere (ADR 0217): the track table's and timeline's
+    /// first selected track, the queue's clicked row, and Now Playing's track, from its menu;
+    /// and a Downloads job's release.
+    func wireDiscographyItems(_ trackMenu: NSMenu) {
+        recommendations.showDiscography(in: trackMenu) { [weak self] in
+            try self?.browser?.firstSelectedRelease()
+        }
+        if let queue = window?.queue.listMenu {
+            recommendations.showDiscography(in: queue) { [weak self] in
+                try self?.release(ofTrackAt: self?.window?.queue.clickedURL?.path)
+            }
+        }
+        if let status = nowPlaying?.status {
+            let menu = NSMenu()
+            status.menu = menu
+            recommendations.showDiscography(in: menu) { [weak self] in
+                try self?.release(ofTrackAt: self?.currentTrackPath)
+            }
+        }
+        downloads.discographyItem = { [weak self] in
+            self?.recommendations.discographyItem(release: $0)
+        }
+    }
+
+    /// The Discogs release of the library's track at `path`; nil for none.
+    private func release(ofTrackAt path: String?) throws -> Int? {
+        guard let path, let row = try trackLookup?(path) else { return nil }
+        return row.discogsReleaseID.flatMap { Int($0) }
     }
 
     private func showRecommendations(_ kind: SeedKind) {
