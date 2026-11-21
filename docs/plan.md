@@ -515,6 +515,22 @@ pastes. ADR 0217 records the decisions.
       an injected clock, and the kept selection.
 - [ ] **94.4 Docs.** ADR 0217, the README's Recommendations section, and a palette and menu
       entry in the command docs.
+- **Implementation plan:**
+  1. `Recommender`: `Seed.discography(artistID:name:)`, the sorts `year` and `title` with
+     `Sort.offered(for:)`, the request's `artist_id` (never `missing`), and the page's
+     `list.artist`, `pending`, an optional `score`, `formats`, `in_library` and `mark` on
+     every album, decoded strictly. A discography fixture beside `recommendations.json`.
+  2. `Discogs`: `pastedDiscogsID` (release, master or artist, slugs and locale prefixes),
+     which `pastedReleaseID` reads, and `Catalog.discographyArtists(release:)`,
+     `(master:)` and `artistName(_:)`, the main artists with ids, without Various Artists.
+  3. `Recommendations`: `showDiscography(_:)`, `discographyChoice(release:)`, the menu item
+     for one artist, several or a reason, the rows' Show Discography, and Show
+     Discography… asking for a pasted id or link. The App wires `recommendations.discography`
+     to the palette and File menu, and the track menu's Show Discography item.
+  4. `RecommendationsModel`: Missing as a filter of the loaded rows, the 15 s refresh while
+     `pending` is over 0, and the kept selection; the window's Format, In Library and Mark
+     columns, Score, Why and Rank hidden for a discography, and its sorts.
+  5. ADR 0217, the README.
 - [ ] **Hardware checkpoint (owner):** open the discography of an artist from the library,
       one from a recommendation, and one from a pasted link. Sort by rating while the values
       come in, and download a missing album.
