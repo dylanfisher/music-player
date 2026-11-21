@@ -411,6 +411,19 @@ private func freePort() async throws -> UInt16 {
     #expect(try await fixture.send("GET", "/").status == 200)
 }
 
+@Test func aRestartOnTheSamePortWaitsForTheOldListenerToClose() async throws {
+    let fixture = Fixture()
+    let port = try await freePort()
+    let renamed = NetworkInterface(
+        name: "lo1", index: 2, address: IPAddress("127.0.0.1")!, prefixLength: 8)
+    for interfaces in [[loopback], [renamed], [loopback]] {
+        try await fixture.service.follow(interfaces, port: port)
+        #expect(fixture.service.listeningPort == port)
+        #expect(try await fixture.send("GET", "/").status == 200)
+    }
+    #expect(fixture.problems.isEmpty)
+}
+
 @Test func aPortChangeDuringAStartLeavesOnlyTheNewPortBound() async throws {
     let fixture = Fixture()
     let old = try await freePort()

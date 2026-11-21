@@ -219,15 +219,14 @@ public final class RemoteService: @unchecked Sendable {
 
     private func stopServing() {
         let current = lock.withLock { () -> RemoteServer? in
-            defer {
-                server = nil
-                own = nil
-                found = []
-                running = ([], 0)
-                refused = []
-                if let server { closing.append(server) }
-            }
-            return server
+            let stopped = server
+            server = nil
+            own = nil
+            found = []
+            running = ([], 0)
+            refused = []
+            if let stopped { closing.append(stopped) }
+            return stopped
         }
         current?.stop()
         hub.stopAll()
