@@ -253,7 +253,9 @@ final class RecommendationsModel {
     /// Reads the rows read so far again after a while, as the service fetches a
     /// discography's values and its order changes with them.
     private func refreshIfFetching() {
-        guard let pending, pending > 0 else { return }
+        // A read out arms the wait itself when it ends, so there is only ever one.
+        guard let pending, pending > 0, reading == nil else { return }
+        refreshing?.cancel()
         refreshing = Task {
             guard await waited(Self.fetchingRetrySeconds) else { return }
             refreshing = nil

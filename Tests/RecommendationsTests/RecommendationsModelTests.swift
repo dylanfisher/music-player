@@ -359,3 +359,100 @@ private final class Answers: @unchecked Sendable {
     #expect(model.rows.map(\.album.id) == [500, 501])
     #expect(model.pending == 0 && model.refreshing == nil)
 }
+
+/// A discography of 250 albums, the first 200 in the library, answering `pending` 5, which
+/// fails each request `fails` says to.
+private func ownedFirst(_ requests: Requests, fails: @escaping @Sendable (Int) -> Bool)
+    -> RecommendationsService
+{
+    var service = RecommendationsService.unused
+    service.page = { query, offset, limit throws(RecommenderError) in
+        requests.append(query, offset, limit)
+        if fails(requests.offsets.count) {
+            throw RecommenderError(service: "the fake", kind: .status(500, code: "internal"))
+        }
+        let end = min(250, offset + limit)
+        var page = page(offset..<end, more: end < 250)
+        page.albums = page.albums?.map {
+            var album = $0
+            album.inLibrary = album.id < 200
+            return album
+        }
+        page.pending = 5
+        return page
+    }
+    return service
+}
+
+/// A clock whose waits hold until the test lets them go; a cancelled wait ends at once.
+@MainActor
+private final class HeldWaits {
+    private var waits: [Int: CheckedContinuation<Void, any Error>] = [:]
+    private var next = 0
+
+    /// The waits armed and not cancelled.
+    var held: Int { waits.count }
+
+    var sleep: @Sendable (Double) async throws -> Void {
+        { [self] _ in try await wait() }
+    }
+
+    private func wait() async throws {
+        let id = next
+        next += 1
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { waits[id] = $0 }
+        } onCancel: {
+            Task { @MainActor in
+                self.waits.removeValue(forKey: id)?.resume(throwing: CancellationError())
+            }
+        }
+    }
+
+    func releaseAll() {
+        let released = waits.values
+        waits = [:]
+        for wait in released { wait.resume() }
+    }
+}
+
+@MainActor
+@Test func readingOnUnderMissingArmsOneRefresh() async {
+    let requests = Requests()
+    let waits = HeldWaits()
+    let service = ownedFirst(requests) { _ in false }
+    let model = RecommendationsModel(service: { service }, sleep: waits.sleep)
+    var missing = discography
+    missing.filters.missing = true
+    await model.show(missing)?.value
+    for _ in 0..<5 {
+        guard let next = model.reading else { break }
+        await next.value
+    }
+    for _ in 0..<20 { await Task.yield() }
+    #expect(requests.offsets == [0, 100, 200])
+    #expect(waits.held == 1, "one wait armed for the refresh")
+    let refresh = model.refreshing
+    waits.releaseAll()
+    await refresh?.value
+    for _ in 0..<20 { await Task.yield() }
+    #expect(requests.offsets == [0, 100, 200, 0, 100, 200], "one refresh read")
+    #expect(waits.held == 1)
+    model.stop()
+}
+
+@MainActor
+@Test func aFailedReadStopsReadingOnUnderMissing() async {
+    let requests = Requests()
+    let service = ownedFirst(requests) { $0 == 2 }
+    let model = RecommendationsModel(service: { service })
+    var missing = discography
+    missing.filters.missing = true
+    await model.show(missing)?.value
+    for _ in 0..<5 {
+        guard let next = model.reading else { break }
+        await next.value
+    }
+    #expect(requests.offsets == [0, 100])
+    #expect(model.problem != nil && model.rows.isEmpty && model.refreshing == nil)
+}
