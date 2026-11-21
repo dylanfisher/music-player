@@ -84,6 +84,11 @@ struct RemoteAPI: Sendable {
             return Self.error(.badRequest, "\(error)")
         }
         let now = await queue()
+        guard window.lowerBound <= now.paths.count else {
+            return Self.error(
+                .badRequest,
+                "offset \(window.lowerBound) is past the queue's \(now.paths.count) tracks")
+        }
         let shown = window.clamped(to: 0..<now.paths.count)
         do {
             return Self.reply(
@@ -107,6 +112,8 @@ struct RemoteAPI: Sendable {
             return RemoteReply(
                 .ok, contentType: found.type, body: Array(found.bytes),
                 fields: [(HTTPWord.cacheControl, "private, max-age=31536000, immutable")])
+        } catch let busy as RemoteBusy {
+            return Self.error(.serviceUnavailable, "\(busy)")
         } catch {
             return Self.error(.serviceUnavailable, "the cover couldn't be read: \(error)")
         }

@@ -221,7 +221,8 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
     #expect(Set(listed) == Set(AppCommands.all().filter(\.runsFromMenus).map(\.id)))
     #expect(
         AppCommands.all().filter { !$0.runsFromMenus }.map(\.id) == [
-            .filterToItem, .seekTo, .setAppVolume, .chooseOutput, .playTracks, .queueTracks,
+            .filterToItem, .seekTo, .setAppVolume, .chooseOutput, .playTracks, .playList,
+            .queueTracks,
             .moveInQueue, .removeFromQueueAt, .receiverSetVolume,
         ])
     #expect(listed.count == Set(listed).count)

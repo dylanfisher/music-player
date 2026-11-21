@@ -48,7 +48,13 @@ public struct RemotePage: Sendable {
                 (HTTPWord.cacheControl, HTTPWord.noCache), (HTTPWord.etag, Self.tag(body)),
                 ("X-Content-Type-Options", "nosniff"),
             ]
-            if file.path == "/" { fields.append(("Content-Security-Policy", Self.contentPolicy)) }
+            if file.path == "/" {
+                // No referrer, so a link out of the page doesn't say which Mac it came from.
+                fields += [
+                    ("Content-Security-Policy", Self.contentPolicy),
+                    ("Referrer-Policy", "no-referrer"),
+                ]
+            }
             replies[file.path] = RemoteReply(
                 .ok, contentType: file.type, body: body, fields: fields)
         }

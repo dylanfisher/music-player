@@ -36,6 +36,7 @@ extension AppDelegate {
                 .playTracks: { [weak self] text in
                     try await self?.playTracks(text, queueing: false)
                 },
+                .playList: { [weak self] text in try await self?.playList(text) },
                 .queueTracks: { [weak self] text in
                     try await self?.playTracks(text, queueing: true)
                 },

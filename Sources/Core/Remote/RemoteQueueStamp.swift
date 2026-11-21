@@ -29,29 +29,24 @@ public struct RemoteQueueStamp: Sendable {
     }
 
     /// An edit Move in Queue (`moving`) or Remove from Queue at asks for, by positions in play
-    /// order of a queue `count` long. Throws when the stamp isn't the current one, since the
-    /// positions then name other tracks, or a position is past the queue.
-    public func edit(_ text: String, moving: Bool, count: Int) throws(RemoteRefusal) -> QueueEdit {
+    /// order, with the queue and order the stamp was made from, which the engine checks it
+    /// still has as it edits. Throws when the stamp isn't the current one, since the positions
+    /// then name other tracks, or a position is past the queue.
+    public func edit(_ text: String, moving: Bool) throws(RemoteRefusal) -> (
+        edit: QueueEdit, queue: [URL], order: [Int]
+    ) {
         guard let asked = CommandArgument.queuePlaces(text, count: moving ? 2 : 1) else {
             throw RemoteRefusal("\(text) isn't the queue's stamp and positions between colons")
         }
-        guard asked.stamp == stamp else {
-            throw RemoteRefusal("the queue changed since it was read; read it again")
-        }
+        guard asked.stamp == stamp else { throw RemoteRefusal.queueChanged }
+        let count = order.count
         let from = asked.places[0]
         guard from < count else { throw RemoteRefusal("the queue has no position \(from)") }
-        guard moving else { return .remove(from) }
+        guard moving else { return (.remove(from), queue, order) }
         let to = asked.places[1]
         guard to <= count else { throw RemoteRefusal("the queue has no position \(to)") }
-        return .move(from, before: to)
+        return (.move(from, before: to), queue, order)
     }
-}
-
-/// An edit to the queue by positions in play order, as the engine takes them.
-public enum QueueEdit: Equatable, Sendable {
-    /// The track at the first position to just before the second, counted before the move.
-    case move(Int, before: Int)
-    case remove(Int)
 }
 
 extension RemoteState {
@@ -74,7 +69,7 @@ extension RemoteState {
         self.init(
             instance: identity.id, name: identity.name, state: state, track: track,
             positionSeconds: state == .stopped ? nil : position.flatMap { $0.isFinite ? $0 : nil },
-            positionReadAt: readAt, queueStamp: queue.stamp, queueLength: playback.queue.count,
+            now: readAt, queueStamp: queue.stamp, queueLength: playback.queue.count,
             queuePosition: playback.currentIndex.flatMap { index in
                 playback.order.firstIndex(of: index).map { $0 + 1 }
             }, shuffle: playback.shuffle, repeatMode: playback.repeatMode.rawValue,

@@ -43,6 +43,10 @@ private final class Recorder {
                 arguments.append(text)
                 return nil
             },
+            .playList: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
             .queueTracks: { [unowned self] text in
                 arguments.append(text)
                 return nil

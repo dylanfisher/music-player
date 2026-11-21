@@ -71,13 +71,14 @@ private func read(
     let (remote, index) = try library()
     let whole = try index.trackNames(TrackFilter(), sortedBy: .title, ascending: false)
     #expect(whole.count > 100)
-    for offset in [0, 50, whole.count - 3, whole.count + 10] {
+    for offset in [0, 50, whole.count - 3, whole.count] {
         let reply = try json(
             try await read(
                 remote, RemoteRoute.tracks, "sort=title&descending=1&offset=\(offset)&limit=40")
         )
         let range = try #require(reply as? [String: Any])
         #expect(range["total"] as? Int == whole.count)
+        #expect((range["stamp"] as? String)?.hasPrefix("\"") == true)
         #expect(range["offset"] as? Int == offset)
         let ids = (range["rows"] as? [[Any]])?.map { $0[0] as? Int64 }
         let expected = whole.indices.clamped(to: offset..<(offset + 40))
@@ -115,8 +116,14 @@ private func read(
     #expect(other.status == .ok)
 }
 
-@Test func aQueryStringOutsideWhatTheReadTakesIsRefused() async throws {
-    let (remote, _) = try library()
+@Test func aQueryStringOutsideWhatTheReadTakesIsRefusedEvenWhenItsTagMatches() async throws {
+    let (remote, index) = try library()
+    let tag = try #require(
+        try await read(remote, RemoteRoute.genres).fields.first { $0.0 == "ETag" }?.1)
+    let total = try index.trackCount(TrackFilter())
+    #expect(
+        try await read(remote, RemoteRoute.tracks, "offset=\(total + 1)&limit=5", tag: tag).status
+            == .badRequest)
     let refused: [(String, String)] = [
         (RemoteRoute.genres, "genre=1"), (RemoteRoute.artists, "genre=x"),
         (RemoteRoute.artists, "genre=1&genre=2"), (RemoteRoute.artists, "genre=0"),
@@ -130,6 +137,9 @@ private func read(
     ]
     for (path, query) in refused {
         #expect(try await read(remote, path, query).status == .badRequest, "\(path)?\(query)")
+        #expect(
+            try await read(remote, path, query, tag: tag).status == .badRequest,
+            "\(path)?\(query) with its tag")
     }
     #expect(await remote.reply("/api/nothing", query: nil, ifNoneMatch: nil) == nil)
 }
@@ -206,6 +216,34 @@ private func read(
     }
 }
 
+@Test func playListPlaysTheWholeListAsTheTracksReadListsItFromAStartTrack() async throws {
+    let (remote, index) = try library()
+    let whole = try index.trackIDs(TrackFilter(), sortedBy: .title, ascending: false)
+    let paths = try index.paths(ids: whole)
+    let start = whole[whole.count / 2]
+    let played = try await remote.files(list: "sort=title&descending=1&playFrom=\(start)")
+    #expect(played.urls.count == whole.count)
+    #expect(played.urls.map(\.path) == whole.map { paths[$0]! })
+    #expect(played.first == whole.count / 2)
+    // A search's tracks play in the order the search lists them.
+    let artist = try #require(try index.artists().last)
+    let word = String(try #require(artist.name.split(separator: " ").first))
+    let found = try json(try await read(remote, RemoteRoute.search, "q=\(word)")) as? [String: Any]
+    let first = try #require((found?["tracks"] as? [[Any]])?.first?[0] as? Int64)
+    let searched = try await remote.files(list: "q=\(word)&playFrom=\(first)")
+    #expect(searched.first == 0)
+    #expect(searched.urls.first?.path == (try index.paths(ids: [first])[first]))
+    for argument in [
+        "sort=title", "playFrom=999999999", "playFrom=\(start)&offset=0",
+        "q=\(word)&playFrom=\(start)&q=a",
+        "sort=rowNumber&playFrom=\(start)",
+    ] {
+        await #expect(throws: RemoteRefusal.self, "\(argument)") {
+            try await remote.files(list: argument)
+        }
+    }
+}
+
 @Test func queueRowsNameEachFileAndOneTheIndexLacksByItsName() async throws {
     let (remote, index) = try library()
     let id = try #require(try index.trackIDs(sortedBy: .path).first)
@@ -213,4 +251,38 @@ private func read(
     let rows = try await remote.queueRows([path, "/gone/Some Song.flac"])
     #expect(rows.map(\.id) == [id, nil])
     #expect(rows[1].title == "Some Song")
+}
+
+/// Counts the reads running at once, each held until the test lets them all go.
+private final class Held: @unchecked Sendable {
+    private let lock = NSLock()
+    private var running = 0
+    private(set) var most = 0
+    let release = DispatchSemaphore(value: 0)
+
+    func read() {
+        lock.withLock {
+            running += 1
+            most = max(most, running)
+        }
+        release.wait()
+        lock.withLock { running -= 1 }
+    }
+
+    var now: Int { lock.withLock { running } }
+}
+
+@Test func coverReadsRunFourAtOnceAndRefuseThoseBeyondTheWaitingCap() async throws {
+    let reads = RemoteArtReads()
+    let held = Held()
+    let total = RemoteArtReads.runningLimit + RemoteArtReads.waitingLimit
+    let tasks = (0..<total).map { _ in Task { try await reads.run { held.read() } } }
+    try await waitFor { held.now == RemoteArtReads.runningLimit && reads.admitted == total }
+    await #expect(throws: RemoteBusy.self) { try await reads.run { held.read() } }
+    for _ in 0..<total { held.release.signal() }
+    for task in tasks { try await task.value }
+    #expect(held.most == RemoteArtReads.runningLimit)
+    // Room again once they're done.
+    held.release.signal()
+    try await reads.run { held.read() }
 }

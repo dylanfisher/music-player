@@ -1594,3 +1594,18 @@ private func loadedURLs(_ output: FakeOutput) -> [URL] {
     try await filling.value
     #expect(loadedURLs(output) == [urls[0], urls[1]])
 }
+
+@Test func aRemoteEditRunsOnlyOnTheQueueItWasMadeFor() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    let read = await engine.state
+    #expect(await engine.edit(.move(0, before: 3), ifQueueIs: read.queue, order: read.order))
+    var state = await engine.state
+    #expect(state.order.map { state.queue[$0] } == [urls[1], urls[2], urls[0]])
+    // The queue changed since `read`, so the same positions would name other tracks.
+    #expect(!(await engine.edit(.remove(0), ifQueueIs: read.queue, order: read.order)))
+    state = await engine.state
+    #expect(state.queue.count == 3)
+    #expect(await engine.edit(.remove(0), ifQueueIs: state.queue, order: state.order))
+    #expect((await engine.state).queue.count == 2)
+}

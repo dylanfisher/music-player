@@ -26,6 +26,7 @@ public actor RemoteLibrary {
     private let read: ArtRead
     /// `library.groupByAlbumArtist`, which the app sets as it changes.
     private var groupByAlbumArtist: Bool
+    private let artReads: RemoteArtReads
     /// Tells this launch's tags from another's, whose change stamps start over.
     private let launch: String
 
@@ -37,6 +38,7 @@ public actor RemoteLibrary {
         self.thumbnails = thumbnails
         self.groupByAlbumArtist = groupByAlbumArtist
         self.read = read
+        artReads = RemoteArtReads()
         launch = RemoteService.newInstanceID().prefix(8).description
     }
 
@@ -63,29 +65,31 @@ public actor RemoteLibrary {
     }
 
     /// A library read's reply, by path and the query string after its `?`; nil for a path
-    /// that isn't one.
+    /// that isn't one. The query is checked before the tag, so a malformed one is a 400 even
+    /// when the tag matches.
     public func reply(_ path: String, query text: String?, ifNoneMatch: String?) -> RemoteReply? {
         let query = RemoteQuery(text)
-        let read: (LibraryIndex, RemoteQuery, Bool) throws -> RemoteReply
+        let prepare: (LibraryIndex, RemoteQuery, Bool) throws -> Read
         switch path {
-        case RemoteRoute.genres: read = Self.genres
-        case RemoteRoute.artists: read = Self.artists
-        case RemoteRoute.albums: read = Self.albums
-        case RemoteRoute.tracks: read = Self.tracks
-        case RemoteRoute.search: read = Self.search
-        case RemoteRoute.covers: read = Self.covers
+        case RemoteRoute.genres: prepare = Self.genres
+        case RemoteRoute.artists: prepare = Self.artists
+        case RemoteRoute.albums: prepare = Self.albums
+        case RemoteRoute.tracks: prepare = Self.tracks
+        case RemoteRoute.search: prepare = Self.search
+        case RemoteRoute.covers: prepare = Self.covers
         default: return nil
         }
         do {
             let index = try index()
             let grouped = groupByAlbumArtist
+            let read = try prepare(index, query, grouped)
             let tag =
                 "\"\(launch)-\(try index.changeStamp().map(String.init).joined(separator: "-"))"
                 + "-\(grouped ? 1 : 0)\""
             if ifNoneMatch == tag {
                 return RemoteReply(.notModified, fields: [(HTTPWord.etag, tag), Self.revalidate])
             }
-            var reply = try read(index, query, grouped)
+            var reply = try read(tag)
             if reply.status == .ok { reply.fields = [(HTTPWord.etag, tag), Self.revalidate] }
             return reply
         } catch let refusal as RemoteRefusal {
@@ -95,60 +99,74 @@ public actor RemoteLibrary {
         }
     }
 
+    /// A read whose query was checked, run with the reply's tag.
+    private typealias Read = (String) throws -> RemoteReply
+
     /// Kept, but asked about again before each use, since the tag says whether it changed.
     private static let revalidate = (HTTPWord.cacheControl, HTTPWord.noCache)
 
     private static func genres(_ index: LibraryIndex, _ query: RemoteQuery, _ grouped: Bool)
-        throws -> RemoteReply
+        throws -> Read
     {
         try query.only([])
-        return RemoteAPI.reply(EntryList(try index.genres(), albums: false))
+        return { _ in RemoteAPI.reply(EntryList(try index.genres(), albums: false)) }
     }
 
     private static func artists(_ index: LibraryIndex, _ query: RemoteQuery, _ grouped: Bool)
-        throws -> RemoteReply
+        throws -> Read
     {
         try query.only([RemoteQuery.genre])
-        return RemoteAPI.reply(
-            EntryList(
-                try index.artists(
-                    TrackFilter(genre: try query.id(RemoteQuery.genre), groupByAlbumArtist: grouped)
-                ),
-                albums: false))
+        let filter = TrackFilter(
+            genre: try query.id(RemoteQuery.genre), groupByAlbumArtist: grouped)
+        return { _ in RemoteAPI.reply(EntryList(try index.artists(filter), albums: false)) }
     }
 
     private static func albums(_ index: LibraryIndex, _ query: RemoteQuery, _ grouped: Bool)
-        throws -> RemoteReply
+        throws -> Read
     {
         try query.only([RemoteQuery.genre, RemoteQuery.artist])
-        return RemoteAPI.reply(
-            EntryList(
-                try index.albums(
-                    TrackFilter(
-                        genre: try query.id(RemoteQuery.genre),
-                        artist: try query.id(RemoteQuery.artist), groupByAlbumArtist: grouped)),
-                albums: true))
+        let filter = TrackFilter(
+            genre: try query.id(RemoteQuery.genre), artist: try query.id(RemoteQuery.artist),
+            groupByAlbumArtist: grouped)
+        return { _ in RemoteAPI.reply(EntryList(try index.albums(filter), albums: true)) }
+    }
+
+    /// The keys that describe a track list, as `/api/tracks` reads it and Play List plays it.
+    static let listKeys: Set<String> = [
+        RemoteQuery.genre, RemoteQuery.artist, RemoteQuery.album, RemoteQuery.text,
+        RemoteQuery.sort, RemoteQuery.descending,
+    ]
+
+    /// The track list `query` describes: its filter, the column it's sorted by and which way.
+    static func list(_ query: RemoteQuery, grouped: Bool) throws -> (
+        filter: TrackFilter, column: TrackColumn, ascending: Bool
+    ) {
+        var filter = trackFilter(
+            genre: try query.id(RemoteQuery.genre), artist: try query.id(RemoteQuery.artist),
+            album: try query.id(RemoteQuery.album), grouped: grouped)
+        if query.has(RemoteQuery.text) { filter.search = try query.text() }
+        return (filter, try query.column() ?? .artist, !(try query.flag(RemoteQuery.descending)))
     }
 
     private static func tracks(_ index: LibraryIndex, _ query: RemoteQuery, _ grouped: Bool)
-        throws -> RemoteReply
+        throws -> Read
     {
-        try query.only([
-            RemoteQuery.genre, RemoteQuery.artist, RemoteQuery.album, RemoteQuery.sort,
-            RemoteQuery.descending, RemoteQuery.offset, RemoteQuery.limit,
-        ])
-        let filter = trackFilter(
-            genre: try query.id(RemoteQuery.genre), artist: try query.id(RemoteQuery.artist),
-            album: try query.id(RemoteQuery.album), grouped: grouped)
-        let column = try query.column() ?? .artist
+        try query.only(listKeys.union([RemoteQuery.offset, RemoteQuery.limit]))
+        let list = try list(query, grouped: grouped)
         let window = try query.window(limit: rangeLimit)
-        return RemoteAPI.reply(
-            TrackRange(
-                total: try index.trackCount(filter), offset: window.lowerBound,
-                rows: try index.trackNames(
-                    filter, sortedBy: column, ascending: !(try query.flag(RemoteQuery.descending)),
-                    window: window
-                ).map(TrackLine.init)))
+        let total = try index.trackCount(list.filter)
+        guard window.lowerBound <= total else {
+            throw RemoteRefusal("offset \(window.lowerBound) is past the list's \(total) tracks")
+        }
+        return { tag in
+            RemoteAPI.reply(
+                TrackRange(
+                    total: total, offset: window.lowerBound, stamp: tag,
+                    rows: try index.trackNames(
+                        list.filter, sortedBy: list.column, ascending: list.ascending,
+                        window: window
+                    ).map(TrackLine.init)))
+        }
     }
 
     /// An album alone lists its tracks in disc and track order whoever plays on them, as the
@@ -163,27 +181,33 @@ public actor RemoteLibrary {
     }
 
     private static func search(_ index: LibraryIndex, _ query: RemoteQuery, _ grouped: Bool)
-        throws -> RemoteReply
+        throws -> Read
     {
         try query.only([RemoteQuery.text])
         let filter = TrackFilter(search: try query.text(), groupByAlbumArtist: grouped)
-        return RemoteAPI.reply(
-            Found(
-                artists: EntryList(
-                    try index.searchEntries(.artists, filter, limit: searchLimit), albums: false
-                ).rows,
-                albums: EntryList(
-                    try index.searchEntries(.albums, filter, limit: searchLimit), albums: true
-                ).rows,
-                tracks: try index.trackNames(filter, sortedBy: .artist, window: 0..<searchLimit)
-                    .map(TrackLine.init)))
+        return { _ in
+            RemoteAPI.reply(
+                Found(
+                    artists: EntryList(
+                        try index.searchEntries(.artists, filter, limit: searchLimit), albums: false
+                    ).rows,
+                    albums: EntryList(
+                        try index.searchEntries(.albums, filter, limit: searchLimit), albums: true
+                    ).rows,
+                    tracks: try index.trackNames(filter, sortedBy: .artist, window: 0..<searchLimit)
+                        .map(TrackLine.init)))
+        }
     }
 
     private static func covers(_ index: LibraryIndex, _ query: RemoteQuery, _ grouped: Bool)
-        throws -> RemoteReply
+        throws -> Read
     {
         try query.only([RemoteQuery.albums])
         let albums = try query.ids(RemoteQuery.albums, limit: coversLimit)
+        return { _ in try covers(index, albums) }
+    }
+
+    private static func covers(_ index: LibraryIndex, _ albums: [Int64]) throws -> RemoteReply {
         let tracks = try index.artTracks(albumIDs: albums)
         let rows = Dictionary(
             try index.rows(ids: Array(Set(tracks.values))).map { ($0.id, $0) },
@@ -219,21 +243,12 @@ public actor RemoteLibrary {
         else { return nil }
         let stamp = FileStamp(sizeBytes: row.sizeBytes, modifiedSeconds: row.modifiedSeconds)
         let (thumbnails, read) = (thumbnails, read)
-        // Off the actor and the cooperative pool: the file may be on a slow NAS.
-        let bytes = try await withCheckedThrowingContinuation { continuation in
-            Self.artReads.async {
-                continuation.resume(
-                    with: Result {
-                        try thumbnails.encodedThumbnail(
-                            art, path: row.path, stamp: stamp, pixels: pixels, read: read)
-                    })
-            }
+        let bytes = try await artReads.run {
+            try thumbnails.encodedThumbnail(
+                art, path: row.path, stamp: stamp, pixels: pixels, read: read)
         }
         return (bytes, bytes.starts(with: [0xFF, 0xD8]) ? jpegMIMEType : pngMIMEType)
     }
-
-    private static let artReads = DispatchQueue(
-        label: "RemoteLibrary.art", qos: .userInitiated, attributes: .concurrent)
 
     /// Play Tracks' or, `queueing`, Queue Tracks' argument as the files to play and the place
     /// to start from. Throws, saying why, for an argument it can't read or tracks it can't find.
@@ -266,20 +281,46 @@ public actor RemoteLibrary {
                 Self.trackFilter(genre: nil, artist: nil, album: album, grouped: true),
                 sortedBy: .album)
             guard !ids.isEmpty else { throw RemoteRefusal("the library has no album \(album)") }
-            var first = 0
-            if let start {
-                guard let found = ids.firstIndex(of: start) else {
-                    throw RemoteRefusal("track \(start) isn't on album \(album)")
-                }
-                first = found
-            }
-            let paths = try index.paths(ids: ids)
-            let kept = ids.indices.filter { paths[ids[$0]] != nil }
-            return (
-                kept.map { URL(fileURLWithPath: paths[ids[$0]]!, isDirectory: false) },
-                kept.firstIndex { $0 >= first } ?? 0
-            )
+            return try files(ids, from: start, in: index, of: "album \(album)")
         }
+    }
+
+    /// Play List's argument: a track list as `/api/tracks` reads it, by its keys, with
+    /// `playFrom=` and the ID of the track to play from, as the files to play and the place to
+    /// start. The list is read now, as the window lists it, so it plays whole however long.
+    public func files(list text: String) throws -> (urls: [URL], first: Int) {
+        let query = RemoteQuery(text)
+        try query.only(Self.listKeys.union([RemoteQuery.start]))
+        guard let start = try query.id(RemoteQuery.start) else {
+            throw RemoteRefusal("playFrom must name the track to play from")
+        }
+        let list = try Self.list(query, grouped: groupByAlbumArtist)
+        let index = try index()
+        let ids = try index.trackIDs(list.filter, sortedBy: list.column, ascending: list.ascending)
+        return try files(ids, from: start, in: index, of: "the list")
+    }
+
+    /// `ids`' files in order, from `start` when given, which must be one of them; an ID whose
+    /// file is gone is left out.
+    private func files(_ ids: [Int64], from start: Int64?, in index: LibraryIndex, of list: String)
+        throws -> (urls: [URL], first: Int)
+    {
+        var first = 0
+        if let start {
+            guard let found = ids.firstIndex(of: start) else {
+                throw RemoteRefusal("track \(start) isn't in \(list) now; read it again")
+            }
+            first = found
+        }
+        let paths = try index.paths(ids: ids)
+        let kept = ids.indices.filter { paths[ids[$0]] != nil }
+        guard !kept.isEmpty else {
+            throw RemoteRefusal("none of \(list)'s tracks is in the library")
+        }
+        return (
+            kept.map { URL(fileURLWithPath: paths[ids[$0]]!, isDirectory: false) },
+            kept.firstIndex { $0 >= first } ?? 0
+        )
     }
 }
 
@@ -340,6 +381,8 @@ struct TrackLine: Encodable, Equatable {
 struct TrackRange: Encodable {
     var total: Int
     var offset: Int
+    /// The library's tag when it was read: a page holding ranges of another starts over.
+    var stamp: String
     var rows: [TrackLine]
 }
 

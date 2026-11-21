@@ -75,8 +75,9 @@ public struct RemoteState: Encodable, Equatable, Sendable {
     /// Nil for nothing loaded, or a file the library no longer holds.
     public var track: Track?
     public var positionSeconds: Double?
-    /// Seconds since 1970 when `positionSeconds` was read.
-    public var positionReadAt: Double
+    /// Seconds since 1970 on this Mac's clock when the state was read, `positionSeconds` with
+    /// it, so the page compares `lastPlayedAt` against this Mac's own clock, not the phone's.
+    public var now: Double
     /// Changes whenever the queue's tracks or order do.
     public var queueStamp: Int
     public var queueLength: Int
@@ -97,7 +98,7 @@ public struct RemoteState: Encodable, Equatable, Sendable {
 
     public init(
         instance: String, name: String, state: Playing, track: Track?, positionSeconds: Double?,
-        positionReadAt: Double, queueStamp: Int, queueLength: Int, queuePosition: Int?,
+        now: Double, queueStamp: Int, queueLength: Int, queuePosition: Int?,
         shuffle: Bool, repeatMode: String, volumeDecibels: Double?,
         volumeFloorDecibels: Double? = nil, output: Output?, receiver: Receiver?,
         lastPlayedAt: Double?
@@ -107,7 +108,7 @@ public struct RemoteState: Encodable, Equatable, Sendable {
         self.state = state
         self.track = track
         self.positionSeconds = positionSeconds
-        self.positionReadAt = positionReadAt
+        self.now = now
         self.queueStamp = queueStamp
         self.queueLength = queueLength
         self.queuePosition = queuePosition
@@ -129,13 +130,13 @@ public struct RemoteState: Encodable, Equatable, Sendable {
     func isNews(after previous: RemoteState) -> Bool {
         var same = self
         same.positionSeconds = previous.positionSeconds
-        same.positionReadAt = previous.positionReadAt
+        same.now = previous.now
         guard same == previous else { return true }
         switch (previous.positionSeconds, positionSeconds) {
         case (nil, nil): return false
         case (let before?, let now?):
             let expected =
-                before + (state == .playing ? positionReadAt - previous.positionReadAt : 0)
+                before + (state == .playing ? self.now - previous.now : 0)
             return abs(now - expected) > Self.driftSeconds
         default: return true
         }

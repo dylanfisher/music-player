@@ -62,7 +62,7 @@ private final class Fixture: @unchecked Sendable {
     ) {
         current = RemoteState(
             instance: ownID, name: "Studio", state: .paused, track: nil, positionSeconds: 10,
-            positionReadAt: 0, queueStamp: 1, queueLength: 0, queuePosition: nil, shuffle: false,
+            now: 0, queueStamp: 1, queueLength: 0, queuePosition: nil, shuffle: false,
             repeatMode: "off", volumeDecibels: nil, output: nil, receiver: nil, lastPlayedAt: nil)
         service = RemoteService(
             identity: .init(id: ownID, name: "Studio", host: "Studio"),
@@ -346,7 +346,7 @@ private final class Fixture: @unchecked Sendable {
     var before = fixture.current
     before.state = .playing
     var after = before
-    after.positionReadAt = 2
+    after.now = 2
     after.positionSeconds = 12
     #expect(!after.isNews(after: before))
     after.positionSeconds = 13.5
@@ -356,7 +356,7 @@ private final class Fixture: @unchecked Sendable {
     #expect(after.isNews(after: before))
     before.state = .paused
     after = before
-    after.positionReadAt = 2
+    after.now = 2
     #expect(!after.isNews(after: before))
     after.positionSeconds = 12
     #expect(after.isNews(after: before))
@@ -636,6 +636,7 @@ private final class Waits: @unchecked Sendable {
     let token = try await fixture.pair()
     let page = try await fixture.send("GET", "/")
     #expect(page.head.contains("Content-Security-Policy: default-src 'none'"))
+    #expect(page.head.contains("Referrer-Policy: no-referrer"))
     let pageTag = try #require(page.head.split(separator: "\r\n").first { $0.hasPrefix("ETag: ") })
     let cachedPage = try await fixture.send(
         "GET", "/", fields: "If-None-Match: \(pageTag.dropFirst(6))\r\n")
@@ -662,25 +663,68 @@ private final class Waits: @unchecked Sendable {
             == #"{"offset":1,"position":0,"rows":[[null,"Two",null,null]],"stamp":7,"total":2}"#)
     #expect(reply.head.contains("Cache-Control: no-store"))
     #expect(try await fixture.send("GET", "/api/queue?offset=0", token: token).status == 400)
+    #expect(
+        try await fixture.send("GET", "/api/queue?offset=3&limit=5", token: token).status == 400)
     #expect(try await fixture.send("POST", "/api/queue", token: token, body: "{}").status == 405)
 }
 
 @Test func aQueueEditNamesPositionsOfTheQueueAsItsStampSaysItWas() throws {
     var stamp = RemoteQueueStamp()
     var state = PlaybackState()
-    state.queue = [URL(fileURLWithPath: "/a.flac", isDirectory: false)]
-    state.order = [0]
+    state.queue = ["/a.flac", "/b.flac", "/c.flac"].map {
+        URL(fileURLWithPath: $0, isDirectory: false)
+    }
+    state.order = [2, 0, 1]
     stamp.note(state, at: 0)
     let now = "\(stamp.stamp)"
-    #expect(try stamp.edit("\(now):0:1", moving: true, count: 3) == .move(0, before: 1))
-    #expect(try stamp.edit("\(now):2", moving: false, count: 3) == .remove(2))
-    #expect(try stamp.edit("\(now):1:3", moving: true, count: 3) == .move(1, before: 3))
+    let moved = try stamp.edit("\(now):0:1", moving: true)
+    #expect(moved.edit == .move(0, before: 1))
+    #expect(moved.queue == state.queue && moved.order == state.order)
+    #expect(try stamp.edit("\(now):2", moving: false).edit == .remove(2))
+    #expect(try stamp.edit("\(now):1:3", moving: true).edit == .move(1, before: 3))
     for (text, moving) in [
         ("\(stamp.stamp + 1):0", false), ("\(now):3", false), ("\(now):0:4", true),
         ("\(now):0", true), ("\(now):0:1", false), ("\(now):-1", false), ("x:0", false),
     ] {
-        #expect(throws: RemoteRefusal.self, "\(text)") {
-            try stamp.edit(text, moving: moving, count: 3)
+        #expect(throws: RemoteRefusal.self, "\(text)") { try stamp.edit(text, moving: moving) }
+    }
+}
+
+@Test func theLibraryReadsAndTheir304sRefuseAnOriginThatIsntAMacs() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    let token = try await fixture.pair()
+    let genres = try await fixture.send("GET", "/api/genres", token: token)
+    let tag = try #require(genres.head.split(separator: "\r\n").first { $0.hasPrefix("ETag: ") })
+    for path in [
+        "/", "/app.js", "/api/genres", "/api/tracks?offset=0&limit=1", "/api/search?q=a",
+        "/api/queue?offset=0&limit=1", "/api/covers?albums=1", "/api/art/s/1-00",
+    ] {
+        for fields in ["", "If-None-Match: \(tag.dropFirst(6))\r\n"] {
+            let reply = try await fixture.send(
+                "GET", path, token: token, fields: "Origin: http://evil.example\r\n" + fields)
+            #expect(reply.status == 403, "\(path) \(fields)")
+            #expect(!reply.head.contains("Access-Control-Allow-Origin"))
         }
     }
+    let own = try await fixture.send(
+        "GET", "/api/genres", token: token,
+        fields: "Origin: http://\(fixture.host)\r\nIf-None-Match: \(tag.dropFirst(6))\r\n")
+    #expect(own.status == 304)
+}
+
+@Test func aQuietStreamGetsACommentEveryFifteenSeconds() async throws {
+    let fixture = Fixture()
+    try await fixture.start()
+    let token = try await fixture.pair()
+    let connection = try await LoopbackConnection.connect(port: fixture.port)
+    defer { connection.close() }
+    try await connection.send(
+        "GET /api/events HTTP/1.1\r\nHost: \(fixture.host)\r\nAuthorization: Bearer \(token)\r\n\r\n"
+    )
+    // The fixture's hub sleeps 2 ms a tick, so 15 s of ticks pass in well under a second.
+    let heard = String(
+        decoding: try await connection.receive(through: Array("\n:\n\n".utf8)), as: UTF8.self)
+    #expect(heard.contains("data: "))
+    #expect(RemoteEventHub.heartbeatSeconds == 15)
 }

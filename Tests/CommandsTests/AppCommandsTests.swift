@@ -57,7 +57,7 @@ import Testing
         .playPause, .play, .pause, .nextTrack, .previousTrack, .seekForward, .seekBack,
         .seekForwardPercent, .seekBackPercent, .seekTo, .volumeUp, .volumeDown,
         .setAppVolume, .chooseOutput, .stop, .shuffle, .repeatOff, .repeatAll, .repeatOne,
-        .playTracks, .queueTracks, .moveInQueue, .removeFromQueueAt,
+        .playTracks, .playList, .queueTracks, .moveInQueue, .removeFromQueueAt,
     ]
     #expect(
         remote
@@ -110,7 +110,7 @@ import Testing
         AppCommands.all().filter { $0.argument != nil }.map(\.id)
             == [
                 .showStats, .play, .seekTo, .setAppVolume, .chooseOutput, .playTracks,
-                .queueTracks, .moveInQueue, .removeFromQueueAt, .receiverSetVolume,
+                .playList, .queueTracks, .moveInQueue, .removeFromQueueAt, .receiverSetVolume,
             ])
     #expect(AppCommands.all().filter(\.replies).map(\.id) == [.showStats, .showSpectrum])
     #expect(AppCommands.all().filter(\.takesPaths).map(\.id) == [.showSpectrum])

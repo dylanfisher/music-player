@@ -171,6 +171,8 @@ extension CommandID {
     public static let chooseOutput = CommandID("output.chooseOutput")
     /// Tracks by ID, or an album from a track, for the web remote's lists.
     public static let playTracks = CommandID("playback.playTracks")
+    /// A track list as the web remote reads it, from a track in it, played whole.
+    public static let playList = CommandID("playback.playList")
     /// Tracks by ID, or an album, after those already queued, for the web remote's lists.
     public static let queueTracks = CommandID("playback.queueTracks")
     /// A track in the queue to another place, by position, for the web remote's Queue.
@@ -228,6 +230,10 @@ public enum AppCommands {
     private static let seekToArgument = "a position in seconds"
     /// Set Volume's argument, as `CommandArgument.decibels` reads it.
     private static let appVolumeArgument = "a level in dB, 0 or under"
+    /// Play List's argument, as `RemoteLibrary.files(list:)` reads it.
+    private static let playListArgument =
+        "a query string of the list's genre, artist, album, q, sort and descending, as the web"
+        + " remote reads tracks, and playFrom, the ID of the track to play from"
     /// Move in Queue's argument, as `CommandArgument.queuePlaces` reads it.
     private static let queueMoveArgument =
         "the queue's stamp, the position from 0 and the position to move before, between colons"
@@ -415,6 +421,7 @@ public enum AppCommands {
             Command(
                 .playTracks, "Play Tracks", remote: true,
                 argument: CommandArgument.playTracksHelp, menus: false),
+            Command(.playList, "Play List", remote: true, argument: playListArgument, menus: false),
             Command(
                 .queueTracks, "Queue Tracks", remote: true,
                 argument: CommandArgument.queueTracksHelp, menus: false),

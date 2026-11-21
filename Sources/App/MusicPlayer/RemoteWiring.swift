@@ -109,12 +109,21 @@ extension AppDelegate {
         return nil
     }
 
+    /// Play List's argument, from the remote or the command line.
+    func playList(_ text: String) async throws -> String? {
+        guard let library = remoteLibrary() else { throw RemoteNotReady() }
+        let files = try await library.files(list: text)
+        play(files.urls, first: files.first)
+        return nil
+    }
+
     /// Move in Queue's (`moving`) or Remove from Queue at's argument.
     func editQueue(_ text: String, moving: Bool) async throws -> String? {
         guard let engine else { throw RemoteNotReady() }
-        switch try remote.queue.edit(text, moving: moving, count: playback.order.count) {
-        case .move(let from, let before): await engine.moveQueueItems([from], to: before)
-        case .remove(let at): await engine.removeQueueItems([at])
+        let asked = try remote.queue.edit(text, moving: moving)
+        // The engine checks the queue and edits it in one step, so it can't change between.
+        guard await engine.edit(asked.edit, ifQueueIs: asked.queue, order: asked.order) else {
+            throw RemoteRefusal.queueChanged
         }
         return nil
     }

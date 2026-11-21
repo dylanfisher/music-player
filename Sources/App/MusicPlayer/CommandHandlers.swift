@@ -344,7 +344,7 @@ extension AppDelegate {
         }
         // Each needs its argument, which only the command line and the remote pass.
         for id in [
-            CommandID.seekTo, .setAppVolume, .chooseOutput, .playTracks, .queueTracks,
+            CommandID.seekTo, .setAppVolume, .chooseOutput, .playTracks, .playList, .queueTracks,
             .moveInQueue, .removeFromQueueAt,
         ] {
             dispatcher.handle(id, enabled: { false }, run: {})

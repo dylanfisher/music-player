@@ -404,6 +404,18 @@ public actor PlaybackEngine {
         applyEdit(queue.remove(positions))
     }
 
+    /// `edit`'s move or removal, by positions in play order, when the queue is still `urls` in
+    /// `order`, as the web remote read it; false, changing nothing, once it changed, so the
+    /// positions can't name other tracks than the remote meant.
+    public func edit(_ edit: QueueEdit, ifQueueIs urls: [URL], order: [Int]) -> Bool {
+        guard state.queue == urls, state.order == order else { return false }
+        switch edit {
+        case .move(let from, let before): moveQueueItems([from], to: before)
+        case .remove(let at): removeQueueItems([at])
+        }
+        return true
+    }
+
     /// Follows the current, next and starting tracks to their new positions after an edit.
     private func applyEdit(_ moved: [Int?]) {
         queueGeneration += 1

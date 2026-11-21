@@ -14,6 +14,7 @@ struct RemoteQuery: Sendable {
     static let offset = "offset"
     static let limit = "limit"
     static let text = "q"
+    static let start = "playFrom"
 
     private let values: [String: String]
     private let problem: String?
@@ -49,6 +50,8 @@ struct RemoteQuery: Sendable {
             throw RemoteRefusal("\(unknown) isn't a key this read takes")
         }
     }
+
+    func has(_ key: String) -> Bool { values[key] != nil }
 
     /// The ID under `key`, nil when it's absent.
     func id(_ key: String) throws(RemoteRefusal) -> Int64? {
@@ -122,4 +125,8 @@ public struct RemoteRefusal: Error, CustomStringConvertible {
     public var description: String
 
     init(_ description: String) { self.description = description }
+
+    /// A queue edit whose stamp or queue is no longer the current one.
+    public static let queueChanged = RemoteRefusal(
+        "the queue changed since it was read; read it again")
 }
