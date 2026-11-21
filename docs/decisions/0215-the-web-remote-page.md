@@ -94,7 +94,8 @@ plus the time since the event arrived on the phone's. Now Playing, the transport
 follow the chosen Mac at once. Browse and Search stay on the Mac they were opened on when the
 page switches by itself, saying which Mac they show, and their commands go to that Mac, since
 their IDs are its library's; they follow the chosen Mac again when the owner picks one or goes
-back to Browse's top.
+back to Browse's top. Until something is opened in Browse they follow the chosen Mac, and
+they leave a Mac that is no longer paired.
 
 **Event streams.** One per paired Mac, read with `fetch` and a stream reader, since
 `EventSource` can't send the token. The server sends a comment every 15 s; a stream the page

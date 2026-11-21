@@ -310,8 +310,17 @@ function library() {
   return libraryID ? macs.get(libraryID) ?? null : null;
 }
 
+function pairedIDs() {
+  return Array.from(macs.values()).filter((mac) => mac.paired).map((mac) => mac.id);
+}
+
+/// Browse is at its top and no search is shown: a change of Mac loses nothing.
+function browseUntouched() {
+  return browse.stack.length <= 1 && $("results").childElementCount === 0;
+}
+
 function bindLibrary(event) {
-  const bound = libraryMac(libraryID, chosenID, event);
+  const bound = libraryMac(libraryID, chosenID, event, pairedIDs(), browseUntouched());
   if (bound === libraryID) return;
   libraryID = bound;
   libraryChanged();
@@ -530,6 +539,9 @@ class VirtualList {
   }
 }
 
+const RETRIES = 3;
+const RETRY_MS = 2000;
+
 /// A list read a range at a time by position: the tracks of a filter, or the queue.
 class RangedSource {
   constructor(path, render, onPage, mac = chosen()) {
@@ -546,6 +558,16 @@ class RangedSource {
     /// The tag and length the ranges held were read under, null before the first came.
     this.held = null;
     this.settle = 0;
+    /// Failed fetches by start, so a range is read again a bounded number of times.
+    this.failures = new Map();
+  }
+
+  /// The list is replaced: stop its timer and its fetches.
+  dispose() {
+    clearTimeout(this.settle);
+    for (const controller of this.loading.values()) controller.abort();
+    this.loading.clear();
+    this.wanted = [];
   }
 
   total() {
@@ -585,6 +607,7 @@ class RangedSource {
       (page) => {
         if (this.loading.get(start) !== controller) return;
         this.loading.delete(start);
+        this.failures.delete(start);
         if (this.onPage && this.onPage(page) === false) return;
         if (listChanged(this.held, page)) {
           // The library or the list changed: what's held is of another list. The scroll
@@ -603,6 +626,10 @@ class RangedSource {
         if (controller.signal.aborted) return;
         this.loading.delete(start);
         say(error.message);
+        // A transient error would otherwise leave placeholders until the next scroll.
+        const failed = (this.failures.get(start) ?? 0) + 1;
+        this.failures.set(start, failed);
+        if (failed <= RETRIES) setTimeout(() => this.wanted.includes(start) && this.fetch(), RETRY_MS);
       }
     );
   }
@@ -787,6 +814,7 @@ const queueView = {
     }
     this.stamp = stamp ?? (mac.state ? mac.state.queueStamp : null);
     if ($("view-queue").hidden) return;
+    if (this.source) this.source.dispose();
     const source = new RangedSource("/api/queue", (element, row, index) => this.render(element, row, index), (page) => {
       // A range from before the queue changed names other tracks: start over.
       if (this.stamp !== null && page.stamp !== this.stamp) {
@@ -866,7 +894,12 @@ function openLevel(next) {
   showLevel();
 }
 
+function disposeBrowseList() {
+  if (browse.list && browse.list.source.dispose) browse.list.source.dispose();
+}
+
 function showLevel() {
+  disposeBrowseList();
   const current = level();
   const mac = library();
   renderLibraryName();
@@ -1054,7 +1087,7 @@ const kinds = {
 
 /// Browse's top, where it follows the chosen Mac again.
 function chooseKind(kind) {
-  const bound = libraryMac(libraryID, chosenID, "top");
+  const bound = libraryMac(libraryID, chosenID, "top", pairedIDs(), true);
   if (bound !== libraryID) $("results").replaceChildren();
   libraryID = bound;
   browse.kind = kind;
@@ -1192,6 +1225,7 @@ $("tabs").addEventListener("click", (event) => {
 
 /// Another Mac's library: what Browse, Search and Queue showed was the last one's.
 function libraryChanged() {
+  disposeBrowseList();
   browse.stack = [];
   browse.list = null;
   $("results").replaceChildren();

@@ -237,9 +237,19 @@ private func run(_ context: JSContext, _ script: String) -> String? {
         run(
             context,
             """
-            return [libraryMac("a", "b", "auto"), libraryMac("a", "b", "picked"),
-              libraryMac("a", "b", "top"), libraryMac(null, "b", "auto")];
+            return [libraryMac("a", "b", "auto", ["a", "b"], false), libraryMac("a", "b", "picked", ["a", "b"], false),
+              libraryMac("a", "b", "top", ["a", "b"], false), libraryMac(null, "b", "auto", ["a", "b"], false)];
             """) == #"["a","b","b","b"]"#)
+}
+
+@Test func browseLeavesAMacThatIsNoLongerPairedAndFollowsWhileUntouched() throws {
+    let context = try logic()
+    #expect(
+        run(
+            context,
+            """
+            return [libraryMac("a", "b", "auto", ["b"], false), libraryMac("a", "b", "auto", ["a", "b"], true)];
+            """) == #"["b","b"]"#)
 }
 
 @Test func aRefusedQueueEditReadsTheQueueAgain() throws {

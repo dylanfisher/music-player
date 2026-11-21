@@ -277,9 +277,12 @@ export function playListArgument(filter, id) {
 
 /// The Mac Browse and Search read from: they stay on the one they were opened on when the
 /// page switches Macs by itself (`"auto"`), and follow the chosen Mac when the owner picks one
-/// (`"picked"`) or goes back to Browse's top (`"top"`), or when there was none.
-export function libraryMac(bound, chosen, event) {
-  return bound === null || event !== "auto" ? chosen : bound;
+/// (`"picked"`) or goes back to Browse's top (`"top"`), when there was none, when the bound
+/// one is no longer among the `paired` Macs, or while nothing has been opened (`untouched`),
+/// so the Mac that answered first doesn't hold them against one that starts playing a moment
+/// later.
+export function libraryMac(bound, chosen, event, paired, untouched) {
+  return bound === null || event !== "auto" || untouched || !paired.includes(bound) ? chosen : bound;
 }
 
 /// What the Queue does after an edit: a refused one, as when the queue moved since it was
