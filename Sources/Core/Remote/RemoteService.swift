@@ -56,6 +56,18 @@ public final class RemoteService: @unchecked Sendable {
     private var running: (interfaces: [NetworkInterface], port: UInt16) = ([], 0)
     /// The interfaces and port asked for last, which a lost listener starts again on.
     private var wanted: (interfaces: [NetworkInterface], port: UInt16)?
+    /// Counts the servers started, so a loss from one that isn't `active` is ignored.
+    private var serials = 0
+    /// The serial of the server started last, nil once stopped.
+    private var active: Int?
+    /// Whether a restart after a loss is waiting out its delay, which folds in further losses.
+    private var restarting = false
+    /// Lost listeners since one stayed ready for `steadySeconds`; the next delay doubles per one.
+    private var losses = 0
+    /// When the server last became ready, on `now`'s clock.
+    private var readyAt: Double?
+    private let restartSleep: @Sendable (Double) async throws -> Void
+    private let now: @Sendable () -> Double
     /// What was reported of adverts this session, so each is said once.
     private var refused: Set<String> = []
     /// Set once, at the end of `init`, since its instance list reads this service.
@@ -65,6 +77,12 @@ public final class RemoteService: @unchecked Sendable {
     static let refusedCap = 64
     /// Characters of an advert's name kept: the name a Mac gives itself is far shorter.
     static let nameCharacters = 256
+    /// The wait before the first restart after a lost listener, doubled for each further one.
+    static let restartSeconds = 1.0
+    /// The longest wait before a restart.
+    static let restartCapSeconds = 30.0
+    /// How long a listener stays ready before a loss counts as a first one again.
+    static let steadySeconds = 60.0
 
     /// `state` says what's playing now, `run` runs a command as `Origin.remote`, and `page`
     /// is the web page's HTML.
@@ -77,8 +95,14 @@ public final class RemoteService: @unchecked Sendable {
         pairing: RemotePairing = RemotePairing(),
         sleep: @escaping @Sendable (Double) async throws -> Void = {
             try await Task.sleep(nanoseconds: UInt64($0 * 1e9))
-        }
+        },
+        restartSleep: @escaping @Sendable (Double) async throws -> Void = {
+            try await Task.sleep(nanoseconds: UInt64($0 * 1e9))
+        },
+        now: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime }
     ) {
+        self.restartSleep = restartSleep
+        self.now = now
         self.identity = identity
         self.devices = devices
         self.pairing = pairing
@@ -157,11 +181,16 @@ public final class RemoteService: @unchecked Sendable {
         guard let api = lock.withLock({ self.api }) else {
             preconditionFailure("the service's API is set in init")
         }
+        let serial = lock.withLock { () -> Int in
+            serials += 1
+            active = serials
+            return serials
+        }
         let made = try await RemoteServer.start(
             on: interfaces, port: port, hostNames: [dotLocal(identity.host)],
             allowsOrigin: { [weak self] in self?.allows(origin: $0) ?? false },
             handler: { await api.handle($0) }, problem: problem,
-            lost: { [weak self] in self?.listenerLost() })
+            lost: { [weak self] in self?.listenerLost(from: serial) })
         let addresses = interfaces.map(\.address).filter { !$0.isLinkLocal }
             .sorted { if case .v4 = $0, case .v6 = $1 { true } else { false } }
             .map(\.description)
@@ -175,6 +204,7 @@ public final class RemoteService: @unchecked Sendable {
             own = instance
             subnets = LocalSubnets(interfaces)
             running = (interfaces, port)
+            readyAt = now()
             return true
         }
         guard current else {
@@ -189,19 +219,38 @@ public final class RemoteService: @unchecked Sendable {
             problem: problem)
     }
 
-    /// A listener failed after it was ready: starts again on what was asked for last.
-    private func listenerLost() {
-        guard
-            let again = lock.withLock({ () -> (interfaces: [NetworkInterface], port: UInt16)? in
-                running.interfaces = []
-                return wanted
-            })
-        else { return }
+    /// A listener of the server `serial` failed after it was ready: starts again on what was
+    /// asked for last, after a wait that doubles with each loss in a row, up to
+    /// `restartCapSeconds`. A loss from a server that isn't the current one, or while a restart
+    /// is waiting, is ignored, so several failing interfaces make one restart.
+    func listenerLost(from serial: Int) {
+        let delay = lock.withLock { () -> Double? in
+            guard active == serial, !restarting, wanted != nil else { return nil }
+            restarting = true
+            running.interfaces = []
+            if let readyAt, now() - readyAt >= Self.steadySeconds { losses = 0 }
+            defer { losses += 1 }
+            return min(
+                Self.restartSeconds * Double(sign: .plus, exponent: losses, significand: 1),
+                Self.restartCapSeconds)
+        }
+        guard let delay else { return }
         Task { [weak self] in
-            do throws(LocalNetworkError) {
-                try await self?.follow(again.interfaces, port: again.port)
+            do {
+                try await self?.restartSleep(delay)
             } catch {
-                self?.problem("the web remote can't listen again: \(error)")
+                self?.problem("the web remote's restart was cancelled: \(error)")
+            }
+            guard let self else { return }
+            let again = lock.withLock { () -> (interfaces: [NetworkInterface], port: UInt16)? in
+                restarting = false
+                return wanted
+            }
+            guard let again else { return }
+            do throws(LocalNetworkError) {
+                try await follow(again.interfaces, port: again.port)
+            } catch {
+                problem("the web remote can't listen again: \(error)")
             }
         }
     }
@@ -220,6 +269,7 @@ public final class RemoteService: @unchecked Sendable {
     private func stopServing() {
         let current = lock.withLock { () -> RemoteServer? in
             let stopped = server
+            active = nil
             server = nil
             own = nil
             found = []
@@ -244,6 +294,9 @@ public final class RemoteService: @unchecked Sendable {
 
     /// The server, for tests that fail its listeners.
     var currentServer: RemoteServer? { lock.withLock { server } }
+
+    /// The serial of the current server, for tests that lose a listener of an old one.
+    var currentSerial: Int? { lock.withLock { active } }
 
     /// Where a phone opens the page, nil while it's stopped.
     public var links: RemoteLinks? {

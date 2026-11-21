@@ -51,7 +51,10 @@ private final class Fixture: @unchecked Sendable {
     let saves = Saves()
     var service: RemoteService!
 
-    init() {
+    init(
+        restartSleep: @escaping @Sendable (Double) async throws -> Void = { _ in },
+        now: @escaping @Sendable () -> Double = { 0 }
+    ) {
         current = RemoteState(
             instance: ownID, name: "Studio", state: .paused, track: nil, positionSeconds: 10,
             positionReadAt: 0, queueStamp: 1, queueLength: 0, queuePosition: nil, shuffle: false,
@@ -72,7 +75,8 @@ private final class Fixture: @unchecked Sendable {
             },
             advertiser: bonjour, browser: bonjour,
             problem: { [self] message in lock.withLock { heard.append(message) } },
-            sleep: { _ in try await Task.sleep(nanoseconds: 2_000_000) })
+            sleep: { _ in try await Task.sleep(nanoseconds: 2_000_000) },
+            restartSleep: restartSleep, now: now)
     }
 
     deinit { service?.stop() }
@@ -448,6 +452,66 @@ private func freePort() async throws -> UInt16 {
     }
     #expect(try await fixture.send("GET", "/").status == 200)
     #expect(fixture.problems.contains { $0.hasPrefix("the web remote stopped listening") })
+}
+
+/// The delays a restart asked to wait, and a clock a test sets.
+private final class Waits: @unchecked Sendable {
+    private let lock = NSLock()
+    private var delays: [Double] = []
+    private var time = 0.0
+
+    var asked: [Double] { lock.withLock { delays } }
+    var clock: Double { lock.withLock { time } }
+    func advance(_ seconds: Double) { lock.withLock { time += seconds } }
+    func ask(_ seconds: Double) { lock.withLock { delays.append(seconds) } }
+}
+
+@Test func lostListenersRestartWithDoublingDelaysThatResetOnceSteady() async throws {
+    let waits = Waits()
+    let fixture = Fixture(restartSleep: { waits.ask($0) }, now: { waits.clock })
+    try await fixture.start()
+    for _ in 0..<7 {
+        let before = try #require(fixture.service.currentServer)
+        before.loseFirstListener()
+        try await waitFor {
+            fixture.service.currentServer.map { $0 !== before } == true
+                && fixture.service.listeningPort != nil
+        }
+    }
+    #expect(waits.asked == [1, 2, 4, 8, 16, 30, 30])
+    waits.advance(RemoteService.steadySeconds)
+    let last = try #require(fixture.service.currentServer)
+    last.loseFirstListener()
+    try await waitFor { fixture.service.currentServer.map { $0 !== last } == true }
+    #expect(waits.asked.last == 1)
+}
+
+@Test func lossesFromOneServerMakeOneRestartAndOldServersAreIgnored() async throws {
+    let waits = Waits()
+    let fixture = Fixture(
+        restartSleep: {
+            waits.ask($0)
+            try await Task.sleep(nanoseconds: 300_000_000)
+        },
+        now: { waits.clock })
+    let other = NetworkInterface(
+        name: "lo1", index: 2, address: IPAddress("127.0.0.1")!, prefixLength: 8)
+    try await fixture.start()
+    let old = try #require(fixture.service.currentSerial)
+    try await fixture.service.follow([other], port: fixture.port)
+    let current = try #require(fixture.service.currentSerial)
+    #expect(current != old)
+    fixture.service.listenerLost(from: old)
+    #expect(waits.asked.isEmpty)
+    let before = try #require(fixture.service.currentServer)
+    fixture.service.listenerLost(from: current)
+    fixture.service.listenerLost(from: current)
+    fixture.service.listenerLost(from: current)
+    try await waitFor {
+        fixture.service.currentServer.map { $0 !== before } == true
+            && fixture.service.listeningPort != nil
+    }
+    #expect(waits.asked == [1])
 }
 
 @Test func aDeviceHoldsAtMostFourEventStreams() async throws {

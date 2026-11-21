@@ -28,8 +28,12 @@ starts it again when the interfaces change; the code shown survives that. The ap
 `RemoteService` for the launch, and its starts run one at a time, in the order asked: a start
 asked for before a stop does nothing, a stop closes a server that's still binding, and a new
 server waits for the old one's listeners to close, so two starts at once, a quick off and on, or
-a port change never leave two servers or none. A listener that fails after it was ready is
-reported and dropped, and the service starts again. Refused connections are logged ten a
+a port change never leave two servers or none. A listener that fails after it was ready, or
+that reports waiting after it was ready, which is treated the same, is reported and dropped, and
+the service starts again after a wait of 1 s that doubles with each loss in a row, up to 30 s,
+and starts over once a server has stayed ready for a minute. Losses from a server that is no
+longer the current one are ignored, and those that arrive while a restart is waiting, as when
+several interfaces fail together, are folded into it. Refused connections are logged ten a
 session, then counted in one line when the server stops, so a LAN scanner can't flood the log.
 
 Each request's head passes `RemoteRules` before anything else sees it:
