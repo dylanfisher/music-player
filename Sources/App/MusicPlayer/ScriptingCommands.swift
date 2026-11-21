@@ -122,12 +122,9 @@ extension AppDelegate {
         return nil
     }
 
-    /// Choose Output's argument, as the output menu chooses one.
+    /// Choose Output's argument, one of the outputs the menu lists, as the menu chooses it.
     private func chooseOutput(text: String) throws -> String? {
-        guard let choice = OutputChoice(text: text) else {
-            throw Refused(description: "\(text) isn't an output: \(OutputChoice.textHelp)")
-        }
-        chooseOutput(choice)
+        chooseOutput(try chosenOutput(text, among: outputOptionsNow()))
         return nil
     }
 

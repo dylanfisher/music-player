@@ -13,9 +13,11 @@ public struct Command: Sendable, Equatable {
     /// moving around the window do (ADR 0036).
     public let runsFromLinks: Bool
     /// A paired web remote may run it: playback, seeking, the queue, the app's volume, the
-    /// output and the receiver, and nothing that writes tags, moves or deletes files, changes
-    /// another setting or approves a download, since those wait for a confirmation in the Mac's
-    /// own UI (ADR 0214).
+    /// output and the receiver. Nothing that writes tags, moves or deletes files, changes a
+    /// setting or approves a download, since those wait for a confirmation in the Mac's own UI,
+    /// with one deliberate exception: Choose Output writes the output settings, because the
+    /// owner chooses the Mac's output from the phone, and it takes only an output the Mac's
+    /// picker lists (ADR 0214).
     public let runsFromRemote: Bool
     /// What the command line and a link may pass it, as help shows it; nil when it takes
     /// nothing.

@@ -98,3 +98,23 @@ public func outputOptions(
 
 /// The picker's first entry, which `output.deviceUID` null plays through.
 let systemDefaultOutputTitle = "System Default"
+
+/// Why Choose Output refused its argument.
+public struct OutputRefusal: Error, Equatable, CustomStringConvertible {
+    public let description: String
+}
+
+/// The output `text` names, when it's one of `options`, the outputs the picker lists now. Choose
+/// Output runs from the web remote too, so it takes only an output the Mac's own picker offers,
+/// never a UID or UDN made up (ADR 0214).
+public func chosenOutput(_ text: String, among options: [OutputOption]) throws(OutputRefusal)
+    -> OutputChoice
+{
+    guard let choice = OutputChoice(text: text) else {
+        throw OutputRefusal(description: "\(text) isn't an output: \(OutputChoice.textHelp)")
+    }
+    guard options.contains(where: { $0.choice == choice }) else {
+        throw OutputRefusal(description: "\(text) isn't one of the outputs the Mac lists now")
+    }
+    return choice
+}

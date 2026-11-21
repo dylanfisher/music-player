@@ -51,3 +51,14 @@ private let renderers = [FoundOutput(id: "uuid:denon", name: "Denon AVR")]
     #expect(OutputChoice(text: "output:speaker:x") == nil)
     #expect(OutputChoice(text: "command:x") == nil)
 }
+
+@Test func chooseOutputTakesOnlyAnOutputThePickerListsNow() throws {
+    let options = outputOptions(
+        devices: [FoundOutput(id: "dac", name: "DAC")], renderers: [], current: .systemDefault)
+    #expect(try chosenOutput("output:device:dac", among: options) == .device(uid: "dac"))
+    #expect(try chosenOutput("output:", among: options) == .systemDefault)
+    #expect(throws: OutputRefusal.self) {
+        try chosenOutput("output:renderer:uuid:made-up", among: options)
+    }
+    #expect(throws: OutputRefusal.self) { try chosenOutput("dac", among: options) }
+}
