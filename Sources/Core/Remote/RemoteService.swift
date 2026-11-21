@@ -178,8 +178,9 @@ public final class RemoteService: @unchecked Sendable {
             return true
         }
         guard current else {
+            // Closed before the start returns, so nothing listens once a stop's start is done.
             made.stop()
-            lock.withLock { closing.append(made) }
+            await made.closed()
             return
         }
         advertiser.start(instance.advert, problem: problem)

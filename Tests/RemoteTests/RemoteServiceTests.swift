@@ -415,9 +415,11 @@ private func freePort() async throws -> UInt16 {
     let fixture = Fixture()
     let old = try await freePort()
     let new = try await freePort()
-    async let first: Void = fixture.service.follow([loopback], port: old)
-    async let second: Void = fixture.service.follow([loopback], port: new)
-    _ = try await (first, second)
+    // Both are queued before either binds, the new port last, as a setting change would.
+    let first = fixture.service.followTask([loopback], port: old)
+    let second = fixture.service.followTask([loopback], port: new)
+    try await first.value.get()
+    try await second.value.get()
     #expect(fixture.service.listeningPort == new)
     await #expect(throws: (any Error).self) { try await LoopbackConnection.connect(port: old) }
 }
