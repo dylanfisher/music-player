@@ -756,7 +756,8 @@ page: 10.6 to 10.8, with their tests. Each part gets its own review. ADR 0214 is
    (two sizes, `immutable`). Every library read carries `ETag` from `changeStamp`, a launch
    nonce and the grouping, and answers `If-None-Match` with a 304. The state gains the track's
    art ID, the app volume's floor and the receiver's inputs.
-5. Commands, through `ScriptRouter` as `Origin.remote`: Play Tracks and Queue Tracks
+5. Commands, through `ScriptRouter` as `Origin.remote`: Play List (a track list by
+   `/api/tracks`' keys and a start track, played whole), Play Tracks and Queue Tracks
    (`tracks:<ids>` or `album:<id>[:<track>]`), Move in Queue and Remove from Queue Item
    (`<stamp>:<position>[:<to>]`, refused when the queue changed). Arguments parse in Core.
 6. The page: `logic.js`, a pure ES module (choosing a Mac, range planning with its 20-range
