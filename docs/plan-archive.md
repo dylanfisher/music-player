@@ -11626,6 +11626,9 @@ Cost: implementer (Opus) 60 tool calls, 45 min; the other stages' costs weren't 
 window comes back as it was, windowed if it was. And the Stats period change and sync merge
 rows on a quiet machine (405 ms and 19.59 s under load).
 
+Removed in phase 93 at the owner's request (ADR 0216), so its focus mode check is dropped; the
+selection-keeping reload stays.
+
 ### 77. Faster whole-file tag rewrites
 
 Asked by the owner on 2026-11-10, during a Discogs tagger Apply with covers over 15,435 files

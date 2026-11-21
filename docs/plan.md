@@ -195,8 +195,6 @@ that phase's Result line, and delete its line here.
   checks under its Result line, on the 2015 MacBook Pro on battery with the Denon.
 - **81** ([phase](plan-archive.md#81-downloads-approving-unasked-without-a-dialog-and-no-offer-for-one-track)):
   the owner checks under its Result line, an unasked upgrade on the NAS.
-- **82** ([phase](plan-archive.md#82-focus-mode)): the owner checks under its Result line,
-  focus mode while playing.
 - **77** ([phase](plan-archive.md#77-faster-whole-file-tag-rewrites)): the owner check under
   its Result line, files a minute on the NAS for a large art or tag change.
 - **79** ([phase](plan-archive.md#79-rating-the-menus-mark-get-infos-stars-shortcuts-and-a-message)):

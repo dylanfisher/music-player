@@ -1,7 +1,8 @@
 # 0204. Focus mode, the main window changed in place
 
 - **Date:** 2026-11-10
-- **Status:** accepted
+- **Status:** superseded by [0216](0216-removing-focus-mode.md): Focus Mode was removed in
+  phase 93
 - **See also:** [0072](0072-window-chrome-and-status-bar.md) (Distraction-Free Mode)
 
 ## Context
