@@ -92,7 +92,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
         listButton.action = #selector(listChosen)
         viewControl.target = self
         viewControl.action = #selector(viewChosen)
-        sortButton.addItems(withTitles: RecommendationQuery.Sort.allCases.map(sortTitle))
+        sortButton.addItems(
+            withTitles: RecommendationQuery.Sort.offered(for: query.seed).map(sortTitle))
         sortButton.target = self
         sortButton.action = #selector(sortChosen)
         sortButton.toolTip = Self.sortHelp
@@ -232,9 +233,13 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             control.isEnabled = albums
         }
         if query != self.query {
+            let sorts = RecommendationQuery.Sort.offered(for: query.seed)
+            if sorts != RecommendationQuery.Sort.offered(for: self.query.seed) {
+                sortButton.removeAllItems()
+                sortButton.addItems(withTitles: sorts.map(sortTitle))
+            }
             self.query = query
-            sortButton.selectItem(
-                at: RecommendationQuery.Sort.allCases.firstIndex(of: query.sort) ?? 0)
+            sortButton.selectItem(at: sorts.firstIndex(of: query.sort) ?? 0)
             missingBox.state = query.filters.missing ? .on : .off
             stylesField.objectValue = query.filters.styles
             yearFromField.stringValue = query.filters.yearFrom.map(String.init) ?? ""
@@ -339,7 +344,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     }
 
     @objc private func sortChosen() {
-        let sorts = RecommendationQuery.Sort.allCases
+        let sorts = RecommendationQuery.Sort.offered(for: query.seed)
         let index = sortButton.indexOfSelectedItem
         guard index >= 0, index < sorts.count, sorts[index] != query.sort else { return }
         var chosen = query

@@ -68,7 +68,8 @@ enum RecommendationColumn: String, CaseIterable {
         case .want: return values.map { number($0.want) } ?? ""
         case .download: return download ?? ""
         case .why: return album.reasons.first.map { terminalSafe($0.words) } ?? ""
-        case .score: return String(format: "%.2f", row.artist?.score ?? album.score)
+        case .score:
+            return (row.artist.map(\.score) ?? album.score).map { String(format: "%.2f", $0) } ?? ""
         case .forSale: return values?.numForSale.map(number) ?? ""
         case .lowestPrice: return values?.lowestPrice.map { String(format: "%.2f", $0) } ?? ""
         }

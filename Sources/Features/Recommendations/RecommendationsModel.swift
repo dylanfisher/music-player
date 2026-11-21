@@ -43,9 +43,11 @@ final class RecommendationsModel {
         self.sleep = sleep
     }
 
-    /// Shows `query`'s list from its first row, adding its seed to the pop-up's.
+    /// Shows `query`'s list from its first row, adding its seed to the pop-up's. An order or
+    /// view the seed's list doesn't offer becomes its default.
     @discardableResult
-    func show(_ query: RecommendationQuery) -> Task<Void, Never>? {
+    func show(_ asked: RecommendationQuery) -> Task<Void, Never>? {
+        let query = asked.fitted
         if !seeds.contains(query.seed) { seeds.append(query.seed) }
         self.query = query
         rows = []
@@ -213,6 +215,8 @@ final class RecommendationsModel {
         switch error.kind {
         case .refused(let refusal): .refused(refusal)
         case .status(503, code: "busy"): .busy
+        case .status(404, code: "unknown_artist"): .unknownArtist
+        case .badRequest(code: "various_artists", _): .variousArtists
         default: .failed(terminalSafe(error.description))
         }
     }

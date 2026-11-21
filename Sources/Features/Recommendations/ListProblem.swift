@@ -8,6 +8,10 @@ enum ListProblem: Equatable {
     case refused(ServiceRefusal)
     /// The service stayed busy through every retry.
     case busy
+    /// A 404 `unknown_artist`: the service's catalog has no artist of the discography's id.
+    case unknownArtist
+    /// A 400 `various_artists`: the service refuses Various Artists' discography.
+    case variousArtists
     /// Any other error, as its text.
     case failed(String)
 }

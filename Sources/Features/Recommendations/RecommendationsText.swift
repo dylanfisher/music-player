@@ -25,8 +25,12 @@ func pendingText(_ seed: RecommendationQuery.Seed) -> String {
     case .artist(let name):
         "Computing the list for \(terminalSafe(name)), which takes about half a minute the first"
             + " time"
+    case .discography(_, let name): "Reading the discography of \(terminalSafe(name))…"
     }
 }
+
+/// What the status line says while the service still fetches a discography's values.
+func fetchingText(_ pending: Int) -> String { "Fetching ratings, \(number(pending)) left" }
 
 /// The pop-up's title for `seed`.
 func seedTitle(_ seed: RecommendationQuery.Seed) -> String {
@@ -34,6 +38,7 @@ func seedTitle(_ seed: RecommendationQuery.Seed) -> String {
     case .library: "Library"
     case .album(_, let title): "Album: \(terminalSafe(title))"
     case .artist(let name): "Artist: \(terminalSafe(name))"
+    case .discography(_, let name): "Discography: \(terminalSafe(name))"
     }
 }
 
@@ -41,6 +46,8 @@ func seedTitle(_ seed: RecommendationQuery.Seed) -> String {
 func sortTitle(_ sort: RecommendationQuery.Sort) -> String {
     switch sort {
     case .score: "By \(RecommendationColumn.score.title)"
+    case .year: "By \(RecommendationColumn.year.title)"
+    case .title: "By \(RecommendationColumn.title.title)"
     case .rating: "By \(RecommendationColumn.rating.title)"
     case .have: "By \(RecommendationColumn.have.title)"
     case .want: "By \(RecommendationColumn.want.title)"
@@ -55,6 +62,10 @@ func problemText(_ problem: ListProblem, seed: RecommendationQuery.Seed) -> Stri
     case .busy:
         return "The service is busy computing other lists. Try again in a minute."
     case .failed(let text): return text
+    case .unknownArtist:
+        let id = if case .discography(let id, _) = seed { "\(id)" } else { "?" }
+        return "Discogs has no artist \(id) in this Mac's catalog"
+    case .variousArtists: return "Various Artists has no discography"
     case .refused(let refusal):
         switch refusal.code {
         case .noProfile:
@@ -80,7 +91,7 @@ func problemText(_ problem: ListProblem, seed: RecommendationQuery.Seed) -> Stri
             case .artist(let name):
                 return "The service's profile has no album by \(terminalSafe(name)) tagged"
                     + " with a release its catalog has."
-            case .library: return "\(refusal)"
+            case .library, .discography: return "\(refusal)"
             }
         default: return "\(refusal)"
         }
@@ -88,11 +99,14 @@ func problemText(_ problem: ListProblem, seed: RecommendationQuery.Seed) -> Stri
 }
 
 /// The list's facts, for the window's footer: the catalog set, when it was scored, its seed
-/// albums and candidates.
+/// albums and candidates; for a discography, its albums.
 func factsText(_ facts: RecommendationPage.Facts) -> String {
     let scored = DateFormatter.localizedString(
         from: Date(timeIntervalSince1970: TimeInterval(facts.computedAt)), dateStyle: .medium,
         timeStyle: .short)
+    if facts.artist != nil {
+        return "Catalog \(terminalSafe(facts.catalogSet)), \(count(facts.candidates, "album"))"
+    }
     return "Catalog \(terminalSafe(facts.catalogSet)), scored \(scored) from"
         + " \(count(facts.seeds, "album")) of the library; \(number(facts.candidates))"
         + " candidates"

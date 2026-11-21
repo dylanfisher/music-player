@@ -14,11 +14,13 @@ package struct RecommendationPage: Equatable, Sendable, Decodable {
         package var seeds: Int
         /// The albums it holds before the filters and the caps.
         package var candidates: Int
+        /// The artist asked for, for a discography; nil for the scored lists.
+        package var artist: Named?
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case catalogSet = "catalog_set"
             case computedAt = "computed_at"
-            case seeds, candidates
+            case seeds, candidates, artist
         }
     }
 
@@ -72,22 +74,32 @@ package struct RecommendationPage: Equatable, Sendable, Decodable {
         /// The release that stands for the album, whose community values these are; nil when
         /// the catalog has no row for the master.
         package var releaseID: Int?
-        /// Its place in the whole list by score, before the filters and the caps.
+        /// Its place in the whole list by score, before the filters and the caps; for a
+        /// discography in the order asked, before the filters.
         package var rank: Int
-        package var score: Double
+        /// Nil for a discography, which isn't scored.
+        package var score: Double?
         package var artists: [Named]
         package var title: String
         package var year: Int?
         package var label: Named?
         package var styles: [Named]
         package var community: CommunityValues?
-        /// Up to 3, strongest first.
+        /// Up to 3, strongest first; empty for a discography.
         package var reasons: [Reason]
+        /// Each format of `releaseID`, as "Vinyl, LP, Album".
+        package var formats: [String]
+        /// Whether the profile holds a release of the master, or the release.
+        package var inLibrary: Bool
+        /// The verdict on the album, or else on `releaseID` as a release.
+        package var mark: FeedbackMark.Verdict?
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case kind, id
             case releaseID = "release_id"
-            case rank, score, artists, title, year, label, styles, community, reasons
+            case rank, score, artists, title, year, label, styles, community, reasons, formats
+            case inLibrary = "in_library"
+            case mark
         }
     }
 
@@ -112,9 +124,12 @@ package struct RecommendationPage: Equatable, Sendable, Decodable {
     package var artists: [Artist]?
     /// Whether the list goes on past this page.
     package var more: Bool
+    /// For a discography, how many of its releases the sync will fetch values for as it
+    /// comes to them; nil for the scored lists.
+    package var pending: Int?
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
-        case ok, list, albums, artists, more
+        case ok, list, albums, artists, more, pending
     }
 }
 
@@ -125,6 +140,7 @@ extension RecommendationPage {
         albums = try container.decode([Album]?.self, forKey: .albums)
         artists = try container.decode([Artist]?.self, forKey: .artists)
         more = try container.decode(Bool.self, forKey: .more)
+        pending = try container.decode(Int?.self, forKey: .pending)
     }
 }
 
@@ -135,6 +151,7 @@ extension RecommendationPage.Facts {
         computedAt = try container.decode(Int.self, forKey: .computedAt)
         seeds = try container.decode(Int.self, forKey: .seeds)
         candidates = try container.decode(Int.self, forKey: .candidates)
+        artist = try container.decode(RecommendationPage.Named?.self, forKey: .artist)
     }
 }
 
@@ -171,7 +188,7 @@ extension RecommendationPage.Album {
         id = try container.decode(Int.self, forKey: .id)
         releaseID = try container.decode(Int?.self, forKey: .releaseID)
         rank = try container.decode(Int.self, forKey: .rank)
-        score = try container.decode(Double.self, forKey: .score)
+        score = try container.decode(Double?.self, forKey: .score)
         artists = try container.decode([RecommendationPage.Named].self, forKey: .artists)
         title = try container.decode(String.self, forKey: .title)
         year = try container.decode(Int?.self, forKey: .year)
@@ -179,6 +196,9 @@ extension RecommendationPage.Album {
         styles = try container.decode([RecommendationPage.Named].self, forKey: .styles)
         community = try container.decode(CommunityValues?.self, forKey: .community)
         reasons = try container.decode([RecommendationPage.Reason].self, forKey: .reasons)
+        formats = try container.decode([String].self, forKey: .formats)
+        inLibrary = try container.decode(Bool.self, forKey: .inLibrary)
+        mark = try container.decode(FeedbackMark.Verdict?.self, forKey: .mark)
     }
 }
 

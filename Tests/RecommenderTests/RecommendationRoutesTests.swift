@@ -71,6 +71,9 @@ private func everyFilter() -> RecommendationQuery.Filters {
     #expect(album.community?.values?.lowestPrice == nil)
     #expect(album.reasons.first?.kind == .credit)
     #expect(album.reasons.first?.seedRoles == ["Producer"])
+    #expect(album.score == 0.81 && album.formats == ["Vinyl, LP, Album"])
+    #expect(!album.inLibrary && album.mark == nil)
+    #expect(page.list.artist == nil && page.pending == nil)
 
     let artists = try decodeReply(Array(try artistsPage().utf8), as: RecommendationPage.self)
     #expect(artists.albums == nil)
@@ -85,7 +88,79 @@ private func artistsPage() throws -> String {
     let end = try #require(text.range(of: #"]}]}],"#))
     let album = String(text[text.index(after: start.lowerBound)..<end.upperBound].dropLast(2))
     return
-        #"{"ok": true, "list": {"catalog_set": "20261001", "computed_at": 1, "seeds": 1, "candidates": 1}, "albums": null, "artists": [{"rank": 1, "id": 23, "name": "Gus Other", "score": 1, "albums": 1, "best": \#(album)}], "more": false}"#
+        #"{"ok": true, "list": {"catalog_set": "20261001", "computed_at": 1, "seeds": 1, "candidates": 1, "artist": null}, "albums": null, "artists": [{"rank": 1, "id": 23, "name": "Gus Other", "score": 1, "albums": 1, "best": \#(album)}], "more": false, "pending": null}"#
+}
+
+@Test func aDiscographyRequestSendsTheArtistAndNeverMissing() async throws {
+    let stub = try await StubService(
+        Array(repeating: (200, try fixture("discography.json")), count: 3))
+    defer { stub.stop() }
+    let client = try stub.client
+    let seed = RecommendationQuery.Seed.discography(artistID: 23, name: "Gus Other")
+    var filters = everyFilter()
+    filters.labels = []
+    _ = try await client.recommendations(
+        RecommendationQuery(seed: seed, sort: .year), offset: 0)
+    _ = try await client.recommendations(
+        RecommendationQuery(seed: seed, filters: filters, sort: .rating), offset: 50, limit: 50)
+    _ = try await client.recommendations(
+        RecommendationQuery(seed: seed, sort: .title), offset: 0)
+    #expect(
+        stub.requests.map(\.bodyText) == [
+            #"{"artist_id":23,"limit":100,"list":"discography","offset":0,"show":"albums"}"#,
+            #"{"artist_id":23,"limit":50,"list":"discography","offset":50,"show":"albums","#
+                + #""sort":"rating","styles":["Deep House"],"year_from":1990,"year_to":1999}"#,
+            #"{"artist_id":23,"limit":100,"list":"discography","offset":0,"show":"albums","#
+                + #""sort":"title"}"#,
+        ])
+}
+
+@Test func aDiscographysPageDecodesWithoutScoresOrReasons() throws {
+    let page = try decodeReply(
+        Array(try fixture("discography.json").utf8), as: RecommendationPage.self)
+    #expect(page.list.artist == RecommendationPage.Named(id: 23, name: "Gus Other"))
+    #expect(page.list.seeds == 0 && page.pending == 3)
+    let albums = try #require(page.albums)
+    #expect(albums.map(\.score) == [nil, nil])
+    #expect(albums.map(\.reasons.isEmpty) == [true, true])
+    #expect(albums.map(\.formats) == [["CD, Album"], []])
+    #expect(albums.map(\.inLibrary) == [true, false])
+    #expect(albums.map(\.mark) == [nil, .notInterested])
+    #expect(albums[1].year == nil && albums[1].community?.values == nil)
+}
+
+@Test func aDiscographyOffersItsOwnOrdersAndAlbumsOnly() {
+    let seed = RecommendationQuery.Seed.discography(artistID: 23, name: "Gus Other")
+    #expect(
+        RecommendationQuery.Sort.offered(for: seed) == [
+            .year, .title, .rating, .have, .want, .wantHave,
+        ])
+    #expect(
+        RecommendationQuery.Sort.offered(for: .library) == [
+            .score, .rating, .have, .want, .wantHave,
+        ])
+    let fitted = RecommendationQuery(seed: seed, show: .artists, sort: .score).fitted
+    #expect(fitted.show == .albums && fitted.sort == .year)
+    #expect(RecommendationQuery(sort: .title).fitted.sort == .score)
+    #expect(RecommendationQuery(sort: .rating).fitted.sort == .rating)
+}
+
+@Test func anUnknownArtistAndVariousArtistsKeepTheirCodes() async throws {
+    let stub = try await StubService([
+        (404, failure("unknown_artist")), (400, failure("various_artists")),
+    ])
+    defer { stub.stop() }
+    let client = try stub.client
+    for (id, expected) in [
+        (99, RecommenderError.Kind.status(404, code: "unknown_artist")),
+        (194, .badRequest(code: "various_artists", message: "no")),
+    ] {
+        let query = RecommendationQuery(seed: .discography(artistID: id, name: "Made-Up"))
+        #expect(
+            await caught { () async throws(RecommenderError) in
+                try await client.recommendations(query, offset: 0)
+            }?.kind == expected)
+    }
 }
 
 @Test func aPageWithAValueOrFieldNotInTheContractFailsNamingIt() throws {
@@ -100,6 +175,20 @@ private func artistsPage() throws -> String {
             "albums.0.community.status", "late"
         ),
         (text.replacingOccurrences(of: #""rank": 4,"#, with: ""), "albums.0", "rank"),
+        (
+            text.replacingOccurrences(of: #""mark": null"#, with: #""mark": "later""#),
+            "albums.0.mark", "later"
+        ),
+        (
+            text.replacingOccurrences(of: #""in_library": false, "#, with: ""), "albums.0",
+            "in_library"
+        ),
+        (text.replacingOccurrences(of: ",\n \"pending\": null", with: ""), "pending", "pending"),
+        (
+            text.replacingOccurrences(
+                of: #""artist": null}"#, with: #""artist": {"id": 23, "name": "Gus", "x": 1}}"#),
+            "list.artist.x", "unknown key"
+        ),
         (
             text.replacingOccurrences(of: #""seeds": 3950,"#, with: #""seeds": 3950, "extra": 1,"#),
             "list.extra", "unknown key"

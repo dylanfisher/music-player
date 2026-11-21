@@ -27,15 +27,17 @@ func album(_ id: Int, releaseID: Int? = nil) -> RecommendationPage.Album {
     RecommendationPage.Album(
         kind: .master, id: id, releaseID: releaseID ?? id + 1000, rank: id, score: 0.5,
         artists: [RecommendationPage.Named(id: 1, name: "Made-Up Artist")],
-        title: "Album \(id)", year: 2001, label: nil, styles: [], community: nil, reasons: [])
+        title: "Album \(id)", year: 2001, label: nil, styles: [], community: nil, reasons: [],
+        formats: [], inLibrary: false, mark: nil)
 }
 
 let facts = RecommendationPage.Facts(
-    catalogSet: "20261001", computedAt: 1_800_000_000, seeds: 3, candidates: 100)
+    catalogSet: "20261001", computedAt: 1_800_000_000, seeds: 3, candidates: 100, artist: nil)
 
 /// A page of the albums `ids`.
 func page(_ ids: some Sequence<Int>, more: Bool) -> RecommendationPage {
-    RecommendationPage(list: facts, albums: ids.map { album($0) }, artists: nil, more: more)
+    RecommendationPage(
+        list: facts, albums: ids.map { album($0) }, artists: nil, more: more, pending: nil)
 }
 
 /// The requests a fake service was sent, in order.

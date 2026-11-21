@@ -73,7 +73,8 @@ private func album(_ id: Int64, _ releases: [String?]) -> DiscogsAlbum {
         RecommendationPage.Album(
             kind: .master, id: id, releaseID: release, rank: id, score: 0.5,
             artists: [RecommendationPage.Named(id: 1, name: "Made-Up Artist")],
-            title: "Album \(id)", year: nil, label: nil, styles: [], community: nil, reasons: [])
+            title: "Album \(id)", year: nil, label: nil, styles: [], community: nil, reasons: [],
+            formats: [], inLibrary: false, mark: nil)
     }
     let choices = QueueChoice.recommended([recommended(1, 4242), recommended(2, nil)])
     #expect(choices.map(\.title) == ["Made-Up Artist - Album 1", "Made-Up Artist - Album 2"])
