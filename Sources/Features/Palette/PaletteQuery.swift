@@ -1,54 +1,30 @@
-/// What the palette's field asks for: the text to match, and the one kind to list when it
-/// starts with a kind's name and a colon, as `album: dream` does (ADR 0161).
-struct PaletteQuery: Equatable {
-    var text: String
-    var kind: PaletteItem.Kind?
+import Settings
 
-    init(_ typed: String) {
-        if let colon = typed.firstIndex(of: ":"),
-            let kind = PaletteItem.Kind(queryName: typed[..<colon])
-        {
-            self.kind = kind
-            text = String(typed[typed.index(after: colon)...].drop { $0 == " " })
-        } else {
-            kind = nil
-            text = typed
-        }
-    }
-}
+/// What the palette's field asks for (ADR 0161).
+typealias PaletteQuery = TypedQuery<PaletteItem.Kind>
 
-extension PaletteItem.Kind {
+extension PaletteItem.Kind: QueryKind {
     /// The kind's name, as a query types it before a colon, and with one the start of a
     /// command's, a setting's and a track's key (`command:…`). It's the case's name; a test
     /// holds the spellings, so renaming a case can't change what users type or the keys
     /// frecency saved.
     public var name: String { "\(self)" }
     public var keyPrefix: String { name + ":" }
-    /// The short word a query may name the kind by instead (ADR 0161); none for the ⌘K
-    /// kinds.
-    var shortName: String? {
+
+    /// The library kind this one lists; none for the ⌘K kinds.
+    var searchKind: SearchKind? {
         switch self {
-        case .album: "a"
-        case .artist: "ar"
-        case .track: "t"
-        case .playlist: "p"
-        case .genre: "g"
+        case .album: .album
+        case .artist: .artist
+        case .track: .track
+        case .playlist: .playlist
+        case .genre: .genre
         case .command, .setting, .output: nil
         }
     }
 
-    /// The words a query names this kind by, before its colon.
-    var queryNames: [String] { [name] + (shortName.map { [$0] } ?? []) }
+    /// The short word a query may name the kind by instead; none for the ⌘K kinds.
+    var shortName: String? { searchKind?.shortName }
 
-    /// "album: or a:", as the placeholder names them.
-    var queryPrefixes: String { queryNames.map { $0 + ":" }.joined(separator: " or ") }
-
-    /// The kind `name` names, whatever its case; nil for any other word.
-    init?(queryName name: Substring) {
-        let name = name.lowercased()
-        guard let kind = Self.allCases.first(where: { $0.queryNames.contains(name) }) else {
-            return nil
-        }
-        self = kind
-    }
+    public var queryNames: [String] { [name] + (shortName.map { [$0] } ?? []) }
 }

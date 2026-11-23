@@ -19,6 +19,8 @@ Secret.customMirror | CustomReflectable
 # Called through a typealias, which the check doesn't follow: TitleTemplate("…") outside
 # Settings constructs a TokenTemplate.
 TokenTemplate.init | TitleTemplate
+# PaletteQuery("…") in Palette constructs a TypedQuery.
+TypedQuery.init | PaletteQuery
 # SyncFolder(path:share:), DumpsFolder(…) and StagingFolder(…) outside Settings construct a
 # SettingFolder.
 SettingFolder.init | SyncFolder
