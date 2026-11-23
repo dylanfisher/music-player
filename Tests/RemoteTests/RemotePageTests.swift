@@ -371,18 +371,21 @@ private func run(_ context: JSContext, _ script: String) -> String? {
         ) == "[true,false,false,null,null]")
 }
 
-/// A sent slider value stays shown until the state echoes it or the hold passes, so a stale
-/// event doesn't snap the slider back.
+/// A sent slider value stays shown while the state still has the value from before, up to the
+/// hold, so a stale event doesn't snap the slider back; any other value shows at once.
 @Test func aSliderKeepsItsSentValueUntilTheStateEchoesIt() throws {
     let context = try logic()
     #expect(run(context, "return SENT_HOLD_MS") == "2000")
     #expect(
         run(
             context,
-            "const sent = { value: -30, at: 1000 };"
+            "const sent = { value: -30, at: 1000, before: -40 };"
                 + " return [sliderValue(-40, sent, 1500), sliderValue(-30, sent, 1500),"
-                + " sliderValue(-40, sent, 3000), sliderValue(-40, null, 1500)]"
-        ) == "[-30,-30,-40,-40]")
+                + " sliderValue(-40, sent, 3000), sliderValue(-40, null, 1500),"
+                // A ± press or another phone moved it: shown at once, as is a lost receiver.
+                + " sliderValue(-35, sent, 1500), sliderValue(null, sent, 1500),"
+                + " sliderValue(null, { value: -30, at: 1000, before: null }, 1500)]"
+        ) == "[-30,-30,-40,-40,-35,null,null]")
 }
 
 @Test func theSearchFieldNamesThePrefixes() throws {

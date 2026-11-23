@@ -56,10 +56,13 @@ export function tokenKey(id, origin) {
 /// How long a slider shows the value it sent while the Mac's state still has the old one.
 export const SENT_HOLD_MS = 2000;
 
-/// The value a slider shows: `sent` ({ value, at }) until the state's value echoes it or
-/// SENT_HOLD_MS pass, then the state's.
+/// The value a slider shows: `sent` ({ value, at, before }) while the state still has the
+/// value from before the send, for up to SENT_HOLD_MS; any other state value, a ± press or
+/// another phone's change included, shows at once, and so does none.
 export function sliderValue(stateValue, sent, now) {
-  return sent && now - sent.at < SENT_HOLD_MS && stateValue !== sent.value ? sent.value : stateValue;
+  return sent && stateValue != null && stateValue === sent.before && now - sent.at < SENT_HOLD_MS
+    ? sent.value
+    : stateValue;
 }
 
 /// What Now Playing's album list is read for: the Mac, where it was reached, and the playing

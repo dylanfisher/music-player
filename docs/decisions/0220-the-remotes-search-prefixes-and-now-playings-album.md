@@ -44,16 +44,20 @@ track order, read through `/api/tracks?album=…&sort=album`, the album view's r
 a time until the album is whole. It's read once per Mac and album, not per state event: a
 track change within the album only moves the indicator. The indicator is Phosphor's
 `speaker-high` (regular weight, 2.1.1, checked as ADR 0219 checks icons) before the current
-track's title, with that row in the accent colour. A tap plays the album from that track, and
+track's title, with that row in the accent color. A tap plays the album from that track, and
 the + queues it, as the album view's rows do. A track with no album, or nothing playing, shows
 no list. A failed read is said once and tried again only for the next album or when the Mac's
-event stream connects again, not at every state event. The list is plain rows rather than a virtual list: an album is at most a few hundred
-tracks.
+event stream connects again, not at every state event. The list is plain rows rather than a
+virtual list: an album is at most a few hundred tracks.
 
-**The volume sliders after release** (amending 0219). The app and receiver sliders share one `SentSlider` in `app.js`. Each shows the value it sent until the
-state echoes it or two seconds pass (`sliderValue`, `SENT_HOLD_MS` in `logic.js`), so a state
-event sent before the receiver moved doesn't snap it back. A cancelled touch, which sends no
-`change`, ends the drag, so the slider follows the state again.
+**The volume sliders after release** (amending 0219). The app and receiver sliders share one
+`SentSlider` in `app.js`. After a release each shows the value it sent while the state still
+has the value from before the send, for up to two seconds (`sliderValue`, `SENT_HOLD_MS` in
+`logic.js`), so a state event sent before the change doesn't snap it back. Any other state
+value, a ± press or another phone's change, shows at once, and a receiver that's off or lost
+shows "–" at once. A cancelled touch, or a drag that ends where it started, sends no
+`change`, so a cancel, a lift or a blur also ends the drag and the slider follows the state
+again.
 
 ## Alternatives considered
 

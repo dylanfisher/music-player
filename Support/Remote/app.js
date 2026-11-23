@@ -825,31 +825,35 @@ let seeking = false;
 class SentSlider {
   constructor(slider, text, name) {
     this.dragging = false;
-    /// The value last sent, { value, at }, until the state echoes it.
+    /// The value last sent, { value, at, before }, until the state moves on from `before`.
     this.sent = null;
+    /// The state's value last shown, what a send is held against.
+    this.stateValue = null;
     slider.addEventListener("input", () => {
       this.dragging = true;
       text.textContent = slider.value + " dB";
     });
     slider.addEventListener("change", () => {
       this.dragging = false;
-      this.sent = { value: Number(slider.value), at: Date.now() };
+      this.sent = { value: Number(slider.value), at: Date.now(), before: this.stateValue };
       command(name, slider.value);
       // Back to the state's value if it never echoes this one.
       setTimeout(renderNow, SENT_HOLD_MS);
     });
-    // A cancelled touch sends no `change`: the slider goes back to following the state.
-    for (const cancel of ["pointercancel", "touchcancel", "blur"]) {
-      slider.addEventListener(cancel, () => {
-        if (!this.dragging) return;
-        this.dragging = false;
-        renderNow();
-      });
-    }
+    // A cancelled touch, or a drag back to where it started, sends no `change`: the slider goes
+    // back to following the state. After a lift, `change` comes first when there is one.
+    const end = () => {
+      if (!this.dragging) return;
+      this.dragging = false;
+      renderNow();
+    };
+    for (const cancel of ["pointercancel", "touchcancel", "blur"]) slider.addEventListener(cancel, end);
+    for (const lift of ["pointerup", "touchend"]) slider.addEventListener(lift, () => setTimeout(end, 0));
   }
 
   /// The value to show for the state's `value`.
   shown(value) {
+    this.stateValue = value;
     const shown = sliderValue(value, this.sent, Date.now());
     if (shown === value) this.sent = null;
     return shown;
@@ -884,7 +888,8 @@ function renderReceiver(receiver) {
   const slider = $("receiver-slider");
   slider.hidden = receiver.volumeFloorDecibels == null || receiver.volumeCeilingDecibels == null;
   slider.disabled = receiver.volumeDecibels == null;
-  if (!receiverVolume.dragging) {
+  // A receiver that's off or lost shows no volume at once, even mid-drag.
+  if (!receiverVolume.dragging || receiver.volumeDecibels == null) {
     if (!slider.hidden) {
       slider.min = String(receiver.volumeFloorDecibels);
       slider.max = String(receiver.volumeCeilingDecibels);
