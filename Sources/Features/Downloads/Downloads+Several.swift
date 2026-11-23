@@ -35,7 +35,7 @@ extension Downloads {
         case .retry:
             confirm(
                 "Retry \(count) downloads?",
-                "Each starts again in the format it asked for. A staged copy that isn't clean is"
+                "Each starts again in the format it asked for. A staged copy is"
                     + " deleted and searched for again from a user the download hasn't tried.",
                 DownloadAction.retry.title
             ) {

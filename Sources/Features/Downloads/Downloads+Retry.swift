@@ -30,8 +30,8 @@ extension Downloads {
         }
     }
 
-    /// Retry on a staged copy that isn't clean, once the owner confirms: the service deletes it
-    /// and downloads the album again from a user the job hasn't tried (ADR 0211).
+    /// Retry on a staged copy, once the owner confirms: the service deletes it and downloads
+    /// the album again from a user the job hasn't tried (ADR 0211, ADR 0222).
     private func requeue(_ job: DownloadJob, _ row: DownloadRow, _ session: Session) {
         guard let coordinator = session.coordinator else { return }
         confirm(

@@ -28,7 +28,7 @@ private func held(_ machine: String) -> DownloadJob.Hold {
     (.retry, .notFound, .none, true),
     (.retry, .failed, .none, true),
     (.retry, .staged, .none, false),
-    (.retry, .staged, .clean, false),
+    (.retry, .staged, .clean, true),
     (.retry, .staged, .discrepancy, true),
     (.retry, .staged, .error, true),
     (.cancel, .downloading, .none, true),

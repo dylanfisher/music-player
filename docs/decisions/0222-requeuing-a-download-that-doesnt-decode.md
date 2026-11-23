@@ -32,6 +32,12 @@ are only logged: a file that doesn't open (the tag read already judged it), a DS
 AudioToolbox doesn't decode, and a file that's gone or resized when the decode fails, as on a
 share that dropped. A run that's already an error isn't decoded; its reasons stand.
 
+**Retry also requeues a staged copy tagged clean.** ADR 0211 let it requeue only a
+discrepancy or an error, so a clean copy the owner found broken, tagged before this check or
+cut short in a way no check sees, could only be rejected and queued again by hand. The owner
+(2026-11-23): "some files that are supposedly clean actually have discrepancies (cutoff
+etc)". Retry still asks first, and still waits for the tag run to finish.
+
 ## Alternatives considered
 
 - **Counting the lossy-origin check's failure as damage, at Approve.** Rejected: it runs only
@@ -50,5 +56,6 @@ share that dropped. A run that's already an error isn't decoded; its reasons sta
 - Each tag run reads the whole album over the share, a few seconds to a minute on the NAS,
   before it writes tags. A write in place used to read only the tags.
 - A job tagged clean before this, such as job 1535, isn't tagged again; Retry requeues it.
+- Retry can throw away a copy that was fine; its confirmation is the only guard.
 - If AudioToolbox wrongly fails a good file, each peer's copy is thrown away until none is
   left, as ADR 0210 says of the reader. The reasons stay in the log and the service's history.
