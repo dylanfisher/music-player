@@ -13,6 +13,7 @@ public struct RemotePage: Sendable {
         ("/style.css", "style.css", "text/css; charset=utf-8"),
         ("/app.js", "app.js", "text/javascript; charset=utf-8"),
         ("/logic.js", "logic.js", "text/javascript; charset=utf-8"),
+        ("/icons.js", "icons.js", "text/javascript; charset=utf-8"),
         ("/icon.png", "icon.png", pngMIMEType),
     ]
 

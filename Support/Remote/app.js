@@ -3,12 +3,13 @@
 import {
   RANGE_SIZE, SETTLE_MS, RangeCache, SearchQueue, EventParser, afterQueueEdit, backoff,
   chooseMac, clock, failuresAfter, isSilent, keepsArrival, letterOffsets, libraryMac,
-  listChanged, planFetches, playListArgument, positionNow, reach, startedAgo, tokenKey,
+  listChanged, planFetches, playListArgument, positionNow, reach, scrubbed, startedAgo, tokenKey,
   wantedRanges,
 } from "./logic.js";
+import { ICONS } from "./icons.js";
 
 const $ = (id) => document.getElementById(id);
-const ROW = 56;
+const ROW = 40;
 const POOL = 40;
 const TOKENS = "remote.tokens";
 const LAST = "remote.lastControlled";
@@ -33,6 +34,32 @@ function save(key, value) {
     say("This browser won't keep the pairing: " + error.message);
   }
 }
+
+// MARK: Icons, drawn as DOM nodes so no markup is parsed.
+
+const SVG = "http://www.w3.org/2000/svg";
+
+function icon(name) {
+  const data = ICONS[name];
+  if (data === undefined) throw new Error("no icon named " + name);
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", "0 0 256 256");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG, "path");
+  path.setAttribute("d", data);
+  svg.appendChild(path);
+  return svg;
+}
+
+/// Shows icon `name` in `element`, drawing it only when it changes.
+function setIcon(element, name) {
+  if (element.dataset.shown === name) return;
+  element.dataset.shown = name;
+  element.replaceChildren(icon(name));
+}
+
+for (const element of document.querySelectorAll("[data-icon]")) setIcon(element, element.dataset.icon);
 
 let tokens = load(TOKENS, {});
 
@@ -674,7 +701,7 @@ function fillRow(element, { line1, line2, add, placeholder }) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "add";
-    button.textContent = "+";
+    button.appendChild(icon("plus"));
     button.setAttribute("aria-label", "Add to the queue");
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -701,10 +728,10 @@ function renderNow() {
   $("now-title").textContent = track ? track.title : mac ? "Nothing playing" : "No Mac";
   $("now-subtitle").textContent = track ? joined(track.artist, track.album) : mac ? mac.name : "";
   showCover($("now-cover"), mac, track ? track.art : null, "l");
-  $("play").textContent = state && state.state === "playing" ? "⏸" : "▶";
+  setIcon($("play"), state && state.state === "playing" ? "pause" : "play");
   $("shuffle").classList.toggle("on", !!(state && state.shuffle));
   $("repeat").classList.toggle("on", !!(state && state.repeatMode !== "off"));
-  $("repeat").textContent = state && state.repeatMode === "one" ? "↻¹" : "↻";
+  setIcon($("repeat"), state && state.repeatMode === "one" ? "repeatOne" : "repeat");
   const duration = track ? track.durationSeconds : null;
   $("seek").max = duration ? String(Math.floor(duration)) : "1";
   $("seek").disabled = !duration;
@@ -722,6 +749,7 @@ function renderNow() {
 
 let seeking = false;
 let volumeDragging = false;
+let receiverDragging = false;
 
 /// Moves the bar on between events, which come only when something changes.
 function tick() {
@@ -745,7 +773,15 @@ function renderReceiver(receiver) {
   $("receiver-power").textContent = receiver.isOn === false ? "Standby" : "On";
   $("receiver-power").classList.toggle("on", receiver.isOn !== false);
   $("receiver-mute").classList.toggle("on", !!receiver.isMuted);
-  $("receiver-volume").textContent = receiver.volumeDecibels != null ? receiver.volumeDecibels + " dB" : "–";
+  const slider = $("receiver-slider");
+  slider.hidden = receiver.volumeFloorDecibels == null || receiver.volumeCeilingDecibels == null;
+  slider.disabled = receiver.volumeDecibels == null;
+  if (!receiverDragging) {
+    slider.min = String(receiver.volumeFloorDecibels);
+    slider.max = String(receiver.volumeCeilingDecibels);
+    if (receiver.volumeDecibels != null) slider.value = String(receiver.volumeDecibels);
+    $("receiver-volume").textContent = receiver.volumeDecibels != null ? receiver.volumeDecibels + " dB" : "–";
+  }
   const select = $("receiver-input");
   if (select.options.length !== receiver.inputs.length) {
     select.replaceChildren();
@@ -783,6 +819,14 @@ $("volume").addEventListener("input", () => {
 $("volume").addEventListener("change", () => {
   volumeDragging = false;
   command("playback.setAppVolume", $("volume").value);
+});
+$("receiver-slider").addEventListener("input", () => {
+  receiverDragging = true;
+  $("receiver-volume").textContent = $("receiver-slider").value + " dB";
+});
+$("receiver-slider").addEventListener("change", () => {
+  receiverDragging = false;
+  command("receiver.setVolume", $("receiver-slider").value);
 });
 $("receiver-up").addEventListener("click", () => command("receiver.raiseVolume"));
 $("receiver-down").addEventListener("click", () => command("receiver.lowerVolume"));
@@ -909,6 +953,8 @@ function showLevel() {
   $("browse-play").hidden = !current.album;
   $("browse-queue").hidden = !current.album;
   $("jump").replaceChildren();
+  $("browse-list").classList.remove("lettered");
+  $("scrub").hidden = true;
   if (!mac || !mac.paired) {
     $("browse-list").replaceChildren(empty("No Mac to browse"));
     return;
@@ -953,6 +999,7 @@ function showEntries(current, mac) {
       };
       browse.list = new VirtualList($("browse-list"), source, ROW, current.scroll ?? 0);
       jumpBar(rows.map((row) => row[1]), browse.list);
+      scrubber(browse.list, (index) => rows[index][1]);
     },
     (error) => $("browse-list").replaceChildren(empty(error.message))
   );
@@ -990,6 +1037,11 @@ function showTracks(current, mac) {
   source.count = current.total ?? 1;
   browse.list = new VirtualList($("browse-list"), source, ROW, current.scroll ?? 0);
   source.list = browse.list;
+  // A track by its artist, as Songs is sorted, or by its title in an album.
+  scrubber(browse.list, (index) => {
+    const row = source.row(index);
+    return row === undefined ? null : current.album ? row[1] : row[2] ?? row[1];
+  });
 }
 
 /// The album grid: rows of covers, each row a few albums, with their covers' IDs read for the
@@ -1001,8 +1053,9 @@ function showGrid(current, mac) {
     (list) => {
       if (level() !== shown || library() !== mac) return;
       const albums = list.rows;
-      const across = Math.max(2, Math.floor(($("browse-list").clientWidth - 24) / 150));
-      const width = ($("browse-list").clientWidth - 24 - (across - 1) * 12) / across;
+      // The tiles' insets: 12 px on the left and the scrubber's strip on the right.
+      const across = Math.max(2, Math.floor(($("browse-list").clientWidth - 40) / 150));
+      const width = ($("browse-list").clientWidth - 40 - (across - 1) * 12) / across;
       const ids = new Map();
       const asked = new Set();
       const source = {
@@ -1050,6 +1103,7 @@ function showGrid(current, mac) {
       };
       const grid = new VirtualList($("browse-list"), source, Math.ceil(width + 52), current.scroll ?? 0);
       browse.list = grid;
+      scrubber(grid, (index) => albums[index * across][1]);
     },
     (error) => $("browse-list").replaceChildren(empty(error.message))
   );
@@ -1060,6 +1114,7 @@ function jumpBar(names, list) {
   const offsets = letterOffsets(names);
   bar.replaceChildren();
   if (offsets.length < 2) return;
+  $("browse-list").classList.add("lettered");
   for (const [letter] of offsets) {
     const label = document.createElement("div");
     label.textContent = letter;
@@ -1076,6 +1131,47 @@ function jumpBar(names, list) {
   bar.ontouchstart = jump;
   bar.ontouchmove = jump;
   bar.onclick = jump;
+}
+
+/// The strip on the right of Browse's list: a drag moves through the whole list in proportion,
+/// slower the further left of the strip the finger goes, with the name at the top of the view
+/// beside the finger. `label(index)` gives a row's name, or null while it isn't read yet.
+function scrubber(list, label) {
+  const strip = $("scrub");
+  const bubble = $("scrub-label");
+  strip.hidden = false;
+  let share = 0;
+  let lastY = 0;
+  let pointer = null;
+  const show = (y) => {
+    const container = list.container;
+    container.scrollTop = share * (container.scrollHeight - container.clientHeight);
+    const [first] = list.visible;
+    bubble.textContent = label(first) ?? (first + 1).toLocaleString() + " of " + list.source.total().toLocaleString();
+    bubble.style.top = y - strip.getBoundingClientRect().top + "px";
+    bubble.hidden = false;
+  };
+  strip.onpointerdown = (event) => {
+    event.preventDefault();
+    strip.setPointerCapture(event.pointerId);
+    pointer = event.pointerId;
+    const box = strip.getBoundingClientRect();
+    share = Math.min(1, Math.max(0, (event.clientY - box.top) / box.height));
+    lastY = event.clientY;
+    show(event.clientY);
+  };
+  strip.onpointermove = (event) => {
+    if (event.pointerId !== pointer) return;
+    const box = strip.getBoundingClientRect();
+    share = scrubbed(share, event.clientY - lastY, box.height, box.left - event.clientX);
+    lastY = event.clientY;
+    show(event.clientY);
+  };
+  strip.onpointerup = strip.onpointercancel = (event) => {
+    if (event.pointerId !== pointer) return;
+    pointer = null;
+    bubble.hidden = true;
+  };
 }
 
 const kinds = {

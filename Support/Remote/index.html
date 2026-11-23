@@ -30,11 +30,11 @@
       <div class="times"><span id="elapsed">–:––</span><span id="remaining">–:––</span></div>
     </div>
     <div class="transport">
-      <button id="shuffle" class="small" type="button" aria-label="Shuffle">⤮</button>
-      <button id="previous" type="button" aria-label="Previous">⏮</button>
-      <button id="play" class="big" type="button" aria-label="Play or pause">▶</button>
-      <button id="next" type="button" aria-label="Next">⏭</button>
-      <button id="repeat" class="small" type="button" aria-label="Repeat">↻</button>
+      <button id="shuffle" class="small" type="button" aria-label="Shuffle" data-icon="shuffle"></button>
+      <button id="previous" type="button" aria-label="Previous" data-icon="previous"></button>
+      <button id="play" class="big" type="button" aria-label="Play or pause" data-icon="play"></button>
+      <button id="next" type="button" aria-label="Next" data-icon="next"></button>
+      <button id="repeat" class="small" type="button" aria-label="Repeat" data-icon="repeat"></button>
     </div>
     <div id="volume-row" class="volume" hidden>
       <span class="label">Volume</span>
@@ -49,9 +49,12 @@
         <button id="receiver-mute" class="pill" type="button">Mute</button>
       </div>
       <div class="receiver-row">
-        <button id="receiver-down" class="round" type="button" aria-label="Receiver volume down">−</button>
+        <button id="receiver-down" class="round" type="button" aria-label="Receiver volume down" data-icon="minus"></button>
+        <input id="receiver-slider" type="range" step="0.5" aria-label="Receiver volume">
+        <button id="receiver-up" class="round" type="button" aria-label="Receiver volume up" data-icon="plus"></button>
         <span id="receiver-volume" class="value"></span>
-        <button id="receiver-up" class="round" type="button" aria-label="Receiver volume up">+</button>
+      </div>
+      <div class="receiver-row">
         <select id="receiver-input" aria-label="Receiver input"></select>
       </div>
     </div>
@@ -70,7 +73,7 @@
 
   <section id="view-browse" class="view list-view" hidden>
     <div class="bar">
-      <button id="back" class="back" type="button" hidden>‹</button>
+      <button id="back" class="back" type="button" aria-label="Back" data-icon="back" hidden></button>
       <h2 id="browse-title">Library</h2>
       <span id="library-name" class="count"></span>
       <button id="browse-play" class="pill" type="button" hidden>Play</button>
@@ -85,6 +88,8 @@
     <div class="list-frame">
       <div id="browse-list" class="vlist"></div>
       <div id="jump" class="jump" aria-hidden="true"></div>
+      <div id="scrub" class="scrub" aria-hidden="true" hidden></div>
+      <p id="scrub-label" class="scrub-label" aria-hidden="true" hidden></p>
     </div>
   </section>
 

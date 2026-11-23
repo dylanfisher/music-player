@@ -107,7 +107,7 @@ it's hidden and opens them all at once when it's shown again, since iOS suspends
 the phone is locked. The position bar moves on the phone's own clock from when an event
 arrived, not the Mac's `now`, since the two clocks may differ by seconds.
 
-**The virtual list.** Fixed 56-pixel rows over a spacer as tall as all of them, and 40 row
+**The virtual list.** Fixed 40-pixel rows ([0219](0219-the-web-remote-icons-scrubber-and-volume.md)) over a spacer as tall as all of them, and 40 row
 elements reused for what's on screen. A ranged list fetches the ranges of 200 in view and one
 either side once scrolling has settled for 100 ms, at most three at once, nearest first, and
 aborts those no longer wanted; during a fast flick it shows placeholder rows. It keeps an arrival

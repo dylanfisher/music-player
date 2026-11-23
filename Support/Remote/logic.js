@@ -247,6 +247,25 @@ function firstLetter(name) {
   return upper >= "A" && upper <= "Z" ? upper : "#";
 }
 
+/// How far left of the scrubber's strip, in CSS pixels, the finger must go to halve its speed
+/// once, twice and three times (ADR 0219).
+export const SCRUB_STEPS_PX = [32, 96, 160];
+
+/// The scrubber's speed with the finger `leftOfStrip` pixels left of the strip: full on it,
+/// then a half, a quarter and an eighth, as iOS slows a seek bar's drag.
+export function scrubSpeed(leftOfStrip) {
+  let speed = 1;
+  for (const step of SCRUB_STEPS_PX) if (leftOfStrip >= step) speed /= 2;
+  return speed;
+}
+
+/// Where a drag puts the list, as a share of its whole scroll from 0 to 1: on from `from` by
+/// `dy` pixels of a strip `height` tall, so the strip's height is the whole list at full speed.
+export function scrubbed(from, dy, height, leftOfStrip) {
+  if (!(height > 0)) return from;
+  return Math.min(1, Math.max(0, from + (dy / height) * scrubSpeed(leftOfStrip)));
+}
+
 /// The playing position now, from `state` as it arrived at `arrivedAt` milliseconds on the
 /// phone's clock: on from there while playing. The Mac's own clock isn't used, since it and the
 /// phone's may differ by seconds.

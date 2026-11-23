@@ -13,18 +13,19 @@ private func text(_ name: String) throws -> String {
     try String(contentsOf: folder.appendingPathComponent(name, isDirectory: false), encoding: .utf8)
 }
 
-/// logic.js in a context of its own, its exports as globals: JavaScriptCore runs scripts, not
-/// modules, and the file keeps each export at the start of a top-level line so this holds.
-private func logic() throws -> JSContext {
+/// logic.js, or another of the page's modules, in a context of its own, its exports as globals:
+/// JavaScriptCore runs scripts, not modules, and the file keeps each export at the start of a
+/// top-level line so this holds.
+private func logic(_ name: String = "logic.js") throws -> JSContext {
     let context = try #require(JSContext())
     var thrown: String?
     context.exceptionHandler = { _, exception in thrown = exception?.toString() }
-    let script = try text("logic.js").split(separator: "\n", omittingEmptySubsequences: false)
+    let script = try text(name).split(separator: "\n", omittingEmptySubsequences: false)
         .map { $0.hasPrefix("export ") ? String($0.dropFirst("export ".count)) : String($0) }
         .joined(separator: "\n")
     #expect(
         script.range(of: #"(?m)^\s+export\s"#, options: .regularExpression) == nil,
-        "an export logic.js doesn't start a line with")
+        "an export \(name) doesn't start a line with")
     context.evaluateScript(script)
     #expect(thrown == nil, "\(thrown ?? "")")
     return context
@@ -66,13 +67,13 @@ private func run(_ context: JSContext, _ script: String) -> String? {
     for id in found { #expect(remote.contains(id), "\(id)") }
 }
 
-/// app.js parses: its import taken out, it's compiled as a function's body without running.
+/// app.js parses: its imports taken out, it's compiled as a function's body without running.
 @Test func thePagesScriptParses() throws {
     let context = try #require(JSContext())
     var thrown: String?
     context.exceptionHandler = { _, exception in thrown = exception?.toString() }
     let body = try text("app.js").replacingOccurrences(
-        of: #"import \{[^}]*\} from "\./logic\.js";"#, with: "", options: .regularExpression)
+        of: #"import \{[^}]*\} from "\./[a-z]+\.js";"#, with: "", options: .regularExpression)
     #expect(!body.contains("import "))
     context.setObject(body, forKeyedSubscript: "body" as NSString)
     context.evaluateScript("new Function(body)")
@@ -316,4 +317,53 @@ private func run(_ context: JSContext, _ script: String) -> String? {
         run(context, "return [clock(187), clock(3723), clock(null), clock(0.4)]")
             == #"["3:07","1:02:03","–:––","0:00"]"#)
     #expect(run(context, "return [backoff(0), backoff(3), backoff(10)]") == "[1000,8000,30000]")
+}
+
+/// Each icon is path data only, so the file can draw nothing but a shape, and the names the
+/// page asks for are the icons it has, each on a button that says what it does.
+@Test func theIconsArePathDataAndEachOneThePageNamesIsThere() throws {
+    let context = try logic("icons.js")
+    let names = try #require(run(context, "return Object.keys(ICONS)"))
+    #expect(
+        run(
+            context, "return Object.values(ICONS).every((d) => /^[MLHVCSQTAZ0-9.,\\- ]+$/i.test(d))"
+        ) == "true")
+    let page = try text("index.html")
+    let app = try text("app.js")
+    // The names in `data-icon`, and on app.js's lines that draw one, each name `icon(` takes
+    // or a choice of two gives.
+    let named = try NSRegularExpression(pattern: #"(?:data-icon=|icon\(|\? |: )"([A-Za-z]+)""#)
+    let drawing = app.split(separator: "\n").filter { $0.contains("icon(") || $0.contains("Icon(") }
+    var used = Set<String>()
+    for source in [page] + drawing.map(String.init) {
+        for match in named.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+            used.insert(String(source[Range(match.range(at: 1), in: source)!]))
+        }
+    }
+    #expect(used.count == 10)
+    for name in used { #expect(names.contains("\"\(name)\""), "\(name)") }
+    let keys = try #require(
+        try JSONSerialization.jsonObject(with: Data(names.utf8)) as? [String])
+    #expect(Set(keys) == used, "an icon the page doesn't use")
+    let buttons = try NSRegularExpression(pattern: #"<button[^>]*data-icon=[^>]*>"#)
+    for match in buttons.matches(in: page, range: NSRange(page.startIndex..., in: page)) {
+        let tag = String(page[Range(match.range, in: page)!])
+        #expect(tag.contains("aria-label="), "\(tag)")
+    }
+}
+
+@Test func theScrubberHalvesItsSpeedAtEachStepLeftOfItsStrip() throws {
+    let context = try logic()
+    #expect(run(context, "return SCRUB_STEPS_PX") == "[32,96,160]")
+    #expect(
+        run(context, "return [-10, 0, 31, 32, 95, 96, 159, 160, 400].map(scrubSpeed)")
+            == "[1,1,1,0.5,0.5,0.25,0.25,0.125,0.125]")
+    // A strip 400 px tall: 100 px on it is a quarter of the list, and an eighth of that far left.
+    #expect(
+        run(
+            context,
+            "return [scrubbed(0.5, 100, 400, 0), scrubbed(0.5, -100, 400, 200),"
+                + " scrubbed(0.9, 100, 400, 0), scrubbed(0.1, -100, 400, 0), scrubbed(0.3, 50, 0, 0)]"
+        )
+            == "[0.75,0.46875,1,0,0.3]")
 }

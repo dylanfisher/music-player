@@ -51,8 +51,8 @@ public struct RemoteState: Encodable, Equatable, Sendable {
         /// Every input the page's menu offers, with the command that switches to it.
         public var inputs: [Input]
         /// The ends of the page's slider, the signal path slider's, so neither goes higher.
-        public var volumeFloorDecibels: Double?
-        public var volumeCeilingDecibels: Double?
+        var volumeFloorDecibels: Double?
+        var volumeCeilingDecibels: Double?
 
         public struct Input: Encodable, Equatable, Sendable {
             public var value: String
