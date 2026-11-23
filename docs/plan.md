@@ -424,6 +424,22 @@ command click, etc) to be able to retry or remove/cancel etc multiple at once".
       model swaps its rows, so a refresh keeps it. Tests in `DownloadsWindowTests` and the
       model's: enabled with mixed rows, the ids each action gets, one confirmation, and a
       refresh keeping a multiple selection.
+- **Implementation plan:**
+  1. ADR 0218. Every list is paged by the service, 100 rows a page, a discography too; the
+     window holds a discography whole by reading every page once a header sorts it, so only
+     a discography's headers sort, and the scored lists keep the service's order.
+  2. `RecommendationColumn`: which columns sort for a query, each one's value (numbers as
+     numbers, empty last both ways, the list's order breaking ties), and `sorted(_:by:)`.
+     `RecommendationsModel`: the header sort kept per seed while the app runs, applied to
+     `rows`, a read through every page while one is set, and a pop-up order clearing it.
+     The window: sort prototypes on the columns that sort, the indicator from the model,
+     and a header click reported. Tests in a new `HeaderSortTests`.
+  3. `DownloadsWindow`: multiple selection kept by job id, each button and menu item on
+     the selected (or clicked) rows it applies to, Approve, Resume Here and Open in Tagger
+     on the first. `Downloads`: Retry, Reject and Cancel on a set with one confirmation
+     naming the count, Reveal in Finder showing every folder at once. Tests in
+     `DownloadsWindowTests`.
+  4. The README's Recommendations and Downloads sections.
 
 ### 96. The web remote, denser and searchable
 
