@@ -466,6 +466,20 @@ The owner (2026-11-22): "add ability to rescan only some files (the selected fil
       reads the files only (AGENTS.md boundary). Tests: the command's enabled state, the
       paths it passes (an album row's tracks, not the row), and a missing file reported.
 
+Implementation plan:
+
+1. **Commands:** `CommandID.rescanSelected` ("Rescan Selected Files"), in the File menu after
+   Rescan All (the library's commands are there; there's no Library menu) and in the track
+   menu after Reveal in Finder; the palette lists it as it lists every menu command.
+2. **Library:** `LibraryWatcher.rescan(files:parsed:done:)` hands its caller the summary, or
+   the error it now only logs, besides sending `edited`.
+3. **LibraryBrowser:** `rescanSelection(through:)` reads the selected paths, hands them over,
+   and says "Read 12 files again" in the status bar, listing the files it couldn't read as
+   their own report in the Problems window, as a folder scan's issues show.
+4. **App:** the handler, on while the browser has tracks selected and a watcher runs.
+5. ADR 0221; tests in `LibraryBrowserTests` (enabled state, the paths of a timeline's rows,
+   a gone file reported) and `LibraryWatcherTests` (the reply).
+
 ### 91. Filtering and finding downloads and recommendations
 
 The owner (2026-11-19) asked for three things. First, a search bar in the Downloads and Recommendations
