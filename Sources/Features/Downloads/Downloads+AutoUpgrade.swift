@@ -55,6 +55,8 @@ extension Downloads {
             now() < idle.until,
             idle.inputs == inputs(session, share: share, epoch: epoch, index: stamp)
         {
+            // Kept from a pass that counted with these inputs, so its count stands.
+            counted = true
             return
         }
         idlePass = nil

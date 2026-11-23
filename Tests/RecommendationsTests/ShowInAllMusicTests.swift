@@ -15,7 +15,7 @@ import Testing
     window.show(
         rows: [album(7), album(8)].map { RecommendationRow(album: $0) },
         query: RecommendationQuery(), seeds: [], pending: false, message: nil, action: nil,
-        facts: nil)
+        facts: nil, headerSort: nil)
     window.show(downloads: [1007: "Completed", 1008: "Queued"], imported: [1007: 1007])
     var chosen: [Int] = []
     window.allMusicChosen = { chosen.append($0.album.id) }

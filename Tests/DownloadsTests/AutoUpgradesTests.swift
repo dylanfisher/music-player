@@ -271,7 +271,9 @@ private struct ReadFailed: Error {}
     await settled(downloads)
     #expect(downloads.upgradesLeft == 1)
     downloads.upgradeCandidates = { _, _ in throw ReadFailed() }
+    // A pass with nothing changed is skipped, and the stand-in isn't among what it compares.
     downloads.candidatesRead = nil
+    downloads.idlePass = nil
     downloads.upgradeAutomatically()
     await settled(downloads)
     #expect(downloads.upgradesLeft == nil, "the candidates couldn't be read")

@@ -42,7 +42,7 @@ private func rows() -> [RecommendationRow] {
 private func show(_ rows: [RecommendationRow], in window: RecommendationsWindow) {
     window.show(
         rows: rows, query: RecommendationQuery(), seeds: [.library], pending: false,
-        message: nil, action: nil, facts: nil)
+        message: nil, action: nil, facts: nil, headerSort: nil)
 }
 
 @MainActor
