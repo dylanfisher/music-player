@@ -13644,3 +13644,45 @@ retried on every event and an icon lookup reaching the prototype; the re-review 
 hold hiding a ± press and a lost receiver's last value. The full gate passed but for
 `theGlassHeadersAreFrosted`, which fails on main too, with no screen recording here. The
 hardware checkpoint is pending.
+
+### 91. Filtering and finding downloads and recommendations
+
+The owner (2026-11-19) asked for three things. First, a search bar in the Downloads and Recommendations
+windows, "not a full fledged search, just filter results that have been loaded in those
+screens". Second, opening a row "in all music window (if it's been downloaded)". Third, in
+Downloads, "a count of how many items are eligible for auto upgrade to flac when that setting
+is enabled".
+
+- [x] **91.1 The filter.** A search field in each window filters the rows already loaded,
+      matching every word against the row's visible text (artist, title, year, format, user,
+      state in Downloads; artists, title, year, label, styles in Recommendations), case and
+      diacritic insensitive. It doesn't change the service query or the stored settings. The
+      empty state says when the filter hides every row. The rule lives in each model, without
+      AppKit, as `ShortcutsModel.filtered(_:)` does. This is the third contains-style filter
+      after that one and `ReleasesSheet`, so extracting the shared rule is its own commit first
+      (AGENTS.md principle 3). Tests: a word in any column, two words in different columns,
+      accents, an emptied list, and a refresh keeping the filter.
+- [x] **91.2 Show in All Music.** A context menu item, and the same command where each window
+      already has row actions. It applies to a row whose release is in the library, found by
+      Discogs release id in the index off the main thread. In Downloads that's an imported job,
+      or an upgrade's old album. In Recommendations it's a row whose download was imported.
+      The app wires it to the browser's existing album reveal (`showFirstTrack(of: .album,
+      id:)` or its neighbor) and brings the main window forward. A release that isn't found
+      says so in the window's status line rather than doing nothing. Tests: enabled and
+      disabled by state, the release id the closure gets, and the not-found message.
+- [x] **91.3 The upgrade count.** While Upgrade to FLAC Automatically is on, a label beside
+      its box says how many albums the pass could still queue. That's `AutoUpgrades.next`'s
+      rule over the cached candidates with no room limit, so Never Upgrade, misses not yet due
+      and live jobs aren't counted. It updates after each pass and when the box is ticked, and
+      is hidden while the box is off. Tests in `AutoUpgradesTests` and `DownloadsWindowTests`.
+
+Result: landed 2026-11-23 as 0.53.0, four days after it was built, rebased onto phases 93 to
+97. A search field in Downloads and in Recommendations filters the rows loaded, matching the
+text of every column shown (`DownloadColumn.text`, `RecommendationColumn.text`) through
+`ListFilter`, the rule shared with the shortcuts pane and the releases sheet; Added is left
+out. Show in All Music, in each window's menu and toolbar, selects the album by its Discogs
+release in the index, and says in the status line when it isn't there. The upgrade count sits
+beside Upgrade to FLAC Automatically, `AutoUpgrades.queueable` taken at the end of each pass;
+a pass with every slot taken counts from the last read. In the rebase, main's idle pass met
+the count: a pass skipped as unchanged now keeps the count of the pass it was kept from.
+Decided in ADR 0212.

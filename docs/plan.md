@@ -50,7 +50,8 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 Set by the owner on 2026-11-19, amended on 2026-11-20. Earlier run orders are in the archive.
 
-1. Phases 91 and 92, asked for on 2026-11-19, built side by side on their own branches.
+1. Phases 91 and 92, asked for on 2026-11-19, built side by side on their own branches;
+   91 landed 2026-11-23.
 2. Phase 85, what phase 84 left, waits until the owner starts it.
 3. Phase 10, drafted with the owner and started on 2026-11-20, landed on 2026-11-20.
 4. Once phase 10 is on main, the owner said (2026-11-20) to start these unasked:
@@ -398,38 +399,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phases 91 and 92 are the owner's requests of 2026-11-19. Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
-
-### 91. Filtering and finding downloads and recommendations
-
-The owner (2026-11-19) asked for three things. First, a search bar in the Downloads and Recommendations
-windows, "not a full fledged search, just filter results that have been loaded in those
-screens". Second, opening a row "in all music window (if it's been downloaded)". Third, in
-Downloads, "a count of how many items are eligible for auto upgrade to flac when that setting
-is enabled".
-
-- [ ] **91.1 The filter.** A search field in each window filters the rows already loaded,
-      matching every word against the row's visible text (artist, title, year, format, user,
-      state in Downloads; artists, title, year, label, styles in Recommendations), case and
-      diacritic insensitive. It doesn't change the service query or the stored settings. The
-      empty state says when the filter hides every row. The rule lives in each model, without
-      AppKit, as `ShortcutsModel.filtered(_:)` does. This is the third contains-style filter
-      after that one and `ReleasesSheet`, so extracting the shared rule is its own commit first
-      (AGENTS.md principle 3). Tests: a word in any column, two words in different columns,
-      accents, an emptied list, and a refresh keeping the filter.
-- [ ] **91.2 Show in All Music.** A context menu item, and the same command where each window
-      already has row actions. It applies to a row whose release is in the library, found by
-      Discogs release id in the index off the main thread. In Downloads that's an imported job,
-      or an upgrade's old album. In Recommendations it's a row whose download was imported.
-      The app wires it to the browser's existing album reveal (`showFirstTrack(of: .album,
-      id:)` or its neighbor) and brings the main window forward. A release that isn't found
-      says so in the window's status line rather than doing nothing. Tests: enabled and
-      disabled by state, the release id the closure gets, and the not-found message.
-- [ ] **91.3 The upgrade count.** While Upgrade to FLAC Automatically is on, a label beside
-      its box says how many albums the pass could still queue. That's `AutoUpgrades.next`'s
-      rule over the cached candidates with no room limit, so Never Upgrade, misses not yet due
-      and live jobs aren't counted. It updates after each pass and when the box is ticked, and
-      is hidden while the box is off. Tests in `AutoUpgradesTests` and `DownloadsWindowTests`.
+Phase 92 is the owner's request of 2026-11-19. Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
 
 ### 92. Outputs that go away and outputs still being found
 
