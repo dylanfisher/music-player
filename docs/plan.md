@@ -58,7 +58,9 @@ Set by the owner on 2026-11-19, amended on 2026-11-20. Earlier run orders are in
      their own worktrees;
    - then phase 94, once the service's phase 12 has landed (it did, and phase 94 landed
      2026-11-20).
-5. Phase 13 waits.
+5. Phases 95, 96 and 97, the owner's list of 2026-11-22, each on its own branch in its own
+   worktree, side by side; 96 in two parts, 96b after 96a on the same branch.
+6. Phase 13 waits.
 
 ## Waiting on the owner
 
@@ -392,7 +394,106 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phases 91 and 92 are the owner's requests of 2026-11-19. Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
+Phases 95 to 97 are the owner's list of 2026-11-22. Phases 91 and 92 are the owner's requests of 2026-11-19. Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
+
+### 95. Sorting recommendations and choosing several downloads
+
+The owner (2026-11-22): "recommend windows should be able to sort by the table headers if
+possible, at least where the table is somewhat finite, like recommended discography feature for
+a artist", and "download windows need to be able to select multiple items at once (shift click,
+command click, etc) to be able to retry or remove/cancel etc multiple at once".
+
+- [ ] **95.1 The ADR (0218).** Which Recommendations lists sort by header: an artist's
+      discography, and any other list the window holds whole; a list the service pages keeps
+      the service's order with headers that don't sort, since a sort of the loaded part would
+      look like the whole. A sort is kept per list while the app runs and isn't stored. It
+      records what each column sorts by (year as a number, empty values last both ways, then
+      the list's own order as the tie-break).
+- [ ] **95.2 Header sorting.** Clicking a column header in the Recommendations window sorts the
+      loaded rows of a list 95.1 allows, and again reverses it, with the header's indicator.
+      The rule lives in the model or `RecommendationColumn`, without AppKit. Selection follows
+      its rows through a sort; a refresh or a page read keeps the sort; leaving the list and
+      coming back restores it. Tests: each column's order, empty values, reverse, a refresh
+      keeping it, and a paged list's headers not sorting.
+- [ ] **95.3 Several downloads at once.** The Downloads table takes multiple selection (shift
+      and command click, ⌘A). Each row action (Retry, Remove, Cancel and the rest the window
+      has) is enabled while it applies to any selected row and acts on each row it applies to,
+      skipping the others; the context menu acts on the clicked row, or on the selection when
+      the clicked row is in it, as `RecommendationsWindow` does. An action that asks first
+      asks once for the set, naming the count. Selection is captured by job id before the
+      model swaps its rows, so a refresh keeps it. Tests in `DownloadsWindowTests` and the
+      model's: enabled with mixed rows, the ids each action gets, one confirmation, and a
+      refresh keeping a multiple selection.
+
+### 96. The web remote, denser and searchable
+
+The owner (2026-11-22), on the web remote: the A–Z selector on the left, and the right side
+"should support fine tune scrubbing if possible (e.g. scroll up/down to quickly go through whole
+library, move finger left to change scrubbing speed to get fine tunes). if scrubbing is hard,
+keep the default scroll"; "lists should have less vertical space so there are more items on
+screen at once. keep font size as is"; Now Playing "should show the songs from that album below
+it in track view, with a playing indicator on current track"; search "should support same cmd+p
+commands, `a:dream` means album matching `dream`"; "a slider for volume"; and "use phosphor
+icons https://phosphoricons.com/ for all icons/emojis currently in it". The owner asked for
+Phosphor by name, so vendoring its SVGs (MIT) is the owner's go-ahead for that one asset set.
+
+#### 96a. The page: icons, density, the scrubber and volume
+
+- [ ] **96a.1 The ADR (0219).** Phosphor's regular weight, the SVGs of only the icons the page
+      uses, vendored into `Support/Remote` as one file served by `RemotePage.files` (inline
+      SVG keeps the content policy as it is), with its MIT notice and the version they came
+      from. It also records the scrubber's rule from 96a.3.
+- [ ] **96a.2 Icons and density.** Every glyph and emoji in `index.html`, `app.js` and
+      `style.css` (transport, repeat one, shuffle, back, the ± and arrows, play state) becomes
+      its Phosphor icon, coloured by `currentColor`, each button keeping its `aria-label`.
+      List rows lose vertical padding so about 40% more fit on a phone screen, with the font
+      sizes unchanged and each row still at least 36 px tall to tap.
+- [ ] **96a.3 A–Z on the left, the scrubber on the right.** The jump bar moves to the left
+      edge. A strip on the right edge scrubs: a vertical drag moves through the whole list in
+      proportion, and moving the finger left of the strip slows it (full speed on the strip,
+      about a half, a quarter and an eighth at set distances to the left), the way iOS scrubs
+      a seek bar, with a small label showing the row's letter or name under the finger. If it
+      can't be made smooth on the owner's phone with long lists, the right side keeps the
+      default scroll and the ADR says why. The speed rule is a pure function in `logic.js`
+      with tests where `logic.js` is tested.
+- [ ] **96a.4 Receiver volume slider.** The app's slider already shows while Digital Volume is
+      on. The receiver row gets a slider too, sending `receiver.setVolume` on release over the
+      receiver's range from the state, showing the value while dragged, and the ± buttons stay.
+      Tests where the state's receiver fields are tested.
+
+#### 96b. Now Playing's album and search prefixes
+
+- [ ] **96b.1 The ADR (0220).** The query grammar of ADR 0161 (`album:`/`a:`, `artist:`/`ar:`,
+      `track:`/`t:`, `genre:`/`g:`, `playlist:`/`p:`) moves to a tier `Core/Remote` and
+      `Features/Palette` both import, and the server parses `q`, so the page holds no copy.
+      A kind the remote doesn't list answers an empty result rather than a 400; an unknown
+      word before a colon is plain text, as in the palette.
+- [ ] **96b.2 Search prefixes.** `/api/search?q=a:dream` returns only albums matching `dream`,
+      and the same for each kind the remote lists; the search field's placeholder names them.
+      Tests in `RemoteLibraryTests` (each prefix, a short and a long name, case, an unknown
+      word) and the palette's existing `PaletteQuery` tests still passing unchanged.
+- [ ] **96b.3 Now Playing's album.** Below the controls, Now Playing lists the playing track's
+      album in track view, read through the routes the album view already uses, with a
+      playing indicator (a Phosphor icon) on the current track that moves when the track
+      changes, and a tap that plays from that track as the album view's does. A track with no
+      album, or nothing playing, shows no list. It reads the album once per album, not once
+      per state event.
+- [ ] **Hardware checkpoint (owner):** on the phone, with the library open: the icons, the
+      denser lists, A–Z on the left, scrubbing on the right through Artists and Songs at each
+      speed, the receiver slider against the Denon, `a:` and `ar:` searches, and Now Playing's
+      album following a track change.
+
+### 97. Rescanning the selected files
+
+The owner (2026-11-22): "add ability to rescan only some files (the selected files)".
+
+- [ ] **97.1 Rescan Selected Files.** A command in the Library menu, the track table's context
+      menu and ⌘K, enabled while the browser has tracks selected, that reads those files again
+      through `LibraryWatcher.rescan(files:)`, whatever their size and mtime say, as after a
+      tag edit. The status line says how many were read again, and a file that's gone or
+      unreadable is reported as a scan problem as a folder scan reports it, not dropped. It
+      reads the files only (AGENTS.md boundary). Tests: the command's enabled state, the
+      paths it passes (an album row's tracks, not the row), and a missing file reported.
 
 ### 91. Filtering and finding downloads and recommendations
 
