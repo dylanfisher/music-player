@@ -50,6 +50,9 @@ public struct RemoteState: Encodable, Equatable, Sendable {
         public var input: String?
         /// Every input the page's menu offers, with the command that switches to it.
         public var inputs: [Input]
+        /// The ends of the page's slider, the signal path slider's, so neither goes higher.
+        public var volumeFloorDecibels: Double?
+        public var volumeCeilingDecibels: Double?
 
         public struct Input: Encodable, Equatable, Sendable {
             public var value: String
@@ -59,13 +62,15 @@ public struct RemoteState: Encodable, Equatable, Sendable {
 
         public init(
             isOn: Bool?, volumeDecibels: Double?, isMuted: Bool?, input: String?,
-            inputs: [Input] = []
+            inputs: [Input] = [], volumeRangeDecibels: ClosedRange<Double>? = nil
         ) {
             self.isOn = isOn
             self.volumeDecibels = volumeDecibels
             self.isMuted = isMuted
             self.input = input
             self.inputs = inputs
+            volumeFloorDecibels = volumeRangeDecibels?.lowerBound
+            volumeCeilingDecibels = volumeRangeDecibels?.upperBound
         }
     }
 

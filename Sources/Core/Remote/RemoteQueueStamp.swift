@@ -89,8 +89,8 @@ extension RemoteState.Output {
 }
 
 extension RemoteState.Receiver {
-    /// What the receiver last said of itself.
-    public init(_ said: ReceiverState) {
+    /// What the receiver last said of itself, with the range the page's slider covers.
+    public init(_ said: ReceiverState, volumeRangeDecibels: ClosedRange<Double>) {
         self.init(
             isOn: said.isOn, volumeDecibels: said.volume?.decibels, isMuted: said.isMuted,
             input: said.input?.rawValue,
@@ -98,7 +98,7 @@ extension RemoteState.Receiver {
                 Input(
                     value: $0.rawValue, title: $0.title,
                     command: CommandID.receiverInput($0).rawValue)
-            })
+            }, volumeRangeDecibels: volumeRangeDecibels)
     }
 }
 

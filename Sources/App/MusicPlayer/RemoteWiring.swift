@@ -4,6 +4,7 @@ import Library
 import LocalNetwork
 import Log
 import Network
+import NowPlaying
 import Playback
 import Remote
 import Scripting
@@ -205,7 +206,10 @@ extension AppDelegate {
             volumeDecibels: canSetVolume ? volumeDecibels : nil,
             volumeFloorDecibels: MainToolbar.volumeRangeDecibels.lowerBound,
             output: RemoteState.Output(current: currentOutput, among: outputOptionsNow()),
-            receiver: receiver.map { RemoteState.Receiver($0.state) })
+            receiver: receiver.map {
+                RemoteState.Receiver(
+                    $0.state, volumeRangeDecibels: SignalPathPanel.receiverRangeDecibels)
+            })
     }
 }
 

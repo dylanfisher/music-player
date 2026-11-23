@@ -27,7 +27,7 @@ public final class SignalPathPanel: NSViewController {
 
     /// The slider stops at 0 dB, reference level, so a slip can't take the receiver to its
     /// +18 dB top; a level above it, set on the receiver, shows at the end.
-    static let receiverRangeDecibels = -80.0...0.0
+    public static let receiverRangeDecibels = -80.0...0.0
 
     public init() { super.init(nibName: nil, bundle: nil) }
 

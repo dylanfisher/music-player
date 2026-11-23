@@ -597,8 +597,9 @@ private final class Waits: @unchecked Sendable {
     var said = ReceiverState()
     said.isOn = true
     said.input = .cd
-    let receiver = RemoteState.Receiver(said)
+    let receiver = RemoteState.Receiver(said, volumeRangeDecibels: -80...0)
     #expect(receiver.isOn == true && receiver.input == "CD" && receiver.volumeDecibels == nil)
+    #expect(receiver.volumeFloorDecibels == -80 && receiver.volumeCeilingDecibels == 0)
     #expect(receiver.inputs.count == ReceiverInput.allCases.count)
     #expect(
         receiver.inputs.first { $0.value == "BD" }
