@@ -777,8 +777,10 @@ function renderReceiver(receiver) {
   slider.hidden = receiver.volumeFloorDecibels == null || receiver.volumeCeilingDecibels == null;
   slider.disabled = receiver.volumeDecibels == null;
   if (!receiverDragging) {
-    slider.min = String(receiver.volumeFloorDecibels);
-    slider.max = String(receiver.volumeCeilingDecibels);
+    if (!slider.hidden) {
+      slider.min = String(receiver.volumeFloorDecibels);
+      slider.max = String(receiver.volumeCeilingDecibels);
+    }
     if (receiver.volumeDecibels != null) slider.value = String(receiver.volumeDecibels);
     $("receiver-volume").textContent = receiver.volumeDecibels != null ? receiver.volumeDecibels + " dB" : "–";
   }
