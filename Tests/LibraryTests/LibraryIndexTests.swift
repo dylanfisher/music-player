@@ -267,6 +267,29 @@ private func playedPaths(_ index: LibraryIndex) throws -> [String] {
     }
 }
 
+/// A field's filter holds for every word, and matches as the whole search does, by word
+/// starts and without diacritics; a search with no word narrows nothing (ADR 0220).
+@Test func aSearchFieldTakesSeveralWordsAndIgnoresDiacritics() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/m/1.flac", title: "Café Dream", artist: "Night", album: "Blue Moon")
+            .scanned,
+        Crafted(path: "/m/2.flac", title: "Blue", artist: "Dream", album: "Night Café").scanned,
+        Crafted(path: "/m/3.flac", title: "Other", artist: "Blue Café", album: "Dream").scanned,
+    ])
+    func found(_ search: String, _ field: SearchField) throws -> [Int64] {
+        var filter = TrackFilter(search: search)
+        filter.searchField = field
+        return try index.trackIDs(filter, sortedBy: .path)
+    }
+    #expect(try found("cafe dre", .title) == (try ids(index, ["/m/1.flac"])))
+    #expect(try found("CAFÉ nig", .album) == (try ids(index, ["/m/2.flac"])))
+    #expect(try found("blue caf", .artist) == (try ids(index, ["/m/3.flac"])))
+    // Both words in the field, not one there and one elsewhere.
+    #expect(try found("blue night", .album).isEmpty)
+    #expect(TrackFilter(search: "dream").searchesWords)
+    for search in ["", "!!!", " - ( "] { #expect(!TrackFilter(search: search).searchesWords) }
+}
+
 @Test func searchTextBecomesQuotedPrefixPhrases() {
     #expect(ftsQuery("beat abb") == "\"beat\"* \"abb\"*")
     #expect(ftsQuery("say \"hi\"") == "\"say\"* \"\"\"hi\"\"\"*")

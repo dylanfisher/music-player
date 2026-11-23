@@ -108,9 +108,10 @@ struct RemoteQuery: Sendable {
 
     /// The search text, and the tags it matches in when it starts with a kind's name and a
     /// colon, as the palette reads it (ADR 0161, 0220); nil when it names a kind the remote
-    /// doesn't list.
+    /// doesn't list or has no word to match, which would otherwise narrow nothing.
     func search() throws(RemoteRefusal) -> (text: String, field: SearchField?)? {
         let typed = TypedQuery<SearchKind>(try text())
+        guard TrackFilter(search: typed.text).searchesWords else { return nil }
         switch typed.kind {
         case nil: return (typed.text, nil)
         case .artist: return (typed.text, .artist)

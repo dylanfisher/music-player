@@ -215,6 +215,10 @@ private func found(_ remote: RemoteLibrary, _ q: String) async throws -> [String
     for q in ["g:\(albumWord)", "playlist:\(albumWord)"] {
         #expect(try await found(remote, q).values.allSatisfy(\.isEmpty), "\(q)")
     }
+    // A query with no word to match finds nothing, rather than the first of everything.
+    for q in ["a:", "t: ", ":", "!!!", "ar: !!"] {
+        #expect(try await found(remote, q).values.allSatisfy(\.isEmpty), "\(q)")
+    }
     // Searched as typed, the unknown word matches nothing; dropped, the album would match.
     #expect(try await found(remote, "zzq: \(albumWord)").values.allSatisfy(\.isEmpty))
     #expect(try await found(remote, albumWord)["albums"]?.isEmpty == false)
@@ -236,9 +240,14 @@ private func found(_ remote: RemoteLibrary, _ q: String) async throws -> [String
     filter.searchField = .title
     #expect(rows.count == (try index.trackCount(filter)))
     #expect(!rows.isEmpty)
-    #expect(
-        try await read(remote, RemoteRoute.tracks, "q=g%3Arock&offset=0&limit=20").status
-            == .badRequest)
+    for q in ["g%3Arock", "t%3A", "%21%21%21"] {
+        #expect(
+            try await read(remote, RemoteRoute.tracks, "q=\(q)&offset=0&limit=20").status
+                == .badRequest, "\(q)")
+        await #expect(throws: RemoteRefusal.self, "\(q)") {
+            try await remote.files(list: "q=\(q)&playFrom=1")
+        }
+    }
 }
 
 @Test func coversNameEachAlbumsArtWhichComesAtTwoSizesForGood() async throws {

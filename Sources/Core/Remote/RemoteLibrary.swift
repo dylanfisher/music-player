@@ -146,7 +146,8 @@ public actor RemoteLibrary {
             album: try query.id(RemoteQuery.album), grouped: grouped)
         if query.has(RemoteQuery.text) {
             guard let search = try query.search() else {
-                throw RemoteRefusal("q names a kind a track list can't be narrowed to")
+                throw RemoteRefusal(
+                    "q must have a word to search for, of a kind a track list can be narrowed to")
             }
             filter.search = search.text
             filter.searchField = search.field
@@ -191,7 +192,7 @@ public actor RemoteLibrary {
     {
         try query.only([RemoteQuery.text])
         // A kind the remote doesn't list finds nothing, as the palette lists nothing of a
-        // kind it doesn't have.
+        // kind it doesn't have, and so does a query with no word, rather than everything.
         let search = try query.search()
         var filter = TrackFilter(search: search?.text ?? "", groupByAlbumArtist: grouped)
         filter.searchField = search?.field

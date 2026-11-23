@@ -14,6 +14,8 @@ public struct TrackFilter: Equatable, Sendable {
     public var search: String
     /// The tags `search` matches in; nil for all six.
     public var searchField: SearchField?
+    /// Whether `search` has a word to match; one without narrows nothing.
+    public var searchesWords: Bool { ftsQuery(search) != nil }
     /// `library.groupByAlbumArtist`: the Artists column and `artist` name the album artist, and
     /// sorts by Artist or Album keep each album's tracks together.
     public var groupByAlbumArtist: Bool
