@@ -62,7 +62,9 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   on, owned and marked ones included, sorted by year, title or a community value: from the
   track menu for the selected track's release, from a recommendation's menu, or with **Show
   Discography…**, which takes a pasted Discogs release, master or artist link
-  ([ADR 0217](docs/decisions/0217-an-artists-discography.md)).
+  ([ADR 0217](docs/decisions/0217-an-artists-discography.md)). A discography also sorts by
+  its column headers, and the Downloads window acts on several selected jobs at once
+  ([ADR 0218](docs/decisions/0218-sorting-by-header-and-several-downloads.md)).
 - **Sync Folder** (Settings): Macs that play the same library on a share share their plays,
   ratings, loved tracks, playlists, Date Added and where downloads came from through a folder outside the music, where
   each writes only its own log. They sync at launch, after each rescan and on wake; a Mac

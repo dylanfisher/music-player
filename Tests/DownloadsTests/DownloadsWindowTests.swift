@@ -60,9 +60,9 @@ private func rows() -> [DownloadRow] {
 @MainActor
 @Test func theButtonsAndTheMenuActOnTheSelectedRowWhenTheyApply() throws {
     let window = DownloadsWindow()
-    var acted: [(DownloadAction, Int)] = []
+    var acted: [(DownloadAction, [Int])] = []
     window.applies = { action, row in action == .openInTagger && row.id == 1 }
-    window.act = { acted.append(($0, $1.id)) }
+    window.act = { acted.append(($0, $1.map(\.id))) }
     window.show(rows(), status: "Can't reach the service", canAdd: false)
     #expect(!window.statusLabel.isHidden)
     #expect(!window.addButton.isEnabled)
@@ -73,7 +73,7 @@ private func rows() -> [DownloadRow] {
     #expect(window.buttons[.approve]?.isEnabled == false)
     click(tagger)
     #expect(acted.map(\.0) == [.openInTagger])
-    #expect(acted.map(\.1) == [1])
+    #expect(acted.map(\.1) == [[1]])
     window.table.selectRowIndexes([1], byExtendingSelection: false)
     #expect(!tagger.isEnabled)
 
@@ -81,6 +81,94 @@ private func rows() -> [DownloadRow] {
     window.menuNeedsUpdate(menu)
     #expect(menu.items.isEmpty, "no row clicked")
     window.window?.close()
+}
+
+@MainActor
+@Test func onSeveralRowsEachActionActsOnThoseItAppliesToAndTheMenuOnTheClickedOnes() throws {
+    let window = DownloadsWindow()
+    var acted: [(DownloadAction, [Int])] = []
+    // Retry applies to 1 and 3, Cancel to 2, Open in Tagger to 1 and 3, nothing to Approve.
+    window.applies = { action, row in
+        switch action {
+        case .retry, .openInTagger: row.id != 2
+        case .cancel: row.id == 2
+        default: false
+        }
+    }
+    window.act = { acted.append(($0, $1.map(\.id))) }
+    window.show(rows(), status: "", canAdd: true)
+    #expect(window.table.allowsMultipleSelection)
+    window.table.selectAll(nil)
+    #expect(window.selectedRows.map(\.id) == [1, 2, 3], "⌘A")
+    #expect(window.buttons[.retry]?.isEnabled == true)
+    #expect(window.buttons[.cancel]?.isEnabled == true)
+    #expect(window.buttons[.approve]?.isEnabled == false)
+    for action in [DownloadAction.retry, .cancel, .openInTagger] {
+        click(try #require(window.buttons[action]))
+    }
+    #expect(acted.map(\.0) == [.retry, .cancel, .openInTagger])
+    #expect(acted.map(\.1) == [[1, 3], [2], [1]], "a review opens on the first")
+
+    window.table.selectRowIndexes([0, 1], byExtendingSelection: false)
+    #expect(window.buttons[.cancel]?.isEnabled == true, "it applies to one of them")
+    acted = []
+    let menu = try #require(window.table.menu)
+    for clicked in [1, 2] {
+        window.fill(menu, clicked: clicked)
+        let retry = try #require(menu.items.first { $0.title == DownloadAction.retry.title })
+        #expect(retry.isEnabled)
+        menu.performActionForItem(at: menu.index(of: retry))
+    }
+    #expect(acted.map(\.1) == [[1], [3]], "the selection, then a row outside it alone")
+    window.window?.close()
+}
+
+@MainActor
+@Test func aRefreshKeepsEverySelectedJobSelected() {
+    let window = DownloadsWindow()
+    window.show(rows(), status: "", canAdd: true)
+    window.table.selectRowIndexes([0, 2], byExtendingSelection: false)
+    var reordered = rows()
+    reordered.swapAt(0, 1)
+    reordered.remove(at: 2)
+    window.show(reordered, status: "", canAdd: true)
+    #expect(window.rows.map(\.id) == [2, 1])
+    #expect(window.selectedRows.map(\.id) == [1], "job 3 is gone")
+    window.window?.close()
+}
+
+@MainActor
+@Test func cancellingOrRetryingSeveralAsksOnceAndSendsEach() async throws {
+    let fake = FakeService([
+        job(1, .notFound), job(2, .downloading),
+        job(3) { $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["x"]) },
+    ])
+    let (downloads, session) = try await started(fake.service) { throw CancellationError() }
+    var asked: [String] = []
+    downloads.answer = {
+        asked.append($0)
+        return true
+    }
+    downloads.show()
+    let window = try #require(downloads.controller)
+    await eventually("the first poll") { window.rows.count == 3 }
+    let row = { (id: Int) in window.rows.firstIndex { $0.id == id }! }
+    window.table.selectRowIndexes([row(1), row(3)], byExtendingSelection: false)
+    click(try #require(window.buttons[.retry]))
+    #expect(asked == ["Retry 2 downloads?"])
+    await eventually("both sent") { fake.requeued == [3] && fake.job(1)?.state == .queued }
+    #expect(fake.job(1)?.formatPolicy == .flac, "the format it asked for")
+
+    await eventually("the retried rows") { session.model.job(1)?.state == .queued }
+    window.table.selectRowIndexes(
+        IndexSet(window.rows.indices), byExtendingSelection: false)
+    click(try #require(window.buttons[.cancel]))
+    #expect(asked.last == "Cancel \(window.selectedRows.count) downloads?")
+    #expect(asked.count == 2)
+    await eventually("every one cancelled") {
+        [1, 2].allSatisfy { fake.job($0)?.state == .cancelled }
+    }
+    downloads.window?.close()
 }
 
 @MainActor
@@ -219,19 +307,24 @@ private func rows() -> [DownloadRow] {
 @Test func revealInFinderShowsTheStagedFolderWhereTheStagingFolderIsNow() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(
         "staging-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(
-        at: root.appendingPathComponent("job-1", isDirectory: true),
-        withIntermediateDirectories: true)
-    let service = FakeService([job(1)])
+    for folder in ["job-1", "job-2"] {
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent(folder, isDirectory: true),
+            withIntermediateDirectories: true)
+    }
+    let service = FakeService([job(1), job(2) { $0.stagedPath = "job-2" }])
     let (downloads, session) = try await started(service.service) {
         ImportPlaces(stagingRoot: root.path, libraryFolder: "/nowhere", shareRoot: "/")
     }
-    var shown: [URL] = []
-    downloads.showInFinder = { shown += $0 }
-    downloads.reveal(try #require(service.job(1)), session)
+    var shown: [[URL]] = []
+    downloads.showInFinder = { shown.append($0) }
+    downloads.reveal([try #require(service.job(1))], session)
     await eventually("the Finder") { !shown.isEmpty }
-    #expect(shown.map(\.lastPathComponent) == ["job-1"])
-    #expect(shown.first?.deletingLastPathComponent().path == root.path)
+    #expect(shown.map { $0.map(\.lastPathComponent) } == [["job-1"]])
+    #expect(shown.first?.first?.deletingLastPathComponent().path == root.path)
+    downloads.reveal([try #require(service.job(1)), try #require(service.job(2))], session)
+    await eventually("the Finder again") { shown.count == 2 }
+    #expect(shown.last?.map(\.lastPathComponent) == ["job-1", "job-2"], "together")
     downloads.stop()
 }
 
@@ -258,7 +351,7 @@ private func rows() -> [DownloadRow] {
     downloads.show()
     let window = try #require(downloads.window)
     for id in [1, 2, 3] {
-        downloads.reveal(try #require(service.job(id)), session)
+        downloads.reveal([try #require(service.job(id))], session)
         await eventually("job \(id)'s refusal") { window.attachedSheet != nil }
         if let sheet = window.attachedSheet { window.endSheet(sheet) }
     }

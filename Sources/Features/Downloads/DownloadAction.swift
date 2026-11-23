@@ -17,6 +17,9 @@ enum DownloadAction: CaseIterable, Sendable {
         }
     }
 
+    /// The button that confirms Reject.
+    static let rejectButton = "Reject"
+
     var help: String {
         switch self {
         case .approve: "Review where the files go, then move them into the library."
@@ -28,6 +31,15 @@ enum DownloadAction: CaseIterable, Sendable {
         case .openInTagger: "Resolve the discrepancy in the Discogs Tagger."
         case .resumeHere: "Finish an import another Mac, or an earlier run, left."
         case .revealInFinder: "Show the album's staged folder in the Finder."
+        }
+    }
+
+    /// Whether the action, on several rows, acts on each one it applies to. Approve, Resume
+    /// Here and Open in Tagger each open one review, so they act on the first (ADR 0218).
+    var actsOnEach: Bool {
+        switch self {
+        case .reject, .retry, .cancel, .revealInFinder: true
+        case .approve, .resumeHere, .openInTagger: false
         }
     }
 

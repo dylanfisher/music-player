@@ -36,7 +36,7 @@ enum DownloadColumn: String, CaseIterable {
 }
 
 /// The Downloads window (54.12): the service's jobs, a row each, with the actions on the
-/// selected one in the bar and the row's context menu, Add's menu for queueing, and a status
+/// selected ones in the bar and the row's context menu (ADR 0218), Add's menu for queueing, and a status
 /// line for the service and what this Mac couldn't do. It draws what it's given and reports
 /// clicks; `Downloads` does the rest.
 @MainActor
@@ -79,7 +79,9 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
 
     /// Whether `action` applies to `row` now.
     var applies: (DownloadAction, DownloadRow) -> Bool = { _, _ in false }
-    var act: (DownloadAction, DownloadRow) -> Void = { _, _ in }
+    /// Hears an action on the rows it applies to, in the window's order: one row for an action
+    /// that doesn't act on each.
+    var act: (DownloadAction, [DownloadRow]) -> Void = { _, _ in }
     var add: (DownloadAddition) -> Void = { _ in }
     /// A row's Show Discography item, through its release; nil leaves it out.
     var discographyItem: (Int) -> NSMenuItem? = { _ in nil }
@@ -158,6 +160,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
                 stretches: column == .album)
         }
         table.rowHeight = 20
+        table.allowsMultipleSelection = true
         let menu = NSMenu()
         menu.delegate = self
         table.menu = menu
@@ -178,17 +181,18 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         window.contentView = page
     }
 
-    /// Shows `rows`, keeping the selected job selected while it's there, and `status` below.
+    /// Shows `rows`, keeping the selected jobs selected while they're there, and `status`
+    /// below.
     func show(_ rows: [DownloadRow], status: String, canAdd: Bool) {
-        let selected = selectedRow?.id
+        let selected = Set(selectedRows.map(\.id))
         self.canAdd = canAdd
         if rows != self.rows {
             reloads += 1
             self.rows = rows
             table.reloadData()
-            if let selected, let row = rows.firstIndex(where: { $0.id == selected }) {
-                table.selectRowIndexes([row], byExtendingSelection: false)
-            }
+            table.selectRowIndexes(
+                IndexSet(rows.indices.filter { selected.contains(rows[$0].id) }),
+                byExtendingSelection: false)
         }
         statusLabel.stringValue = status
         statusLabel.isHidden = status.isEmpty
@@ -222,21 +226,33 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
 
     @objc private func autoUpgradeClicked() { autoUpgradeChanged(autoUpgradeBox.state == .on) }
 
-    var selectedRow: DownloadRow? {
-        let row = table.selectedRow
-        return row >= 0 && row < rows.count ? rows[row] : nil
+    /// The rows selected, in the window's order.
+    var selectedRows: [DownloadRow] {
+        table.selectedRowIndexes.filter { $0 < rows.count }.map { rows[$0] }
+    }
+
+    /// The rows of `chosen` that `action` acts on: each it applies to, or the first.
+    private func acted(_ action: DownloadAction, _ chosen: [DownloadRow]) -> [DownloadRow] {
+        let applying = chosen.filter { applies(action, $0) }
+        return action.actsOnEach ? applying : Array(applying.prefix(1))
+    }
+
+    /// The rows a menu item acts on: the selection when the clicked row is in it, else the
+    /// clicked row, as the Recommendations window does.
+    private func menuRows(_ clicked: Int) -> [DownloadRow] {
+        table.selectedRowIndexes.contains(clicked) ? selectedRows : [rows[clicked]]
     }
 
     private func enableButtons() {
         for (action, button) in buttons {
-            button.isEnabled = selectedRow.map { applies(action, $0) } ?? false
+            button.isEnabled = !acted(action, selectedRows).isEmpty
         }
     }
 
     @objc private func clicked(_ sender: NSButton) {
         let action = DownloadAction.allCases[sender.tag]
-        guard let row = selectedRow, applies(action, row) else { return }
-        act(action, row)
+        let chosen = acted(action, selectedRows)
+        if !chosen.isEmpty { act(action, chosen) }
     }
 
     @objc private func addChosen(_ sender: NSMenuItem) {
@@ -247,16 +263,18 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     @objc private func menuChosen(_ sender: NSMenuItem) {
         guard let row = sender.representedObject as? Int, row < rows.count else { return }
         let action = DownloadAction.allCases[sender.tag]
-        guard applies(action, rows[row]) else { return }
-        act(action, rows[row])
+        let chosen = acted(action, menuRows(row))
+        if !chosen.isEmpty { act(action, chosen) }
     }
 
     // MARK: - The context menu
 
-    func menuNeedsUpdate(_ menu: NSMenu) {
+    func menuNeedsUpdate(_ menu: NSMenu) { fill(menu, clicked: table.clickedRow) }
+
+    /// The context menu for a click on row `clicked`, -1 for none.
+    func fill(_ menu: NSMenu, clicked: Int) {
         menu.removeAllItems()
         menu.autoenablesItems = false
-        let clicked = table.clickedRow
         guard clicked >= 0, clicked < rows.count else { return }
         for (index, action) in DownloadAction.allCases.enumerated() {
             let item = NSMenuItem(
@@ -264,7 +282,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
             item.target = self
             item.tag = index
             item.representedObject = clicked
-            item.isEnabled = applies(action, rows[clicked])
+            item.isEnabled = !acted(action, menuRows(clicked)).isEmpty
             menu.addItem(item)
         }
         if let discography = discographyItem(rows[clicked].releaseID) {

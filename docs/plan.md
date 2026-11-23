@@ -439,7 +439,7 @@ command click, etc) to be able to retry or remove/cancel etc multiple at once".
      on the first. `Downloads`: Retry, Reject and Cancel on a set with one confirmation
      naming the count, Reveal in Finder showing every folder at once. Tests in
      `DownloadsWindowTests`.
-  4. The README's Recommendations and Downloads sections.
+  4. The README's Recommendations entry.
 
 ### 96. The web remote, denser and searchable
 

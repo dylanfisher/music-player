@@ -137,6 +137,9 @@ package final class Downloads {
 
     /// A row's Show Discography item for its release, from Recommendations (ADR 0217).
     package var discographyItem: (Int) -> NSMenuItem? = { _ in nil }
+    /// Answers `confirm`'s question, by its message, in place of the owner; nil asks the
+    /// owner. Tests stand in for them.
+    var answer: ((String) -> Bool)?
     /// Shows files in the Finder, and opens a web page; tests stand in for both.
     var showInFinder: ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
     var openPage: (URL) -> Void = { url in
@@ -493,8 +496,12 @@ package final class Downloads {
 
     // MARK: - Actions
 
-    private func act(_ action: DownloadAction, _ row: DownloadRow) {
-        guard let session, let job = session.model.job(row.id) else { return }
+    /// `action` on `rows`: one row as before, several by `actOnEach`.
+    private func act(_ action: DownloadAction, _ rows: [DownloadRow]) {
+        guard let session else { return }
+        let jobs = rows.compactMap { row in session.model.job(row.id).map { (row: row, job: $0) } }
+        guard let (row, job) = jobs.first else { return }
+        if jobs.count > 1 { return actOnEach(action, jobs, session) }
         switch action {
         case .approve: startReview(job, session, resuming: false)
         case .resumeHere: startReview(job, session, resuming: true)
@@ -502,7 +509,7 @@ package final class Downloads {
             confirm(
                 "Reject \(row.album)?",
                 "music-recommender deletes its staged folder. Nothing in the library changes.",
-                "Reject"
+                DownloadAction.rejectButton
             ) {
                 Task {
                     guard let coordinator = session.coordinator else { return }
@@ -524,7 +531,7 @@ package final class Downloads {
                 }
             }
         case .retry: retry(job, row, session)
-        case .revealInFinder: reveal(job, session)
+        case .revealInFinder: reveal([job], session)
         case .openInTagger:
             guard let coordinator = session.coordinator else { return }
             let heading = "\(row.album) can't open in the tagger"
@@ -540,7 +547,7 @@ package final class Downloads {
                 do {
                     root = try await session.setup.places().stagingRoot
                 } catch {
-                    return alert("The staging folder wasn't found", ["\(error)"])
+                    return alert(Self.noStagingFolder, ["\(error)"])
                 }
                 openInTagger(staged, root) { verdict, release in
                     Task {
@@ -583,39 +590,6 @@ package final class Downloads {
             } catch {
                 return "the Discogs catalog couldn't be read: \(error)"
             }
-        }
-    }
-
-    /// Shows `job`'s staged folder in the Finder, found where the staging folder is now. A
-    /// folder the service names outside the staging folder, by its name or by a link, is
-    /// refused.
-    func reveal(_ job: DownloadJob, _ session: Session) {
-        guard let path = job.stagedPath else { return }
-        guard let folder = job.stagedFolder else {
-            return alert("The staged folder wasn't shown", [DownloadJob.notOneFolder(path)])
-        }
-        let places = session.setup.places
-        Task {
-            let root: String
-            do {
-                root = try await places().stagingRoot
-            } catch {
-                return alert("The staging folder wasn't found", ["\(error)"])
-            }
-            let url = URL(fileURLWithPath: root, isDirectory: true)
-                .appendingPathComponent(folder, isDirectory: true)
-            let found = await blockingFileWork { () -> String? in
-                guard FileManager.default.fileExists(atPath: url.path) else {
-                    return "\(url.path) is missing"
-                }
-                let real = url.resolvingSymlinksInPath().path
-                let realRoot = URL(fileURLWithPath: root, isDirectory: true)
-                    .resolvingSymlinksInPath().path
-                return isPath(real, inOrAt: realRoot) && real != realRoot
-                    ? nil : "\(url.path) leads outside the staging folder, to \(real)"
-            }
-            if let found { return alert("The staged folder wasn't shown", [found]) }
-            showInFinder([url])
         }
     }
 
@@ -1145,6 +1119,10 @@ package final class Downloads {
     func confirm(
         _ message: String, _ detail: String, _ button: String, then: @escaping () -> Void
     ) {
+        if let answer {
+            if answer(message) { then() }
+            return
+        }
         guard let window = controller?.window else { return }
         let question = NSAlert()
         question.messageText = message
