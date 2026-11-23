@@ -1220,6 +1220,8 @@ private final class SpareOutput: Output, @unchecked Sendable {
     await eventually("the track handed over again") {
         fake.actions.filter { $0 == "SetAVTransportURI" }.count == 2
     }
+    // An action is recorded before its fetch, which closing the output would cut short.
+    await eventually("the track fetched again") { fake.fetched.count == 2 }
     #expect(!fake.actions.suffix(3).contains("Play"))
 }
 
