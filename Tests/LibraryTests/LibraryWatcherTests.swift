@@ -506,6 +506,36 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(received.scanned.isEmpty, "the folder's rescan waits for playback")
 }
 
+/// Rescan Selected Files hears what the rescan read and which files it couldn't, as a file
+/// gone from the disk.
+@Test func aRescanOfFilesTellsItsCallerWhatItRead() async throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let files = library.manifest.files.filter { $0.malformation == nil }
+    let read = library.path(files[0])
+    let gone = library.path(files[1])
+    try FileManager.default.removeItem(atPath: gone)
+    let watcher = watcher(library, through: ListingRecorder(), events: { _ in })
+    let replies = LockedReplies()
+
+    watcher.rescan(files: [read, gone], done: replies.append)
+    #expect(try await eventually(within: 5) { try replies.summaries().count == 1 })
+    let summary = try #require(try replies.summaries().first)
+    #expect(summary.read == 1)
+    #expect(summary.issues.map(\.path) == [gone])
+}
+
+private final class LockedReplies: @unchecked Sendable {
+    private let lock = NSLock()
+    private var replies: [Result<ScanSummary, any Error>] = []
+
+    func append(_ reply: Result<ScanSummary, any Error>) { lock.withLock { replies.append(reply) } }
+
+    func summaries() throws -> [ScanSummary] {
+        try lock.withLock { try replies.map { try $0.get() } }
+    }
+}
+
 @Test func rescanWalksTheChosenFolderAsSettingsHasIt() async throws {
     let library = try TestLibrary()
     let network = WatchedFolder(path: library.root, kind: .network)

@@ -162,14 +162,21 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// them. A file in `parsed`, as the tag writer read it back, is stored from that unless it
     /// changed since. Sends `edited` when they're stored. Their folders are rescanned after,
     /// as `rescan(directories:)` does, in case a scan read a file before the write and stores
-    /// it after; that rescan finds them unchanged.
-    public func rescan(files: [String], parsed: [String: StampedParse] = [:]) {
+    /// it after; that rescan finds them unchanged. `done` is given the summary, or why the
+    /// files couldn't be stored, for Rescan Selected Files to say.
+    public func rescan(
+        files: [String], parsed: [String: StampedParse] = [:],
+        done: @escaping @Sendable (Result<ScanSummary, any Error>) -> Void = { _ in }
+    ) {
         editQueue.async { [scanner, events] in
             do {
-                events(.edited(try scanner.rescan(files: files, parsed: parsed)))
+                let summary = try scanner.rescan(files: files, parsed: parsed)
+                events(.edited(summary))
+                done(.success(summary))
             } catch {
                 // The folder rescan below tries them again.
                 logger.error("couldn't read the edited files again: \(error)")
+                done(.failure(error))
             }
         }
         rescan(directories: Set(files.map { ($0 as NSString).deletingLastPathComponent }).sorted())
