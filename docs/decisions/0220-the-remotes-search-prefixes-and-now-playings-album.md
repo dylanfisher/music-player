@@ -50,7 +50,7 @@ no list. A failed read is said once and tried again only for the next album or w
 event stream connects again, not at every state event. The list is plain rows rather than a virtual list: an album is at most a few hundred
 tracks.
 
-**The receiver slider after release** (amending 0219). It shows the value it sent until the
+**The volume sliders after release** (amending 0219). The app and receiver sliders share one `SentSlider` in `app.js`. Each shows the value it sent until the
 state echoes it or two seconds pass (`sliderValue`, `SENT_HOLD_MS` in `logic.js`), so a state
 event sent before the receiver moved doesn't snap it back. A cancelled touch, which sends no
 `change`, ends the drag, so the slider follows the state again.

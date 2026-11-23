@@ -745,10 +745,11 @@ function renderNow() {
   $("seek").disabled = !duration;
   const volume = state ? state.volumeDecibels : null;
   $("volume-row").hidden = volume == null;
-  if (volume != null && !volumeDragging) {
+  if (volume != null && !appVolume.dragging) {
     $("volume").min = String(state.volumeFloorDecibels ?? -60);
-    $("volume").value = String(volume);
-    $("volume-text").textContent = Math.round(volume) + " dB";
+    const shown = appVolume.shown(volume);
+    $("volume").value = String(shown);
+    $("volume-text").textContent = Math.round(shown) + " dB";
   }
   $("output").textContent = state && state.output ? "Playing through " + state.output.name : "";
   renderReceiver(state ? state.receiver : null);
@@ -817,10 +818,46 @@ async function readAlbum(mac, album) {
 }
 
 let seeking = false;
-let volumeDragging = false;
-let receiverDragging = false;
-/// The receiver volume last sent, { value, at }, shown until the state echoes it.
-let receiverSent = null;
+
+/// A volume slider that sends `name` with its value on release and shows the value in `text`
+/// while dragged. After release it shows the value sent until the state echoes it or
+/// SENT_HOLD_MS pass, so a state event from before the change doesn't snap it back.
+class SentSlider {
+  constructor(slider, text, name) {
+    this.dragging = false;
+    /// The value last sent, { value, at }, until the state echoes it.
+    this.sent = null;
+    slider.addEventListener("input", () => {
+      this.dragging = true;
+      text.textContent = slider.value + " dB";
+    });
+    slider.addEventListener("change", () => {
+      this.dragging = false;
+      this.sent = { value: Number(slider.value), at: Date.now() };
+      command(name, slider.value);
+      // Back to the state's value if it never echoes this one.
+      setTimeout(renderNow, SENT_HOLD_MS);
+    });
+    // A cancelled touch sends no `change`: the slider goes back to following the state.
+    for (const cancel of ["pointercancel", "touchcancel", "blur"]) {
+      slider.addEventListener(cancel, () => {
+        if (!this.dragging) return;
+        this.dragging = false;
+        renderNow();
+      });
+    }
+  }
+
+  /// The value to show for the state's `value`.
+  shown(value) {
+    const shown = sliderValue(value, this.sent, Date.now());
+    if (shown === value) this.sent = null;
+    return shown;
+  }
+}
+
+const appVolume = new SentSlider($("volume"), $("volume-text"), "playback.setAppVolume");
+const receiverVolume = new SentSlider($("receiver-slider"), $("receiver-volume"), "receiver.setVolume");
 
 /// Moves the bar on between events, which come only when something changes.
 function tick() {
@@ -847,13 +884,12 @@ function renderReceiver(receiver) {
   const slider = $("receiver-slider");
   slider.hidden = receiver.volumeFloorDecibels == null || receiver.volumeCeilingDecibels == null;
   slider.disabled = receiver.volumeDecibels == null;
-  if (!receiverDragging) {
+  if (!receiverVolume.dragging) {
     if (!slider.hidden) {
       slider.min = String(receiver.volumeFloorDecibels);
       slider.max = String(receiver.volumeCeilingDecibels);
     }
-    const shown = sliderValue(receiver.volumeDecibels, receiverSent, Date.now());
-    if (shown === receiver.volumeDecibels) receiverSent = null;
+    const shown = receiverVolume.shown(receiver.volumeDecibels);
     if (shown != null) slider.value = String(shown);
     $("receiver-volume").textContent = shown != null ? shown + " dB" : "–";
   }
@@ -887,33 +923,6 @@ $("seek").addEventListener("change", () => {
   seeking = false;
   command("playback.seekTo", $("seek").value);
 });
-$("volume").addEventListener("input", () => {
-  volumeDragging = true;
-  $("volume-text").textContent = $("volume").value + " dB";
-});
-$("volume").addEventListener("change", () => {
-  volumeDragging = false;
-  command("playback.setAppVolume", $("volume").value);
-});
-$("receiver-slider").addEventListener("input", () => {
-  receiverDragging = true;
-  $("receiver-volume").textContent = $("receiver-slider").value + " dB";
-});
-$("receiver-slider").addEventListener("change", () => {
-  receiverDragging = false;
-  receiverSent = { value: Number($("receiver-slider").value), at: Date.now() };
-  command("receiver.setVolume", $("receiver-slider").value);
-  // Back to the state's value if it never echoes this one.
-  setTimeout(renderNow, SENT_HOLD_MS);
-});
-// A cancelled touch sends no `change`: the slider goes back to following the state.
-for (const name of ["pointercancel", "touchcancel", "blur"]) {
-  $("receiver-slider").addEventListener(name, () => {
-    if (!receiverDragging) return;
-    receiverDragging = false;
-    renderNow();
-  });
-}
 $("receiver-up").addEventListener("click", () => command("receiver.raiseVolume"));
 $("receiver-down").addEventListener("click", () => command("receiver.lowerVolume"));
 $("receiver-mute").addEventListener("click", () => command("receiver.mute"));
