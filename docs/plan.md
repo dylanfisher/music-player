@@ -432,6 +432,21 @@ Phosphor by name, so vendoring its SVGs (MIT) is the owner's go-ahead for that o
       receiver's range from the state, showing the value while dragged, and the ± buttons stay.
       Tests where the state's receiver fields are tested.
 
+96a implementation plan:
+
+1. **Receiver:** the signal path slider's −80 to 0 dB range moves from `SignalPathPanel` to
+   `ReceiverVolume.sliderRangeDecibels`, its own commit, so the remote's slider reads the same.
+2. **Remote:** `RemoteState.Receiver` says that range (`volumeFloorDecibels`,
+   `volumeCeilingDecibels`); tested beside its other fields in `RemoteServiceTests`.
+3. **Page:** `Support/Remote/icons.js`, the Phosphor 2.1.1 path data and its MIT notice, served
+   through `RemotePage.files`; app.js builds each icon with `createElementNS` from
+   `data-icon` names, so no markup is parsed and the content policy is unchanged. Rows drop to
+   40 px (`ROW` and `--row`).
+4. **Scrubber:** the jump bar on the left, a strip on the right of Browse's lists; the speed
+   rule (`scrubSpeed`, `scrubbed`) in logic.js, tested in `RemotePageTests` with JavaScriptCore,
+   as is every icon's path data being path commands only.
+5. **Receiver slider** sending `receiver.setVolume` on release. ADR 0219.
+
 #### 96b. Now Playing's album and search prefixes
 
 - [ ] **96b.1 The ADR (0220).** The query grammar of ADR 0161 (`album:`/`a:`, `artist:`/`ar:`,
