@@ -13431,3 +13431,65 @@ All are fixed with tests. The full gate passes every step but `test`, where only
 `theGlassHeadersAreFrosted` fails, as on main. Bench and release bundle skipped: no budgeted
 path, Package.swift or `#available` changed. Phase 91, still to build, adds its text filter and
 Show in All Music to this list. Pending: the owner check.
+
+### 95. Sorting recommendations and choosing several downloads
+
+The owner (2026-11-22): "recommend windows should be able to sort by the table headers if
+possible, at least where the table is somewhat finite, like recommended discography feature for
+a artist", and "download windows need to be able to select multiple items at once (shift click,
+command click, etc) to be able to retry or remove/cancel etc multiple at once".
+
+- [x] **95.1 The ADR (0218).** Which Recommendations lists sort by header: an artist's
+      discography, and any other list the window holds whole; a list the service pages keeps
+      the service's order with headers that don't sort, since a sort of the loaded part would
+      look like the whole. A sort is kept per list while the app runs and isn't stored. It
+      records what each column sorts by (year as a number, empty values last both ways, then
+      the list's own order as the tie-break).
+- [x] **95.2 Header sorting.** Clicking a column header in the Recommendations window sorts the
+      loaded rows of a list 95.1 allows, and again reverses it, with the header's indicator.
+      The rule lives in the model or `RecommendationColumn`, without AppKit. Selection follows
+      its rows through a sort; a refresh or a page read keeps the sort; leaving the list and
+      coming back restores it. Tests: each column's order, empty values, reverse, a refresh
+      keeping it, and a paged list's headers not sorting.
+- [x] **95.3 Several downloads at once.** The Downloads table takes multiple selection (shift
+      and command click, ⌘A). Each row action (Retry, Remove, Cancel and the rest the window
+      has) is enabled while it applies to any selected row and acts on each row it applies to,
+      skipping the others; the context menu acts on the clicked row, or on the selection when
+      the clicked row is in it, as `RecommendationsWindow` does. An action that asks first
+      asks once for the set, naming the count. Selection is captured by job id before the
+      model swaps its rows, so a refresh keeps it. Tests in `DownloadsWindowTests` and the
+      model's: enabled with mixed rows, the ids each action gets, one confirmation, and a
+      refresh keeping a multiple selection.
+- **Implementation plan:**
+  1. ADR 0218. Every list is paged by the service, 100 rows a page, a discography too; the
+     window holds a discography whole by reading every page once a header sorts it, so only
+     a discography's headers sort, and the scored lists keep the service's order.
+  2. `RecommendationColumn`: which columns sort for a query, each one's value (numbers as
+     numbers, empty last both ways, the list's order breaking ties), and `sorted(_:by:)`.
+     `RecommendationsModel`: the header sort kept per seed while the app runs, applied to
+     `rows`, a read through every page while one is set, and a pop-up order clearing it.
+     The window: sort prototypes on the columns that sort, the indicator from the model,
+     and a header click reported. Tests in a new `HeaderSortTests`.
+  3. `DownloadsWindow`: multiple selection kept by job id, each button and menu item on
+     the selected (or clicked) rows it applies to, Approve, Resume Here and Open in Tagger
+     on the first. `Downloads`: Retry, Reject and Cancel on a set with one confirmation
+     naming the count, Reveal in Finder showing every folder at once. Tests in
+     `DownloadsWindowTests`.
+  4. The README's Recommendations entry.
+
+Result (2026-11-22): `b769cf2c..512fe45c`, 5 commits. Only a discography's headers sort: the
+service pages every list 100 rows at a time, a discography too, so a header sort reads the
+rest of its pages and every later read of it reads whole; the scored lists keep the service's
+order. One sort per seed in `RecommendationsModel`, kept while the app runs; the Sort pop-up
+clears it; unrated releases and empty values sort last both ways. Downloads takes multiple
+selection, kept by job id; Retry, Reject, Cancel and Reveal in Finder act on each selected row
+they apply to, asking once with the count, and each job is read again after the answer;
+Approve, Resume Here and Open in Tagger open one review, on the clicked row. Decided in ADR
+0218. Cost: one Opus builder with one fix round, 196k tokens, 75 + 11 tool calls, about
+24 minutes; one Sonnet reviewer, 68k, and a re-review, 55k. The review found an endless read
+on an empty page that says more follow, the menu's review opening the first selected row
+rather than the clicked one, a stale job state after the confirmation, a reveal alert losing
+problems, and unrated releases sorting as 0.00; the re-review found nothing. The full gate
+passed but for `theGlassHeadersAreFrosted`, which fails on main too, since the test runner has
+no screen recording permission here.
+
