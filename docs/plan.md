@@ -464,6 +464,20 @@ Phosphor by name, so vendoring its SVGs (MIT) is the owner's go-ahead for that o
       changes, and a tap that plays from that track as the album view's does. A track with no
       album, or nothing playing, shows no list. It reads the album once per album, not once
       per state event.
+96b implementation plan:
+
+1. **Grammar:** `TypedQuery`, the `QueryKind` protocol and `SearchKind` (the library kinds and
+   their short names) move to `Core/Settings`, the lowest module both `Remote` and `Palette`
+   import; `PaletteQuery` becomes `TypedQuery<PaletteItem.Kind>` and the palette's kinds take
+   their short names from `SearchKind`, its tests unchanged. A commit of its own.
+2. **Search:** `TrackFilter.searchKind` narrows `search` to that kind's FTS columns;
+   `RemoteLibrary.search` parses `q` into a `TypedQuery<SearchKind>`, lists only that kind, and
+   answers genres and playlists empty. Placeholder from the page names the prefixes. Tests in
+   `RemoteLibraryTests` and `LibraryTests`.
+3. **Now Playing's album:** app.js reads `/api/tracks?album=…&sort=album` once per Mac and
+   album, lists it below the controls with Phosphor's `speaker-high` on the playing track, and
+   a tap plays from that track as the album view does. ADR 0220.
+
 - [ ] **Hardware checkpoint (owner):** on the phone, with the library open: the icons, the
       denser lists, A–Z on the left, scrubbing on the right through Artists and Songs at each
       speed, the receiver slider against the Denon, `a:` and `ar:` searches, and Now Playing's
