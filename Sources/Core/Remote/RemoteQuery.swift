@@ -1,4 +1,5 @@
 import Foundation
+import Library
 import Settings
 
 /// A read's query string, taken strictly (ADR 0215): each key at most once, only the keys the
@@ -103,6 +104,20 @@ struct RemoteQuery: Sendable {
             text.utf8.count <= Self.maximumTextBytes
         else { throw RemoteRefusal("q must be 1 to \(Self.maximumTextBytes) bytes of search") }
         return text
+    }
+
+    /// The search text, and the tags it matches in when it starts with a kind's name and a
+    /// colon, as the palette reads it (ADR 0161, 0220); nil when it names a kind the remote
+    /// doesn't list.
+    func search() throws(RemoteRefusal) -> (text: String, field: SearchField?)? {
+        let typed = TypedQuery<SearchKind>(try text())
+        switch typed.kind {
+        case nil: return (typed.text, nil)
+        case .artist: return (typed.text, .artist)
+        case .album: return (typed.text, .album)
+        case .track: return (typed.text, .title)
+        case .genre, .playlist: return nil
+        }
     }
 
     /// Longer than anyone types into a phone's search field.

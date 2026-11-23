@@ -1,5 +1,6 @@
 import Foundation
 import JavaScriptCore
+import Settings
 import Testing
 
 @testable import Commands
@@ -349,6 +350,16 @@ private func run(_ context: JSContext, _ script: String) -> String? {
     for match in buttons.matches(in: page, range: NSRange(page.startIndex..., in: page)) {
         let tag = String(page[Range(match.range, in: page)!])
         #expect(tag.contains("aria-label="), "\(tag)")
+    }
+}
+
+/// The search field names the short prefix of each kind the search lists, which the server
+/// reads (ADR 0220).
+@Test func theSearchFieldNamesThePrefixes() throws {
+    let page = try text("index.html")
+    let field = try #require(page.split(separator: "\n").first { $0.contains("id=\"search\"") })
+    for kind in [SearchKind.artist, .album, .track] {
+        #expect(field.contains(" \(kind.shortName):"), "\(kind)")
     }
 }
 

@@ -164,6 +164,83 @@ private func read(
     }
 }
 
+/// A word of letters only in `name`, which the search's tokenizer keeps whole.
+private func searchWord(_ name: String) -> String? {
+    let words = name.split(separator: " ").filter { $0.count > 2 && $0.allSatisfy(\.isLetter) }
+    return words.first.map { String($0) }
+}
+
+private func found(_ remote: RemoteLibrary, _ q: String) async throws -> [String: [[Any]]] {
+    let reply = try await read(
+        remote, RemoteRoute.search,
+        "q=" + q.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!)
+    #expect(reply.status == .ok, "\(q)")
+    let found = try #require(try json(reply) as? [String: Any])
+    return try found.mapValues { try #require($0 as? [[Any]]) }
+}
+
+/// The palette's prefixes narrow a search to one kind, matched in its own tags, by its name
+/// or short name in any case; a kind the remote doesn't list finds nothing, and a word that
+/// names no kind is searched as typed (ADR 0161, 0220).
+@Test func aPrefixedSearchListsOnlyThatKind() async throws {
+    let (remote, index) = try library()
+    func matches(_ name: Any, _ word: String) -> Bool {
+        (name as? String)?.range(of: word, options: [.caseInsensitive, .diacriticInsensitive])
+            != nil
+    }
+    let album = try #require(try index.albums().first { searchWord($0.name) != nil })
+    let albumWord = try #require(searchWord(album.name))
+    for q in ["a:\(albumWord)", "ALBUM: \(albumWord.uppercased())", "A:\(albumWord)"] {
+        let albums = try await found(remote, q)
+        #expect(albums["albums"]?.contains { $0[0] as? Int64 == album.id } == true, "\(q)")
+        #expect(albums["albums"]?.allSatisfy { matches($0[1], albumWord) } == true, "\(q)")
+        #expect(albums["artists"]?.isEmpty == true && albums["tracks"]?.isEmpty == true, "\(q)")
+    }
+    let artist = try #require(try index.artists().first { searchWord($0.name) != nil })
+    let artistWord = try #require(searchWord(artist.name))
+    for q in ["ar:\(artistWord)", "Artist:\(artistWord)"] {
+        let artists = try await found(remote, q)
+        #expect(artists["artists"]?.contains { $0[0] as? Int64 == artist.id } == true, "\(q)")
+        #expect(artists["albums"]?.isEmpty == true && artists["tracks"]?.isEmpty == true, "\(q)")
+    }
+    let title = try #require(
+        try index.trackNames(TrackFilter(), sortedBy: .title, window: 0..<200)
+            .compactMap { searchWord($0.title) }.first)
+    for q in ["t:\(title)", "track: \(title)"] {
+        let tracks = try await found(remote, q)
+        #expect(tracks["tracks"]?.isEmpty == false, "\(q)")
+        #expect(tracks["tracks"]?.allSatisfy { matches($0[1], title) } == true, "\(q)")
+        #expect(tracks["artists"]?.isEmpty == true && tracks["albums"]?.isEmpty == true, "\(q)")
+    }
+    for q in ["g:\(albumWord)", "playlist:\(albumWord)"] {
+        #expect(try await found(remote, q).values.allSatisfy(\.isEmpty), "\(q)")
+    }
+    // Searched as typed, the unknown word matches nothing; dropped, the album would match.
+    #expect(try await found(remote, "zzq: \(albumWord)").values.allSatisfy(\.isEmpty))
+    #expect(try await found(remote, albumWord)["albums"]?.isEmpty == false)
+}
+
+/// A track list takes the same prefixes, so the search's songs play as it lists them, and
+/// refuses a kind it can't be narrowed to.
+@Test func aTrackListReadsTheSearchsPrefix() async throws {
+    let (remote, index) = try library()
+    let title = try #require(
+        try index.trackNames(TrackFilter(), sortedBy: .title, window: 0..<200)
+            .compactMap { searchWord($0.title) }.first)
+    let q = "t%3A" + title
+    let range = try #require(
+        try json(try await read(remote, RemoteRoute.tracks, "q=\(q)&offset=0&limit=200"))
+            as? [String: Any])
+    let rows = try #require(range["rows"] as? [[Any]])
+    var filter = TrackFilter(search: title)
+    filter.searchField = .title
+    #expect(rows.count == (try index.trackCount(filter)))
+    #expect(!rows.isEmpty)
+    #expect(
+        try await read(remote, RemoteRoute.tracks, "q=g%3Arock&offset=0&limit=20").status
+            == .badRequest)
+}
+
 @Test func coversNameEachAlbumsArtWhichComesAtTwoSizesForGood() async throws {
     let (remote, index) = try library()
     let albums = try index.albums().map(\.id)

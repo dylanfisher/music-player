@@ -239,6 +239,34 @@ private func playedPaths(_ index: LibraryIndex) throws -> [String] {
             == library.readableCount)
 }
 
+/// A search narrowed to a field matches its words in that field's tags only (ADR 0220).
+@Test func aSearchFieldMatchesOnlyItsTags() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let words = library.manifest.files.compactMap { $0.tags?.album }.compactMap {
+        $0.split(separator: " ").first { $0.count > 2 && $0.allSatisfy(\.isLetter) }
+    }
+    let word = String(try #require(words.first))
+    var filter = TrackFilter(search: word)
+    let anywhere = Set(try index.trackIDs(filter, sortedBy: .title))
+    filter.searchField = .album
+    let inAlbums = try index.trackIDs(filter, sortedBy: .title)
+    #expect(!inAlbums.isEmpty)
+    #expect(Set(inAlbums).isSubset(of: anywhere))
+    for row in try index.rows(ids: inAlbums) {
+        #expect(
+            row.album?.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil,
+            "\(row.path)")
+    }
+    filter.searchField = .title
+    for row in try index.rows(ids: try index.trackIDs(filter, sortedBy: .title)) {
+        #expect(
+            row.title.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil,
+            "\(row.path)")
+    }
+}
+
 @Test func searchTextBecomesQuotedPrefixPhrases() {
     #expect(ftsQuery("beat abb") == "\"beat\"* \"abb\"*")
     #expect(ftsQuery("say \"hi\"") == "\"say\"* \"\"\"hi\"\"\"*")

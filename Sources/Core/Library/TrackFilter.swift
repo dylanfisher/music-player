@@ -12,6 +12,8 @@ public struct TrackFilter: Equatable, Sendable {
     /// What was typed in the search field. Words match the starts of words in the title, artist,
     /// album, album artist, genre or composer.
     public var search: String
+    /// The tags `search` matches in; nil for all six.
+    public var searchField: SearchField?
     /// `library.groupByAlbumArtist`: the Artists column and `artist` name the album artist, and
     /// sorts by Artist or Album keep each album's tracks together.
     public var groupByAlbumArtist: Bool

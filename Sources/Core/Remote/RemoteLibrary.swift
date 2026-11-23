@@ -144,7 +144,13 @@ public actor RemoteLibrary {
         var filter = trackFilter(
             genre: try query.id(RemoteQuery.genre), artist: try query.id(RemoteQuery.artist),
             album: try query.id(RemoteQuery.album), grouped: grouped)
-        if query.has(RemoteQuery.text) { filter.search = try query.text() }
+        if query.has(RemoteQuery.text) {
+            guard let search = try query.search() else {
+                throw RemoteRefusal("q names a kind a track list can't be narrowed to")
+            }
+            filter.search = search.text
+            filter.searchField = search.field
+        }
         return (filter, try query.column() ?? .artist, !(try query.flag(RemoteQuery.descending)))
     }
 
@@ -184,18 +190,30 @@ public actor RemoteLibrary {
         throws -> Read
     {
         try query.only([RemoteQuery.text])
-        let filter = TrackFilter(search: try query.text(), groupByAlbumArtist: grouped)
+        // A kind the remote doesn't list finds nothing, as the palette lists nothing of a
+        // kind it doesn't have.
+        let search = try query.search()
+        var filter = TrackFilter(search: search?.text ?? "", groupByAlbumArtist: grouped)
+        filter.searchField = search?.field
+        let lists = { (field: SearchField) in
+            search.map { $0.field == nil || $0.field == field } ?? false
+        }
         return { _ in
             RemoteAPI.reply(
                 Found(
-                    artists: EntryList(
-                        try index.searchEntries(.artists, filter, limit: searchLimit), albums: false
-                    ).rows,
-                    albums: EntryList(
-                        try index.searchEntries(.albums, filter, limit: searchLimit), albums: true
-                    ).rows,
-                    tracks: try index.trackNames(filter, sortedBy: .artist, window: 0..<searchLimit)
-                        .map(TrackLine.init)))
+                    artists: lists(.artist)
+                        ? EntryList(
+                            try index.searchEntries(.artists, filter, limit: searchLimit),
+                            albums: false
+                        ).rows : [],
+                    albums: lists(.album)
+                        ? EntryList(
+                            try index.searchEntries(.albums, filter, limit: searchLimit),
+                            albums: true
+                        ).rows : [],
+                    tracks: lists(.title)
+                        ? try index.trackNames(filter, sortedBy: .artist, window: 0..<searchLimit)
+                            .map(TrackLine.init) : []))
         }
     }
 

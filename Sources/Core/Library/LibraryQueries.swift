@@ -453,7 +453,7 @@ extension LibraryIndex {
                 guard let search = ftsQuery(filter.search) else { continue }
                 conditions.append(
                     "t.file_id IN (SELECT rowid FROM track_search WHERE track_search MATCH ?)")
-                values.append(search)
+                values.append(filter.searchField.map { "{\($0.columns)} : (\(search))" } ?? search)
             }
         }
         return (conditions, values)
