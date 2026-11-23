@@ -91,6 +91,6 @@ extension AppDelegate {
     }
 }
 
-private struct LibraryNotWatched: Error, CustomStringConvertible {
+struct LibraryNotWatched: Error, CustomStringConvertible {
     var description: String { "the library isn't being watched" }
 }

@@ -80,7 +80,7 @@ public enum AppMenus {
         .separator,
         .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
         .separator, .command(.editTags), .command(.showSpectrum), .command(.revealInFinder),
-        .separator,
+        .command(.rescanSelected), .separator,
         .command(.removeTracks), .separator, .command(.newPlaylistFromSelection),
         .live(addToPlaylistMenuTitle),
         .live(showInPlaylistMenuTitle),
@@ -126,7 +126,7 @@ public enum AppMenus {
                     .command(.showDiscogsTagger), .command(.showDownloads),
                     .command(.showRecommendations), .command(.recommendationsForAlbum),
                     .command(.recommendationsForArtist), .command(.showDiscography),
-                    .command(.rescanNow),
+                    .command(.rescanNow), .command(.rescanSelected),
                     .submenu(
                         "Moved and Removed Files",
                         [

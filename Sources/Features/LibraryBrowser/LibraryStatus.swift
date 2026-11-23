@@ -34,6 +34,8 @@ struct LibraryStatus: Equatable, Sendable {
     var organizedReport: [Problem] = []
     /// The lines of the last move list imported that moved nothing.
     var importedMovesReport: [Problem] = []
+    /// The files the last Rescan Selected Files couldn't read (ADR 0221).
+    var rescannedReport: [Problem] = []
     /// What the health check shown found that the table can't list, and how many such items.
     var healthProblems: [Problem] = []
     var healthOtherCount = 0
@@ -241,6 +243,7 @@ struct LibraryStatus: Equatable, Sendable {
             + addedFilesReport.map { $0.kinded(ProblemKind.added) }
             + organizedReport.map { $0.kinded(ProblemKind.organized) }
             + importedMovesReport.map { $0.kinded(ProblemKind.movesImported) }
+            + rescannedReport
         return
             (reports + healthProblems + syncProblems.map { Problem($0, kind: ProblemKind.sync) }
             + folderLines.map(\.problem)).filter { !dismissed.contains($0.line) }

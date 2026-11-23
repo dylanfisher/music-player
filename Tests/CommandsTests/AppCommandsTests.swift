@@ -39,7 +39,7 @@ import Testing
             "Like",
             "Dislike", "-", "Rating ▸ 6",
             "-", "Get Info", "Show Spectrum",
-            "Reveal in Finder", "-",
+            "Reveal in Finder", "Rescan Selected Files", "-",
             "Remove…", "-", "New Playlist with Selected Tracks", "Add to Playlist ▸",
             "Show in Playlist ▸",
         ])

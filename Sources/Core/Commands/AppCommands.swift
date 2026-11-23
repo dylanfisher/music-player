@@ -87,6 +87,8 @@ extension CommandID {
     /// Asks for a Discogs artist, release or master and shows its discography (ADR 0217).
     public static let showDiscography = CommandID("recommendations.discography")
     public static let rescanNow = CommandID("library.rescanNow")
+    /// Reads the selection's files again whatever their size and mtime say (ADR 0221).
+    public static let rescanSelected = CommandID("track.rescan")
     /// Analyzes every file not analyzed yet, or changed since, until paused (ADR 0116); once
     /// every file was tried, the whole library again (ADR 0119).
     public static let analyzeLibrary = CommandID("library.analyzeLibrary")
@@ -328,6 +330,7 @@ public enum AppCommands {
             Command(.showDiscography, "Show Discography…"),
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
             Command(.rescanNow, "Rescan All"),
+            Command(.rescanSelected, "Rescan Selected Files"),
             // Not from links either: it reads every file on the NAS.
             Command(.analyzeLibrary, "Analyze Library"),
             Command(.pauseLibraryAnalysis, "Pause Library Analysis"),

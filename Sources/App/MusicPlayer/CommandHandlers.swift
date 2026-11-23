@@ -49,6 +49,17 @@ extension AppDelegate {
             .rescanNow, enabled: { [weak self] in self?.watcher != nil },
             run: { [weak self] in self?.watcher?.rescanNow() })
         dispatcher.handle(
+            .rescanSelected,
+            enabled: { [weak self] in self?.watcher != nil && self?.hasSelectedTracks() == true },
+            run: { [weak self] in
+                self?.browser?.rescanSelection { [weak self] paths, done in
+                    guard let watcher = self?.watcher else {
+                        return done(.failure(LibraryNotWatched()))
+                    }
+                    watcher.rescan(files: paths, done: done)
+                }
+            })
+        dispatcher.handle(
             .pauseScan,
             enabled: { [weak self] in
                 self?.browser?.showsScan == true && self?.browser?.scanIsPaused == false
@@ -367,7 +378,7 @@ extension AppDelegate {
             do {
                 use(try await browser.selectedPaths())
             } catch {
-                browser.reportCommand("couldn't read the selected tracks", error)
+                browser.reportCommand(LibraryBrowser.unreadSelection, error)
             }
         }
     }
