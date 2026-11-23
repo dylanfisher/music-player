@@ -394,7 +394,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phases 96 and 97 are the owner's list of 2026-11-22. Phases 91 and 92 are the owner's requests of 2026-11-19. Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
+Phase 96 is from the owner's list of 2026-11-22. Phases 91 and 92 are the owner's requests of 2026-11-19. Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
 
 ### 96. The web remote, denser and searchable
 
@@ -453,32 +453,6 @@ Phosphor by name, so vendoring its SVGs (MIT) is the owner's go-ahead for that o
       denser lists, A–Z on the left, scrubbing on the right through Artists and Songs at each
       speed, the receiver slider against the Denon, `a:` and `ar:` searches, and Now Playing's
       album following a track change.
-
-### 97. Rescanning the selected files
-
-The owner (2026-11-22): "add ability to rescan only some files (the selected files)".
-
-- [ ] **97.1 Rescan Selected Files.** A command in the Library menu, the track table's context
-      menu and ⌘K, enabled while the browser has tracks selected, that reads those files again
-      through `LibraryWatcher.rescan(files:)`, whatever their size and mtime say, as after a
-      tag edit. The status line says how many were read again, and a file that's gone or
-      unreadable is reported as a scan problem as a folder scan reports it, not dropped. It
-      reads the files only (AGENTS.md boundary). Tests: the command's enabled state, the
-      paths it passes (an album row's tracks, not the row), and a missing file reported.
-
-Implementation plan:
-
-1. **Commands:** `CommandID.rescanSelected` ("Rescan Selected Files"), in the File menu after
-   Rescan All (the library's commands are there; there's no Library menu) and in the track
-   menu after Reveal in Finder; the palette lists it as it lists every menu command.
-2. **Library:** `LibraryWatcher.rescan(files:parsed:done:)` hands its caller the summary, or
-   the error it now only logs, besides sending `edited`.
-3. **LibraryBrowser:** `rescanSelection(through:)` reads the selected paths, hands them over,
-   and says "Read 12 files again" in the status bar, listing the files it couldn't read as
-   their own report in the Problems window, as a folder scan's issues show.
-4. **App:** the handler, on while the browser has tracks selected and a watcher runs.
-5. ADR 0221; tests in `LibraryBrowserTests` (enabled state, the paths of a timeline's rows,
-   a gone file reported) and `LibraryWatcherTests` (the reply).
 
 ### 91. Filtering and finding downloads and recommendations
 
