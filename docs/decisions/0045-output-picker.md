@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
-- **Amended by:** [0211](0211-falling-back-to-system-default.md): the menus and ⌘K check System
+- **Amended by:** [0223](0223-falling-back-to-system-default.md): the menus and ⌘K check System
   Default during a fallback, and the menus and the popup show a Searching row while a search
   runs.
 

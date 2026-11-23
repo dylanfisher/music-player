@@ -23,7 +23,7 @@ enum HALDeviceProviderError: PlaybackFailure {
 
 /// The CoreAudio device with one UID. It listens for the device list changing and for the device
 /// dying, and never substitutes another device itself; the app falls back to System Default
-/// through another provider (ADR 0211). It also follows the properties that decide
+/// through another provider (ADR 0223). It also follows the properties that decide
 /// whether the device plays samples unchanged, and reports its state each time one changes.
 ///
 /// The first open in a run snapshots the device and the system's default outputs into
@@ -65,7 +65,7 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
 
     /// `uid`, or for nil the UID of the system's default output now. Resolved once, so when that
     /// device goes away playback pauses instead of following macOS to another one, and a
-    /// fallback to System Default resolves it again (ADR 0211).
+    /// fallback to System Default resolves it again (ADR 0223).
     ///
     /// While this process hogs a device, macOS moves the default output off it, or leaves none
     /// when it is the only output, so the default is read through `systemDefaultUID`, which

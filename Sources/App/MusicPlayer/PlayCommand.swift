@@ -220,7 +220,7 @@ private final class Player: @unchecked Sendable {
         case .finished, .stopped:
             log(update.event == .finished ? "done" : "stopped")
             if beginQuitting() { finish(status: 0) }
-        // The command line never falls back: only the app does (ADR 0211).
+        // The command line never falls back: only the app does (ADR 0223).
         case .queueChanged, .trackEnded, .seeked, .fellBack, .outputChanged, nil: break
         }
     }

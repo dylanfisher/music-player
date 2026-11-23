@@ -4,7 +4,7 @@
 - **Status:** accepted
 - **Amended by:** [0023](0023-failure-table.md): the failure table, and the failures phase 14a
   changed how this reports. [0063](0063-failed-tracks-stop-playback.md): which failures stop
-  playback. [0211](0211-falling-back-to-system-default.md): a lost device falls back to System
+  playback. [0223](0223-falling-back-to-system-default.md): a lost device falls back to System
   Default, paused.
 
 ## Context
@@ -80,7 +80,7 @@ decoded. Position comes from the same count.
 `kAudioHardwarePropertyDevices` and to `kAudioDevicePropertyDeviceIsAlive` on the device's current
 object ID. With no UID set, the system default is resolved once, at the start. If the device goes
 away, the output drops everything and reports where to resume, and the engine pauses. It never
-moves to another device. (Superseded by [0211](0211-falling-back-to-system-default.md): when the
+moves to another device. (Superseded by [0223](0223-falling-back-to-system-default.md): when the
 config names the device, the app moves output to System Default, still paused, and back when
 the device returns.) When the device comes back, the default outputs are put back and the
 engine offers to resume. Hog mode follows `output.hogMode`; without it only mixable formats are
@@ -120,7 +120,7 @@ underruns through it.
   exact byte, which one buffer and a byte count already give for free.
 - **Following macOS to the new default device when the DAC is unplugged** — rejected: it would play
   out of the speakers at the DAC's volume, which is the failure the plan forbids. (Superseded
-  by [0211](0211-falling-back-to-system-default.md): the fallback stays paused until Play and
+  by [0223](0223-falling-back-to-system-default.md): the fallback stays paused until Play and
   plays with System Default's own profile.)
 - **A trap handler that restores the device on a crash** — rejected: CoreAudio calls aren't
   async-signal-safe. The restore record handles every way a run can end, including `kill -9`.

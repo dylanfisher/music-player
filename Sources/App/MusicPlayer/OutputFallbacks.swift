@@ -4,7 +4,7 @@ import Settings
 private let logger = moduleLogger()
 
 /// Where playback stands in a fallback to System Default, and what each step of one decides,
-/// with no AppKit, device or network in it, so tests drive it with stand-ins (ADR 0211). The
+/// with no AppKit, device or network in it, so tests drive it with stand-ins (ADR 0223). The
 /// app makes the moves it decides on. `Renderer` is the renderer output a fallback leaves.
 struct OutputFallbacks<Renderer: AnyObject> {
     enum Phase {
@@ -127,7 +127,7 @@ struct OutputFallbacks<Renderer: AnyObject> {
 
     /// Whether an edit of the output settings only saves `profile`, the device's the config
     /// names: once playback is on System Default in its place, the config shows that device's
-    /// settings, so an edit is that device's, and the output stays (ADR 0211). Not for a change
+    /// settings, so an edit is that device's, and the output stays (ADR 0223). Not for a change
     /// of device (`switched`), or when the config's device is the one in use.
     func savesOnly(_ profile: DeviceProfile, switched: Bool, inUse: String?) -> Bool {
         hasMoved && !switched && profile.uid != inUse
@@ -141,7 +141,7 @@ struct OutputFallbacks<Renderer: AnyObject> {
 
     /// The hog mode a problem's details show for the device in use: the config's, which
     /// mirrors that device's profile, `inUse`, except once playback is on System Default, when
-    /// the config shows the chosen device's (ADR 0211).
+    /// the config shows the chosen device's (ADR 0223).
     func hogModeShown(config: Bool, inUse: Bool?) -> Bool? { hasMoved ? inUse : config }
 
     /// Whether Turn On Hog Mode, which sets the config's hog mode, reaches the device in use.
@@ -164,7 +164,7 @@ struct OutputFallbacks<Renderer: AnyObject> {
 
     /// Whether a pick of `choice` ends the fallback, though it changes no setting: it's the
     /// output the config names, `named`, listed as not connected while System Default plays
-    /// in its place, so picking it asks for that output again (ADR 0211).
+    /// in its place, so picking it asks for that output again (ADR 0223).
     func pickEnds(_ choice: OutputChoice, named: OutputChoice) -> Bool {
         hasMoved && choice == named
     }

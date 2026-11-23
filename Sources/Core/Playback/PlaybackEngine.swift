@@ -99,7 +99,7 @@ public actor PlaybackEngine {
 
     /// The output in use moved by itself to a device the user chose in place of the lost one,
     /// as `DeviceOutput` does when a pick ends its fallback: the loss is over, and
-    /// `outputChanged` says so (ADR 0211).
+    /// `outputChanged` says so (ADR 0223).
     public func lossEnded() {
         guard state.device == .lost else { return }
         state.device = .connected
@@ -123,7 +123,7 @@ public actor PlaybackEngine {
     /// Plays through `fallback` after the output in use was lost, paused where the loss left
     /// it, until Play. The lost output isn't stopped, so it goes on watching for its return (a
     /// renderer asks whether it answers), and when it reports one, playback moves back to it,
-    /// paused or playing as it is then (ADR 0211). `use(_:)` ends the fallback. Returns false,
+    /// paused or playing as it is then (ADR 0223). `use(_:)` ends the fallback. Returns false,
     /// moving nothing, when the output in use isn't lost or is `fallback`.
     @discardableResult
     public func fallBack(to fallback: any Output) -> Bool {
@@ -138,7 +138,7 @@ public actor PlaybackEngine {
     /// Ends a fallback by going back to the output lost, which is lost still, as when the user
     /// picks it again: what the fallback plays stops, paused where it is, and nothing loads
     /// until the lost output reports its return or Play is pressed. Its return is then handled
-    /// as any lost output's (ADR 0211).
+    /// as any lost output's (ADR 0223).
     public func backToLost() {
         guard let lost = lostOutput else { return }
         let resume = currentItem.map { ($0, resumeSeconds ?? position() ?? 0) }

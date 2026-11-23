@@ -4,7 +4,7 @@
 - **Status:** accepted
 - **Amended by:** [0098](0098-scan-adds-by-folder-hog-mode-off-ember-icon.md): `output.hogMode`
   is off by default, and a device seen first hogs only when it's on and its kind allows it.
-  [0211](0211-falling-back-to-system-default.md): after the app's own fallback to System
+  [0223](0223-falling-back-to-system-default.md): after the app's own fallback to System
   Default, output returns to the device even while System Default plays.
 
 ## Context

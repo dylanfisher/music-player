@@ -92,7 +92,7 @@ enum DoPRefusal: Sendable {
 ///
 /// `use(_:)` moves playback to another device mid-track. When the device in use goes away and
 /// another is chosen, the first is watched, and output goes back to it once it returns, unless
-/// the other one is playing (ADR 0037); after `fallBack(to:)`, even then (ADR 0211).
+/// the other one is playing (ADR 0037); after `fallBack(to:)`, even then (ADR 0223).
 ///
 /// Unchecked Sendable: `condition` guards what callers share with the control thread, and the
 /// rest belongs to the one control thread, which `step()` runs (`DeviceOutput+Control.swift`).
@@ -255,7 +255,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// device in use, it only applies the new settings.
     public func use(_ choice: DeviceChoice) { post(.use(choice)) }
     /// `use(_:)` for a device the user didn't choose, after the one in use went away: output goes
-    /// back to the lost device when it returns, whatever plays here (ADR 0211).
+    /// back to the lost device when it returns, whatever plays here (ADR 0223).
     public func fallBack(to choice: DeviceChoice) { post(.fallBack(choice)) }
     public func position() -> OutputPosition? {
         condition.withLock {

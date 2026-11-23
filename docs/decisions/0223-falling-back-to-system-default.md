@@ -1,4 +1,4 @@
-# 0211. An output that goes away falls back to System Default, paused
+# 0223. An output that goes away falls back to System Default, paused
 
 - **Date:** 2026-11-19
 - **Status:** accepted

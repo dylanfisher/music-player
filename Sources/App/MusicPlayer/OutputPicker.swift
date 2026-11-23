@@ -47,7 +47,7 @@ extension AppDelegate {
     }
 
     /// The output playing: System Default during a fallback, while the config names the output
-    /// that went away (ADR 0211).
+    /// that went away (ADR 0223).
     var outputInUse: OutputChoice { outputFallback.inUse(named: currentOutput) }
 
     func outputOptionsNow() -> [OutputOption] {
@@ -73,7 +73,7 @@ extension AppDelegate {
     }
 
     /// Starts one search for renderers, unless one is running, and lists what it finds. The
-    /// lists show a Searching row until it ends (ADR 0211).
+    /// lists show a Searching row until it ends (ADR 0223).
     func searchOutputs() {
         guard outputSearch == nil else { return }
         outputSearch = Task { [weak self] in
@@ -129,7 +129,7 @@ extension AppDelegate {
 }
 
 /// The palette rows that pick an output, "Output: <name>". No Searching row: the palette's rows
-/// are listed once as it opens, so one would stay after the search ended (ADR 0211).
+/// are listed once as it opens, so one would stay after the search ended (ADR 0223).
 func outputItems(_ options: [OutputOption], current: OutputChoice) -> [PaletteItem] {
     options.map {
         PaletteItem(

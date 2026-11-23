@@ -268,7 +268,7 @@ private func fellBackFromTheDAC(playing: Bool) async throws -> (TwoDevices, resu
 @Test func aPickOfAnotherDeviceDuringAFallbackEndsTheLoss() async throws {
     let (rig, _) = try await fellBackFromTheDAC(playing: true)
     let headphones = NullDevice(name: "Headphones")
-    // As the app does when the user's pick ends the fallback (ADR 0211).
+    // As the app does when the user's pick ends the fallback (ADR 0223).
     rig.output.use(DeviceChoice(provider: headphones, digitalVolume: false, gain: 1, formats: nil))
     await rig.engine.lossEnded()
     try await rig.wait(for: .outputChanged)

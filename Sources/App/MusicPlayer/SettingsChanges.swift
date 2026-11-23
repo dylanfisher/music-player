@@ -220,7 +220,7 @@ extension AppDelegate {
             applyRemoteSetting()
         }
         let output = [schema.outputDeviceUID.key, schema.hogMode.key, schema.digitalVolume.key]
-        // A change of output ends a fallback, and output goes where the settings say (ADR 0211).
+        // A change of output ends a fallback, and output goes where the settings say (ADR 0223).
         let choice = [schema.outputDeviceUID.key, schema.outputRenderer.key]
         let ending = !keys.isDisjoint(with: choice) && endFallback()
         if ending || !keys.isDisjoint(with: output) {

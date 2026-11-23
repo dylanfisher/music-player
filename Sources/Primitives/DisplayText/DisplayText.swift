@@ -106,13 +106,13 @@ public let emptyStar = "☆"
 public let mixedPlaceholder = "Mixed"
 
 /// Now Playing's line once playback has moved, paused, to System Default because the output it
-/// played on went away (ADR 0211).
+/// played on went away (ADR 0223).
 public let fellBackMessage =
     "The output went away, so playback paused and moved to System Default. Press Play to play"
     + " there; it moves back once the output returns."
 
 /// The output pickers' last row, disabled, while a search for network renderers runs
-/// (ADR 0211).
+/// (ADR 0223).
 public let searchingForRenderers = "Searching for network players…"
 
 /// `text` as one line for a terminal. A file name or a tag can hold control characters, which

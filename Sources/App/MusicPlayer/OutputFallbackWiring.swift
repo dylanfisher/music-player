@@ -9,7 +9,7 @@ private let logger = moduleLogger()
 
 /// Falling back to System Default, paused, when the output the config names goes away, and
 /// back when it returns, as `OutputFallbacks` decides. The config isn't written, so the choice
-/// survives (ADR 0211).
+/// survives (ADR 0223).
 extension AppDelegate {
     /// Moves playback to System Default after a loss, unless it already fell back.
     func fallBack() {

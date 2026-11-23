@@ -44,7 +44,7 @@ public final class NowPlayingModel {
                     problem: failure, track: url, entry: entry, trackFormat: format(of: url),
                     headline: "Couldn't play \(url.lastPathComponent): \(failure.message)"))
         case .deviceLost: show(Self.lostMessage)
-        // Playing, it took over what played on System Default (ADR 0211).
+        // Playing, it took over what played on System Default (ADR 0223).
         case .deviceReturned where isPlaying: endLoss()
         case .deviceReturned: show(Self.returnedMessage)
         case .fellBack: show(fellBackMessage)

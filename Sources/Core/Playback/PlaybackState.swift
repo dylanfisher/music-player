@@ -9,7 +9,7 @@ public struct PlaybackState: Sendable, Equatable {
     public enum Device: Sendable, Equatable {
         case connected
         /// Unplugged or gone. Playback paused, and stays paused if it moved to System Default
-        /// (ADR 0211).
+        /// (ADR 0223).
         case lost
         /// Back after being lost, so playback can resume where it paused.
         case returned
@@ -62,7 +62,7 @@ public enum PlaybackEvent: Sendable, Equatable {
     case deviceLost
     case deviceReturned
     /// Playback moved, paused, to System Default after the output it played on was lost, and
-    /// moves back once that returns (ADR 0211).
+    /// moves back once that returns (ADR 0223).
     case fellBack
     /// Another output took the place of the one lost, or the fallback from it became the
     /// choice, so the loss is over.
