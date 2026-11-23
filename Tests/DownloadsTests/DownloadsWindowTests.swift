@@ -124,6 +124,83 @@ private func rows() -> [DownloadRow] {
 }
 
 @MainActor
+@Test func aReviewFromTheMenuOpensOnTheClickedRowInsideASelection() throws {
+    let window = DownloadsWindow()
+    var acted: [[Int]] = []
+    window.applies = { action, _ in action == .openInTagger }
+    window.act = { acted.append($1.map(\.id)) }
+    window.show(rows(), status: "", canAdd: true)
+    window.table.selectRowIndexes([0, 1], byExtendingSelection: false)
+    let menu = try #require(window.table.menu)
+    window.fill(menu, clicked: 1)
+    let tagger = try #require(
+        menu.items.first { $0.title == DownloadAction.openInTagger.title })
+    menu.performActionForItem(at: menu.index(of: tagger))
+    click(try #require(window.buttons[.openInTagger]))
+    #expect(acted == [[2], [1]], "the clicked row, then the button's first")
+    window.window?.close()
+}
+
+@MainActor
+@Test func severalJobsAreActedOnAsTheyAreOnceTheQuestionIsAnswered() async throws {
+    let fake = FakeService([
+        job(1, .notFound),
+        job(3) { $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["x"]) },
+    ])
+    let (downloads, session) = try await started(fake.service) { throw CancellationError() }
+    var yes: (() -> Void)?
+    downloads.answer = { yes = $1 }
+    downloads.show()
+    let window = try #require(downloads.controller)
+    await eventually("the first poll") { window.rows.count == 2 }
+    window.table.selectAll(nil)
+    click(try #require(window.buttons[.retry]))
+    let answer = try #require(yes)
+    // While the question is up, job 1 is imported and job 3's copy fails its search.
+    fake.put(job(1, .imported))
+    fake.put(
+        job(3, .failed) {
+            $0.failedStage = .search
+            $0.tagging = DownloadJob.Tagging(status: .discrepancy, reasons: ["x"])
+        })
+    await session.model.poll()
+    answer()
+    await eventually("job 3 retried") { fake.job(3)?.state == .queued }
+    #expect(fake.requeued.isEmpty, "retried as it is now, not requeued as it was")
+    #expect(fake.job(1)?.state == .imported, "Retry no longer applies to it")
+    downloads.window?.close()
+    downloads.stop()
+}
+
+@MainActor
+@Test func aMissingStagingFolderIsSaidWithTheFoldersRefusedBefore() async throws {
+    let service = FakeService([
+        job(1) { $0.stagedPath = "../library" }, job(2) { $0.stagedPath = "job-2" },
+    ])
+    let (downloads, session) = try await started(service.service) {
+        throw CancellationError()
+    }
+    downloads.show()
+    let window = try #require(downloads.window)
+    downloads.reveal([try #require(service.job(1)), try #require(service.job(2))], session)
+    await eventually("the alert") { window.attachedSheet != nil }
+    let texts = labels(in: window.attachedSheet?.contentView)
+    #expect(texts.contains(Downloads.noStagingFolder))
+    #expect(texts.contains { $0.contains(DownloadJob.notOneFolder("../library")) })
+    if let sheet = window.attachedSheet { window.endSheet(sheet) }
+    window.close()
+    downloads.stop()
+}
+
+/// Every label's text under `view`.
+@MainActor
+private func labels(in view: NSView?) -> [String] {
+    guard let view else { return [] }
+    return ((view as? NSTextField).map { [$0.stringValue] } ?? [])
+        + view.subviews.flatMap { labels(in: $0) }
+}
+
+@MainActor
 @Test func aRefreshKeepsEverySelectedJobSelected() {
     let window = DownloadsWindow()
     window.show(rows(), status: "", canAdd: true)
@@ -147,7 +224,7 @@ private func rows() -> [DownloadRow] {
     var asked: [String] = []
     downloads.answer = {
         asked.append($0)
-        return true
+        $1()
     }
     downloads.show()
     let window = try #require(downloads.controller)

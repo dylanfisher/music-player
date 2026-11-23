@@ -231,10 +231,15 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
         table.selectedRowIndexes.filter { $0 < rows.count }.map { rows[$0] }
     }
 
-    /// The rows of `chosen` that `action` acts on: each it applies to, or the first.
-    private func acted(_ action: DownloadAction, _ chosen: [DownloadRow]) -> [DownloadRow] {
+    /// The rows of `chosen` that `action` acts on: each it applies to, or one, `clicked`
+    /// when it applies, else the first.
+    private func acted(
+        _ action: DownloadAction, _ chosen: [DownloadRow], clicked: DownloadRow? = nil
+    ) -> [DownloadRow] {
         let applying = chosen.filter { applies(action, $0) }
-        return action.actsOnEach ? applying : Array(applying.prefix(1))
+        if action.actsOnEach { return applying }
+        if let clicked, applying.contains(clicked) { return [clicked] }
+        return Array(applying.prefix(1))
     }
 
     /// The rows a menu item acts on: the selection when the clicked row is in it, else the
@@ -263,7 +268,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     @objc private func menuChosen(_ sender: NSMenuItem) {
         guard let row = sender.representedObject as? Int, row < rows.count else { return }
         let action = DownloadAction.allCases[sender.tag]
-        let chosen = acted(action, menuRows(row))
+        let chosen = acted(action, menuRows(row), clicked: rows[row])
         if !chosen.isEmpty { act(action, chosen) }
     }
 
@@ -282,7 +287,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
             item.target = self
             item.tag = index
             item.representedObject = clicked
-            item.isEnabled = !acted(action, menuRows(clicked)).isEmpty
+            item.isEnabled = !acted(action, menuRows(clicked), clicked: rows[clicked]).isEmpty
             menu.addItem(item)
         }
         if let discography = discographyItem(rows[clicked].releaseID) {

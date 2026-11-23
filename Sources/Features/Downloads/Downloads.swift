@@ -137,9 +137,9 @@ package final class Downloads {
 
     /// A row's Show Discography item for its release, from Recommendations (ADR 0217).
     package var discographyItem: (Int) -> NSMenuItem? = { _ in nil }
-    /// Answers `confirm`'s question, by its message, in place of the owner; nil asks the
-    /// owner. Tests stand in for them.
-    var answer: ((String) -> Bool)?
+    /// Hears `confirm`'s question, by its message, in place of the owner, with what to run
+    /// for a yes; nil asks the owner. Tests stand in for them.
+    var answer: ((String, @escaping () -> Void) -> Void)?
     /// Shows files in the Finder, and opens a web page; tests stand in for both.
     var showInFinder: ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
     var openPage: (URL) -> Void = { url in
@@ -1119,10 +1119,7 @@ package final class Downloads {
     func confirm(
         _ message: String, _ detail: String, _ button: String, then: @escaping () -> Void
     ) {
-        if let answer {
-            if answer(message) { then() }
-            return
-        }
+        if let answer { return answer(message, then) }
         guard let window = controller?.window else { return }
         let question = NSAlert()
         question.messageText = message

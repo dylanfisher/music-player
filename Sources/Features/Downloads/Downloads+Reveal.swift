@@ -28,7 +28,7 @@ extension Downloads {
                 do {
                     root = try await places().stagingRoot
                 } catch {
-                    return alert(Self.noStagingFolder, ["\(error)"])
+                    return alert(Self.noStagingFolder, ["\(error)"] + problems)
                 }
                 for folder in folders {
                     let url = URL(fileURLWithPath: root, isDirectory: true)

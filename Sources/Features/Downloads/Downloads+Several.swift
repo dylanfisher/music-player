@@ -15,7 +15,7 @@ extension Downloads {
                 "music-recommender deletes their staged folders. Nothing in the library changes.",
                 DownloadAction.rejectButton
             ) {
-                self.each(jobs, session, failed: "rejections weren't sent") { job in
+                self.each(action, jobs, session, failed: "rejections weren't sent") { job in
                     guard let coordinator = session.coordinator else {
                         return Self.notReviewing
                     }
@@ -28,7 +28,7 @@ extension Downloads {
                 "music-recommender stops them and deletes what they got.",
                 DownloadAction.cancel.title
             ) {
-                self.each(jobs, session, failed: "downloads weren't cancelled") {
+                self.each(action, jobs, session, failed: "downloads weren't cancelled") {
                     await session.model.cancel($0.id)
                 }
             }
@@ -39,7 +39,7 @@ extension Downloads {
                     + " deleted and searched for again from a user the download hasn't tried.",
                 DownloadAction.retry.title
             ) {
-                self.each(jobs, session, failed: "downloads weren't started again") { job in
+                self.each(action, jobs, session, failed: "downloads weren't started again") { job in
                     guard job.state == .staged else {
                         return await session.model.retry(job.id, policy: nil)
                     }
@@ -58,15 +58,17 @@ extension Downloads {
     /// Why a job that needs this Mac's review couldn't be sent: it hasn't started reviewing.
     static let notReviewing = "this Mac isn't reviewing downloads yet"
 
-    /// Runs `call` on each job in turn, then says which it failed for, and asks for the jobs
-    /// again.
+    /// Runs `call` on each job in turn, as it is now, then says which it failed for, and asks
+    /// for the jobs again. A job `action` no longer applies to, since the question went up or
+    /// as the jobs before it ran, is skipped.
     private func each(
-        _ jobs: [(row: DownloadRow, job: DownloadJob)], _ session: Session, failed: String,
-        _ call: @escaping (DownloadJob) async -> String?
+        _ action: DownloadAction, _ jobs: [(row: DownloadRow, job: DownloadJob)],
+        _ session: Session, failed: String, _ call: @escaping (DownloadJob) async -> String?
     ) {
         Task {
             var problems: [String] = []
-            for (row, job) in jobs {
+            for (row, _) in jobs {
+                guard let job = session.model.job(row.id), applies(action, row) else { continue }
                 if let problem = await call(job) { problems.append("\(row.album): \(problem)") }
             }
             if !problems.isEmpty { alert("\(problems.count) of \(jobs.count) \(failed)", problems) }
