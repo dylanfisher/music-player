@@ -234,7 +234,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private(set) var scanButtonCommand: CommandID?
     private(set) var analysisButtonCommand: CommandID?
     private let problemsButton = NSButton()
-    private(set) var status = LibraryStatus()
+    var status = LibraryStatus()
     private var browserHeight: Int
     private var lastRefresh = Date.distantPast
     private var refreshPending = false
@@ -905,7 +905,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         if hadKeys { focusTracks() }
     }
 
-    private func showStatus() {
+    func showStatus() {
         let check: HealthCheck? =
             if case .health(let check) = model.filter.source { check } else { nil }
         let found = check.flatMap { health.report?[$0] }

@@ -36,6 +36,10 @@ struct LibraryStatus: Equatable, Sendable {
     var importedMovesReport: [Problem] = []
     /// The files the last Rescan Selected Files couldn't read (ADR 0221).
     var rescannedReport: [Problem] = []
+    /// The last Rescan Selected Files begun, so only its end takes away its "Reading 12 files
+    /// again" and says what it read.
+    var latestRescan = 0
+    var rescanningText: String?
     /// What the health check shown found that the table can't list, and how many such items.
     var healthProblems: [Problem] = []
     var healthOtherCount = 0
@@ -173,10 +177,11 @@ struct LibraryStatus: Equatable, Sendable {
             + paused.map { "Scan paused: " + $0 }).joined(separator: " · ")
     }
 
-    /// The scans' text, a tag save's, a copy's and an organize's, the first part of the
-    /// activity line.
+    /// The scans' text, a tag save's, a copy's, an organize's and a rescan of files', the first
+    /// part of the activity line.
     var scanAndSaveText: String? {
-        let parts = [scanText, savingText, copyingText, organizingText].compactMap { $0 }
+        let parts = [scanText, savingText, copyingText, organizingText, rescanningText]
+            .compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -244,9 +249,13 @@ struct LibraryStatus: Equatable, Sendable {
             + organizedReport.map { $0.kinded(ProblemKind.organized) }
             + importedMovesReport.map { $0.kinded(ProblemKind.movesImported) }
             + rescannedReport
+        // A file Rescan Selected Files couldn't read may be in its folder's issues too.
+        var listed = Set<String>()
         return
             (reports + healthProblems + syncProblems.map { Problem($0, kind: ProblemKind.sync) }
-            + folderLines.map(\.problem)).filter { !dismissed.contains($0.line) }
+            + folderLines.map(\.problem)).filter {
+                !dismissed.contains($0.line) && listed.insert($0.line).inserted
+            }
     }
 
     var problemLines: [String] { problems.map(\.line) }

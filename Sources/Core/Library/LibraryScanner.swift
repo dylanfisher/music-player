@@ -241,7 +241,13 @@ public struct LibraryScanner: Sendable {
                 files.append(file)
                 summary.read += 1
                 if case .failure = file.outcome { summary.failed += 1 }
-            case .issue(let issue)?: summary.issues.append(issue)
+            case .issue(let issue)?:
+                // A share gone with every file selected would otherwise list each of them.
+                if summary.issues.count < ScanPipeline.maximumIssues {
+                    summary.issues.append(issue)
+                } else {
+                    summary.unlistedIssues += 1
+                }
             case nil: break
             }
         }
@@ -251,7 +257,7 @@ public struct LibraryScanner: Sendable {
             try index.deleteOrphans()
         }
         logger.info(
-            "read \(summary.read) edited files again, \(summary.failed) failed, \(summary.issues.count) issues"
+            "read \(summary.read) edited files again, \(summary.failed) failed, \(summary.issues.count + summary.unlistedIssues) issues"
         )
         return summary
     }

@@ -525,6 +525,25 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(summary.issues.map(\.path) == [gone])
 }
 
+/// A share gone under a big selection lists the first `maximumIssues` files and counts the rest.
+@Test func aRescanOfFilesListsAtMostTheCapOfIssues() throws {
+    let library = try TestLibrary()
+    let file = try #require(library.manifest.files.first { $0.malformation == nil })
+    let copies = library.root + "/copies"
+    try FileManager.default.createDirectory(atPath: copies, withIntermediateDirectories: true)
+    let extra = 7
+    let paths = (0..<(ScanPipeline.maximumIssues + extra)).map {
+        copies + "/\($0)." + (file.path as NSString).pathExtension
+    }
+    for path in paths { try FileManager.default.copyItem(atPath: library.path(file), toPath: path) }
+    _ = try library.scan()
+    try FileManager.default.removeItem(atPath: copies)
+
+    let summary = try library.scanner.rescan(files: paths)
+    #expect(summary.issues.count == ScanPipeline.maximumIssues)
+    #expect(summary.unlistedIssues == extra)
+}
+
 private final class LockedReplies: @unchecked Sendable {
     private let lock = NSLock()
     private var replies: [Result<ScanSummary, any Error>] = []

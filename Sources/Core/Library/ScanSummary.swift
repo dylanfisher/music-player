@@ -21,6 +21,9 @@ public struct ScanSummary: Equatable, Sendable {
     /// Files without an audio extension, which are skipped.
     public var otherFiles = 0
     public var issues: [ScanIssue] = []
+    /// How many more issues a rescan of files had than `ScanPipeline.maximumIssues`, which
+    /// `issues` leaves out.
+    public var unlistedIssues = 0
     /// Stopped by `ScanControl.cancel`. What was read is kept; nothing was removed.
     public var cancelled = false
     /// Nil when the scan stopped before reading.
