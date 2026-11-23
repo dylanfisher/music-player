@@ -50,8 +50,8 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 Set by the owner on 2026-11-19, amended on 2026-11-20. Earlier run orders are in the archive.
 
-1. Phases 91 and 92, asked for on 2026-11-19, built side by side on their own branches;
-   91 landed 2026-11-23.
+1. Phases 91 and 92, asked for on 2026-11-19, built side by side on their own branches,
+   both landed 2026-11-23.
 2. Phase 85, what phase 84 left, waits until the owner starts it.
 3. Phase 10, drafted with the owner and started on 2026-11-20, landed on 2026-11-20.
 4. Once phase 10 is on main, the owner said (2026-11-20) to start these unasked:
@@ -124,6 +124,10 @@ that phase's Result line, and delete its line here.
   ([steps](plan-archive.md#96-the-web-remote-denser-and-searchable)): on the phone, the icons,
   the denser lists, scrubbing at each speed, the receiver slider, prefixed searches and Now
   Playing's album.
+- **92 Outputs that go away** ([steps](plan-archive.md#92-outputs-that-go-away-and-outputs-still-being-found)):
+  unplug the DAC while playing, press Play on the speakers, plug it back in; turn the Denon off
+  while playing to it; on a fresh launch, watch Controls ▸ Output's Searching row give way to
+  the Denon.
 
 ### Owner checks in the running app
 
@@ -399,36 +403,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phase 92 is the owner's request of 2026-11-19. Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
-
-### 92. Outputs that go away and outputs still being found
-
-The owner (2026-11-19): "audio output device should fall back to using default if the other
-one you were listening to goes offline", and "when i first start music-player, i don't see the
-denon input in the list of output devices. can we show a searching indicator". The owner chose
-to fall back to System Default and stay paused, and to keep searching only when a list opens
-(ADR 0045), with a Searching row while it runs.
-
-- [ ] **92.1 The ADR.** It supersedes ADR 0011's "It never moves to another device" and the
-      matching line of ADR 0023 for this case. When the chosen device or renderer is lost, the
-      output moves to System Default, paused, so nothing plays on the speakers until the user
-      presses Play. The saved choice doesn't change, so ADR 0037's return and ADR 0041's
-      renderer probe still move playback back when it returns. It records what Now Playing
-      says, and what happens when System Default is itself the lost device (stay lost, as now).
-- [ ] **92.2 The fallback.** On `.deviceLost` for a chosen HAL device or renderer, the engine
-      stays paused at its position on System Default. The picker shows System Default in use
-      and the chosen one "(not connected)" or "(not found)". When the chosen output returns,
-      playback moves back to it, still paused. Tests with `NullDevice`'s `unplug` and `plugIn`
-      and with the renderer stand-in: lost while playing, lost while paused, returned, and
-      System Default itself lost.
-- [ ] **92.3 The Searching row.** While `outputSearch` runs, the Output menus (Controls and
-      the toolbar), the ⌘K output rows and the Settings popup show a disabled "Searching for
-      network players…" row after the renderers. An open menu updates when the search starts
-      and ends. The string is in `DisplayText`. Tests in `MainMenuTests`, `PaletteCommandsTests`
-      and `GeneralModelTests`.
-- [ ] **Hardware checkpoint (owner):** unplug the DAC while playing, then press Play on the
-      speakers and plug it back in. Turn the Denon off while playing to it. On a fresh launch,
-      open Controls ▸ Output and watch the Searching row give way to the Denon.
+Phase 85 is what phase 84 left on 2026-11-11; phases 10 and 13 are from the original plan and haven't been built.
 
 ### 85. The file splits and the performance rerun
 

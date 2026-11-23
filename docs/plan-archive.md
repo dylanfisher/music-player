@@ -13686,3 +13686,43 @@ beside Upgrade to FLAC Automatically, `AutoUpgrades.queueable` taken at the end 
 a pass with every slot taken counts from the last read. In the rebase, main's idle pass met
 the count: a pass skipped as unchanged now keeps the count of the pass it was kept from.
 Decided in ADR 0212.
+
+### 92. Outputs that go away and outputs still being found
+
+The owner (2026-11-19): "audio output device should fall back to using default if the other
+one you were listening to goes offline", and "when i first start music-player, i don't see the
+denon input in the list of output devices. can we show a searching indicator". The owner chose
+to fall back to System Default and stay paused, and to keep searching only when a list opens
+(ADR 0045), with a Searching row while it runs.
+
+- [x] **92.1 The ADR.** It supersedes ADR 0011's "It never moves to another device" and the
+      matching line of ADR 0023 for this case. When the chosen device or renderer is lost, the
+      output moves to System Default, paused, so nothing plays on the speakers until the user
+      presses Play. The saved choice doesn't change, so ADR 0037's return and ADR 0041's
+      renderer probe still move playback back when it returns. It records what Now Playing
+      says, and what happens when System Default is itself the lost device (stay lost, as now).
+- [x] **92.2 The fallback.** On `.deviceLost` for a chosen HAL device or renderer, the engine
+      stays paused at its position on System Default. The picker shows System Default in use
+      and the chosen one "(not connected)" or "(not found)". When the chosen output returns,
+      playback moves back to it, still paused. Tests with `NullDevice`'s `unplug` and `plugIn`
+      and with the renderer stand-in: lost while playing, lost while paused, returned, and
+      System Default itself lost.
+- [x] **92.3 The Searching row.** While `outputSearch` runs, the Output menus (Controls and
+      the toolbar), the ⌘K output rows and the Settings popup show a disabled "Searching for
+      network players…" row after the renderers. An open menu updates when the search starts
+      and ends. The string is in `DisplayText`. Tests in `MainMenuTests`, `PaletteCommandsTests`
+      and `GeneralModelTests`.
+- [ ] **Hardware checkpoint (owner):** unplug the DAC while playing, then press Play on the
+      speakers and plug it back in. Turn the Denon off while playing to it. On a fresh launch,
+      open Controls ▸ Output and watch the Searching row give way to the Denon.
+
+Result: landed 2026-11-23 as 0.54.0, four days after it was built, rebased onto phases 93 to
+97 and 91. A chosen HAL device or renderer that goes away hands playback to System Default,
+paused, through `DeviceOutput.fallBack(to:)` and `OutputFallbacks`, which decides each step
+without AppKit; the saved choice stays, so when the lost output returns playback goes back to
+it, even while System Default plays. A pick of any output ends the fallback; System Default
+lost itself stays lost, and the command line never falls back. The Searching row shows in the
+Output menus and the Settings popup while renderers are searched for, and is left out of ⌘K,
+whose rows are listed once as it opens. In the rebase its ADR became 0223, main having taken
+0211, and `DeviceOutput.swift`'s size ceiling went up to 1,662, the two branches' cuts and
+additions together. Decided in ADR 0223. Pending: the hardware checkpoint.
