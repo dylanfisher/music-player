@@ -109,7 +109,7 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
             defer: false)
         window.title = Self.title
-        window.minSize = NSSize(width: 900, height: 320)
+        window.minSize = NSSize(width: 1050, height: 320)
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
