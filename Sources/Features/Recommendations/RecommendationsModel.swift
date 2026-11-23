@@ -257,6 +257,11 @@ final class RecommendationsModel {
             more = page.more
             facts = page.list
             pending = page.pending
+            // Asking for the next page again would get the same empty one, without end.
+            if page.more, rows.isEmpty {
+                finish(problem: .failed(Self.emptyPage(at: start + read.count)))
+                return
+            }
             finish(problem: nil)
             readMoreToShow()
             refreshIfFetching()
@@ -303,6 +308,11 @@ final class RecommendationsModel {
         self.problem = problem
         reading = nil
         changed()
+    }
+
+    /// Says the service sent no rows at `offset` though it said more follow.
+    static func emptyPage(at offset: Int) -> String {
+        "The service sent no albums from row \(offset + 1) on, though it said more follow."
     }
 
     private static func problem(_ error: RecommenderError) -> ListProblem {

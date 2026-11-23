@@ -139,7 +139,7 @@ extension RecommendationColumn {
     }
 
     /// What the column sorts `row` by, nil for an empty value: a number for the numeric
-    /// columns (a rating by its average), whether the library has the album for In Library,
+    /// columns (a rating by its average, empty without votes), whether the library has the album for In Library,
     /// and the cell's text for the rest.
     private func key(_ row: RecommendationRow) -> SortKey? {
         let album = row.album
@@ -149,7 +149,9 @@ extension RecommendationColumn {
         case .albums: return row.artist.map { .number(Double($0.albums)) }
         case .year: return album.year.map { .number(Double($0)) }
         case .inLibrary: return .number(album.inLibrary ? 1 : 0)
-        case .rating: return values.map { .number($0.ratingAverage) }
+        // A release nobody rated has an average of 0, which isn't a rating.
+        case .rating:
+            return values.flatMap { $0.ratingCount > 0 ? .number($0.ratingAverage) : nil }
         case .have: return values.map { .number(Double($0.have)) }
         case .want: return values.map { .number(Double($0.want)) }
         case .score: return (row.artist.map(\.score) ?? album.score).map { .number($0) }

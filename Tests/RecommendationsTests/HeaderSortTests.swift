@@ -49,6 +49,19 @@ private func ids(_ column: RecommendationColumn, ascending: Bool) -> [Int] {
     #expect(ids(.label, ascending: false) == [0, 1, 2, 3])
 }
 
+@Test func aReleaseNobodyRatedSortsAsEmpty() {
+    var unrated = row(0, "Unrated", year: nil, want: 0)
+    unrated.album.community?.values?.ratingCount = 0
+    let sorted = { (ascending: Bool) in
+        RecommendationColumn.sorted(
+            [unrated, row(1, "None", year: nil, want: nil), row(2, "Rated", year: nil, want: 10)],
+            by: HeaderSort(column: .rating, ascending: ascending)
+        ).map(\.album.id)
+    }
+    #expect(sorted(true) == [2, 0, 1])
+    #expect(sorted(false) == [2, 0, 1])
+}
+
 @Test func onlyADiscographysHeadersSortAndNeverDownload() {
     #expect(RecommendationColumn.allCases.filter { $0.sorts(RecommendationQuery()) }.isEmpty)
     let sorting = RecommendationColumn.allCases.filter { $0.sorts(gus) }
@@ -104,6 +117,50 @@ private func discography(_ total: Int, _ requests: Requests) -> RecommendationsS
     await model.show(byTitle)?.value
     #expect(model.headerSort == nil, "an order from the pop-up is the one shown")
     #expect(model.rows.first?.album.id == 0)
+}
+
+/// A discography whose first page of 100 says more follow and whose next pages are empty, which
+/// throws after three asks so a read that keeps asking ends.
+private func emptyAfterAPage(_ requests: Requests) -> RecommendationsService {
+    var service = RecommendationsService.unused
+    service.page = { query, offset, limit throws(RecommenderError) in
+        requests.append(query, offset, limit)
+        guard requests.offsets.count <= 3 else { throw unexpected("a page asked again") }
+        var page = page(offset == 0 ? 0..<100 : 0..<0, more: true)
+        page.albums = page.albums?.map {
+            var album = $0
+            album.inLibrary = true
+            return album
+        }
+        return page
+    }
+    return service
+}
+
+@MainActor
+@Test func anEmptyPageThatSaysMoreFollowStopsTheReadAndSaysSo() async {
+    let requests = Requests()
+    let service = emptyAfterAPage(requests)
+    let model = RecommendationsModel(service: { service })
+    await model.show(gus)?.value
+    await model.sort(by: HeaderSort(column: .year, ascending: true))?.value
+    #expect(requests.offsets == [0, 100])
+    #expect(model.problem == .failed(RecommendationsModel.emptyPage(at: 100)))
+
+    // Missing hides every row of the first page, so it reads on for rows to show.
+    let missing = Requests()
+    let filtered = emptyAfterAPage(missing)
+    let other = RecommendationsModel(service: { filtered })
+    var query = gus
+    query.filters.missing = true
+    let first = other.show(query)
+    await first?.value
+    for _ in 0..<5 {
+        guard let next = other.reading else { break }
+        await next.value
+    }
+    #expect(missing.offsets == [0, 100])
+    #expect(other.problem == .failed(RecommendationsModel.emptyPage(at: 100)))
 }
 
 @MainActor
