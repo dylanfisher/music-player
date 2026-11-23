@@ -28,7 +28,8 @@ actor DownloadsCoordinator {
 
     /// Why a tag run requeues a job.
     enum Requeue: Equatable, Sendable {
-        /// A staged file isn't audio the reader knows (ADR 0210).
+        /// A staged file isn't audio the reader knows (ADR 0210), or fails partway through
+        /// decoding (ADR 0222).
         case damaged
         /// A discrepancy another peer's copy might not have (ADR 0211).
         case discrepancy
@@ -48,6 +49,9 @@ actor DownloadsCoordinator {
         /// Matches a staged job's files with its release, writing nothing; nil on a Mac with
         /// no Discogs catalog, which doesn't tag.
         var autoTag: (@Sendable (StagedJob) async throws -> AutoTagRun)?
+        /// Decodes the staged files at the paths given to their ends, giving why each damaged
+        /// one is (ADR 0222). Throws only when cancelled.
+        var damagedAudio: @Sendable ([String]) async throws -> [String]
         /// Finishes the writes a crash left unconfirmed in the staged journal (ADR 0146),
         /// giving the failures; the first tag run after launch waits for it.
         var recover: @Sendable () async -> [String]
@@ -188,8 +192,19 @@ actor DownloadsCoordinator {
         var requeue: Requeue?
         if let staged = stagedJob(job) {
             do {
-                let run = try await autoTag(staged)
+                var run = try await autoTag(staged)
                 guard !lostLeases.contains(job.id) else { return }
+                // A file whose tags read can still fail partway through its audio, which no
+                // other check reads. A run that's an error already has its reasons.
+                let failed = if case .error = run.verdict { true } else { false }
+                if !failed {
+                    let damage = try await effects.damagedAudio(run.staged.files.map(\.path))
+                    guard !lostLeases.contains(job.id) else { return }
+                    if !damage.isEmpty {
+                        run.verdict = .error(damage)
+                        run.staged.damaged = true
+                    }
+                }
                 switch run.verdict {
                 case .error: if run.staged.damaged { requeue = .damaged }
                 case .discrepancy: if run.anotherCopyMightFix { requeue = .discrepancy }

@@ -1,3 +1,4 @@
+import Analysis
 import AppKit
 import Discogs
 import Foundation
@@ -328,6 +329,7 @@ package final class Downloads {
             service: setup.service,
             sleep: { seconds in try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1e9)) },
             autoTag: canTag ? tagging : nil,
+            damagedAudio: { try await Analysis.damagedAudio($0) },
             recover: {
                 let root: String
                 do {

@@ -144,7 +144,7 @@ func readsIntegers(_ format: SignalFormat) -> Bool {
 
 /// Interleaved 32-bit samples at the file's rate: signed integers, which hold a lossless
 /// file's samples at the top of the word, or floats.
-private func clientFormat(rateHz: Double, channels: Int, integer: Bool)
+func clientFormat(rateHz: Double, channels: Int, integer: Bool)
     -> AudioStreamBasicDescription
 {
     let bytesPerFrame = UInt32(channels * MemoryLayout<Int32>.size)
@@ -157,7 +157,7 @@ private func clientFormat(rateHz: Double, channels: Int, integer: Bool)
 }
 
 /// Reads until `frames` frames are in or the file ends.
-private func readHop(_ decoder: FileDecoder, into buffer: UnsafeMutableRawPointer, frames: Int)
+func readHop(_ decoder: FileDecoder, into buffer: UnsafeMutableRawPointer, frames: Int)
     throws -> Int
 {
     let bytesPerFrame = Int(decoder.fileFormat.mChannelsPerFrame) * MemoryLayout<Int32>.size

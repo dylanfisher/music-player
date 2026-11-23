@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0200](0200-upgrading-to-flac-automatically.md) (a tagging error stays for the
   owner)
+- **Amended by:** [0222](0222-requeuing-a-download-that-doesnt-decode.md): a file that fails
+  partway through decoding is damaged too
 - **See also:** [0146](0146-staged-tag-writes.md) (the tag run), music-recommender's ADR 0023
   (requeue and tried peers)
 

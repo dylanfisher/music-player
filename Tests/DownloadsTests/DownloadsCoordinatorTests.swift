@@ -109,6 +109,8 @@ private final class Setup {
     var verdict = AutoTagRun.Verdict.clean
     /// Whether the stand-in AutoTag says another peer's copy might fix a discrepancy.
     var anotherCopyMightFix = false
+    /// What the stand-in decode check says of the staged files: why each damaged one is.
+    var damage: [String] = []
     /// The staging folder the stand-ins read and write, where `stage` puts files.
     let stagingRoot: String
     /// What the staged journal's recovery reports as failed.
@@ -145,6 +147,7 @@ private final class Setup {
         let calls = calls
         let verdict = verdict
         let mightFix = anotherCopyMightFix
+        let damage = damage
         let clock = service.clock
         let reports = importReports
         let url = databaseURL
@@ -162,6 +165,7 @@ private final class Setup {
                         return run(
                             verdict, for: job, root: root, anotherCopyMightFix: mightFix)
                     } : nil,
+                damagedAudio: { _ in damage },
                 recover: {
                     calls.recover()
                     await calls.waitForRecovery()
@@ -719,6 +723,19 @@ private func damagedJob() -> DownloadJob {
     #expect(setup.service.job(1)?.state == .queued)
     #expect(await coordinator.requeueing.isEmpty)
     #expect(try setup.index.stagedSizes(job: 1, folder: "job-1") == [:])
+}
+
+@Test func aCopyWhoseAudioStopsDecodingIsReportedThenRequeuedUnwritten() async throws {
+    let setup = try Setup([job(1)])
+    let why = "01 First Song.flac is damaged: it stops decoding 4% of the way in"
+    setup.damage = [why]
+    try setup.stage(1)
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1)])
+    #expect(
+        setup.service.eventTypes == ["lease", "tagging running", "tagging error", "release_lease"])
+    #expect(setup.service.requeued == [1])
+    #expect(setup.calls.writes == 0, "a copy that's thrown away isn't tagged")
 }
 
 @Test func aRequeueNotAnsweredIsSentAgainAtTheNextPoll() async throws {
