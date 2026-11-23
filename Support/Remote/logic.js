@@ -53,6 +53,15 @@ export function tokenKey(id, origin) {
   return id + " " + origin;
 }
 
+/// How long a slider shows the value it sent while the Mac's state still has the old one.
+export const SENT_HOLD_MS = 2000;
+
+/// The value a slider shows: `sent` ({ value, at }) until the state's value echoes it or
+/// SENT_HOLD_MS pass, then the state's.
+export function sliderValue(stateValue, sent, now) {
+  return sent && now - sent.at < SENT_HOLD_MS && stateValue !== sent.value ? sent.value : stateValue;
+}
+
 /// What Now Playing's album list is read for: the Mac, where it was reached, and the playing
 /// track's album; null when nothing with an album plays, which shows no list. A track change
 /// within the album keeps the key, so the album is read once.

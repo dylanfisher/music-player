@@ -3,7 +3,7 @@
 import {
   RANGE_SIZE, SETTLE_MS, RangeCache, SearchQueue, EventParser, afterQueueEdit, backoff,
   chooseMac, clock, failuresAfter, isSilent, keepsArrival, letterOffsets, libraryMac,
-  listChanged, nowAlbumKey, planFetches, playListArgument, positionNow, reach, scrubbed, startedAgo, tokenKey,
+  SENT_HOLD_MS, listChanged, nowAlbumKey, planFetches, sliderValue, playListArgument, positionNow, reach, scrubbed, startedAgo, tokenKey,
   wantedRanges,
 } from "./logic.js";
 import { ICONS } from "./icons.js";
@@ -40,8 +40,9 @@ function save(key, value) {
 const SVG = "http://www.w3.org/2000/svg";
 
 function icon(name) {
+  // Own keys only, so `__proto__` or `constructor` can't name one.
+  if (!Object.prototype.hasOwnProperty.call(ICONS, name)) throw new Error("no icon named " + name);
   const data = ICONS[name];
-  if (data === undefined) throw new Error("no icon named " + name);
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("viewBox", "0 0 256 256");
   svg.setAttribute("class", "icon");
@@ -209,6 +210,7 @@ class Mac {
     const response = await this.fetch("/api/events", { signal: controller.signal });
     if (!response.ok) throw new Error(await problem(response));
     this.upSince = Date.now();
+    if (nowAlbum.failed === this) nowAlbum.key = null;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const parser = new EventParser();
@@ -756,13 +758,14 @@ function renderNow() {
 
 /// The playing track's album, read once per Mac and album; a track change within it only moves
 /// the mark.
-const nowAlbum = { key: null, rows: [], playing: null };
+const nowAlbum = { key: null, rows: [], playing: null, failed: null };
 
 function renderNowAlbum(mac, track) {
   const album = track ? track.albumID : null;
   const key = mac && mac.paired ? nowAlbumKey(mac.id, mac.origin, track) : null;
   if (key !== nowAlbum.key) {
     nowAlbum.key = key;
+    nowAlbum.failed = null;
     nowAlbum.rows = [];
     $("now-album").replaceChildren();
     $("now-album").hidden = true;
@@ -782,8 +785,8 @@ function renderNowAlbum(mac, track) {
         },
         (error) => {
           if (nowAlbum.key !== key) return;
-          // Read again at the next state event.
-          nowAlbum.key = null;
+          // Read again at the next album or when the Mac's stream connects again.
+          nowAlbum.failed = mac;
           say(error.message);
         }
       );
@@ -816,6 +819,8 @@ async function readAlbum(mac, album) {
 let seeking = false;
 let volumeDragging = false;
 let receiverDragging = false;
+/// The receiver volume last sent, { value, at }, shown until the state echoes it.
+let receiverSent = null;
 
 /// Moves the bar on between events, which come only when something changes.
 function tick() {
@@ -847,8 +852,10 @@ function renderReceiver(receiver) {
       slider.min = String(receiver.volumeFloorDecibels);
       slider.max = String(receiver.volumeCeilingDecibels);
     }
-    if (receiver.volumeDecibels != null) slider.value = String(receiver.volumeDecibels);
-    $("receiver-volume").textContent = receiver.volumeDecibels != null ? receiver.volumeDecibels + " dB" : "–";
+    const shown = sliderValue(receiver.volumeDecibels, receiverSent, Date.now());
+    if (shown === receiver.volumeDecibels) receiverSent = null;
+    if (shown != null) slider.value = String(shown);
+    $("receiver-volume").textContent = shown != null ? shown + " dB" : "–";
   }
   const select = $("receiver-input");
   if (select.options.length !== receiver.inputs.length) {
@@ -894,8 +901,19 @@ $("receiver-slider").addEventListener("input", () => {
 });
 $("receiver-slider").addEventListener("change", () => {
   receiverDragging = false;
+  receiverSent = { value: Number($("receiver-slider").value), at: Date.now() };
   command("receiver.setVolume", $("receiver-slider").value);
+  // Back to the state's value if it never echoes this one.
+  setTimeout(renderNow, SENT_HOLD_MS);
 });
+// A cancelled touch sends no `change`: the slider goes back to following the state.
+for (const name of ["pointercancel", "touchcancel", "blur"]) {
+  $("receiver-slider").addEventListener(name, () => {
+    if (!receiverDragging) return;
+    receiverDragging = false;
+    renderNow();
+  });
+}
 $("receiver-up").addEventListener("click", () => command("receiver.raiseVolume"));
 $("receiver-down").addEventListener("click", () => command("receiver.lowerVolume"));
 $("receiver-mute").addEventListener("click", () => command("receiver.mute"));
@@ -1133,6 +1151,7 @@ function showGrid(current, mac) {
     (list) => {
       if (level() !== shown || library() !== mac) return;
       const albums = list.rows;
+      if (albums.length === 0) return $("browse-list").replaceChildren(empty("Nothing here"));
       // The tiles' insets: 12 px on the left and the scrubber's strip on the right.
       const across = Math.max(2, Math.floor(($("browse-list").clientWidth - 40) / 150));
       const width = ($("browse-list").clientWidth - 40 - (across - 1) * 12) / across;
@@ -1183,7 +1202,7 @@ function showGrid(current, mac) {
       };
       const grid = new VirtualList($("browse-list"), source, Math.ceil(width + 52), current.scroll ?? 0);
       browse.list = grid;
-      scrubber(grid, (index) => albums[index * across][1]);
+      scrubber(grid, (index) => albums[index * across]?.[1] ?? null);
     },
     (error) => $("browse-list").replaceChildren(empty(error.message))
   );
