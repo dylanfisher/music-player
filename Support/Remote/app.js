@@ -3,7 +3,7 @@
 import {
   RANGE_SIZE, SETTLE_MS, RangeCache, SearchQueue, EventParser, afterQueueEdit, backoff,
   chooseMac, clock, failuresAfter, isSilent, keepsArrival, letterOffsets, libraryMac,
-  listChanged, planFetches, playListArgument, positionNow, reach, scrubbed, startedAgo, tokenKey,
+  listChanged, nowAlbumKey, planFetches, playListArgument, positionNow, reach, scrubbed, startedAgo, tokenKey,
   wantedRanges,
 } from "./logic.js";
 import { ICONS } from "./icons.js";
@@ -681,9 +681,15 @@ async function wholeList(mac, path) {
   return body;
 }
 
-function fillRow(element, { line1, line2, add, placeholder }) {
+function fillRow(element, { line1, line2, add, placeholder, playing }) {
   element.replaceChildren();
   element.classList.toggle("placeholder", !!placeholder);
+  element.classList.toggle("current", !!playing);
+  if (playing) {
+    const mark = icon("speakerHigh");
+    mark.classList.add("playing-mark");
+    element.appendChild(mark);
+  }
   const texts = document.createElement("div");
   texts.className = "texts";
   const first = document.createElement("div");
@@ -744,7 +750,67 @@ function renderNow() {
   }
   $("output").textContent = state && state.output ? "Playing through " + state.output.name : "";
   renderReceiver(state ? state.receiver : null);
+  renderNowAlbum(mac, track);
   tick();
+}
+
+/// The playing track's album, read once per Mac and album; a track change within it only moves
+/// the mark.
+const nowAlbum = { key: null, rows: [], playing: null };
+
+function renderNowAlbum(mac, track) {
+  const album = track ? track.albumID : null;
+  const key = mac && mac.paired ? nowAlbumKey(mac.id, mac.origin, track) : null;
+  if (key !== nowAlbum.key) {
+    nowAlbum.key = key;
+    nowAlbum.rows = [];
+    $("now-album").replaceChildren();
+    $("now-album").hidden = true;
+    if (key !== null) {
+      readAlbum(mac, album).then(
+        (rows) => {
+          if (nowAlbum.key !== key) return;
+          nowAlbum.rows = rows.map((row) => {
+            const element = document.createElement("div");
+            element.className = "row";
+            return { row, element };
+          });
+          nowAlbum.playing = null;
+          $("now-album").replaceChildren(...nowAlbum.rows.map(({ element }) => element));
+          $("now-album").hidden = rows.length === 0;
+          markPlaying(mac, album, mac.state && mac.state.track ? mac.state.track.id : null, true);
+        },
+        (error) => {
+          if (nowAlbum.key !== key) return;
+          // Read again at the next state event.
+          nowAlbum.key = null;
+          say(error.message);
+        }
+      );
+    }
+  }
+  if (key !== null) markPlaying(mac, album, track.id, false);
+}
+
+/// Draws the rows whose mark changes, or every row when `all`.
+function markPlaying(mac, album, id, all) {
+  if (!all && id === nowAlbum.playing) return;
+  for (const { row, element } of nowAlbum.rows) {
+    if (all || row[0] === id || row[0] === nowAlbum.playing) albumTrack(element, row, album, mac, row[0] === id);
+  }
+  nowAlbum.playing = id;
+}
+
+/// The album's tracks, in the order the album view lists them, a range at a time.
+async function readAlbum(mac, album) {
+  const rows = [];
+  for (;;) {
+    const page = await mac.json(
+      "/api/tracks?" + query({ album, sort: "album", offset: rows.length, limit: RANGE_SIZE })
+    );
+    rows.push(...page.rows);
+    if (page.rows.length === 0 || rows.length >= page.total) return rows;
+  }
 }
 
 let seeking = false;
@@ -1020,19 +1086,31 @@ function enter(current, row) {
   }
 }
 
+/// A track of `album` in a list of its tracks: a tap plays the album from it.
+function albumTrack(element, row, album, mac, playing = false) {
+  fillRow(element, {
+    line1: row[1],
+    line2: row[2] ?? "",
+    add: row[0] != null ? () => command("playback.queueTracks", "tracks:" + row[0], mac) : null,
+    playing,
+  });
+  element.onclick = () => {
+    if (row[0] != null) command("playback.playTracks", "album:" + album + ":" + row[0], mac);
+  };
+}
+
 function showTracks(current, mac) {
   const source = new RangedSource("/api/tracks?" + query(current.filter), (element, row, index) => {
     if (row === undefined) return placeholder(element);
+    if (current.album) return albumTrack(element, row, current.album, mac);
     fillRow(element, {
       line1: row[1],
-      line2: current.album ? row[2] ?? "" : joined(row[2], row[3]),
+      line2: joined(row[2], row[3]),
       add: row[0] != null ? () => command("playback.queueTracks", "tracks:" + row[0], mac) : null,
     });
+    // The whole list, as the Mac reads it, from this track.
     element.onclick = () => {
-      if (row[0] == null) return;
-      if (current.album) command("playback.playTracks", "album:" + current.album + ":" + row[0], mac);
-      // The whole list, as the Mac reads it, from this track.
-      else command("playback.playList", playListArgument(current.filter, row[0]), mac);
+      if (row[0] != null) command("playback.playList", playListArgument(current.filter, row[0]), mac);
     };
   }, null, mac);
   // The length it had, so the place Back returns to is in the list before its first range.

@@ -341,7 +341,7 @@ private func run(_ context: JSContext, _ script: String) -> String? {
             used.insert(String(source[Range(match.range(at: 1), in: source)!]))
         }
     }
-    #expect(used.count == 10)
+    #expect(used.count == 11)
     for name in used { #expect(names.contains("\"\(name)\""), "\(name)") }
     let keys = try #require(
         try JSONSerialization.jsonObject(with: Data(names.utf8)) as? [String])
@@ -355,6 +355,22 @@ private func run(_ context: JSContext, _ script: String) -> String? {
 
 /// The search field names the short prefix of each kind the search lists, which the server
 /// reads (ADR 0220).
+/// Now Playing reads an album once: two tracks of it share a key, and another album, another
+/// Mac or a track without one doesn't (ADR 0220).
+@Test func nowPlayingsAlbumIsKeyedByMacAndAlbum() throws {
+    let context = try logic()
+    #expect(
+        run(
+            context,
+            "const o = 'http://den.local:47800';"
+                + " return [nowAlbumKey('m', o, { id: 1, albumID: 7 })"
+                + " === nowAlbumKey('m', o, { id: 2, albumID: 7 }),"
+                + " nowAlbumKey('m', o, { id: 1, albumID: 7 }) === nowAlbumKey('m', o, { id: 3, albumID: 8 }),"
+                + " nowAlbumKey('m', o, { id: 1, albumID: 7 }) === nowAlbumKey('n', o, { id: 1, albumID: 7 }),"
+                + " nowAlbumKey('m', o, { id: 1, albumID: null }), nowAlbumKey('m', o, null)]"
+        ) == "[true,false,false,null,null]")
+}
+
 @Test func theSearchFieldNamesThePrefixes() throws {
     let page = try text("index.html")
     let field = try #require(page.split(separator: "\n").first { $0.contains("id=\"search\"") })

@@ -53,6 +53,13 @@ export function tokenKey(id, origin) {
   return id + " " + origin;
 }
 
+/// What Now Playing's album list is read for: the Mac, where it was reached, and the playing
+/// track's album; null when nothing with an album plays, which shows no list. A track change
+/// within the album keeps the key, so the album is read once.
+export function nowAlbumKey(macID, origin, track) {
+  return track && track.albumID != null ? macID + " " + origin + " " + track.albumID : null;
+}
+
 /// Every origin an instance from `/api/instances` can be reached at, lowercased as a
 /// browser's `location.origin` is: its `.local` name, then each address.
 export function instanceOrigins(instance) {

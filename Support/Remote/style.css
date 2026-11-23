@@ -401,6 +401,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .results .row { position: relative; }
 
+.now-album { width: 100%; flex: none; border-top: 1px solid var(--line); }
+.now-album .row { position: relative; padding: 0; }
+.playing-mark { width: 16px; height: 16px; flex: none; color: var(--accent); }
+
 .empty { color: var(--secondary); text-align: center; padding: 24px; }
 
 /* The tab bar. */
