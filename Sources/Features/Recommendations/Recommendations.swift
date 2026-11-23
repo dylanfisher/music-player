@@ -289,6 +289,7 @@ public final class Recommendations {
         made.keepWidths(columnWidths)
         made.show(downloads: downloads)
         made.queryChosen = { [weak self] in self?.model.show($0) }
+        made.headerSortChosen = { [weak self] in self?.model.sort(by: $0) }
         made.reachedEnd = { [weak self] in self?.model.readMore() }
         made.markChosen = { [weak self] in self?.mark($0, $1) }
         made.showMarked = { [weak self] in self?.showMarked() }
@@ -406,7 +407,7 @@ public final class Recommendations {
         controller.show(
             rows: model.rows, query: model.query, seeds: model.seeds,
             pending: model.isReading, message: message, action: action,
-            facts: model.facts.map(factsText))
+            facts: model.facts.map(factsText), headerSort: model.headerSort)
     }
 }
 

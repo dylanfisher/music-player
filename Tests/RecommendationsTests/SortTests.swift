@@ -15,7 +15,7 @@ import Testing
     window.queryChosen = { chosen.append($0) }
     window.show(
         rows: [], query: RecommendationQuery(), seeds: [.library], pending: false,
-        message: nil, action: nil, facts: nil)
+        message: nil, action: nil, facts: nil, headerSort: nil)
     #expect(window.sortButton.titleOfSelectedItem == "By Score")
     #expect(window.sortButton.itemTitles.last == "By Want per Have")
     window.sortButton.selectItem(withTitle: "By Rating")
@@ -24,11 +24,11 @@ import Testing
 
     window.show(
         rows: [], query: RecommendationQuery(sort: .want), seeds: [.library], pending: false,
-        message: nil, action: nil, facts: nil)
+        message: nil, action: nil, facts: nil, headerSort: nil)
     #expect(window.sortButton.titleOfSelectedItem == "By Want")
     window.show(
         rows: [], query: RecommendationQuery(show: .artists, sort: .want), seeds: [.library],
-        pending: false, message: nil, action: nil, facts: nil)
+        pending: false, message: nil, action: nil, facts: nil, headerSort: nil)
     #expect(!window.sortButton.isEnabled)
 }
 
@@ -40,7 +40,7 @@ import Testing
     let seed = RecommendationQuery.Seed.discography(artistID: 23, name: "Gus Other")
     window.show(
         rows: [], query: RecommendationQuery(seed: seed, sort: .year), seeds: [.library, seed],
-        pending: false, message: nil, action: nil, facts: nil)
+        pending: false, message: nil, action: nil, facts: nil, headerSort: nil)
     #expect(
         window.sortButton.itemTitles == [
             "By Year", "By Title", "By Rating", "By Have", "By Want", "By Want per Have",
@@ -53,7 +53,7 @@ import Testing
 
     window.show(
         rows: [], query: RecommendationQuery(), seeds: [.library, seed], pending: false,
-        message: nil, action: nil, facts: nil)
+        message: nil, action: nil, facts: nil, headerSort: nil)
     #expect(window.sortButton.itemTitles.first == "By Score")
     #expect(!window.sortButton.itemTitles.contains("By Year"))
 }
@@ -67,7 +67,7 @@ import Testing
     let second = RecommendationQuery.Seed.discography(artistID: 4242, name: "Gus Other")
     window.show(
         rows: [], query: RecommendationQuery(seed: second), seeds: [.library, first, second],
-        pending: false, message: nil, action: nil, facts: nil)
+        pending: false, message: nil, action: nil, facts: nil, headerSort: nil)
     #expect(window.listButton.numberOfItems == 3)
     #expect(window.listButton.indexOfSelectedItem == 2)
     window.listButton.selectItem(at: 1)

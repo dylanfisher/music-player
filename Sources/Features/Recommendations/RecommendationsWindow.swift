@@ -51,6 +51,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     /// The rows shown, in the list's order.
     private(set) var rows: [RecommendationRow] = []
     private(set) var query = RecommendationQuery()
+    /// The header sort shown, nil for the list's own order.
+    private(set) var headerSort: HeaderSort?
     /// The state of each release's newest download job, by release id.
     private(set) var downloads: [Int: String] = [:]
     private var seeds: [RecommendationQuery.Seed] = []
@@ -62,6 +64,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
 
     /// Hears a change of list, view, order or filter.
     var queryChosen: (RecommendationQuery) -> Void = { _ in }
+    /// Hears a header clicked to sort the list, nil for its own order.
+    var headerSortChosen: (HeaderSort?) -> Void = { _ in }
     /// Hears Not Interested or Already Have on rows.
     var markChosen: ([RecommendationRow], FeedbackMark.Verdict) -> Void = { _, _ in }
     /// Hears Download… on rows.
@@ -231,12 +235,13 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
             forRowIndexes: IndexSet(integersIn: 0..<rows.count), columnIndexes: [column])
     }
 
-    /// Shows the list: `rows` of `query`, the pop-up's `seeds`, `message` with a spinner while
-    /// `pending`, and the button `action` names when there is something to do.
+    /// Shows the list: `rows` of `query` in `headerSort`'s order, the pop-up's `seeds`,
+    /// `message` with a spinner while `pending`, and the button `action` names when there is
+    /// something to do.
     func show(
         rows: [RecommendationRow], query: RecommendationQuery,
         seeds: [RecommendationQuery.Seed], pending: Bool, message: String?,
-        action: (title: String, run: () -> Void)?, facts: String?
+        action: (title: String, run: () -> Void)?, facts: String?, headerSort: HeaderSort?
     ) {
         if seeds != self.seeds {
             self.seeds = seeds
@@ -269,6 +274,15 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
                 query.seed.isDiscography ? Self.missingDiscographyHelp : Self.missingHelp
             showColumns()
         }
+        let resorted = headerSort != self.headerSort
+        if resorted {
+            // Set first, so the table's report of the change is heard as no change.
+            self.headerSort = headerSort
+            table.sortDescriptors =
+                headerSort.map {
+                    [NSSortDescriptor(key: $0.column.rawValue, ascending: $0.ascending)]
+                } ?? []
+        }
         if rows != self.rows {
             // A discography read again as its values come in reorders; the selection follows
             // its albums, and the scroll stays where it is.
@@ -280,6 +294,9 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
                 table.selectRowIndexes([min(place, rows.count - 1)], byExtendingSelection: false)
             } else {
                 table.selectRowIndexes(rowsOf(selected, in: rows), byExtendingSelection: false)
+            }
+            if resorted, let first = table.selectedRowIndexes.first {
+                table.scrollRowToVisible(first)
             }
         }
         if !pending { place = nil }
@@ -427,6 +444,8 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
                 continue
             }
             column.isHidden = !shown.applies(to: query) || chosenHidden[shown] == true
+            column.sortDescriptorPrototype =
+                shown.sorts(query) ? NSSortDescriptor(key: shown.rawValue, ascending: true) : nil
         }
     }
 
@@ -515,6 +534,20 @@ final class RecommendationsWindow: NSWindowController, NSTableViewDataSource,
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) { showDetail() }
+
+    /// A header clicked: the first descriptor is the sort, and a click on it again reverses it.
+    func tableView(
+        _ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]
+    ) {
+        let chosen = table.sortDescriptors.first.flatMap { descriptor in
+            descriptor.key.flatMap(RecommendationColumn.init(rawValue:)).map {
+                HeaderSort(column: $0, ascending: descriptor.ascending)
+            }
+        }
+        guard chosen != headerSort else { return }
+        headerSort = chosen
+        headerSortChosen(chosen)
+    }
 
     /// Gives the columns `widths`, a column not listed keeping its own, and reports each
     /// change after, as the Downloads window does.

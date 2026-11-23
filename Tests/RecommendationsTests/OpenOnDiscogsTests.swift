@@ -17,7 +17,7 @@ import Testing
     window.show(
         rows: [album(7), release].map { RecommendationRow(album: $0) },
         query: RecommendationQuery(), seeds: [], pending: false, message: nil, action: nil,
-        facts: nil)
+        facts: nil, headerSort: nil)
     var opened: [URL] = []
     window.discogsChosen = { opened.append(discogsPage(of: $0.album)) }
     #expect(!window.discogsButton.isEnabled)

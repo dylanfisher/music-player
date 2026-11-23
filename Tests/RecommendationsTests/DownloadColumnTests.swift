@@ -14,7 +14,7 @@ import Testing
     window.show(
         rows: [album(7), album(8), masterless].map { RecommendationRow(album: $0) },
         query: RecommendationQuery(), seeds: [], pending: false, message: nil, action: nil,
-        facts: nil)
+        facts: nil, headerSort: nil)
     let column = try #require(
         window.table.tableColumns.first {
             $0.identifier.rawValue == RecommendationColumn.download.rawValue

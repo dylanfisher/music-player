@@ -249,7 +249,7 @@ private final class Answers: @unchecked Sendable {
         window.show(
             rows: ids.map { RecommendationRow(album: album($0)) }, query: discography,
             seeds: [.library, discography.seed], pending: false, message: nil, action: nil,
-            facts: nil)
+            facts: nil, headerSort: nil)
     }
     show([1, 2, 3])
     window.table.selectRowIndexes([0, 2], byExtendingSelection: false)
@@ -269,7 +269,7 @@ private final class Answers: @unchecked Sendable {
     let show = { (query: RecommendationQuery) in
         window.show(
             rows: [], query: query, seeds: [.library, discography.seed], pending: false,
-            message: nil, action: nil, facts: nil)
+            message: nil, action: nil, facts: nil, headerSort: nil)
     }
     show(RecommendationQuery(sort: .rating))
     #expect(hidden(.why) == false && hidden(.format) == true && hidden(.mark) == true)

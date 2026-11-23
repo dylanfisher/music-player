@@ -22,12 +22,18 @@ final class RecommendationsModel {
     private(set) var query = RecommendationQuery()
     /// The rows read, in the list's order.
     private var loaded: [RecommendationRow] = []
+    /// Each list's header sort, by its seed, kept while the app runs (ADR 0218).
+    private var headerSorts: [RecommendationQuery.Seed: HeaderSort] = [:]
     /// The rows shown: those read, without the library's albums when Missing is on for a
-    /// discography, which the service lists whole (ADR 0217).
+    /// discography, which the service lists whole (ADR 0217), in the header sort's order.
     var rows: [RecommendationRow] {
-        query.seed.isDiscography && query.filters.missing
+        let kept =
+            query.seed.isDiscography && query.filters.missing
             ? loaded.filter { !$0.album.inLibrary } : loaded
+        return headerSort.map { RecommendationColumn.sorted(kept, by: $0) } ?? kept
     }
+    /// The list's header sort, nil for its own order.
+    var headerSort: HeaderSort? { headerSorts[query.seed] }
     /// How many of a discography's releases the service will still fetch values for, as the
     /// last page said; nil for the scored lists.
     private(set) var pending: Int?
@@ -64,12 +70,16 @@ final class RecommendationsModel {
     @discardableResult
     func show(_ asked: RecommendationQuery) -> Task<Void, Never>? {
         let query = asked.fitted
+        // An order chosen from the pop-up is the one shown.
+        if query.seed == self.query.seed, query.sort != self.query.sort {
+            headerSorts[query.seed] = nil
+        }
         var others = query
         others.filters.missing = self.query.filters.missing
         if query.seed.isDiscography, others == self.query, !loaded.isEmpty {
             self.query = query
             changed()
-            return readMoreWhileFiltered()
+            return readMoreToShow()
         }
         if !seeds.contains(query.seed) { seeds.append(query.seed) }
         self.query = query
@@ -86,6 +96,18 @@ final class RecommendationsModel {
     func readMore() -> Task<Void, Never>? {
         guard more, reading == nil, problem == nil else { return nil }
         return read(from: loaded.count, through: 0)
+    }
+
+    /// Sorts the list by `sort`'s column, or back to its own order for nil, and reads the
+    /// pages not read yet: a sort of part of the list would look like the whole (ADR 0218).
+    @discardableResult
+    func sort(by sort: HeaderSort?) -> Task<Void, Never>? {
+        if let sort {
+            precondition(sort.column.sorts(query), "\(sort.column) doesn't sort this list")
+        }
+        headerSorts[query.seed] = sort
+        changed()
+        return readMoreToShow()
     }
 
     /// Reads the list again from its first row through at least `count` rows, a page at a
@@ -187,6 +209,8 @@ final class RecommendationsModel {
             return nil
         }
         let query = query
+        // A sorted list is read whole, so a refresh or the next page reads every page left.
+        let count = headerSort == nil ? count : .max
         let task = Task { await fetch(service, query, from: offset, through: count) }
         reading = task
         changed()
@@ -234,18 +258,20 @@ final class RecommendationsModel {
             facts = page.list
             pending = page.pending
             finish(problem: nil)
-            readMoreWhileFiltered()
+            readMoreToShow()
             refreshIfFetching()
             return
         }
     }
 
-    /// Reads the next page while Missing leaves fewer rows than a page of a discography, so
-    /// a run of the library's albums can't leave the window nothing to scroll to.
+    /// Reads the next page of a discography while a header sorts it, or while Missing leaves
+    /// fewer rows than a page, so a run of the library's albums can't leave the window
+    /// nothing to scroll to.
     @discardableResult
-    private func readMoreWhileFiltered() -> Task<Void, Never>? {
-        guard query.seed.isDiscography, query.filters.missing,
-            rows.count < RecommenderClient.pageLimit
+    private func readMoreToShow() -> Task<Void, Never>? {
+        guard query.seed.isDiscography,
+            headerSort != nil
+                || (query.filters.missing && rows.count < RecommenderClient.pageLimit)
         else { return nil }
         return readMore()
     }
