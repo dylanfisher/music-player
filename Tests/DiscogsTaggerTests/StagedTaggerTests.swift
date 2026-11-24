@@ -111,7 +111,8 @@ private final class WriteGate: @unchecked Sendable {
 }
 
 private let staged = StagedJob(
-    releaseID: stagedRelease, artist: "Persuader", folder: "job-7", format: .flac, files: [])
+    releaseID: stagedRelease, queuedReleaseID: stagedRelease, artist: "Persuader", folder: "job-7",
+    format: .flac, files: [])
 
 @MainActor
 private func stagedTagger(

@@ -6,7 +6,10 @@ import Recommender
 /// A job music-recommender staged, as AutoTag takes it: the release it downloaded, where, in
 /// what format, and its files as the service reported them.
 package struct StagedJob: Sendable {
+    /// The release to match the files with: the queued one, or one this Mac tagged them as.
     package var releaseID: Int
+    /// The release the service lists the job with, whose tracklist its positions are of.
+    let queuedReleaseID: Int
     /// As the snapshot spelled it, for a file name that starts with it.
     var artist: String
     /// The job's folder in the staging folder, one component: its `stagedPath`.
@@ -41,7 +44,8 @@ extension StagedJob {
             let format = job.candidate?.format
         else { return nil }
         self.init(
-            releaseID: job.release.releaseID, artist: job.release.artist, folder: folder,
+            releaseID: job.release.releaseID, queuedReleaseID: job.release.releaseID,
+            artist: job.release.artist, folder: folder,
             format: format, files: files)
     }
 }

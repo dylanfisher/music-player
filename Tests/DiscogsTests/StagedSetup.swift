@@ -12,13 +12,17 @@ import Testing
 
 private let stagedReleaseID = 4242
 
-/// The release's dump record, with `tracks`.
-private func releaseXML(_ tracks: [(position: String, title: String, duration: String)]) -> String {
+/// A release's dump record, with `tracks`: the staged release, unless `id` and `format` make it
+/// another edition of the same album.
+private func releaseXML(
+    _ tracks: [(position: String, title: String, duration: String)], id: Int = stagedReleaseID,
+    format: String = "File"
+) -> String {
     let tracklist = tracks.map {
         "<track><position>\($0.position)</position><title>\($0.title)</title><duration>\($0.duration)</duration></track>"
     }.joined()
     return
-        #"<release id="\#(stagedReleaseID)"><artists><artist><id>1</id><name>Made-Up Artist</name></artist></artists><title>Made-Up Album</title><labels><label name="Svek" catno="SK 032" id="5"/></labels><formats><format name="File" qty="1"><descriptions><description>FLAC</description></descriptions></format></formats><released>1999-03-00</released><tracklist>\#(tracklist)</tracklist></release>"#
+        #"<release id="\#(id)"><artists><artist><id>1</id><name>Made-Up Artist</name></artist></artists><title>Made-Up Album</title><labels><label name="Svek" catno="SK 032" id="5"/></labels><formats><format name="\#(format)" qty="1"><descriptions><description>FLAC</description></descriptions></format></formats><released>1999-03-00</released><tracklist>\#(tracklist)</tracklist></release>"#
         + "\n"
 }
 
@@ -81,21 +85,28 @@ final class StagedSetup {
     private(set) var job: StagedJob?
     private(set) var mapping = DiscogsPreset.oneToOne.mapping
 
-    init(release tracks: [(position: String, title: String, duration: String)] = stagedSongs) throws
-    {
+    /// `editions` are other releases of the same album, each a CD.
+    init(
+        release tracks: [(position: String, title: String, duration: String)] = stagedSongs,
+        editions: [(id: Int, tracks: [(position: String, title: String, duration: String)])] =
+            []
+    ) throws {
         dumps = try DumpFolder()
         root = dumps.directory.appendingPathComponent("staging", isDirectory: true)
-        try dumps.write("20261101", releases: releaseXML(tracks))
+        let others = editions.map { releaseXML($0.tracks, id: $0.id, format: "CD") }
+        try dumps.write("20261101", releases: ([releaseXML(tracks)] + others).joined())
         try dumps.importCatalog()
     }
 
     /// Copies `files` into `job-7` and tags them, then runs AutoTag on them for `format`, as a
-    /// job for the release `releaseID`. `namingTheRelease` tags them with the release's artist
+    /// job matched with the release `releaseID` and queued for `queued`, that one when nil.
+    /// `namingTheRelease` tags them with the release's artist
     /// and album too, so the catalog finds it by them.
     func run(
         _ files: [Staged], format: DownloadJob.Candidate.Format = .flac,
         mapping: DiscogsMapping = DiscogsPreset.oneToOne.mapping,
-        releaseID: Int = stagedReleaseID, namingTheRelease: Bool = false
+        releaseID: Int = stagedReleaseID, queuedAs queued: Int? = nil,
+        namingTheRelease: Bool = false
     ) async throws -> AutoTagRun {
         let (fixtures, manifest) = try fixtureLibrary.get()
         let folder = root.appendingPathComponent("job-7", isDirectory: true)
@@ -135,8 +146,8 @@ final class StagedSetup {
                 try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int)
         }
         job = StagedJob(
-            releaseID: releaseID, artist: "Made-Up Artist", folder: "job-7", format: format,
-            files: jobFiles)
+            releaseID: releaseID, queuedReleaseID: queued ?? releaseID, artist: "Made-Up Artist",
+            folder: "job-7", format: format, files: jobFiles)
         self.mapping = mapping
         return try await autoTag()
     }

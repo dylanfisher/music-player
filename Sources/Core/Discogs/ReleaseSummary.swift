@@ -20,6 +20,13 @@ public struct ReleaseSummary: Equatable, Sendable {
     /// The tracks a file can be, as the matcher counts them: headings left out, an index
     /// track's parts each one.
     public var trackCount: Int
+
+    /// "CD (Album), Music From Memory MFM056, 2022": which edition of its title it is, for a
+    /// line that names the release beside its id. Empty parts are left out.
+    package var edition: String {
+        let label = [label, catalogNumber].filter { !$0.isEmpty }.joined(separator: " ")
+        return [format, label, year].filter { !$0.isEmpty }.joined(separator: ", ")
+    }
 }
 
 /// A release as View Release shows it: its summary and its tracklist as Discogs lists it.

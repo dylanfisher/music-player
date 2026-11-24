@@ -63,6 +63,43 @@ private func reasons(_ run: AutoTagRun) -> [String] {
     #expect(run.anotherCopyMightFix)
 }
 
+/// The three songs and a bonus track, which the service left without a position.
+private let withBonus =
+    exactStaging + [Staged(name: "04 Bonus Beat.flac", title: "Bonus Beat", number: 4)]
+private let bonusEdition = stagedSongs + [(position: "4", title: "Bonus Beat", duration: "0:00")]
+
+@Test func anExtraFileThatAnotherEditionHasNamesItAndIsntRequeued() async throws {
+    let setup = try StagedSetup(editions: [(id: 4343, tracks: bonusEdition)])
+    let run = try await setup.run(withBonus, namingTheRelease: true)
+    #expect(run.fits?.id == 4343)
+    #expect(
+        run.verdict
+            == .discrepancy([
+                "4 files, release has 3", "04 Bonus Beat.flac fits no track",
+                "release 4343 (CD (FLAC), Svek SK 032, 1999) fits every file",
+            ]))
+    #expect(!run.anotherCopyMightFix, "another copy would only replace files that fit 4343")
+    #expect(run.edits.isEmpty)
+}
+
+@Test func filesThatFitNoOtherEditionAreRequeuedAsBefore() async throws {
+    let longer = bonusEdition + [(position: "5", title: "Another Beat", duration: "0:00")]
+    let setup = try StagedSetup(editions: [(id: 4343, tracks: longer)])
+    let run = try await setup.run(withBonus, namingTheRelease: true)
+    #expect(run.fits == nil)
+    #expect(reasons(run).contains("4 files, release has 3"))
+    #expect(run.anotherCopyMightFix)
+}
+
+@Test func filesMatchedWithTheEditionTheyFitAreCleanWhateverTheServicesPositions() async throws {
+    // The service gave the positions of 4242, the release queued, and none for the bonus.
+    let setup = try StagedSetup(editions: [(id: 4343, tracks: bonusEdition)])
+    let run = try await setup.run(withBonus, releaseID: 4343, queuedAs: 4242)
+    #expect(run.verdict == .clean)
+    #expect(run.fits == nil)
+    #expect(run.edits.count == 4)
+}
+
 @Test func anUnreadableFileIsAnError() async throws {
     var files = exactStaging
     files[2].sample = .garbage

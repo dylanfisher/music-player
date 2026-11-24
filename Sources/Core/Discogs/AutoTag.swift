@@ -30,8 +30,13 @@ package struct AutoTagRun: Sendable {
     /// files (their count, a file that fits no track or a track with none, a title or a length
     /// that differs, the wrong codec), and none would come back with every copy (a file the
     /// writer can't tag, a format AutoTag can't check). A match only below exact, or a position
-    /// the service gave otherwise, doesn't say the copy is wrong (ADR 0211).
+    /// the service gave otherwise, doesn't say the copy is wrong (ADR 0211). False when the
+    /// files fit another release (`fits`): another copy would only replace them.
     package var anotherCopyMightFix = false
+    /// For a discrepancy in how the files fit their release's tracklist, the first other
+    /// release the matcher found that they fit with no reason, which a reason names
+    /// (ADR 0224); nil for none.
+    package var fits: ReleaseSummary? = nil
 }
 
 /// Matches `job`'s staged files under `stagingRoot` against its release in the catalog at
@@ -63,71 +68,15 @@ package func autoTag(
             edits: [])
     }
     let changes = changeSet(for: staged.files, match: match, mapping: mapping.overwriting())
-    let name = { (id: Int64?) in id.flatMap { staged.staged[$0]?.name } ?? "a file" }
-
-    var reasons: [String] = []
-    // Whether a reason is about the copy, and whether one would come back with any copy.
-    var aboutTheCopy = false
-    var withEveryCopy = false
-    if staged.files.count != match.releaseTrackCount {
-        reasons.append("\(staged.files.count) files, release has \(match.releaseTrackCount)")
-        aboutTheCopy = true
-    }
-    for row in match.comparison(of: staged.album) {
-        guard let index = row.track else {
-            reasons.append("\(name(row.fileID)) fits no track")
-            aboutTheCopy = true
-            continue
-        }
-        let track = positions[index]
-        switch row.state {
-        case .matched: break
-        case .missing:
-            reasons.append("track \(track) has no file")
-            aboutTheCopy = true
-        case .different:
-            if let title = row.releaseTitle,
-                TitleSimilarity([row.fileTitle]).similarities(to: title)[0]
-                    < MatchThreshold.sameTitle
-            {
-                reasons.append(
-                    "track \(track) is titled \(row.fileTitle ?? "nothing"), not \(title)")
-                aboutTheCopy = true
-            }
-            if let expected = row.releaseSeconds, let seconds = row.fileSeconds,
-                !ReleaseScore.agrees(seconds, expected)
-            {
-                reasons.append(
-                    "track \(track) is \(Int(abs(seconds - Double(expected)).rounded())) s off")
-                aboutTheCopy = true
-            }
-        }
-    }
-    for file in staged.files {
-        let player = match.mapping[file.id].map { positions[$0] }
-        let service = staged.staged[file.id]?.position
-        if let player, player != service {
-            let said = service.map { "the service said \($0)" } ?? "the service left it out"
-            reasons.append("\(name(file.id)) is track \(player), \(said)")
-        }
-        if let expected = codec(job.format), file.metadata.audio.codec != expected {
-            reasons.append(
-                "\(name(file.id)) is \(codecName(file.metadata.audio.codec)), not \(job.format.rawValue.uppercased())"
-            )
-            aboutTheCopy = true
-        } else if codec(job.format) == nil {
-            reasons.append("\(name(file.id)) is \(job.format.rawValue), which can't be checked")
-            withEveryCopy = true
-        }
-    }
-    for file in changes.files {
-        if let unwritable = file.unwritable {
-            reasons.append("\(name(file.fileID)): \(unwritable)")
-            withEveryCopy = true
-        }
-    }
-    if reasons.isEmpty, match.tier != .exact {
-        reasons.append("the match is \(match.tier.rawValue), not exact")
+    let checked = check(job, staged, match, positions: positions, changes: changes)
+    var reasons = checked.reasons
+    // Files that don't fit their release's tracklist may fit another's; only the releases the
+    // matcher found are tried (ADR 0224). No release fixes a wrong codec, or a reason every
+    // copy would have.
+    var fits: ReleaseSummary?
+    if !reasons.isEmpty, checked.tracklist, !checked.codec, !checked.withEveryCopy {
+        fits = try await fittingRelease(job, staged, match, catalogAt: catalog, mapping: mapping)
+        if let fits { reasons.append("release \(fits.id) (\(fits.edition)) fits every file") }
     }
 
     let edits: [(path: String, edit: TagEdit)]
@@ -141,7 +90,118 @@ package func autoTag(
     return AutoTagRun(
         verdict: reasons.isEmpty ? .clean : .discrepancy(reasons), staged: staged, match: match,
         changes: changes, edits: reasons.isEmpty ? edits : [],
-        anotherCopyMightFix: aboutTheCopy && !withEveryCopy)
+        anotherCopyMightFix: fits == nil && (checked.tracklist || checked.codec)
+            && !checked.withEveryCopy,
+        fits: fits)
+}
+
+/// What the checks of one match found: the reasons, and which kinds they are.
+private struct Checks {
+    var reasons: [String] = []
+    /// A reason is about how the files fit the tracklist: their count, a file that fits no
+    /// track or a track with none, a title or a length that differs.
+    var tracklist = false
+    /// A file isn't the codec the service said.
+    var codec = false
+    /// A reason would come back with every copy: a file the writer can't tag, or a format
+    /// AutoTag can't check.
+    var withEveryCopy = false
+}
+
+/// Why `staged`'s files, matched as `match` with its tracks at `positions`, can't be written
+/// as `changes` unasked; no reason for a clean match. The service's positions are checked only
+/// for the release the job was queued for, which they were given for (ADR 0224).
+private func check(
+    _ job: StagedJob, _ staged: StagedAlbum, _ match: AlbumMatch, positions: [String],
+    changes: AlbumChangeSet
+) -> Checks {
+    let name = { (id: Int64?) in id.flatMap { staged.staged[$0]?.name } ?? "a file" }
+    var checks = Checks()
+    if staged.files.count != match.releaseTrackCount {
+        checks.reasons.append("\(staged.files.count) files, release has \(match.releaseTrackCount)")
+        checks.tracklist = true
+    }
+    for row in match.comparison(of: staged.album) {
+        guard let index = row.track else {
+            checks.reasons.append("\(name(row.fileID)) fits no track")
+            checks.tracklist = true
+            continue
+        }
+        let track = positions[index]
+        switch row.state {
+        case .matched: break
+        case .missing:
+            checks.reasons.append("track \(track) has no file")
+            checks.tracklist = true
+        case .different:
+            if let title = row.releaseTitle,
+                TitleSimilarity([row.fileTitle]).similarities(to: title)[0]
+                    < MatchThreshold.sameTitle
+            {
+                checks.reasons.append(
+                    "track \(track) is titled \(row.fileTitle ?? "nothing"), not \(title)")
+                checks.tracklist = true
+            }
+            if let expected = row.releaseSeconds, let seconds = row.fileSeconds,
+                !ReleaseScore.agrees(seconds, expected)
+            {
+                checks.reasons.append(
+                    "track \(track) is \(Int(abs(seconds - Double(expected)).rounded())) s off")
+                checks.tracklist = true
+            }
+        }
+    }
+    for file in staged.files {
+        let player = match.mapping[file.id].map { positions[$0] }
+        let service = staged.staged[file.id]?.position
+        if job.releaseID == job.queuedReleaseID, let player, player != service {
+            let said = service.map { "the service said \($0)" } ?? "the service left it out"
+            checks.reasons.append("\(name(file.id)) is track \(player), \(said)")
+        }
+        if let expected = codec(job.format), file.metadata.audio.codec != expected {
+            checks.reasons.append(
+                "\(name(file.id)) is \(codecName(file.metadata.audio.codec)), not \(job.format.rawValue.uppercased())"
+            )
+            checks.codec = true
+        } else if codec(job.format) == nil {
+            checks.reasons.append(
+                "\(name(file.id)) is \(job.format.rawValue), which can't be checked")
+            checks.withEveryCopy = true
+        }
+    }
+    for file in changes.files {
+        if let unwritable = file.unwritable {
+            checks.reasons.append("\(name(file.fileID)): \(unwritable)")
+            checks.withEveryCopy = true
+        }
+    }
+    if checks.reasons.isEmpty, match.tier != .exact {
+        checks.reasons.append("the match is \(match.tier.rawValue), not exact")
+    }
+    return checks
+}
+
+/// The first of `match`'s other releases, best first, that `staged`'s files fit with no
+/// reason, as they would for a job queued for it; nil for none. Only a release whose score
+/// fits the tracklist and the lengths can be exact, so only those are read again.
+private func fittingRelease(
+    _ job: StagedJob, _ staged: StagedAlbum, _ match: AlbumMatch, catalogAt catalog: URL,
+    mapping: DiscogsMapping
+) async throws -> ReleaseSummary? {
+    for candidate in match.candidates
+    where candidate.score.fitsTracklist && candidate.score.durationsAgree {
+        let other = try await chooseRelease(
+            candidate.releaseID, for: staged.album, after: match, catalogAt: catalog,
+            source: .catalog, api: nil)
+        guard let release = other.release, let positions = ReleaseSnapshot.positions(other.tracks)
+        else { continue }
+        var queuedAsIt = job
+        queuedAsIt.releaseID = release.id
+        let changes = changeSet(for: staged.files, match: other, mapping: mapping.overwriting())
+        let checked = check(queuedAsIt, staged, other, positions: positions, changes: changes)
+        if checked.reasons.isEmpty { return release.summary }
+    }
+    return nil
 }
 
 /// The codec a file of the service's `format` holds, as the reader names it; nil for a format
