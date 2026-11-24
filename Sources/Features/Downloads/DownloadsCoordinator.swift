@@ -205,7 +205,7 @@ actor DownloadsCoordinator {
         let verdict: AutoTagRun.Verdict
         var requeue: Requeue?
         // What this run found the files fit, which replaces what an earlier one found.
-        var fits: Int?
+        var fits: (release: Int, folder: String)?
         let lost = "job \(job.id)'s lease went to another Mac; nothing was written"
         if var staged = stagedJob(job) {
             if let fit { staged.releaseID = fit }
@@ -230,7 +230,9 @@ actor DownloadsCoordinator {
                 }
                 // The owner asked for these files to be tagged, not thrown away.
                 if fit != nil { requeue = nil }
-                if case .discrepancy = run.verdict { fits = run.fits?.id }
+                if case .discrepancy = run.verdict, let fit = run.fits {
+                    fits = (fit.id, staged.folder)
+                }
                 if run.verdict == .clean {
                     verdict = await effects.write(run)
                     // The write can grow a file, so what the files measure now is recorded
@@ -395,12 +397,13 @@ actor DownloadsCoordinator {
 
     /// Records the release a tag run found `job`'s files fit, or with nil, forgets one: each
     /// report replaces what the one before found.
-    private func recordFit(_ release: Int?, _ job: DownloadJob) {
+    private func recordFit(_ fit: (release: Int, folder: String)?, _ job: DownloadJob) {
         do {
             let index = try index()
+            // Forgetting a fit reads no folder.
             try index.recordFittingRelease(
-                job: job.id, queued: job.release.releaseID, folder: job.stagedFolder ?? "",
-                release: release)
+                job: job.id, queued: job.release.releaseID, folder: fit?.folder ?? "",
+                release: fit?.release)
             fittingReleases = try index.fittingReleases()
         } catch {
             fittingReleases = nil
