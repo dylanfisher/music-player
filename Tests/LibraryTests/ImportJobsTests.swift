@@ -88,6 +88,21 @@ private let moved = ImportStep(
     #expect(try index.taggedReleases().isEmpty)
 }
 
+@Test func theLedgerKeepsTheReleaseAStagedJobFitsApartFromTheOneItWasTaggedAs() throws {
+    let (index, _) = try temporaryIndex()
+    try index.recordTaggedRelease(job: 42, queued: 4242, folder: "job-42", release: 5151)
+    try index.recordFittingRelease(job: 42, queued: 4242, folder: "job-42", release: 6161)
+    try index.recordFittingRelease(job: 42, queued: 4242, folder: "job-42", release: 7171)
+    #expect(try index.fittingReleases() == [42: TaggedRelease(folder: "job-42", releaseID: 7171)])
+    #expect(try index.taggedReleases() == [42: TaggedRelease(folder: "job-42", releaseID: 5151)])
+    try index.recordFittingRelease(job: 42, queued: 4242, folder: "job-42", release: nil)
+    #expect(try index.fittingReleases().isEmpty)
+    #expect(try index.taggedReleases().count == 1)
+    try index.recordFittingRelease(job: 42, queued: 4242, folder: "job-42", release: 6161)
+    try index.forgetImportJob(42)
+    #expect(try index.fittingReleases().isEmpty)
+}
+
 @Test func aTaggedReleaseThatIsntANumberIsAnError() throws {
     let (index, _) = try temporaryIndex()
     try index.recordImportStep(

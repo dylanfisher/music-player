@@ -158,7 +158,7 @@ final class DownloadsWindow: NSWindowController, NSTableViewDataSource, NSTableV
     private func build(in window: NSWindow) {
         let bar = NSStackView()
         bar.spacing = 8
-        for action in DownloadAction.allCases {
+        for action in DownloadAction.allCases where action.inToolbar {
             let button = NSButton(title: action.title, target: self, action: #selector(clicked))
             button.bezelStyle = .rounded
             button.toolTip = action.help

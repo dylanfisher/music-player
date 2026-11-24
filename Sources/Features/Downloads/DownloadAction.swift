@@ -4,7 +4,8 @@ import Recommender
 /// What the Downloads window's toolbar and context menu do to one job. Whether each applies is
 /// a pure function of the job, this Mac and the service, table-tested, so the window only asks.
 enum DownloadAction: CaseIterable, Sendable {
-    case approve, reject, retry, cancel, openInTagger, resumeHere, revealInFinder, showInAllMusic
+    case approve, reject, retry, cancel, openInTagger, useReleaseThatFits, resumeHere
+    case revealInFinder, showInAllMusic
 
     var title: String {
         switch self {
@@ -13,6 +14,7 @@ enum DownloadAction: CaseIterable, Sendable {
         case .retry: "Retry"
         case .cancel: "Cancel Download"
         case .openInTagger: "Open in Tagger"
+        case .useReleaseThatFits: "Use Release That Fits…"
         case .resumeHere: "Resume Here"
         case .revealInFinder: "Reveal in Finder"
         case .showInAllMusic: AppCommands.title(of: .showInAllMusic)
@@ -21,6 +23,8 @@ enum DownloadAction: CaseIterable, Sendable {
 
     /// The button that confirms Reject.
     static let rejectButton = "Reject"
+    /// The button that confirms Use Release That Fits.
+    static let tagAsReleaseButton = "Tag as Release"
 
     var help: String {
         switch self {
@@ -31,33 +35,43 @@ enum DownloadAction: CaseIterable, Sendable {
                 + " user the job hasn't tried."
         case .cancel: "Stop the search or download and delete what it got."
         case .openInTagger: "Resolve the discrepancy in the Discogs Tagger."
+        case .useReleaseThatFits:
+            "Write the tags of the other release the files fit, which this Mac's tag run found,"
+                + " in place of the one queued."
         case .resumeHere: "Finish an import another Mac, or an earlier run, left."
         case .revealInFinder: "Show the album's staged folder in the Finder."
         case .showInAllMusic: "Select the album in the library's All Music."
         }
     }
 
+    /// Whether the toolbar has a button for it; every action is in the context menu. Use
+    /// Release That Fits, which few rows take, would widen the smallest window by 160 points
+    /// (ADR 0224).
+    var inToolbar: Bool { self != .useReleaseThatFits }
+
     /// Whether the action, on several rows, acts on each one it applies to. Approve, Resume
-    /// Here and Open in Tagger each open one review, and Show in All Music selects one album,
-    /// so they act on the first (ADR 0218).
+    /// Here and Open in Tagger each open one review, Use Release That Fits confirms one
+    /// release, and Show in All Music selects one album, so they act on the first (ADR 0218).
     var actsOnEach: Bool {
         switch self {
         case .reject, .retry, .cancel, .revealInFinder: true
-        case .approve, .resumeHere, .openInTagger, .showInAllMusic: false
+        case .approve, .resumeHere, .openInTagger, .useReleaseThatFits, .showInAllMusic: false
         }
     }
 
     /// Whether the action applies to `job` on the Mac named `machine`. Nothing applies while
     /// the service doesn't answer; a job another Mac is reviewing takes only Resume Here, which
     /// takes the claim over. Approve needs the job staged and tagged clean; Open in Tagger a
-    /// discrepancy or an error, on a Mac with a catalog (`canTag`); Retry, besides a job that
+    /// discrepancy or an error, on a Mac with a catalog (`canTag`), and Use Release That Fits a
+    /// discrepancy whose files this Mac's tag run found fit another release (`knowsFit`,
+    /// ADR 0224); Retry, besides a job that
     /// failed or wasn't found, a staged one once it's tagged, clean too, which it requeues
     /// (ADR 0211, ADR 0222). Reveal in Finder, which only
     /// looks, needs a staged folder, from `staged` until the import, and not the service; Show
     /// in All Music an album in the library, the one imported or the one an upgrade replaces.
     static func applies(
         _ action: DownloadAction, to job: DownloadJob, machine: String, answering: Bool,
-        canTag: Bool
+        canTag: Bool, knowsFit: Bool
     ) -> Bool {
         if action == .revealInFinder {
             return job.stagedPath != nil
@@ -87,6 +101,9 @@ enum DownloadAction: CaseIterable, Sendable {
         case .openInTagger:
             return canTag && !elsewhere && job.state == .staged
                 && (job.tagging.status == .discrepancy || job.tagging.status == .error)
+        case .useReleaseThatFits:
+            return canTag && knowsFit && !elsewhere && job.state == .staged
+                && job.tagging.status == .discrepancy
         case .resumeHere:
             return job.state == .approved || job.state == .importing
         // Answered before the service's guard.

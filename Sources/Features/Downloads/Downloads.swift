@@ -299,9 +299,11 @@ package final class Downloads {
                     await coordinator.take(jobs)
                     let problems = await coordinator.problems
                     let tagged = await coordinator.taggedAs()
+                    let fits = await coordinator.fitting()
                     guard self.session === session else { return }
                     // Changes the rows, and calls `changed`, only when it's new.
                     model.setTagged(tagged)
+                    model.setFits(fits)
                     self.approveSafe()
                     self.upgradeAutomatically()
                     // The poll refreshed the rows; only a new problem changes what shows.
@@ -517,7 +519,8 @@ package final class Downloads {
         else { return false }
         return DownloadAction.applies(
             action, to: job, machine: session.setup.machine,
-            answering: session.model.connection == .answering, canTag: session.canTag)
+            answering: session.model.connection == .answering, canTag: session.canTag,
+            knowsFit: session.model.fit(row.id) != nil)
     }
 
     // MARK: - Actions
@@ -557,6 +560,7 @@ package final class Downloads {
                 }
             }
         case .retry: retry(job, row, session)
+        case .useReleaseThatFits: useReleaseThatFits(job, row, session)
         case .revealInFinder: reveal([job], session)
         case .showInAllMusic: showInLibrary(job, session)
         case .openInTagger:
@@ -606,7 +610,7 @@ package final class Downloads {
         guard job.candidate != nil else {
             return "music-recommender hasn't said what format it downloaded"
         }
-        guard let catalog else { return "this Mac has no Discogs catalog to tag with" }
+        guard let catalog else { return DownloadsCoordinator.noCatalog }
         let release = job.release.releaseID
         return await blockingFileWork { () -> String? in
             do {
@@ -615,9 +619,14 @@ package final class Downloads {
                 }
                 return nil
             } catch {
-                return "the Discogs catalog couldn't be read: \(error)"
+                return catalogUnread(error)
             }
         }
+    }
+
+    /// Why a release couldn't be looked up in the catalog.
+    nonisolated static func catalogUnread(_ error: any Error) -> String {
+        "the Discogs catalog couldn't be read: \(error)"
     }
 
     /// Starts `review` unless one is in flight, so a quick second click leaves the first

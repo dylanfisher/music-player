@@ -43,6 +43,9 @@ final class DownloadsModel {
     /// The release each job's staged files were tagged as in the tagger on this Mac, by job,
     /// which the rows name where it isn't the one the service lists (ADR 0178).
     private(set) var tagged: [Int: TaggedRelease] = [:]
+    /// The release each job's staged files fit, by job, as a tag run on this Mac found, which
+    /// Use Release That Fits writes (ADR 0224).
+    private(set) var fits: [Int: TaggedRelease] = [:]
     /// Why Approve Safe Matches Automatically left each job it looked at for the owner, by job
     /// (ADR 0193).
     private(set) var leftForReview: [Int: String] = [:]
@@ -221,6 +224,19 @@ final class DownloadsModel {
         self.tagged = tagged
         buildRows()
         changed()
+    }
+
+    /// Takes the releases the coordinator found the files fit. The rows don't show them, the
+    /// tag run's reasons do, so only what applies changes.
+    func setFits(_ fits: [Int: TaggedRelease]) {
+        guard fits != self.fits else { return }
+        self.fits = fits
+        changed()
+    }
+
+    /// The release the job `id`'s files fit, while it isn't the one the service lists.
+    func fit(_ id: Int) -> Int? {
+        jobs.rows[id].flatMap { job in fits[id]?.differs(for: job) }
     }
 
     /// Records why the job `id` was left for review, or with nil, that it may be looked at again.

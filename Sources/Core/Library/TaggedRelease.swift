@@ -2,7 +2,8 @@ import Recommender
 
 /// The release a staged job's files were tagged as in the tagger, where it isn't the one the
 /// job was queued for (ADR 0178), and the job's folder they were tagged in. Kept in this Mac's
-/// import ledger, since music-recommender has no call yet to record a job's new release.
+/// import ledger, since music-recommender has no call yet to record a job's new release. The
+/// release the tag run found they fit (ADR 0224) is kept the same way.
 package struct TaggedRelease: Equatable, Sendable {
     /// The job's folder in the staging folder when its files were tagged.
     package var folder: String

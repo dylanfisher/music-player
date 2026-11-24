@@ -22,6 +22,10 @@ private func held(_ machine: String) -> DownloadJob.Hold {
     (.openInTagger, .staged, .discrepancy, true),
     (.openInTagger, .staged, .error, true),
     (.openInTagger, .staged, .clean, false),
+    (.useReleaseThatFits, .staged, .discrepancy, true),
+    (.useReleaseThatFits, .staged, .error, false),
+    (.useReleaseThatFits, .staged, .clean, false),
+    (.useReleaseThatFits, .approved, .discrepancy, false),
     (.resumeHere, .importing, .clean, true),
     (.resumeHere, .approved, .clean, true),
     (.resumeHere, .staged, .clean, false),
@@ -40,16 +44,20 @@ func eachActionAppliesToItsStates(
 ) {
     let job = job(1, state) { $0.tagging.status = tagging }
     #expect(
-        DownloadAction.applies(action, to: job, machine: me, answering: true, canTag: true)
+        DownloadAction.applies(
+            action, to: job, machine: me, answering: true, canTag: true, knowsFit: true)
             == applies)
     // Nothing applies while the service doesn't answer.
-    #expect(!DownloadAction.applies(action, to: job, machine: me, answering: false, canTag: true))
+    #expect(
+        !DownloadAction.applies(
+            action, to: job, machine: me, answering: false, canTag: true, knowsFit: true))
 }
 
 @Test(arguments: [
     (DownloadAction.approve, false),
     (.reject, false),
     (.openInTagger, false),
+    (.useReleaseThatFits, false),
     (.retry, false),
     (.cancel, false),
     (.resumeHere, true),
@@ -57,23 +65,43 @@ func eachActionAppliesToItsStates(
 func aJobAnotherMacReviewsTakesOnlyResumeHere(action: DownloadAction, applies: Bool) {
     let state: JobState = action == .resumeHere ? .importing : .staged
     let job = job(1, state) {
-        $0.tagging.status = [.openInTagger, .retry].contains(action) ? .discrepancy : .clean
+        $0.tagging.status =
+            [.openInTagger, .useReleaseThatFits, .retry].contains(action) ? .discrepancy : .clean
         $0.review = held("Living Room")
     }
     #expect(
-        DownloadAction.applies(action, to: job, machine: me, answering: true, canTag: true)
+        DownloadAction.applies(
+            action, to: job, machine: me, answering: true, canTag: true, knowsFit: true)
             == applies)
     var mine = job
     mine.review = held(me)
-    #expect(DownloadAction.applies(action, to: mine, machine: me, answering: true, canTag: true))
+    #expect(
+        DownloadAction.applies(
+            action, to: mine, machine: me, answering: true, canTag: true, knowsFit: true))
 }
 
 @Test func withoutACatalogTheTaggerDoesntOpen() {
     let job = job(1) { $0.tagging.status = .discrepancy }
     #expect(
-        !DownloadAction.applies(.openInTagger, to: job, machine: me, answering: true, canTag: false)
+        !DownloadAction.applies(
+            .openInTagger, to: job, machine: me, answering: true, canTag: false, knowsFit: true)
     )
-    #expect(DownloadAction.applies(.reject, to: job, machine: me, answering: true, canTag: false))
+    #expect(
+        DownloadAction.applies(
+            .reject, to: job, machine: me, answering: true, canTag: false, knowsFit: true))
+}
+
+@Test func useReleaseThatFitsNeedsACatalogAndAFitThisMacFound() {
+    let job = job(1) { $0.tagging.status = .discrepancy }
+    for (canTag, knowsFit) in [(true, true), (false, true), (true, false)] {
+        #expect(
+            DownloadAction.applies(
+                .useReleaseThatFits, to: job, machine: me, answering: true, canTag: canTag,
+                knowsFit: knowsFit) == (canTag && knowsFit))
+    }
+    #expect(
+        DownloadAction.applies(
+            .openInTagger, to: job, machine: me, answering: true, canTag: true, knowsFit: false))
 }
 
 @Test(arguments: [
@@ -91,7 +119,8 @@ func aFailedJobCancelsUpToTaggingAndSearchesAgainOnlyFromItsDownload(
     let job = job(1, .failed) { $0.failedStage = stage }
     #expect(DownloadAction.retrySearches(job) == searches)
     #expect(
-        DownloadAction.applies(.cancel, to: job, machine: me, answering: true, canTag: true)
+        DownloadAction.applies(
+            .cancel, to: job, machine: me, answering: true, canTag: true, knowsFit: true)
             == cancels)
 }
 
@@ -117,7 +146,8 @@ func showInAllMusicNeedsAnAlbumInTheLibraryButNotTheService(
     for answering in [true, false] {
         #expect(
             DownloadAction.applies(
-                .showInAllMusic, to: job, machine: me, answering: answering, canTag: false)
+                .showInAllMusic, to: job, machine: me, answering: answering, canTag: false,
+                knowsFit: true)
                 == applies)
     }
 }
@@ -131,12 +161,14 @@ func revealInFinderNeedsAStagedFolderButNotTheService(state: JobState, applies: 
     for answering in [true, false] {
         #expect(
             DownloadAction.applies(
-                .revealInFinder, to: staged, machine: me, answering: answering, canTag: false)
+                .revealInFinder, to: staged, machine: me, answering: answering, canTag: false,
+                knowsFit: true)
                 == applies)
     }
     var unstaged = staged
     unstaged.stagedPath = nil
     #expect(
         !DownloadAction.applies(
-            .revealInFinder, to: unstaged, machine: me, answering: true, canTag: true))
+            .revealInFinder, to: unstaged, machine: me, answering: true, canTag: true,
+            knowsFit: true))
 }

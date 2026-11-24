@@ -28,6 +28,10 @@ struct ImportStep: Equatable, Sendable {
         /// `destination`. music-recommender has no call to record it yet, so this is the one
         /// place that says so.
         case retagged
+        /// A staged job whose files the tag run here found fit another release than the one
+        /// it matched them with (ADR 0224), with the job's folder as `path` and that release's
+        /// id as `destination`, until a later tag run or write.
+        case fits
     }
 
     /// The service's job id, which every Mac shares.
@@ -39,7 +43,7 @@ struct ImportStep: Equatable, Sendable {
     var path: String
     /// For `moved` and `carried`, the new file's path relative to the library's share; for
     /// `setAside`, the hidden name's; for `held`, the release id the file must carry; for
-    /// `retagged`, the release id the files were tagged as.
+    /// `retagged`, the release id the files were tagged as; for `fits`, the one they fit.
     var destination: String? = nil
     /// For `moved`, the size the file must have where it went; for `tagged`, the size it has
     /// since the tag write.
@@ -151,28 +155,51 @@ extension LibraryIndex {
     package func recordTaggedRelease(job: Int, queued: Int, folder: String, release: Int)
         throws
     {
-        guard release != queued else {
-            return try statement(
-                "DELETE FROM \(importStepsTable) WHERE job_id = ? AND kind = ?"
-            ).run(job, ImportStep.Kind.retagged.rawValue)
-        }
-        try database.transaction {
-            try statement("DELETE FROM \(importStepsTable) WHERE job_id = ? AND kind = ?")
-                .run(job, ImportStep.Kind.retagged.rawValue)
-            try recordImportStep(
-                ImportStep(
-                    jobID: job, releaseID: queued, kind: .retagged, path: folder,
-                    destination: String(release)))
-        }
+        try recordRelease(
+            .retagged, job: job, queued: queued, folder: folder,
+            release: release == queued ? nil : release)
     }
 
     /// The release each job's staged files were tagged as in the tagger, by job, where it
     /// isn't the one queued.
     package func taggedReleases() throws -> [Int: TaggedRelease] {
+        try releases(.retagged)
+    }
+
+    /// Records that the tag run found the staged files of `folder` fit `release` (ADR 0224),
+    /// or with nil, forgets that they fit one.
+    package func recordFittingRelease(job: Int, queued: Int, folder: String, release: Int?)
+        throws
+    {
+        try recordRelease(.fits, job: job, queued: queued, folder: folder, release: release)
+    }
+
+    /// The release each job's staged files fit, by job, as the tag run here found.
+    package func fittingReleases() throws -> [Int: TaggedRelease] {
+        try releases(.fits)
+    }
+
+    /// Records the job's one step of `kind`, `release` in its folder, or with nil, removes it.
+    private func recordRelease(
+        _ kind: ImportStep.Kind, job: Int, queued: Int, folder: String, release: Int?
+    ) throws {
+        let remove = "DELETE FROM \(importStepsTable) WHERE job_id = ? AND kind = ?"
+        guard let release else { return try statement(remove).run(job, kind.rawValue) }
+        try database.transaction {
+            try statement(remove).run(job, kind.rawValue)
+            try recordImportStep(
+                ImportStep(
+                    jobID: job, releaseID: queued, kind: kind, path: folder,
+                    destination: String(release)))
+        }
+    }
+
+    /// The release of each job's step of `kind`, by job.
+    private func releases(_ kind: ImportStep.Kind) throws -> [Int: TaggedRelease] {
         var found: [Int: TaggedRelease] = [:]
         try statement(
             "SELECT job_id, path, destination FROM \(importStepsTable) WHERE kind = ?"
-        ).query(ImportStep.Kind.retagged.rawValue) { row in
+        ).query(kind.rawValue) { row in
             let text = row.optionalText(2) ?? ""
             guard let release = Int(text) else { throw LibraryError.notAReleaseID(text) }
             found[try row.int(0)] = TaggedRelease(folder: try row.text(1), releaseID: release)

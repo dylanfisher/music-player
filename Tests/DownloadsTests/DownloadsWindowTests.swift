@@ -533,6 +533,7 @@ private func type(_ text: String, in window: DownloadsWindow) {
     let content = try #require(window.window?.contentView)
     let smallest = try #require(window.window?.minSize.width)
     #expect(content.fittingSize.width <= smallest)
+    #expect(window.buttons[.useReleaseThatFits] == nil, "it's in the context menu only")
     window.window?.close()
 }
 

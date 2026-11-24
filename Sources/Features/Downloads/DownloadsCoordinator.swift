@@ -11,7 +11,8 @@ private let logger = moduleLogger()
 /// the service's 10-minute tagging lease, renewed every 3; it writes a clean run's tags and
 /// nothing else; it requeues a job whose staged copy is damaged (ADR 0210), or doesn't match
 /// its release while the job has tried fewer than `peerLimit` peers (ADR 0211), for another
-/// peer's;
+/// peer's; it keeps the release the files of a discrepancy fit instead, which Use Release That
+/// Fits writes (ADR 0224);
 /// it sends the reports the index's outbox holds, in order, until each is answered; and it
 /// runs Approve's import under the 24-hour review claim. Every effect is injected, the clock's
 /// waits too.
@@ -25,6 +26,9 @@ actor DownloadsCoordinator {
     /// The peers a job may have tried for a copy that doesn't match its release to be
     /// requeued: the third copy that doesn't match is left for the owner (ADR 0211).
     static let peerLimit = 3
+
+    /// Why a Mac with no catalog doesn't tag.
+    static let noCatalog = "this Mac has no Discogs catalog to tag with"
 
     /// Why a tag run requeues a job.
     enum Requeue: Equatable, Sendable {
@@ -98,6 +102,8 @@ actor DownloadsCoordinator {
     private var importing = false
     /// `taggedAs()`, once read.
     private var taggedReleases: [Int: TaggedRelease]?
+    /// `fitting()`, once read.
+    private var fittingReleases: [Int: TaggedRelease]?
     /// What went wrong that no call returns: reports the service refused, which the outbox
     /// dropped, and the index's failures, for the window to show.
     private(set) var problems: [String] = []
@@ -160,9 +166,15 @@ actor DownloadsCoordinator {
         }
     }
 
+    /// Tags `listed` under the lease and reports the verdict. With `fit`, the release the
+    /// files fit, which Use Release That Fits tags them as (ADR 0224): the job must still be
+    /// staged with a discrepancy, and nothing is requeued. Gives why the files weren't written
+    /// clean, or the verdict not sent; nil when they were and it was.
+    @discardableResult
     private func tag(
-        _ listed: DownloadJob, with autoTag: @Sendable (StagedJob) async throws -> AutoTagRun
-    ) async {
+        _ listed: DownloadJob, with autoTag: @Sendable (StagedJob) async throws -> AutoTagRun,
+        as fit: Int? = nil
+    ) async -> String? {
         tagging = listed.id
         defer { tagging = nil }
         let job: DownloadJob
@@ -171,16 +183,18 @@ actor DownloadsCoordinator {
         } catch {
             // Another Mac took it first, or the service didn't answer: the next poll says.
             logger.info("job \(listed.id) not tagged here: \(error)")
-            return
+            return "\(error)"
         }
         // The poll may be old: the job is the service's answer now, which another Mac may have
         // tagged, or the owner rejected, since.
-        guard job.state == .staged, [.none, .running].contains(job.tagging.status) else {
-            logger.info(
-                "job \(job.id) is \(job.state.rawValue), tagged \(job.tagging.status.rawValue); not tagged here"
-            )
+        let waiting: [DownloadJob.Tagging.Status] =
+            fit == nil ? [.none, .running] : [.discrepancy]
+        guard job.state == .staged, waiting.contains(job.tagging.status) else {
+            let now =
+                "job \(job.id) is \(job.state.rawValue), tagged \(job.tagging.status.rawValue)"
+            logger.info("\(now); not tagged here")
             await releaseLease(job.id)
-            return
+            return now
         }
         lostLeases.remove(job.id)
         queue(.tagging(DownloadJob.Tagging(status: .running, reasons: [])), job)
@@ -190,16 +204,20 @@ actor DownloadsCoordinator {
 
         let verdict: AutoTagRun.Verdict
         var requeue: Requeue?
-        if let staged = stagedJob(job) {
+        // What this run found the files fit, which replaces what an earlier one found.
+        var fits: Int?
+        let lost = "job \(job.id)'s lease went to another Mac; nothing was written"
+        if var staged = stagedJob(job) {
+            if let fit { staged.releaseID = fit }
             do {
                 var run = try await autoTag(staged)
-                guard !lostLeases.contains(job.id) else { return }
+                guard !lostLeases.contains(job.id) else { return lost }
                 // A file whose tags read can still fail partway through its audio, which no
                 // other check reads. A run that's an error already has its reasons.
                 let failed = if case .error = run.verdict { true } else { false }
                 if !failed {
                     let damage = try await effects.damagedAudio(run.staged.files.map(\.path))
-                    guard !lostLeases.contains(job.id) else { return }
+                    guard !lostLeases.contains(job.id) else { return lost }
                     if !damage.isEmpty {
                         run.verdict = .error(damage)
                         run.staged.damaged = true
@@ -210,11 +228,16 @@ actor DownloadsCoordinator {
                 case .discrepancy: if run.anotherCopyMightFix { requeue = .discrepancy }
                 case .clean: break
                 }
+                // The owner asked for these files to be tagged, not thrown away.
+                if fit != nil { requeue = nil }
+                if case .discrepancy = run.verdict { fits = run.fits?.id }
                 if run.verdict == .clean {
                     verdict = await effects.write(run)
                     // The write can grow a file, so what the files measure now is recorded
                     // whatever it reported: the checks after it hold the files to these sizes.
                     recordSizes(of: staged, under: run.staged.stagingRoot, job)
+                    // Some files may carry it whatever the write reported, as in the tagger.
+                    if let fit { recordRelease(fit, of: staged, job) }
                 } else {
                     verdict = run.verdict
                 }
@@ -227,14 +250,34 @@ actor DownloadsCoordinator {
             ])
         }
         renewal.cancel()
-        guard !lostLeases.contains(job.id) else { return }
+        guard !lostLeases.contains(job.id) else { return lost }
+        recordFit(fits, job)
         queue(.tagging(Self.tagging(verdict)), job)
-        await flush()
+        let sent = await flush()
         await releaseLease(job.id)
         if let requeue, await mayTryAnotherPeer(job.id, requeue) {
             requeueing[job.id] = requeue
             await self.requeue(job.id, requeue)
         }
+        switch verdict {
+        case .clean:
+            return sent ? nil : "the report waits in the outbox until the service answers"
+        case .discrepancy(let reasons), .error(let reasons):
+            let tagged = Self.tagging(verdict).status.rawValue
+            return "tagged \(tagged): " + reasons.joined(separator: "; ")
+        }
+    }
+
+    /// Use Release That Fits (ADR 0224): tags `job`'s files as the release this Mac's tag run
+    /// found they fit, under a lease, writing them only when that run is clean, and reports
+    /// the verdict. Nil when written and reported clean, else why not.
+    func tagAsFit(_ job: DownloadJob) async -> String? {
+        guard let autoTag = effects.autoTag else { return Self.noCatalog }
+        guard let fit = fitting()[job.id]?.differs(for: job) else {
+            return "this Mac's tag run found no release the files fit"
+        }
+        guard tagging == nil else { return "another album is being tagged; try again after it" }
+        return await tag(job, with: autoTag, as: fit)
     }
 
     /// Whether job `id` may be requeued for `why`: always for a damaged copy; for a discrepancy,
@@ -297,6 +340,7 @@ actor DownloadsCoordinator {
         do {
             try index().forgetImportJob(id)
             taggedReleases = nil
+            fittingReleases = nil
         } catch {
             note("job \(id)'s import ledger couldn't be forgotten: \(error)")
         }
@@ -331,6 +375,36 @@ actor DownloadsCoordinator {
             taggedReleases = [:]
             note("the releases staged jobs were tagged as couldn't be read: \(error)")
             return [:]
+        }
+    }
+
+    /// The release each job's staged files fit, by job, as a tag run on this Mac found
+    /// (ADR 0224). Read from the index once, then kept, as `taggedAs()` is.
+    func fitting() -> [Int: TaggedRelease] {
+        if let fittingReleases { return fittingReleases }
+        do {
+            let read = try index().fittingReleases()
+            fittingReleases = read
+            return read
+        } catch {
+            fittingReleases = [:]
+            note("the releases staged jobs fit couldn't be read: \(error)")
+            return [:]
+        }
+    }
+
+    /// Records the release a tag run found `job`'s files fit, or with nil, forgets one: each
+    /// report replaces what the one before found.
+    private func recordFit(_ release: Int?, _ job: DownloadJob) {
+        do {
+            let index = try index()
+            try index.recordFittingRelease(
+                job: job.id, queued: job.release.releaseID, folder: job.stagedFolder ?? "",
+                release: release)
+            fittingReleases = try index.fittingReleases()
+        } catch {
+            fittingReleases = nil
+            note("job \(job.id)'s release that fits wasn't recorded: \(error)")
         }
     }
 
@@ -593,6 +667,8 @@ actor DownloadsCoordinator {
         guard let staged = StagedJob(job) else { return }
         recordSizes(of: staged, under: stagingRoot, job)
         recordRelease(release, of: staged, job)
+        // The files are what the owner wrote now, not what a tag run found.
+        recordFit(nil, job)
     }
 
     /// Records that `staged`'s files were written as `release`, which forgets an earlier one

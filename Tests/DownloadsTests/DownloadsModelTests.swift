@@ -91,7 +91,8 @@ func jobsRejectedOrCancelledAreNotListed(state: JobState) {
     for action in DownloadAction.allCases {
         #expect(
             DownloadAction.applies(
-                action, to: imported, machine: "Studio", answering: true, canTag: true)
+                action, to: imported, machine: "Studio", answering: true, canTag: true,
+                knowsFit: true)
                 == (action == .showInAllMusic))
     }
 }

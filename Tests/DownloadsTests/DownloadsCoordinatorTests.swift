@@ -82,12 +82,17 @@ private final class Calls: @unchecked Sendable {
 /// An AutoTag run with `verdict` and no files, as AutoTag reports one.
 private func run(
     _ verdict: AutoTagRun.Verdict, for job: StagedJob, root: String = "/nonexistent",
-    anotherCopyMightFix: Bool = false
+    anotherCopyMightFix: Bool = false, fits: ReleaseSummary? = nil
 ) -> AutoTagRun {
     AutoTagRun(
         verdict: verdict, staged: StagedAlbum(job, stagingRoot: root), match: nil, changes: nil,
-        edits: [], anotherCopyMightFix: anotherCopyMightFix)
+        edits: [], anotherCopyMightFix: anotherCopyMightFix, fits: fits)
 }
+
+/// Release 5151, a CD of job 1's album with another tracklist.
+private let cdEdition = ReleaseSummary(
+    id: 5151, artist: "Made-Up Artist", title: "Made-Up Album", label: "Svek",
+    catalogNumber: "SK 033", country: "", year: "2022", format: "CD", trackCount: 14)
 
 /// Appends bytes to each of `job`'s files under `root`, as a tag write does when its padding
 /// runs out.
@@ -109,6 +114,11 @@ private final class Setup {
     var verdict = AutoTagRun.Verdict.clean
     /// Whether the stand-in AutoTag says another peer's copy might fix a discrepancy.
     var anotherCopyMightFix = false
+    /// The release the stand-in AutoTag says the files fit, matched with the queued one.
+    var fits: ReleaseSummary?
+    /// The stand-in AutoTag's verdict for the files matched with another release than the one
+    /// queued, which says another copy might fix a discrepancy.
+    var otherVerdict = AutoTagRun.Verdict.clean
     /// What the stand-in decode check says of the staged files: why each damaged one is.
     var damage: [String] = []
     /// The staging folder the stand-ins read and write, where `stage` puts files.
@@ -147,6 +157,8 @@ private final class Setup {
         let calls = calls
         let verdict = verdict
         let mightFix = anotherCopyMightFix
+        let fits = fits
+        let otherVerdict = otherVerdict
         let damage = damage
         let clock = service.clock
         let reports = importReports
@@ -162,8 +174,13 @@ private final class Setup {
                     ? { @Sendable job in
                         calls.tag(job)
                         await calls.waitIfHeld()
+                        guard job.releaseID == job.queuedReleaseID else {
+                            return run(
+                                otherVerdict, for: job, root: root, anotherCopyMightFix: true)
+                        }
                         return run(
-                            verdict, for: job, root: root, anotherCopyMightFix: mightFix)
+                            verdict, for: job, root: root, anotherCopyMightFix: mightFix,
+                            fits: fits)
                     } : nil,
                 damagedAudio: { _ in damage },
                 recover: {
@@ -841,4 +858,73 @@ private final class Counter: @unchecked Sendable {
             return count
         }
     }
+}
+
+/// The files fit another release (ADR 0224): the tag run reports the discrepancy, keeps the
+/// release here, and doesn't requeue a copy that isn't wrong.
+@Test func aCopyThatFitsAnotherReleaseIsKeptForUseReleaseThatFits() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .discrepancy(["3 files, release has 2", "release 5151 (CD) fits every file"])
+    setup.fits = cdEdition
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1)])
+    #expect(setup.service.requeued.isEmpty)
+    #expect(setup.calls.writes == 0)
+    #expect(await coordinator.fitting() == [1: TaggedRelease(folder: "job-1", releaseID: 5151)])
+    #expect(
+        await setup.coordinator().fitting() == [1: TaggedRelease(folder: "job-1", releaseID: 5151)],
+        "kept in the index, for the next launch")
+}
+
+@Test func useReleaseThatFitsWritesTheFitCleanAndRecordsItAsTheTaggedRelease() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .discrepancy(["3 files, release has 2"])
+    setup.fits = cdEdition
+    try setup.stage(1)
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1)])
+    let listed = try #require(setup.service.job(1))
+    #expect(listed.tagging.status == .discrepancy)
+
+    #expect(await coordinator.tagAsFit(listed) == nil)
+    #expect(setup.calls.tags.map(\.releaseID) == [4242, 5151])
+    #expect(setup.calls.writes == 1)
+    #expect(setup.service.job(1)?.tagging == clean)
+    #expect(
+        setup.service.eventTypes.suffix(4) == [
+            "lease", "tagging running", "tagging clean", "release_lease",
+        ])
+    #expect(await coordinator.taggedAs() == [1: TaggedRelease(folder: "job-1", releaseID: 5151)])
+    #expect(await coordinator.fitting().isEmpty, "the write supersedes what the tag run found")
+    #expect(try setup.index.stagedSizes(job: 1, folder: "job-1").count == 2)
+    #expect(setup.service.requeued.isEmpty)
+}
+
+@Test func useReleaseThatFitsWritesNothingWhenTheFitIsntClean() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .discrepancy(["3 files, release has 2"])
+    setup.fits = cdEdition
+    setup.otherVerdict = .discrepancy(["track 3 is 40 s off"])
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1)])
+    let listed = try #require(setup.service.job(1))
+
+    #expect(await coordinator.tagAsFit(listed) == "tagged discrepancy: track 3 is 40 s off")
+    #expect(setup.calls.writes == 0)
+    #expect(
+        setup.service.job(1)?.tagging
+            == DownloadJob.Tagging(status: .discrepancy, reasons: ["track 3 is 40 s off"]))
+    #expect(await coordinator.fitting().isEmpty, "the new report found no release that fits")
+    #expect(setup.service.requeued.isEmpty, "asked to tag the copy, not to replace it")
+}
+
+@Test func useReleaseThatFitsNeedsAFitThisMacFound() async throws {
+    let setup = try Setup([job(1)])
+    setup.verdict = .discrepancy(["3 files, release has 2"])
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1)])
+    let listed = try #require(setup.service.job(1))
+    #expect(
+        await coordinator.tagAsFit(listed) == "this Mac's tag run found no release the files fit")
+    #expect(setup.calls.tags.count == 1)
 }
