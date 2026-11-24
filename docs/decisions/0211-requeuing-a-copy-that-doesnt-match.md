@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0210](0210-requeuing-a-damaged-download.md) (only a damaged copy is requeued
   unasked)
+- **Amended by:** [0224](0224-using-the-release-the-files-fit.md): a copy whose files fit
+  another release the matcher found isn't requeued
 - **See also:** [0200](0200-upgrading-to-flac-automatically.md) (the upgrader requeues its own
   discrepancies), music-recommender's ADR 0023 (requeue and tried peers)
 

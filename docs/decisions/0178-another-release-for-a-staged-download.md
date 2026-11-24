@@ -3,6 +3,9 @@
 - **Date:** 2026-11-09
 - **Status:** accepted
 - **Amends:** [0146](0146-staged-tag-writes.md) (the staged tagger's release was fixed)
+- **Amended by:** [0224](0224-using-the-release-the-files-fit.md): Downloads can tag a staged
+  job as a release its tag run found the files fit, and the service's positions are checked
+  only for the release queued
 - **See also:** [0145](0145-the-recommender-client.md) (the service's contract),
   [0147](0147-moving-downloads-into-the-library.md) and
   [0169](0169-approve-at-once-and-manual-upgrades.md) (Approve),
